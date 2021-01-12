@@ -1,4 +1,4 @@
-module github.com/antinvestor/frame
+module github.com/pitabwire/frame
 
 go 1.14
 

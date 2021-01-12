@@ -85,7 +85,7 @@ func (s *Service) AddHealthCheck( checker health.Checker ) {
 	s.healthCheckers = append(s.healthCheckers, checker)
 }
 
-func (s *Service) Run(ctx context.Context, address string, serverSetup func(context.Context, *server.Server) error ) error {
+func (s *Service) Run(ctx context.Context, address string, serverSetup func(context.Context, interface{}) error ) error {
 
 	if s.server == nil {
 		return errors.New("attempting to run service without a server")

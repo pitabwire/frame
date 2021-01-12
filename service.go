@@ -6,6 +6,7 @@ import (
 	"gocloud.dev/server"
 	"gocloud.dev/server/health"
 	"gocloud.dev/server/sdserver"
+	"google.golang.org/grpc"
 	"log"
 	"net/http"
 )
@@ -13,39 +14,29 @@ import (
 const ctxKeyService = "serviceKey"
 
 type Service struct {
-	name   string
-	server   *server.Server
-	queue  *Queue
-	dataStore *store
+	name           string
+	server         *server.Server
+	grpcServer     *grpc.Server
+	queue          *Queue
+	dataStore      *store
 	healthCheckers []health.Checker
-	cleanup func()
+	cleanup        func()
 }
 
 type Option func(service *Service)
 
-type Options struct {
-	ServerOpts *server.Options
-
-}
-
-func Server(opts *server.Options) Option {
-	return func(c *Service) {
-		c.server = server.New(http.DefaultServeMux, opts)
-	}
-}
-
-func NewService(name string, opts... Option) *Service {
+func NewService(name string, opts ...Option) *Service {
 
 	defaultSrvOptions := &server.Options{
 		RequestLogger: sdserver.NewRequestLogger(),
-		Driver:                &server.DefaultDriver{},
+		Driver:        &server.DefaultDriver{},
 	}
 
 	service := &Service{
-		name: name,
-		server:   server.New(http.DefaultServeMux, defaultSrvOptions),
+		name:      name,
+		server:    server.New(http.DefaultServeMux, defaultSrvOptions),
 		dataStore: &store{},
-		queue: &Queue{},
+		queue:     &Queue{},
 	}
 
 	for _, opt := range opts {
@@ -68,7 +59,7 @@ func FromContext(ctx context.Context) *Service {
 	return service
 }
 
-func (s *Service) AddCleanupMethod(f func())  {
+func (s *Service) AddCleanupMethod(f func()) {
 	if s.cleanup == nil {
 		s.cleanup = f
 		return
@@ -78,14 +69,14 @@ func (s *Service) AddCleanupMethod(f func())  {
 	s.cleanup = func() { old(); f() }
 }
 
-func (s *Service) AddHealthCheck( checker health.Checker ) {
+func (s *Service) AddHealthCheck(checker health.Checker) {
 	if s.healthCheckers != nil {
 		s.healthCheckers = []health.Checker{}
 	}
 	s.healthCheckers = append(s.healthCheckers, checker)
 }
 
-func (s *Service) Run(ctx context.Context, address string, serverSetup func(context.Context, interface{}) error ) error {
+func (s *Service) Run(ctx context.Context, address string, serverSetup func(context.Context, interface{}) error) error {
 
 	if s.server == nil {
 		return errors.New("attempting to run service without a server")
@@ -112,9 +103,8 @@ func (s *Service) Run(ctx context.Context, address string, serverSetup func(cont
 
 }
 
-func (s *Service)Stop() {
+func (s *Service) Stop() {
 	if s.cleanup != nil {
 		s.cleanup()
 	}
 }
-

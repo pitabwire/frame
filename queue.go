@@ -26,7 +26,7 @@ type publisher struct {
 }
 
 type SubscribeWorker interface {
-	Handle(message []byte, metadata map[string]string) error
+	Handle(ctx context.Context, message []byte, metadata map[string]string) error
 }
 
 type subscriber struct {
@@ -208,7 +208,7 @@ func (s Service) subscribe(ctx context.Context) {
 				go func() {
 					defer func() { <-sem }() // Release the semaphore.
 
-					err := localSub.handler.Handle(msg.Body, msg.Metadata)
+					err := localSub.handler.Handle(ctx, msg.Body, msg.Metadata)
 					if err != nil {
 						log.Printf(" subscribe -- Unable to process message %v : %v",
 							localSub.url, err)

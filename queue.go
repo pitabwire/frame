@@ -82,11 +82,11 @@ func (s Service) Publish(ctx context.Context, reference string, message []byte, 
 	})
 }
 
-func (s Service)QObject(ctx context.Context, model BaseModel) ([]byte, map[string]string, error)  {
+func (s Service)QObject(ctx context.Context, model BaseModelI) ([]byte, map[string]string, error)  {
 
 	queueMap := make(map[string]string)
 	metaMap := make(map[string]string)
-	queueMap[queueMessageId] = model.ID
+	queueMap[queueMessageId] = model.GetID()
 
 	////Serialize span
 	//if span := opentracing.SpanFromContext(ctx); span != nil {

@@ -10,6 +10,10 @@ import (
 	"time"
 )
 
+type BaseModelI interface {
+	GetID() string
+}
+
 // Migration Our simple table holding all the migration data
 type BaseModel struct {
 	ID         string `gorm:"type:varchar(50);primary_key"`
@@ -19,6 +23,9 @@ type BaseModel struct {
 	DeletedAt  gorm.DeletedAt `sql:"index"`
 }
 
+func (model *BaseModel)GetID() string   {
+	return model.ID
+}
 // BeforeCreate Ensures we update a migrations time stamps
 func (model *BaseModel) BeforeCreate(db *gorm.DB) error {
 	model.ID = xid.New().String()

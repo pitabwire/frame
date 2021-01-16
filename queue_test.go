@@ -91,14 +91,19 @@ func TestService_RegisterPublisherMultiple(t *testing.T) {
 
 }
 
+type messageHandler struct {
 
-func messageConsumer(message []byte, metadata map[string]string) error {
+}
+func (m *messageHandler) Handle(message []byte, metadata map[string]string) error {
 
 	log.Printf(" A nice message to handle: %v", string(message))
 	return nil
 }
 
-func messageConsumerWithError(message []byte, metadata map[string]string) error {
+type handlerWithError struct {
+
+}
+func (m *handlerWithError) Handle(message []byte, metadata map[string]string) error {
 
 	log.Printf(" A dreadful message to handle: %v", string(message))
 	return errors.New("throwing an error for tests")
@@ -112,7 +117,7 @@ func TestService_RegisterSubscriber(t *testing.T) {
 
 	optTopic := RegisterPublisher("test", "mem://topicA")
 	opt := RegisterSubscriber("test", "mem://topicA",
-		5, messageConsumer )
+		5, &messageHandler{} )
 
 	srv := NewService( "Test Srv", optTopic, opt)
 
@@ -146,7 +151,7 @@ func TestService_RegisterSubscriberWithError(t *testing.T) {
 	defer cancel()
 
 	optTopic := RegisterPublisher("test", "mem://topicA")
-	opt := RegisterSubscriber("test", "mem://topicA", 1, messageConsumerWithError )
+	opt := RegisterSubscriber("test", "mem://topicA", 1, &handlerWithError{} )
 
 	srv := NewService( "Test Srv", optTopic, opt)
 
@@ -169,7 +174,7 @@ func TestService_RegisterSubscriberInvalid(t *testing.T) {
 	defer cancel()
 
 	opt := RegisterSubscriber("test", "memt+://topicA",
-		5, messageConsumer )
+		5, &messageHandler{} )
 
 	srv := NewService( "Test Srv", opt)
 
@@ -186,7 +191,7 @@ func TestService_RegisterSubscriberContextCancelWorks(t *testing.T) {
 
 	optTopic := RegisterPublisher("test", "mem://topicA")
 	opt := RegisterSubscriber("test", "mem://topicA",
-		5, messageConsumer )
+		5, &messageHandler{} )
 
 	srv := NewService( "Test Srv", opt, optTopic)
 

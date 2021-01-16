@@ -25,12 +25,16 @@ type publisher struct {
 	isInit   bool
 }
 
+type SubscribeWorker interface {
+	Handle(message []byte, metadata map[string]string) error
+}
+
 type subscriber struct {
-	url            string
-	concurrency    int
-	subscFunction  func(message []byte, metadata map[string]string) error
-	subscription   *pubsub.Subscription
-	isInit         bool
+	url          string
+	concurrency  int
+	handler      SubscribeWorker
+	subscription *pubsub.Subscription
+	isInit       bool
 }
 
 func RegisterPublisher(reference string, queueUrl string) Option {
@@ -49,16 +53,16 @@ func RegisterPublisher(reference string, queueUrl string) Option {
 }
 
 func RegisterSubscriber(reference string, queueUrl string, concurrency int,
-	subscFunc func(message []byte, metadata map[string]string) error) Option {
+	handler SubscribeWorker) Option {
 	return func(s *Service) {
 		if s.queue.subscriptionQueueMap == nil {
 			s.queue.subscriptionQueueMap = make(map[string]*subscriber)
 		}
 
 		s.queue.subscriptionQueueMap[reference] = &subscriber{
-			url:            queueUrl,
-			concurrency:    concurrency,
-			subscFunction:  subscFunc,
+			url:         queueUrl,
+			concurrency: concurrency,
+			handler:     handler,
 		}
 
 	}
@@ -204,7 +208,7 @@ func (s Service) subscribe(ctx context.Context) {
 				go func() {
 					defer func() { <-sem }() // Release the semaphore.
 
-					err := localSub.subscFunction(msg.Body, msg.Metadata)
+					err := localSub.handler.Handle(msg.Body, msg.Metadata)
 					if err != nil {
 						log.Printf(" subscribe -- Unable to process message %v : %v",
 							localSub.url, err)

@@ -2,6 +2,7 @@ package frame
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"gocloud.dev/pubsub"
@@ -10,6 +11,8 @@ import (
 	_ "gocloud.dev/pubsub/natspubsub"
 	"log"
 )
+
+var queueMessageId = "q_id"
 
 type Queue struct {
 	publishQueueMap      map[string]*publisher
@@ -78,6 +81,50 @@ func (s Service) Publish(ctx context.Context, reference string, message []byte, 
 		Metadata: metadata,
 	})
 }
+
+func (s Service)QObject(ctx context.Context, model BaseModel) ([]byte, map[string]string, error)  {
+
+	queueMap := make(map[string]string)
+	metaMap := make(map[string]string)
+	queueMap[queueMessageId] = model.ID
+
+	////Serialize span
+	//if span := opentracing.SpanFromContext(ctx); span != nil {
+	//
+	//	carrier := opentracing.TextMapCarrier(queueMap)
+	//	err := opentracing.GlobalTracer().Inject(
+	//		span.Context(),
+	//		opentracing.TextMap,
+	//		carrier)
+	//	if err != nil {
+	//		return nil, err
+	//	}
+	//}
+
+	payload, err := json.Marshal(queueMap)
+
+	return payload, metaMap, err
+}
+
+func (s Service)QID(ctx context.Context, payload []byte) (string, error) {
+	var queueMap map[string]string
+	err := json.Unmarshal(payload, &queueMap)
+	if err != nil {
+		return "",  err
+	}
+
+	//carrier := opentracing.TextMapCarrier(queueMap)
+	//spanCtx, err := opentracing.GlobalTracer().Extract(opentracing.TextMap, carrier)
+	//if err != nil {
+	//	return "", nil, err
+	//}
+	//
+	//bCtx := context.Background()
+	//span, ctx := opentracing.StartSpanFromContext(bCtx, traceId, opentracing.ChildOf(spanCtx))
+
+	return queueMap[queueMessageId], nil
+}
+
 
 
 func (s Service) initPubsub(ctx context.Context) error {

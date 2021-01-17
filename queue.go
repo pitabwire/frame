@@ -68,7 +68,6 @@ func RegisterSubscriber(reference string, queueUrl string, concurrency int,
 	}
 }
 
-
 func (s Service) Publish(ctx context.Context, reference string, message []byte, metadata map[string]string) error {
 
 	publisher := s.queue.publishQueueMap[reference]
@@ -86,7 +85,7 @@ func (s Service) Publish(ctx context.Context, reference string, message []byte, 
 	})
 }
 
-func (s Service)QObject(ctx context.Context, model BaseModelI) ([]byte, map[string]string, error)  {
+func (s Service) QObject(ctx context.Context, model BaseModelI) ([]byte, map[string]string, error) {
 
 	queueMap := make(map[string]string)
 	metaMap := make(map[string]string)
@@ -110,11 +109,11 @@ func (s Service)QObject(ctx context.Context, model BaseModelI) ([]byte, map[stri
 	return payload, metaMap, err
 }
 
-func (s Service)QID(ctx context.Context, payload []byte) (string, error) {
+func (s Service) QID(ctx context.Context, payload []byte) (string, error) {
 	var queueMap map[string]string
 	err := json.Unmarshal(payload, &queueMap)
 	if err != nil {
-		return "",  err
+		return "", err
 	}
 
 	//carrier := opentracing.TextMapCarrier(queueMap)
@@ -128,8 +127,6 @@ func (s Service)QID(ctx context.Context, payload []byte) (string, error) {
 
 	return queueMap[queueMessageId], nil
 }
-
-
 
 func (s Service) initPubsub(ctx context.Context) error {
 
@@ -183,8 +180,6 @@ func (s Service) subscribe(ctx context.Context) {
 
 		go func(localSub *subscriber) {
 
-
-			log.Printf(" subscribe -- Initiating queue : %v", localSub.url)
 			sem := make(chan struct{}, localSub.concurrency)
 		recvLoop:
 			for {

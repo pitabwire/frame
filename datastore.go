@@ -172,7 +172,7 @@ func scanForNewMigrations(db *gorm.DB, migrationsDirPath string) error {
 			if migration.AppliedAt == nil {
 
 				if migration.Patch != string(migrationPatch) {
-					err = db.Model(&migration).Update("patch", string(migrationPatch)).Error
+					err = db.Model(&migration).Where("name = ?", filename).Update("patch", string(migrationPatch)).Error
 
 					if err != nil {
 						log.Printf("There is an error updating migration :%s", file)

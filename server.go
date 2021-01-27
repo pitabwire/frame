@@ -2,14 +2,28 @@ package frame
 
 import (
 	"context"
-	"github.com/soheilhy/cmux"
 	"gocloud.dev/server"
 	"google.golang.org/grpc"
-	"log"
-	"net"
 	"net/http"
+	"strings"
 	"time"
 )
+
+type multiProtoHandler struct {
+	handler http.Handler
+	driver *grpcDriver
+}
+
+func (mph *multiProtoHandler) ServeHTTP(w http.ResponseWriter, r *http.Request){
+
+	if r.ProtoMajor == 2 && strings.HasPrefix(
+		r.Header.Get("Content-Type"), "application/grpc") {
+		mph.driver.grpcServer.ServeHTTP(w, r)
+	} else {
+		mph.handler.ServeHTTP(w, r)
+	}
+
+}
 
 type grpcDriver struct {
 	httpServer *http.Server
@@ -18,46 +32,27 @@ type grpcDriver struct {
 
 func (gd *grpcDriver) ListenAndServe(addr string, h http.Handler) error {
 
-	l, err := net.Listen("tcp", addr)
-	if err != nil {
-		return err
+	rootHandler := &multiProtoHandler{
+		handler: h,
+		driver: gd,
 	}
 
-	m := cmux.New(l)
-
-	if gd.grpcServer != nil {
-
-		grpcL := m.Match(cmux.HTTP2HeaderField("content-type", "application/grpc"))
-
-		go func() {
-
-			// start the server continuously to be listening client request any tym in goroutine otherwise will exit with 1 soon it is starteds
-			if err := gd.grpcServer.Serve(grpcL); err != nil {
-				log.Fatalf(" ListenAndServe -- failed to serve grpc: %v", err)
-			}
-
-		}()
-	}
-
-	if gd.httpServer != nil {
-
-		httpL := m.Match(cmux.HTTP1Fast())
-
-		go func() {
-
-			// start the server continuously to be listening client request any tym in goroutine otherwise will exit with 1 soon it is starteds
-			if err := gd.httpServer.Serve(httpL); err != nil {
-				log.Fatalf(" ListenAndServe -- failed to serve http: %v", err)
-			}
-
-		}()
-	}
-
-	if gd.grpcServer != nil || gd.httpServer != nil {
-		return m.Serve()
-	}
-	return nil
+	gd.httpServer.Addr = addr
+	gd.httpServer.Handler = rootHandler
+	return gd.httpServer.ListenAndServe()
 }
+
+func (gd *grpcDriver) ListenAndServeTLS(addr, certFile, keyFile string, h http.Handler) error {
+	rootHandler := &multiProtoHandler{
+		handler: h,
+		driver: gd,
+	}
+
+	gd.httpServer.Addr = addr
+	gd.httpServer.Handler = rootHandler
+	return gd.httpServer.ListenAndServeTLS(certFile, keyFile)
+}
+
 
 func (gd *grpcDriver) Shutdown(ctx context.Context) error {
 

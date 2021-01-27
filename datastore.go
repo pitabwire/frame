@@ -157,7 +157,7 @@ func scanForNewMigrations(db *gorm.DB, migrationsDirPath string) error {
 			continue
 		}
 
-		result := db.Where("name = ?", filename).Find(&migration)
+		result := db.First(&migration, "name = ?", filename)
 		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
 
 			log.Printf("migration %s is unapplied", file)
@@ -172,10 +172,11 @@ func scanForNewMigrations(db *gorm.DB, migrationsDirPath string) error {
 			if migration.AppliedAt == nil {
 
 				if migration.Patch != string(migrationPatch) {
-					err = db.Model(&migration).Where("name = ?", filename).Update("patch", string(migrationPatch)).Error
 
-					if err != nil {
-						log.Printf("There is an error updating migration :%s", file)
+					result := db.Model(&migration).Update("patch", string(migrationPatch))
+
+					if result.Error != nil {
+						log.Printf("There is an error updating migration :%s %v", file, result.Error)
 					}
 				}
 			}
@@ -198,7 +199,7 @@ func applyNewMigrations(db *gorm.DB) error {
 			return err
 		}
 
-		db.Model(&migration).UpdateColumn("applied_at", time.Now())
+		db.Model(&migration).Update("applied_at", time.Now())
 		log.Printf("Successfully applied the file : %v", fmt.Sprintf("%s.sql", migration.Name))
 	}
 

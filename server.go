@@ -3,30 +3,16 @@ package frame
 import (
 	"context"
 	"fmt"
+	"github.com/cockroachdb/cmux"
 	"gocloud.dev/server"
 	"gocloud.dev/server/requestlog"
 	"google.golang.org/grpc"
+	"log"
+	"net"
 	"net/http"
 	"os"
-	"strings"
 	"time"
 )
-
-type rootHandler struct {
-	handler http.Handler
-	driver  *grpcDriver
-}
-
-func (rh *rootHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-
-	if r.ProtoMajor == 2 && strings.HasPrefix(
-		r.Header.Get("Content-Type"), "application/grpc") {
-		rh.driver.grpcServer.ServeHTTP(w, r)
-	} else {
-		rh.handler.ServeHTTP(w, r)
-	}
-
-}
 
 type grpcDriver struct {
 	httpServer *http.Server
@@ -35,25 +21,73 @@ type grpcDriver struct {
 
 func (gd *grpcDriver) ListenAndServe(addr string, h http.Handler) error {
 
-	rootHandler := &rootHandler{
-		handler: h,
-		driver:  gd,
+	gd.httpServer.Addr = addr
+	gd.httpServer.Handler = h
+
+	ln, err := net.Listen("tcp", addr)
+	if err != nil {
+		return err
 	}
 
-	gd.httpServer.Addr = addr
-	gd.httpServer.Handler = rootHandler
-	return gd.httpServer.ListenAndServe()
+	m := cmux.New(ln)
+
+	var grpcL net.Listener
+	grpcMatcher := cmux.HTTP2HeaderField("content-type", "application/grpc")
+	grpcL = m.Match(grpcMatcher)
+
+	anyL := m.Match(cmux.Any())
+
+	go func() {
+		err := gd.grpcServer.Serve(grpcL)
+		if err != nil {
+			log.Printf(" ListenAndServe -- stopping grpc server because : %v", err)
+		}
+	}()
+
+	go func() {
+		err := gd.httpServer.Serve(anyL)
+		if err != nil {
+			log.Printf(" ListenAndServe -- stopping http server because : %v", err)
+		}
+	}()
+
+	return m.Serve()
+
 }
 
 func (gd *grpcDriver) ListenAndServeTLS(addr, certFile, keyFile string, h http.Handler) error {
-	rootHandler := &rootHandler{
-		handler: h,
-		driver:  gd,
-	}
 
 	gd.httpServer.Addr = addr
-	gd.httpServer.Handler = rootHandler
-	return gd.httpServer.ListenAndServeTLS(certFile, keyFile)
+	gd.httpServer.Handler = h
+
+	ln, err := net.Listen("tcp", addr)
+	if err != nil {
+		return err
+	}
+
+	m := cmux.New(ln)
+
+	var grpcL net.Listener
+	grpcMatcher := cmux.HTTP2HeaderField("content-type", "application/grpc")
+	grpcL = m.Match(grpcMatcher)
+
+	anyL := m.Match(cmux.Any())
+
+	go func() {
+		err := gd.grpcServer.Serve(grpcL)
+		if err != nil {
+			log.Printf(" ListenAndServeTLS -- stopping grpc server because : %v", err)
+		}
+	}()
+
+	go func() {
+		err := gd.httpServer.ServeTLS(anyL, certFile, keyFile)
+		if err != nil {
+			log.Printf(" ListenAndServeTLS -- stopping http server because : %v", err)
+		}
+	}()
+
+	return m.Serve()
 }
 
 func (gd *grpcDriver) Shutdown(ctx context.Context) error {

@@ -24,7 +24,7 @@ func TestService(t *testing.T) {
 	srvOptions := &server.Options{
 
 	}
-	opt := HttpServer(srvOptions)
+	opt := HttpServer(nil, srvOptions)
 
 
 	srv := NewService( "Test", opt)

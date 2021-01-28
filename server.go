@@ -68,7 +68,7 @@ func (gd *grpcDriver) Shutdown(ctx context.Context) error {
 	return nil
 }
 
-func GrpcServer(grpcServer *grpc.Server, httpOpts *server.Options) Option {
+func GrpcServer(grpcServer *grpc.Server, h http.Handler, httpOpts *server.Options) Option {
 	return func(c *Service) {
 
 		httpOpts.Driver = &grpcDriver{
@@ -84,17 +84,25 @@ func GrpcServer(grpcServer *grpc.Server, httpOpts *server.Options) Option {
 			httpOpts.RequestLogger = requestlog.NewNCSALogger(os.Stdout, func(e error) { fmt.Println(e) })
 		}
 
-		c.server = server.New(http.DefaultServeMux, httpOpts)
+		if h == nil {
+			h = http.DefaultServeMux
+		}
+
+		c.server = server.New(h, httpOpts)
 	}
 }
 
-func HttpServer(httpOpts *server.Options) Option {
+func HttpServer(h http.Handler, httpOpts *server.Options) Option {
 	return func(c *Service) {
 
 		if httpOpts.RequestLogger == nil {
 			httpOpts.RequestLogger = requestlog.NewNCSALogger(os.Stdout, func(e error) { fmt.Println(e) })
 		}
 
-		c.server = server.New(http.DefaultServeMux, httpOpts)
+		if h == nil {
+			h = http.DefaultServeMux
+		}
+
+		c.server = server.New(h, httpOpts)
 	}
 }

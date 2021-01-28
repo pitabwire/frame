@@ -29,7 +29,7 @@ func TestGrpcServer(t *testing.T) {
 
 	srvOptions := &server.Options{}
 
-	srv := NewService("Testing", GrpcServer(grpcServer, srvOptions))
+	srv := NewService("Testing", GrpcServer(grpcServer, nil, srvOptions))
 
 	go func() {
 		_ = srv.Run(ctx, ":")
@@ -55,7 +55,7 @@ func TestService_Run(t *testing.T) {
 		Driver: &testDriver{},
 	}
 
-	srv = NewService("Testing", HttpServer(srvOptions))
+	srv = NewService("Testing", HttpServer(nil, srvOptions))
 
 	err = srv.Run(ctx, ":")
 	if err != nil {

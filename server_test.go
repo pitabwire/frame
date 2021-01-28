@@ -6,6 +6,7 @@ import (
 	"google.golang.org/grpc"
 	"net/http"
 	"testing"
+	"time"
 )
 
 type testDriver struct {
@@ -21,23 +22,20 @@ func (t *testDriver) Shutdown(ctx context.Context) error {
 
 func TestGrpcServer(t *testing.T) {
 
-	ctx := context.Background()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
 	grpcServer := grpc.NewServer()
 
-	srvOptions := &server.Options{
-		Driver: &testDriver{},
-	}
+	srvOptions := &server.Options{}
 
 	srv := NewService("Testing", GrpcServer(grpcServer, srvOptions))
 
 	go func() {
-		err := srv.Run(ctx, ":40000")
-
-		if err != nil {
-			t.Errorf("Could not run Server : %v", err)
-		}
+		_ = srv.Run(ctx, ":")
 	}()
+
+	time.Sleep(time.Second*2)
 
 	srv.Stop()
 
@@ -59,7 +57,7 @@ func TestService_Run(t *testing.T) {
 
 	srv = NewService("Testing", HttpServer(srvOptions))
 
-	err = srv.Run(ctx, ":40000")
+	err = srv.Run(ctx, ":")
 	if err != nil {
 		t.Errorf("Could not run Server : %v", err)
 	}

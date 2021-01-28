@@ -2,25 +2,28 @@ package frame
 
 import (
 	"context"
+	"fmt"
 	"gocloud.dev/server"
+	"gocloud.dev/server/requestlog"
 	"google.golang.org/grpc"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 )
 
-type multiProtoHandler struct {
+type rootHandler struct {
 	handler http.Handler
-	driver *grpcDriver
+	driver  *grpcDriver
 }
 
-func (mph *multiProtoHandler) ServeHTTP(w http.ResponseWriter, r *http.Request){
+func (rh *rootHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	if r.ProtoMajor == 2 && strings.HasPrefix(
 		r.Header.Get("Content-Type"), "application/grpc") {
-		mph.driver.grpcServer.ServeHTTP(w, r)
+		rh.driver.grpcServer.ServeHTTP(w, r)
 	} else {
-		mph.handler.ServeHTTP(w, r)
+		rh.handler.ServeHTTP(w, r)
 	}
 
 }
@@ -32,9 +35,9 @@ type grpcDriver struct {
 
 func (gd *grpcDriver) ListenAndServe(addr string, h http.Handler) error {
 
-	rootHandler := &multiProtoHandler{
+	rootHandler := &rootHandler{
 		handler: h,
-		driver: gd,
+		driver:  gd,
 	}
 
 	gd.httpServer.Addr = addr
@@ -43,16 +46,15 @@ func (gd *grpcDriver) ListenAndServe(addr string, h http.Handler) error {
 }
 
 func (gd *grpcDriver) ListenAndServeTLS(addr, certFile, keyFile string, h http.Handler) error {
-	rootHandler := &multiProtoHandler{
+	rootHandler := &rootHandler{
 		handler: h,
-		driver: gd,
+		driver:  gd,
 	}
 
 	gd.httpServer.Addr = addr
 	gd.httpServer.Handler = rootHandler
 	return gd.httpServer.ListenAndServeTLS(certFile, keyFile)
 }
-
 
 func (gd *grpcDriver) Shutdown(ctx context.Context) error {
 
@@ -78,14 +80,21 @@ func GrpcServer(grpcServer *grpc.Server, httpOpts *server.Options) Option {
 			grpcServer: grpcServer,
 		}
 
+		if httpOpts.RequestLogger == nil {
+			httpOpts.RequestLogger = requestlog.NewNCSALogger(os.Stdout, func(e error) { fmt.Println(e) })
+		}
+
 		c.server = server.New(http.DefaultServeMux, httpOpts)
-
 	}
-
 }
 
 func HttpServer(httpOpts *server.Options) Option {
 	return func(c *Service) {
+
+		if httpOpts.RequestLogger == nil {
+			httpOpts.RequestLogger = requestlog.NewNCSALogger(os.Stdout, func(e error) { fmt.Println(e) })
+		}
+
 		c.server = server.New(http.DefaultServeMux, httpOpts)
 	}
 }

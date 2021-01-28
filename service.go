@@ -3,12 +3,14 @@ package frame
 import (
 	"context"
 	"errors"
+	"fmt"
 	"gocloud.dev/server"
 	"gocloud.dev/server/health"
-	"gocloud.dev/server/sdserver"
+	"gocloud.dev/server/requestlog"
 	"google.golang.org/grpc"
 	"log"
 	"net/http"
+	"os"
 )
 
 const ctxKeyService = "serviceKey"
@@ -28,7 +30,7 @@ type Option func(service *Service)
 func NewService(name string, opts ...Option) *Service {
 
 	defaultSrvOptions := &server.Options{
-		RequestLogger: sdserver.NewRequestLogger(),
+		RequestLogger: requestlog.NewNCSALogger(os.Stdout, func(e error) { fmt.Println(e) }),
 		Driver:        &server.DefaultDriver{},
 	}
 

@@ -42,9 +42,7 @@ func NewService(name string, opts ...Option) *Service {
 		queue:     &Queue{},
 	}
 
-	for _, opt := range opts {
-		opt(service)
-	}
+	service.Init(opts...)
 
 	return service
 }
@@ -60,6 +58,13 @@ func FromContext(ctx context.Context) *Service {
 	}
 
 	return service
+}
+
+func (s *Service) Init(opts ...Option) {
+
+	for _, opt := range opts {
+		opt(s)
+	}
 }
 
 func (s *Service) AddCleanupMethod(f func()) {

@@ -2,39 +2,43 @@ package frame
 
 import (
 	"context"
-	"fmt"
-	"github.com/cockroachdb/cmux"
+	"github.com/soheilhy/cmux"
 	"gocloud.dev/server"
-	"gocloud.dev/server/requestlog"
 	"google.golang.org/grpc"
 	"log"
 	"net"
 	"net/http"
-	"os"
-	"time"
 )
 
 type grpcDriver struct {
 	httpServer *http.Server
 	grpcServer *grpc.Server
+
+	listener net.Listener
 }
 
 func (gd *grpcDriver) ListenAndServe(addr string, h http.Handler) error {
 
+	var ln net.Listener
+	var err error
+
 	gd.httpServer.Addr = addr
 	gd.httpServer.Handler = h
 
-	ln, err := net.Listen("tcp", addr)
-	if err != nil {
-		return err
+	if gd.listener != nil {
+		ln = gd.listener
+	}else {
+		ln, err = net.Listen("tcp", addr)
+		if err != nil {
+			return err
+		}
 	}
 
 	m := cmux.New(ln)
 
 	var grpcL net.Listener
-	grpcMatcher := cmux.HTTP2HeaderField("content-type", "application/grpc")
-	grpcL = m.Match(grpcMatcher)
-
+	grpcMatcher := cmux.HTTP2MatchHeaderFieldSendSettings("content-type", "application/grpc")
+	grpcL = m.MatchWithWriters(grpcMatcher)
 	anyL := m.Match(cmux.Any())
 
 	go func() {
@@ -57,12 +61,20 @@ func (gd *grpcDriver) ListenAndServe(addr string, h http.Handler) error {
 
 func (gd *grpcDriver) ListenAndServeTLS(addr, certFile, keyFile string, h http.Handler) error {
 
+	var ln net.Listener
+	var err error
+
 	gd.httpServer.Addr = addr
 	gd.httpServer.Handler = h
 
-	ln, err := net.Listen("tcp", addr)
-	if err != nil {
-		return err
+
+	if gd.listener != nil {
+		ln = gd.listener
+	}else {
+		ln, err = net.Listen("tcp", addr)
+		if err != nil {
+			return err
+		}
 	}
 
 	m := cmux.New(ln)
@@ -102,41 +114,28 @@ func (gd *grpcDriver) Shutdown(ctx context.Context) error {
 	return nil
 }
 
-func GrpcServer(grpcServer *grpc.Server, h http.Handler, httpOpts *server.Options) Option {
+func GrpcServer(grpcServer *grpc.Server) Option {
 	return func(c *Service) {
-
-		httpOpts.Driver = &grpcDriver{
-			httpServer: &http.Server{
-				ReadTimeout:  30 * time.Second,
-				WriteTimeout: 30 * time.Second,
-				IdleTimeout:  120 * time.Second,
-			},
-			grpcServer: grpcServer,
-		}
-
-		if httpOpts.RequestLogger == nil {
-			httpOpts.RequestLogger = requestlog.NewNCSALogger(os.Stdout, func(e error) { fmt.Println(e) })
-		}
-
-		if h == nil {
-			h = http.DefaultServeMux
-		}
-
-		c.server = server.New(h, httpOpts)
+		c.grpcServer = grpcServer
 	}
 }
 
-func HttpServer(h http.Handler, httpOpts *server.Options) Option {
+
+func ServerListener(listener net.Listener) Option {
+	return func(c *Service) {
+		c.listener = listener
+	}
+}
+
+func HttpHandler(h http.Handler) Option {
 	return func(c *Service) {
 
-		if httpOpts.RequestLogger == nil {
-			httpOpts.RequestLogger = requestlog.NewNCSALogger(os.Stdout, func(e error) { fmt.Println(e) })
-		}
+		c.handler = h
+	}
+}
 
-		if h == nil {
-			h = http.DefaultServeMux
-		}
-
-		c.server = server.New(h, httpOpts)
+func HttpOptions(httpOpts *server.Options) Option {
+	return func(c *Service) {
+		c.serverOptions = httpOpts
 	}
 }

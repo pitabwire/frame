@@ -2,15 +2,15 @@ package frame
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"gocloud.dev/server"
 	"gocloud.dev/server/health"
 	"gocloud.dev/server/requestlog"
 	"google.golang.org/grpc"
-	"log"
+	"net"
 	"net/http"
 	"os"
+	"time"
 )
 
 const ctxKeyService = "serviceKey"
@@ -18,7 +18,10 @@ const ctxKeyService = "serviceKey"
 type Service struct {
 	name           string
 	server         *server.Server
+	handler        http.Handler
+	serverOptions  *server.Options
 	grpcServer     *grpc.Server
+	listener       net.Listener
 	queue          *Queue
 	dataStore      *store
 	healthCheckers []health.Checker
@@ -29,14 +32,8 @@ type Option func(service *Service)
 
 func NewService(name string, opts ...Option) *Service {
 
-	defaultSrvOptions := &server.Options{
-		RequestLogger: requestlog.NewNCSALogger(os.Stdout, func(e error) { fmt.Println(e) }),
-		Driver:        &server.DefaultDriver{},
-	}
-
 	service := &Service{
 		name:      name,
-		server:    server.New(http.DefaultServeMux, defaultSrvOptions),
 		dataStore: &store{},
 		queue:     &Queue{},
 	}
@@ -80,25 +77,43 @@ func (s *Service) AddHealthCheck(checker health.Checker) {
 
 func (s *Service) Run(ctx context.Context, address string) error {
 
-	if s.server == nil {
-		return errors.New("attempting to run service without a server")
-	}
-
-	s.AddCleanupMethod(func() {
-		err := s.server.Shutdown(ctx)
-		if err != nil {
-			log.Printf("Run -- Server could not shut down gracefully : %v", err)
-		}
-	})
-
 	err := s.initPubsub(ctx)
 	if err != nil {
 		return err
 	}
 
+	if s.handler == nil {
+		s.handler = http.DefaultServeMux
+	}
+
+	if s.serverOptions == nil {
+		s.serverOptions = &server.Options{}
+	}
+
+	if s.serverOptions.RequestLogger == nil {
+		s.serverOptions.RequestLogger = requestlog.NewNCSALogger(os.Stdout, func(e error) { fmt.Println(e) })
+	}
+
+
+	// If grpc server is setup we should use the correct driver
+	if s.grpcServer != nil {
+
+		s.serverOptions.Driver = &grpcDriver{
+			grpcServer: s.grpcServer,
+			httpServer: &http.Server{
+				ReadTimeout:  30 * time.Second,
+				WriteTimeout: 30 * time.Second,
+				IdleTimeout:  120 * time.Second,
+			},
+			listener: s.listener,
+		}
+
+	}
+
+	s.server = server.New(s.handler, s.serverOptions)
+
 	err = s.server.ListenAndServe(address)
 	return err
-
 }
 
 func (s *Service) Stop() {

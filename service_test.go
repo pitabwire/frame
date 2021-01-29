@@ -2,7 +2,6 @@ package frame
 
 import (
 	"context"
-	"gocloud.dev/server"
 	"testing"
 )
 
@@ -21,13 +20,7 @@ func TestDefaultService(t *testing.T) {
 
 func TestService(t *testing.T) {
 
-	srvOptions := &server.Options{
-
-	}
-	opt := HttpServer(nil, srvOptions)
-
-
-	srv := NewService( "Test", opt)
+	srv := NewService( "Test")
 	if srv == nil {
 		t.Errorf("No default service could be instaniated")
 	}

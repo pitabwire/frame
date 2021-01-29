@@ -130,6 +130,11 @@ func (s Service) QID(ctx context.Context, payload []byte) (string, error) {
 
 func (s Service) initPubsub(ctx context.Context) error {
 
+	if s.queue == nil {
+		return nil
+	}
+
+
 	for ref, publisher := range s.queue.publishQueueMap {
 
 		topic, err := pubsub.OpenTopic(ctx, publisher.url)

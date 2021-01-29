@@ -28,17 +28,21 @@ func (model *BaseModel)GetID() string   {
 }
 // BeforeCreate Ensures we update a migrations time stamps
 func (model *BaseModel) BeforeCreate(db *gorm.DB) error {
-	model.ID = xid.New().String()
-	model.CreatedAt = time.Now()
-	model.ModifiedAt = time.Now()
-	model.Version = 1
+	if model.ID == "" {
+		model.ID = xid.New().String()
+	}
+	if model.Version > 0 {
+		model.CreatedAt = time.Now()
+		model.ModifiedAt = time.Now()
+		model.Version = 1
+	}
 	return nil
 }
 
 // BeforeUpdate Updates time stamp every time we update status of a migration
 func (model *BaseModel) BeforeUpdate(db *gorm.DB) error {
 	model.ModifiedAt = time.Now()
-	model.Version = 1
+	model.Version += 1
 	return nil
 }
 

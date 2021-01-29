@@ -7,6 +7,7 @@ import (
 	"gocloud.dev/server/health"
 	"gocloud.dev/server/requestlog"
 	"google.golang.org/grpc"
+	"gorm.io/gorm"
 	"net"
 	"net/http"
 	"os"
@@ -34,7 +35,10 @@ func NewService(name string, opts ...Option) *Service {
 
 	service := &Service{
 		name:      name,
-		dataStore: &store{},
+		dataStore: &store{
+			readDatabase: []*gorm.DB{},
+			writeDatabase: []*gorm.DB{},
+		},
 		queue:     &Queue{},
 	}
 

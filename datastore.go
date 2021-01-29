@@ -20,8 +20,6 @@ import (
 type store struct {
 	writeDatabase []*gorm.DB
 	readDatabase  []*gorm.DB
-
-	db *gorm.DB
 }
 
 func (s *Service) DB(ctx context.Context, readOnly bool) *gorm.DB {
@@ -68,6 +66,13 @@ func Datastore(ctx context.Context, postgresqlConnection string, readOnly bool) 
 			}
 		}
 
+		if s.dataStore.writeDatabase == nil {
+			s.dataStore.writeDatabase = []*gorm.DB{}
+		}
+
+		if s.dataStore.readDatabase == nil {
+			s.dataStore.readDatabase = []*gorm.DB{}
+		}
 		db, err := postgres.Open(ctx, postgresqlConnection)
 		if err != nil {
 			log.Printf("AddDB -- problem instantiating database : %v", err)

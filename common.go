@@ -1,6 +1,7 @@
 package frame
 
 import (
+	"fmt"
 	"github.com/rs/xid"
 	"gorm.io/gorm"
 	"net"
@@ -99,13 +100,11 @@ func GetMacAddress() string {
 
 	interfaces, _ := net.Interfaces()
 	for _, interf := range interfaces {
-
 		if addrs, err := interf.Addrs(); err == nil {
 			for _, addr := range addrs {
-
 				// only interested in the name with current IP address
 				if strings.Contains(addr.String(), currentIP) {
-					return interf.HardwareAddr.String()
+					return fmt.Sprintf("%s:%s",interf.Name, interf.HardwareAddr.String())
 				}
 			}
 		}

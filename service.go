@@ -23,6 +23,7 @@ type Service struct {
 	serverOptions  *server.Options
 	grpcServer     *grpc.Server
 	listener       net.Listener
+	client         *http.Client
 	queue          *Queue
 	dataStore      *store
 	healthCheckers []health.Checker
@@ -39,6 +40,7 @@ func NewService(name string, opts ...Option) *Service {
 			readDatabase: []*gorm.DB{},
 			writeDatabase: []*gorm.DB{},
 		},
+		client: &http.Client{},
 		queue:     &Queue{},
 	}
 

@@ -7,7 +7,7 @@ import (
 
 func TestService_Datastore(t *testing.T) {
 	ctx := context.Background()
-	mainDb := Datastore(ctx, "postgres://tes:tes@localhost:5432/ant?sslmode=require", false )
+	mainDb := Datastore(ctx, "postgres://frame:secret@localhost:5423/framedatabase?sslmode=disable", false )
 
 	srv := NewService( "Test Srv", mainDb)
 
@@ -38,8 +38,8 @@ func TestService_Datastore(t *testing.T) {
 
 func TestService_DatastoreRead(t *testing.T) {
 	ctx := context.Background()
-	mainDb := Datastore(ctx, "postgres://tes:tes@localhost:5432/ant?sslmode=require", false )
-	readDb := Datastore(ctx, "postgres://read:tes@localhost:5432/ant?sslmode=require", true )
+	mainDb := Datastore(ctx, "postgres://frame:secret@localhost:5423/framedatabase?sslmode=disable", false )
+	readDb := Datastore(ctx, "postgres://frame:secret@localhost:5423/framedatabase?sslmode=disable", true )
 
 	srv := NewService( "Test Srv", mainDb, readDb)
 

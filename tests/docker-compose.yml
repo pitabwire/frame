@@ -13,7 +13,7 @@ services:
       migrate up --yes --all-namespaces
     restart: on-failure
     volumes:
-      - ./keto.yaml:/home/ory/keto.yml
+      - ./tests/keto.yaml:/home/ory/keto.yml
   keto:
     container_name: frame_keto
     image: oryd/keto:v0.6.0-alpha.1
@@ -22,7 +22,7 @@ services:
     depends_on:
       - keto-migrate
     volumes:
-      - ./keto.yaml:/home/ory/keto.yml
+      - ./tests/keto.yaml:/home/ory/keto.yml
     ports:
       - 4466:4466
       - 4467:4467

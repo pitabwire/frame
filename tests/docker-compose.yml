@@ -3,6 +3,7 @@ version: '3.2'
 services:
 
   keto-migrate:
+    container_name: frame_keto_migration
     image: oryd/keto:v0.6.0-alpha.1
     links:
       - postgresd:postgresd
@@ -14,6 +15,7 @@ services:
     volumes:
       - ./keto.yaml:/home/ory/keto.yml
   keto:
+    container_name: frame_keto
     image: oryd/keto:v0.6.0-alpha.1
     links:
       - postgresd:postgresd
@@ -26,6 +28,7 @@ services:
       - 4467:4467
       
   postgresd:
+    container_name: frame_postgres
     image: postgres:13
     environment:
       - POSTGRES_USER=frame

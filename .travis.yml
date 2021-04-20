@@ -3,4 +3,15 @@ language: go
 go:
   - 1.x
 
-script: go test -v ./...
+
+
+addons:
+  apt:
+    packages:
+      - docker-ce
+      - docker-compose
+
+script:
+  - docker-compose up -d
+  - sleep 5
+  - go test -v ./...

@@ -4,9 +4,9 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/ioutil"
-	"log"
 	"net/http"
 )
 
@@ -47,6 +47,10 @@ func invokeACLService(ctx context.Context, action string, subject string, method
 
 	service := FromContext(ctx)
 
+	if service == nil {
+		return errors.New("service object should be set or supplied in the context"), nil
+	}
+
 	postBody, _ := json.Marshal(map[string]interface{}{
 		"namespace": "default",
 		"object":    service.name,
@@ -59,28 +63,24 @@ func invokeACLService(ctx context.Context, action string, subject string, method
 	req, err := http.NewRequestWithContext(ctx, method, authorizationUrl, bytes.NewBuffer(postBody))
 	//Handle Error
 	if err != nil {
-		log.Printf(" problems at request : %v", err)
 		return err, nil
 	}
 	req.Header = headers
 
 	resp, err := service.client.Do(req)
 	if err != nil {
-		log.Printf(" problems after request : %v", err)
 		return err, nil
 	}
 
 	defer resp.Body.Close()
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		log.Printf(" problems at body close : %v", err)
 		return err, nil
 	}
 
 	var response map[string]interface{}
 	err = json.Unmarshal(body, &response)
 	if err != nil {
-		log.Printf(" problems at decoding message : %s  %v", string(body), err)
 		return err, nil
 	}
 

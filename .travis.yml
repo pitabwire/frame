@@ -14,5 +14,5 @@ addons:
 script:
   - docker-compose -f ./tests/docker-compose.yml up  -d
   - sleep 5
-  - docker-compose logs
+  - docker-compose -f ./tests/docker-compose.yml logs
   - go test -v ./...

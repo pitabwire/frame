@@ -7,6 +7,10 @@ import (
 	"golang.org/x/text/language"
 )
 
+func (s *Service) Bundle() *i18n.Bundle {
+	return s.bundle
+}
+
 func Translations(languages ... string) Option {
 
 	bundle := i18n.NewBundle(language.English)

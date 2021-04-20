@@ -14,6 +14,7 @@ services:
     restart: on-failure
     volumes:
       - ./tests/keto.yaml:/home/ory/keto.yml
+
   keto:
     container_name: frame_keto
     image: oryd/keto:v0.6.0-alpha.1

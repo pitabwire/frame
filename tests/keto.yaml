@@ -117,7 +117,7 @@ log:
   # - Windows Command Line (CMD):
   #    > set LOG_LEVEL=<value>
   #
-  level: panic
+  level: debug
 
 ## tracing ##
 #

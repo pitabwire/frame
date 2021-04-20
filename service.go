@@ -3,6 +3,7 @@ package frame
 import (
 	"context"
 	"fmt"
+	"github.com/nicksnyder/go-i18n/v2/i18n"
 	"gocloud.dev/server"
 	"gocloud.dev/server/health"
 	"gocloud.dev/server/requestlog"
@@ -26,6 +27,7 @@ type Service struct {
 	client         *http.Client
 	queue          *Queue
 	dataStore      *store
+	bundle         *i18n.Bundle
 	healthCheckers []health.Checker
 	cleanup        func()
 }
@@ -35,13 +37,13 @@ type Option func(service *Service)
 func NewService(name string, opts ...Option) *Service {
 
 	service := &Service{
-		name:      name,
+		name: name,
 		dataStore: &store{
-			readDatabase: []*gorm.DB{},
+			readDatabase:  []*gorm.DB{},
 			writeDatabase: []*gorm.DB{},
 		},
 		client: &http.Client{},
-		queue:     &Queue{},
+		queue:  &Queue{},
 	}
 
 	service.Init(opts...)
@@ -104,7 +106,6 @@ func (s *Service) Run(ctx context.Context, address string) error {
 	if s.serverOptions.RequestLogger == nil {
 		s.serverOptions.RequestLogger = requestlog.NewNCSALogger(os.Stdout, func(e error) { fmt.Println(e) })
 	}
-
 
 	// If grpc server is setup we should use the correct driver
 	if s.grpcServer != nil {

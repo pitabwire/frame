@@ -3,6 +3,7 @@ module github.com/pitabwire/frame
 go 1.16
 
 require (
+	github.com/nicksnyder/go-i18n/v2 v2.1.2
 	github.com/rs/xid v1.2.1
 	github.com/soheilhy/cmux v0.1.4
 	gocloud.dev v0.21.0

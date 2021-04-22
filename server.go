@@ -129,7 +129,6 @@ func ServerListener(listener net.Listener) Option {
 
 func HttpHandler(h http.Handler) Option {
 	return func(c *Service) {
-
 		c.handler = h
 	}
 }

@@ -58,8 +58,6 @@ func invokeACLService(ctx context.Context, action string, subject string, method
 		"subject":   subject,
 	})
 
-
-
 	req, err := http.NewRequestWithContext(ctx, method, authorizationUrl, bytes.NewBuffer(postBody))
 	//Handle Error
 	if err != nil {

@@ -15,18 +15,21 @@ type BaseModelI interface {
 	GetID() string
 }
 
-// Migration Our simple table holding all the migration data
+// BaseModel Our simple table holding all the migration data
 type BaseModel struct {
-	ID         string `gorm:"type:varchar(50);primary_key"`
-	CreatedAt  time.Time
-	ModifiedAt time.Time
-	Version    uint32         `gorm:"DEFAULT 0"`
-	DeletedAt  gorm.DeletedAt `sql:"index"`
+	ID          string `gorm:"type:varchar(50);primary_key"`
+	CreatedAt   time.Time
+	ModifiedAt  time.Time
+	Version     uint32         `gorm:"DEFAULT 0"`
+	TenantID    string         `gorm:"type:varchar(50);"`
+	PartitionID string         `gorm:"type:varchar(50);"`
+	DeletedAt   gorm.DeletedAt `sql:"index"`
 }
 
-func (model *BaseModel)GetID() string   {
+func (model *BaseModel) GetID() string {
 	return model.ID
 }
+
 // BeforeCreate Ensures we update a migrations time stamps
 func (model *BaseModel) BeforeCreate(db *gorm.DB) error {
 	if model.ID == "" {
@@ -36,6 +39,13 @@ func (model *BaseModel) BeforeCreate(db *gorm.DB) error {
 		model.CreatedAt = time.Now()
 		model.ModifiedAt = time.Now()
 		model.Version = 1
+	}
+
+	ctx := db.Statement.Context
+	authClaim := ClaimsFromContext(ctx)
+	if  model.TenantID == "" && authClaim != nil {
+		model.PartitionID = authClaim.PartitionID
+		model.TenantID = authClaim.TenantID
 	}
 	return nil
 }
@@ -55,8 +65,6 @@ type Migration struct {
 	Patch     string `gorm:"type:text"`
 	AppliedAt *time.Time
 }
-
-
 
 func GetIp(r *http.Request) string {
 	sourceIp := r.Header.Get("X-FORWARDED-FOR")
@@ -104,7 +112,7 @@ func GetMacAddress() string {
 			for _, addr := range addrs {
 				// only interested in the name with current IP address
 				if strings.Contains(addr.String(), currentIP) {
-					return fmt.Sprintf("%s:%s",interf.Name, interf.HardwareAddr.String())
+					return fmt.Sprintf("%s:%s", interf.Name, interf.HardwareAddr.String())
 				}
 			}
 		}

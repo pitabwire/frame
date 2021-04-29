@@ -22,6 +22,17 @@ type store struct {
 	readDatabase  []*gorm.DB
 }
 
+func TenantPartition(ctx context.Context) func(db *gorm.DB) *gorm.DB {
+	return func(db *gorm.DB) *gorm.DB {
+		authClaim := ClaimsFromContext(ctx)
+		if authClaim != nil {
+			return db.Where("tenant_id = ? AND partition_id = ?", authClaim.TenantID, authClaim.PartitionID)
+		} else {
+			return db
+		}
+	}
+}
+
 func (s *Service) DB(ctx context.Context, readOnly bool) *gorm.DB {
 
 	var db *gorm.DB
@@ -53,7 +64,7 @@ func (s *Service) DB(ctx context.Context, readOnly bool) *gorm.DB {
 		db = s.dataStore.writeDatabase[randomIndex]
 	}
 
-	return db.WithContext(ctx)
+	return db.WithContext(ctx).Scopes(TenantPartition(ctx))
 }
 
 func Datastore(ctx context.Context, postgresqlConnection string, readOnly bool) Option {
@@ -98,8 +109,6 @@ func Datastore(ctx context.Context, postgresqlConnection string, readOnly bool) 
 }
 
 // addSqlHealthChecker returns a health check for the database.
-//This will signal to Kubernetes or other orchestrators that the server should not receive
-// traffic until the server is able to connect to its database.
 func addSqlHealthChecker(s *Service, db *sql.DB) {
 	dbCheck := sqlhealth.New(db)
 	s.AddHealthCheck(dbCheck)
@@ -108,8 +117,7 @@ func addSqlHealthChecker(s *Service, db *sql.DB) {
 	})
 }
 
-// PerformMigration finds missing migrations and records them in the database,
-// We use the fragmenta_metadata table to do this
+// MigrateDatastore finds missing migrations and records them in the database
 func (s *Service) MigrateDatastore(ctx context.Context, migrationsDirPath string, migrations ...interface{}) error {
 
 	db := s.DB(ctx, false)

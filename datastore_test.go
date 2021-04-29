@@ -47,6 +47,7 @@ func TestService_DatastoreRead(t *testing.T) {
 	r := srv.DB(ctx, true)
 	if w == nil || r == nil {
 		t.Errorf("Read and write services setup but one couldn't be found")
+		return
 	}
 
 	wd, _ := w.DB()

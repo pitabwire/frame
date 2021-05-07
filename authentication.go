@@ -24,19 +24,23 @@ type AuthenticationClaims struct {
 	jwt.StandardClaims
 }
 
+// AsMetadata Creates a string map to be used as metadata in queue data
 func (a *AuthenticationClaims) AsMetadata() map[string]string {
 
 	m := make(map[string]string)
 	m["tenant_id"] = a.TenantID
 	m["partition_id"] = a.PartitionID
 	m["profile_id"] = a.ProfileID
+	m["subscription_id"] = a.SubscriptionID
 	return m
 }
 
+// ClaimsToContext adds authentication claims to the current supplied context
 func (a *AuthenticationClaims) ClaimsToContext(ctx context.Context) context.Context {
 	return context.WithValue(ctx, ctxKeyAuthentication, a)
 }
 
+// ClaimsFromContext extracts authentication claims from the supplied context if any exist
 func ClaimsFromContext(ctx context.Context) *AuthenticationClaims {
 	authenticationClaims, ok := ctx.Value(ctxKeyAuthentication).(*AuthenticationClaims)
 	if !ok {
@@ -45,7 +49,6 @@ func ClaimsFromContext(ctx context.Context) *AuthenticationClaims {
 
 	return authenticationClaims
 }
-
 
 func authenticate(ctx context.Context, jwtToken string) (context.Context, error) {
 
@@ -111,6 +114,8 @@ func getPemCert(token *jwt.Token) (interface{}, error) {
 	return cert, nil
 }
 
+// AuthenticationMiddleware Simple http middleware function
+// to verify and extract authentication data supplied in a jwt as authorization bearer token
 func AuthenticationMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		authorizationHeader := r.Header.Get("Authorization")
@@ -169,7 +174,9 @@ func grpcJwtTokenExtractor(ctx context.Context) (string, error) {
 	return strings.TrimSpace(extractedJwtToken[1]), nil
 }
 
-func UnaryAuthInterceptor(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+// UnaryAuthInterceptor Simple grpc interceptor to extract the jwt supplied via authorization bearer token and verify the authentication claims in the token
+func UnaryAuthInterceptor(ctx context.Context, req interface{},
+	info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
 
 	jwtToken, err := grpcJwtTokenExtractor(ctx)
 	if err != nil {
@@ -183,17 +190,36 @@ func UnaryAuthInterceptor(ctx context.Context, req interface{}, info *grpc.Unary
 	return handler(ctx, req)
 }
 
+// serverStreamWrapper simple wrapper method that stores auth claims for the server stream context
+type serverStreamWrapper struct {
+	authClaim *AuthenticationClaims
+	grpc.ServerStream
+}
+
+func (s *serverStreamWrapper) Context() context.Context {
+	return s.authClaim.ClaimsToContext(s.Context())
+}
+
+// StreamAuthInterceptor An authentication claims extractor that will always verify the information flowing in the streams as true jwt claims
 func StreamAuthInterceptor(srv interface{}, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
 
-	ctx := ss.Context()
-	jwtToken, err := grpcJwtTokenExtractor(ctx)
-	if err != nil {
-		return err
-	}
+	localServerStream := ss
+	authClaim := ClaimsFromContext(localServerStream.Context())
+	if authClaim == nil {
+		ctx := ss.Context()
+		jwtToken, err := grpcJwtTokenExtractor(ctx)
+		if err != nil {
+			return err
+		}
 
-	ctx, err = authenticate(ctx, jwtToken)
-	if err != nil {
-		return err
+		ctx, err = authenticate(ctx, jwtToken)
+		if err != nil {
+			return err
+		}
+
+		authClaim = ClaimsFromContext(ctx)
+
+		localServerStream = &serverStreamWrapper{authClaim, ss}
 	}
-	return handler(srv, ss)
+	return handler(srv, localServerStream)
 }

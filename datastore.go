@@ -203,6 +203,11 @@ func applyNewMigrations(db *gorm.DB) error {
 
 	var unAppliedMigrations []Migration
 	if err := db.Where("applied_at IS NULL").Find(&unAppliedMigrations).Error; err != nil {
+
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			log.Printf("No migrations found to be applied ")
+			return nil
+		}
 		return err
 	}
 

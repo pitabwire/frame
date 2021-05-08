@@ -7,7 +7,6 @@ require (
 	github.com/dgrijalva/jwt-go v3.2.0+incompatible
 	github.com/nicksnyder/go-i18n/v2 v2.1.2
 	github.com/rs/xid v1.2.1
-	github.com/serjlee/jwk-go v0.1.0
 	github.com/soheilhy/cmux v0.1.4
 	github.com/stretchr/testify v1.6.1
 	gocloud.dev v0.21.0

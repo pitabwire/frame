@@ -1,0 +1,5 @@
+
+[Example]
+description = "An example message to use"
+one = "{{.Name}} has nothing"
+other = "{{.Name}} have nothing"

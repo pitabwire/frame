@@ -1,0 +1,5 @@
+
+[Example]
+description = "Mfano wa messaji"
+one = "{{.Name}} haina chochote"
+other = "{{.Name}} havina vyovyote"

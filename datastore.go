@@ -157,12 +157,9 @@ func scanForNewMigrations(db *gorm.DB, migrationsDirPath string) error {
 
 	for _, file := range files {
 
-		var migration Migration
-
 		filename := filepath.Base(file)
 		filename = strings.Replace(filename, ".sql", "", 1)
 
-		migration.Name = filename
 		migrationPatch, err := ioutil.ReadFile(file)
 
 		if err != nil {
@@ -170,34 +167,50 @@ func scanForNewMigrations(db *gorm.DB, migrationsDirPath string) error {
 			continue
 		}
 
-		result := db.First(&migration, "name = ?", filename)
-		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
-
-			log.Printf("migration %s is unapplied", file)
-			migration.Patch = string(migrationPatch)
-
-			err = db.Save(&migration).Error
-			if err != nil {
-				log.Printf("There is an error :%v adding migration :%s", err, file)
-			}
-		} else {
-
-			if migration.AppliedAt.IsZero() {
-
-				if migration.Patch != string(migrationPatch) {
-
-					result := db.Model(&migration).Update("patch", string(migrationPatch))
-
-					if result.Error != nil {
-						log.Printf("There is an error updating migration :%s %v", file, result.Error)
-					}
-				}
-			}
-
+		err = saveNewMigrations(db, filename, string(migrationPatch))
+		if err != nil {
+			log.Printf("new migration :%s could not be processed because: %+v", file, err)
 		}
+
 	}
 	return nil
 }
+
+
+
+func saveNewMigrations(db *gorm.DB, filename string, migrationPatch string) error {
+
+	migration := Migration{Name: filename}
+
+	result := db.First(&migration, "name = ?", filename)
+	if errors.Is(result.Error, gorm.ErrRecordNotFound) {
+
+		log.Printf("migration %s is unapplied", filename)
+		migration.Patch = migrationPatch
+
+		err := db.Save(&migration).Error
+		if err != nil {
+			return err
+		}
+	} else {
+
+		if !migration.AppliedAt.Valid {
+
+			if migration.Patch != migrationPatch {
+
+				err := db.Model(&migration).Update("patch", string(migrationPatch)).Error
+
+				if err != nil {
+					return err
+				}
+			}
+		}
+
+	}
+
+	return nil
+}
+
 
 func applyNewMigrations(db *gorm.DB) error {
 
@@ -217,7 +230,14 @@ func applyNewMigrations(db *gorm.DB) error {
 			return err
 		}
 
-		db.Model(&migration).Update("applied_at", time.Now())
+		migration.AppliedAt = sql.NullTime{
+			Time: time.Now(),
+			Valid: true,
+		}
+		if err := db.Model(&migration).Save(migration).Error; err != nil {
+			return err
+		}
+
 		log.Printf("Successfully applied the file : %v", fmt.Sprintf("%s.sql", migration.Name))
 	}
 

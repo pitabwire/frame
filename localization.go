@@ -11,12 +11,16 @@ func (s *Service) Bundle() *i18n.Bundle {
 	return s.bundle
 }
 
-func Translations(languages ... string) Option {
+func Translations(translationsFolder string, languages ... string) Option {
+
+	if translationsFolder == ""{
+		translationsFolder = "localization"
+	}
 
 	bundle := i18n.NewBundle(language.English)
 	bundle.RegisterUnmarshalFunc("toml", toml.Unmarshal)
 	for _, lang := range languages {
-		bundle.MustLoadMessageFile(fmt.Sprintf("localization/messages.%v.toml", lang))
+		bundle.MustLoadMessageFile(fmt.Sprintf("%s/messages.%v.toml",translationsFolder, lang))
 	}
 
 	return func(c *Service) {

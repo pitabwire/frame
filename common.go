@@ -1,6 +1,7 @@
 package frame
 
 import (
+	"database/sql"
 	"fmt"
 	"github.com/rs/xid"
 	"gorm.io/gorm"
@@ -63,7 +64,7 @@ type Migration struct {
 
 	Name      string `gorm:"type:varchar(50);unique_index"`
 	Patch     string `gorm:"type:text"`
-	AppliedAt *time.Time
+	AppliedAt sql.NullTime
 }
 
 func GetIp(r *http.Request) string {

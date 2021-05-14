@@ -186,7 +186,7 @@ func saveNewMigrations(db *gorm.DB, filename string, migrationPatch string) erro
 	if errors.Is(result.Error, gorm.ErrRecordNotFound) {
 
 		log.Printf("migration %s is unapplied", filename)
-		migration.Patch = migrationPatch
+		migration = Migration{Name: filename, Patch: migrationPatch}
 
 		err := db.Save(&migration).Error
 		if err != nil {

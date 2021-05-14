@@ -182,7 +182,7 @@ func scanForNewMigrations(db *gorm.DB, migrationsDirPath string) error {
 			}
 		} else {
 
-			if migration.AppliedAt == nil {
+			if migration.AppliedAt.IsZero() {
 
 				if migration.Patch != string(migrationPatch) {
 

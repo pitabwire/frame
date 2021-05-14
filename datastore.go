@@ -176,7 +176,7 @@ func scanForNewMigrations(db *gorm.DB, migrationsDirPath string) error {
 			log.Printf("migration %s is unapplied", file)
 			migration.Patch = string(migrationPatch)
 
-			err = db.Create(&migration).Error
+			err = db.Save(&migration).Error
 			if err != nil {
 				log.Printf("There is an error :%v adding migration :%s", err, file)
 			}

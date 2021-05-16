@@ -1,12 +1,10 @@
 package frame
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"net/http"
 )
 
@@ -28,56 +26,21 @@ func AuthorizationControlListHasAccess(ctx context.Context, action string, subje
 		"subject":   subject,
 	}
 
-	err, result := invokeACLService(ctx, http.MethodPost, authorizationUrl, payload)
-
+	result, err := InvokeRestService(ctx, http.MethodPost, authorizationUrl, payload, nil)
 	if err != nil {
 		return err, false
 	}
 
-	if val, ok := result["allowed"]; ok && val.(bool) {
+	var response map[string]interface{}
+	err = json.Unmarshal(result, &response)
+	if err != nil {
+		return err, false
+	}
+
+	if val, ok := response["allowed"]; ok && val.(bool) {
 		return nil, true
 	}
 	return nil, false
 }
 
 
-func invokeACLService(ctx context.Context, method string, authorizationUrl string, payload map[string]interface{}) (error, map[string]interface{}) {
-
-	headers := map[string][]string{
-		"Content-Type": {"application/json"},
-		"Accept":       {"application/json"},
-	}
-
-	service := FromContext(ctx)
-
-	postBody, err := json.Marshal(payload)
-	if err != nil {
-		return err, nil
-	}
-
-	req, err := http.NewRequestWithContext(ctx, method, authorizationUrl, bytes.NewBuffer(postBody))
-	//Handle Error
-	if err != nil {
-		return err, nil
-	}
-	req.Header = headers
-
-	resp, err := service.client.Do(req)
-	if err != nil {
-		return err, nil
-	}
-
-	defer resp.Body.Close()
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return err, nil
-	}
-
-	var response map[string]interface{}
-	err = json.Unmarshal(body, &response)
-	if err != nil {
-		return err, nil
-	}
-
-	return nil, response
-}

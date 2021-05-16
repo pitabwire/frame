@@ -2,6 +2,7 @@ package frame
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -25,8 +26,14 @@ func authorizationControlListWrite(ctx context.Context, action string, subject s
 		"subject":   subject,
 	}
 
-	err, _ := invokeACLService(ctx, http.MethodPut, authorizationUrl, payload)
+	result, err := InvokeRestService(ctx, http.MethodPut, authorizationUrl, payload, nil)
 
+	if err != nil {
+		return err
+	}
+
+	var response map[string]interface{}
+	err = json.Unmarshal(result, &response)
 	if err != nil {
 		return err
 	}
@@ -47,10 +54,10 @@ func TestAuthorizationControlListWrite(t *testing.T) {
 	ctx = ToContext(ctx, srv)
 
 	authClaim := AuthenticationClaims{
-		TenantID: "tenant",
+		TenantID:    "tenant",
 		PartitionID: "partition",
-		ProfileID: "profile",
-		AccessID: "access",
+		ProfileID:   "profile",
+		AccessID:    "access",
 	}
 	ctx = authClaim.ClaimsToContext(ctx)
 
@@ -75,10 +82,10 @@ func TestAuthorizationControlListHasAccess(t *testing.T) {
 	ctx = ToContext(ctx, srv)
 
 	authClaim := AuthenticationClaims{
-		TenantID: "tenant",
+		TenantID:    "tenant",
 		PartitionID: "partition",
-		ProfileID: "profile",
-		AccessID: "access",
+		ProfileID:   "profile",
+		AccessID:    "access",
 	}
 	ctx = authClaim.ClaimsToContext(ctx)
 

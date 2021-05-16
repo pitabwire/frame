@@ -4,7 +4,7 @@ services:
 
   keto-migrate:
     container_name: frame_keto_migration
-    image: oryd/keto:v0.6.0-alpha.1
+    image: oryd/keto:v0.6.0-alpha.3
     links:
       - postgresd:postgresd
     environment:
@@ -17,7 +17,7 @@ services:
 
   keto:
     container_name: frame_keto
-    image: oryd/keto:v0.6.0-alpha.1
+    image: oryd/keto:v0.6.0-alpha.3
     links:
       - postgresd:postgresd
     depends_on:

@@ -20,7 +20,7 @@ type AuthenticationClaims struct {
 	ProfileID      string `json:"profile_id,omitempty"`
 	TenantID       string `json:"tenant_id,omitempty"`
 	PartitionID    string `json:"partition_id,omitempty"`
-	SubscriptionID string `json:"subscription_id,omitempty"`
+	AccessID string `json:"access_id,omitempty"`
 	jwt.StandardClaims
 }
 
@@ -31,7 +31,7 @@ func (a *AuthenticationClaims) AsMetadata() map[string]string {
 	m["tenant_id"] = a.TenantID
 	m["partition_id"] = a.PartitionID
 	m["profile_id"] = a.ProfileID
-	m["subscription_id"] = a.SubscriptionID
+	m["access_id"] = a.AccessID
 	return m
 }
 

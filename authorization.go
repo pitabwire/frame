@@ -10,22 +10,25 @@ import (
 	"net/http"
 )
 
-func AuthorizationControlListWrite(ctx context.Context, action string, subject string) error {
-
-	authorizationUrl := fmt.Sprintf("%s%s", GetEnv("KETO_AUTHORIZATION_WRITE_URL", ""), "/relation-tuples")
-	err, _ := invokeACLService(ctx, action, subject, http.MethodPut, authorizationUrl)
-
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
 
 func AuthorizationControlListHasAccess(ctx context.Context, action string, subject string) (error, bool) {
 
 	authorizationUrl := fmt.Sprintf("%s%s", GetEnv("KETO_AUTHORIZATION_READ_URL", ""), "/check")
-	err, result := invokeACLService(ctx, action, subject, http.MethodPost, authorizationUrl)
+
+	authClaims := ClaimsFromContext(ctx)
+
+	if authClaims == nil {
+		return errors.New("only authenticated requsts should be used to check authorization"), false
+	}
+
+	payload := map[string]interface{}{
+		"namespace": authClaims.TenantID,
+		"object":    authClaims.PartitionID,
+		"relation":  action,
+		"subject":   subject,
+	}
+
+	err, result := invokeACLService(ctx, http.MethodPost, authorizationUrl, payload)
 
 	if err != nil {
 		return err, false
@@ -38,7 +41,7 @@ func AuthorizationControlListHasAccess(ctx context.Context, action string, subje
 }
 
 
-func invokeACLService(ctx context.Context, action string, subject string, method string, authorizationUrl string) (error, map[string]interface{}) {
+func invokeACLService(ctx context.Context, method string, authorizationUrl string, payload map[string]interface{}) (error, map[string]interface{}) {
 
 	headers := map[string][]string{
 		"Content-Type": {"application/json"},
@@ -47,16 +50,10 @@ func invokeACLService(ctx context.Context, action string, subject string, method
 
 	service := FromContext(ctx)
 
-	if service == nil {
-		return errors.New("service object should be set or supplied in the context"), nil
+	postBody, err := json.Marshal(payload)
+	if err != nil {
+		return err, nil
 	}
-
-	postBody, _ := json.Marshal(map[string]interface{}{
-		"namespace": "default",
-		"object":    service.name,
-		"relation":  action,
-		"subject":   subject,
-	})
 
 	req, err := http.NewRequestWithContext(ctx, method, authorizationUrl, bytes.NewBuffer(postBody))
 	//Handle Error

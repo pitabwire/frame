@@ -14,6 +14,7 @@ func AuthorizationControlListHasAccess(ctx context.Context, action string, subje
 	authorizationUrl := fmt.Sprintf("%s%s", GetEnv("KETO_AUTHORIZATION_READ_URL", ""), "/check")
 
 	authClaims := ClaimsFromContext(ctx)
+	service := FromContext(ctx)
 
 	if authClaims == nil {
 		return errors.New("only authenticated requsts should be used to check authorization"), false
@@ -26,7 +27,7 @@ func AuthorizationControlListHasAccess(ctx context.Context, action string, subje
 		"subject":   subject,
 	}
 
-	result, err := InvokeRestService(ctx, http.MethodPost, authorizationUrl, payload, nil)
+	result, err := service.InvokeRestService(ctx, http.MethodPost, authorizationUrl, payload, nil)
 	if err != nil {
 		return err, false
 	}

@@ -14,6 +14,7 @@ func authorizationControlListWrite(ctx context.Context, action string, subject s
 
 	authorizationUrl := fmt.Sprintf("%s%s", GetEnv("KETO_AUTHORIZATION_WRITE_URL", ""), "/relation-tuples")
 	authClaims := ClaimsFromContext(ctx)
+	service := FromContext(ctx)
 
 	if authClaims == nil {
 		return errors.New("only authenticated requsts should be used to check authorization")
@@ -26,7 +27,7 @@ func authorizationControlListWrite(ctx context.Context, action string, subject s
 		"subject":   subject,
 	}
 
-	result, err := InvokeRestService(ctx, http.MethodPut, authorizationUrl, payload, nil)
+	result, err := service.InvokeRestService(ctx, http.MethodPut, authorizationUrl, payload, nil)
 
 	if err != nil {
 		return err

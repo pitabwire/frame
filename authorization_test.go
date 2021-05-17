@@ -54,7 +54,7 @@ func TestAuthorizationControlListWrite(t *testing.T) {
 	ctx = ToContext(ctx, srv)
 
 	authClaim := AuthenticationClaims{
-		TenantID:    "tenant",
+		TenantID:    "default",
 		PartitionID: "partition",
 		ProfileID:   "profile",
 		AccessID:    "access",
@@ -82,7 +82,7 @@ func TestAuthorizationControlListHasAccess(t *testing.T) {
 	ctx = ToContext(ctx, srv)
 
 	authClaim := AuthenticationClaims{
-		TenantID:    "tenant",
+		TenantID:    "default",
 		PartitionID: "partition",
 		ProfileID:   "profile",
 		AccessID:    "access",

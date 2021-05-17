@@ -260,7 +260,7 @@ namespaces:
 # - Windows Command Line (CMD):
 #    > set VERSION=<value>
 #
-version: v0.6.0-alpha.1
+version: v0.6.0-alpha.3
 
 dsn: postgres://frame:secret@postgresd:5432/framedatabase?sslmode=disable
 

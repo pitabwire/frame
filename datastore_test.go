@@ -94,13 +94,13 @@ func TestSaveNewMigrations(t *testing.T) {
 	ctx := context.Background()
 	mainDb := Datastore(ctx, testDatastoreConnection, false)
 	srv := NewService("Test Migrations Srv", mainDb)
-	err := srv.MigrateDatastore(ctx, "./tests/migrations/default")
+	err := srv.MigrateDatastore(ctx, "./tests_runner/migrations/default")
 	if err != nil {
 		t.Errorf("Could not migrate successfully because : %v", err)
 		return
 	}
 
-	migrationPath := "./tests/migrations/scans/scanned_select.sql"
+	migrationPath := "./tests_runner/migrations/scans/scanned_select.sql"
 
 	err = srv.DB(ctx, false).Where("name = ?", migrationPath).Unscoped().Delete(&Migration{}).Error
 	if err != nil {
@@ -160,13 +160,13 @@ func TestApplyMigrations(t *testing.T) {
 	ctx := context.Background()
 	mainDb := Datastore(ctx, testDatastoreConnection, false)
 	srv := NewService("Test Migrations Srv", mainDb)
-	err := srv.MigrateDatastore(ctx, "./tests/migrations/default")
+	err := srv.MigrateDatastore(ctx, "./tests_runner/migrations/default")
 	if err != nil {
 		t.Errorf("Could not migrate successfully because : %v", err)
 		return
 	}
 
-	migrationPath := "./tests/migrations/applied/apply_select.sql"
+	migrationPath := "./tests_runner/migrations/applied/apply_select.sql"
 
 	err = srv.DB(ctx, false).Where("name = ?", migrationPath).Unscoped().Delete(&Migration{}).Error
 	if err != nil {

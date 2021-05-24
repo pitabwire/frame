@@ -7,7 +7,7 @@ import (
 
 func TestTranslations(t *testing.T) {
 
-	translations := Translations( "tests/localization", "en", "sw")
+	translations := Translations( "tests_runner/localization", "en", "sw")
 	srv := NewService("Test Localization Srv", translations)
 
 	bundle := srv.Bundle()

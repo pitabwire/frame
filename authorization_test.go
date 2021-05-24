@@ -27,10 +27,14 @@ func authorizationControlListWrite(ctx context.Context, action string, subject s
 		"subject":   subject,
 	}
 
-	result, err := service.InvokeRestService(ctx, http.MethodPut, authorizationUrl, payload, nil)
+	status, result, err := service.InvokeRestService(ctx, http.MethodPut, authorizationUrl, payload, nil)
 
 	if err != nil {
 		return err
+	}
+
+	if status > 299 || status < 200 {
+		return errors.New(fmt.Sprintf(" invalid response status %d had message %s", status, string(result)))
 	}
 
 	var response map[string]interface{}

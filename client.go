@@ -8,7 +8,7 @@ import (
 	"net/http"
 )
 
-func (s *Service) InvokeRestService(ctx context.Context, method string, authorizationUrl string, payload map[string]interface{}, headers map[string][]string) ([]byte, error) {
+func (s *Service) InvokeRestService(ctx context.Context, method string, authorizationUrl string, payload map[string]interface{}, headers map[string][]string) (int, []byte, error) {
 
 	if headers == nil {
 		headers = map[string][]string{
@@ -19,22 +19,24 @@ func (s *Service) InvokeRestService(ctx context.Context, method string, authoriz
 
 	postBody, err := json.Marshal(payload)
 	if err != nil {
-		return nil, err
+		return 0, nil, err
 	}
 
 	req, err := http.NewRequestWithContext(ctx, method, authorizationUrl, bytes.NewBuffer(postBody))
 	if err != nil {
-		return nil, err
+		return 0, nil, err
 	}
 	req.Header = headers
 
 	resp, err := s.client.Do(req)
 	if err != nil {
-		return nil, err
+		return 0, nil, err
 	}
 
 	defer resp.Body.Close()
-	return ioutil.ReadAll(resp.Body)
+
+	response, err := ioutil.ReadAll(resp.Body)
+	return resp.StatusCode, response, err
 
 }
 

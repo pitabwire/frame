@@ -27,9 +27,13 @@ func AuthorizationControlListHasAccess(ctx context.Context, action string, subje
 		"subject":   subject,
 	}
 
-	result, err := service.InvokeRestService(ctx, http.MethodPost, authorizationUrl, payload, nil)
+	status, result, err := service.InvokeRestService(ctx, http.MethodPost, authorizationUrl, payload, nil)
 	if err != nil {
 		return err, false
+	}
+
+	if status > 299 || status < 200{
+		return errors.New(fmt.Sprintf(" invalid response status %d had message %s", status, string(result))), false
 	}
 
 	var response map[string]interface{}

@@ -14,7 +14,7 @@ func TestService_RegisterPublisherNotSet(t *testing.T) {
 
 	srv := NewService( "Test Srv")
 
-	err := srv.Publish(ctx, "random", []byte(""), nil )
+	err := srv.Publish(ctx, "random", []byte("") )
 
 	if err == nil  {
 		t.Errorf("We shouldn't be able to publish when no topic was registered")
@@ -29,7 +29,7 @@ func TestService_RegisterPublisherNotInitialized(t *testing.T) {
 	opt := RegisterPublisher("test", "mem://topicA")
 	srv := NewService( "Test Srv", opt)
 
-	err := srv.Publish(ctx, "random", []byte(""), nil )
+	err := srv.Publish(ctx, "random", []byte("") )
 
 	if err == nil  {
 		t.Errorf("We shouldn't be able to publish when no topic was registered")
@@ -50,7 +50,7 @@ func TestService_RegisterPublisher(t *testing.T) {
 		return
 	}
 
-	err = srv.Publish(ctx, "test", []byte(""), nil )
+	err = srv.Publish(ctx, "test", []byte("") )
 	if err != nil  {
 		t.Errorf("We could not publish to topic that was registered %v", err)
 	}
@@ -74,17 +74,17 @@ func TestService_RegisterPublisherMultiple(t *testing.T) {
 		return
 	}
 
-	err = srv.Publish(ctx, "test", []byte("Testament"), nil )
+	err = srv.Publish(ctx, "test", []byte("Testament") )
 	if err != nil  {
 		t.Errorf("We could not publish to topic that was registered %v", err)
 	}
 
-	err = srv.Publish(ctx, "test-2", []byte("Testament"), nil )
+	err = srv.Publish(ctx, "test-2", []byte("Testament") )
 	if err != nil  {
 		t.Errorf("We could not publish to topic that was registered %v", err)
 	}
 
-	err = srv.Publish(ctx, "test-3", []byte("Testament"), nil )
+	err = srv.Publish(ctx, "test-3", []byte("Testament") )
 	if err == nil  {
 		t.Errorf("We should not be able to publish to topic that was not registered")
 	}
@@ -94,7 +94,7 @@ func TestService_RegisterPublisherMultiple(t *testing.T) {
 type messageHandler struct {
 
 }
-func (m *messageHandler) Handle(ctx context.Context, message []byte, metadata map[string]string) error {
+func (m *messageHandler) Handle(ctx context.Context, message []byte) error {
 
 	log.Printf(" A nice message to handle: %v", string(message))
 	return nil
@@ -103,7 +103,7 @@ func (m *messageHandler) Handle(ctx context.Context, message []byte, metadata ma
 type handlerWithError struct {
 
 }
-func (m *handlerWithError) Handle(ctx context.Context, message []byte, metadata map[string]string) error {
+func (m *handlerWithError) Handle(ctx context.Context, message []byte) error {
 
 	log.Printf(" A dreadful message to handle: %v", string(message))
 	return errors.New("throwing an error for tests")
@@ -128,7 +128,7 @@ func TestService_RegisterSubscriber(t *testing.T) {
 	}
 
 	for i := range make([]int, 30) {
-		err = srv.Publish(ctx, "test", []byte(fmt.Sprintf(" testing message %d", i)), nil)
+		err = srv.Publish(ctx, "test", []byte(fmt.Sprintf(" testing message %d", i)))
 		if err != nil {
 			t.Errorf("We could not publish to topic that was registered %v", err)
 		}
@@ -136,7 +136,7 @@ func TestService_RegisterSubscriber(t *testing.T) {
 
 	}
 
-	err = srv.Publish(ctx, "test", []byte("throw error"), nil)
+	err = srv.Publish(ctx, "test", []byte("throw error"))
 	if err != nil {
 		t.Errorf("We could not publish to topic that was registered %v", err)
 	}
@@ -161,7 +161,7 @@ func TestService_RegisterSubscriberWithError(t *testing.T) {
 		return
 	}
 
-		err = srv.Publish(ctx, "test", []byte(fmt.Sprintf(" testing message with error")), nil)
+		err = srv.Publish(ctx, "test", []byte(fmt.Sprintf(" testing message with error")))
 		if err != nil {
 			t.Errorf("We could not publish to topic that was registered %v", err)
 		}

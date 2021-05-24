@@ -17,10 +17,10 @@ const ctxKeyAuthentication = "authenticationKey"
 // AuthenticationClaims Create a struct that will be encoded to a JWT.
 // We add jwt.StandardClaims as an embedded type, to provide fields like expiry time
 type AuthenticationClaims struct {
-	ProfileID      string `json:"profile_id,omitempty"`
-	TenantID       string `json:"tenant_id,omitempty"`
-	PartitionID    string `json:"partition_id,omitempty"`
-	AccessID string `json:"access_id,omitempty"`
+	ProfileID   string `json:"profile_id,omitempty"`
+	TenantID    string `json:"tenant_id,omitempty"`
+	PartitionID string `json:"partition_id,omitempty"`
+	AccessID    string `json:"access_id,omitempty"`
 	jwt.StandardClaims
 }
 
@@ -48,6 +48,31 @@ func ClaimsFromContext(ctx context.Context) *AuthenticationClaims {
 	}
 
 	return authenticationClaims
+}
+
+// ClaimsFromMap extracts authentication claims from the supplied map if they exist
+func ClaimsFromMap(m map[string]string) *AuthenticationClaims {
+	var authenticationClaims AuthenticationClaims
+
+	if val, ok := m["tenant_id"]; ok {
+		authenticationClaims = AuthenticationClaims{}
+		authenticationClaims.TenantID = val
+
+		if val, ok := m["partition_id"]; ok {
+			authenticationClaims.PartitionID = val
+
+			if val, ok := m["profile_id"]; ok {
+				authenticationClaims.ProfileID = val
+
+				if val, ok := m["access_id"]; ok {
+					authenticationClaims.AccessID = val
+					return &authenticationClaims
+				}
+			}
+		}
+	}
+
+	return nil
 }
 
 func authenticate(ctx context.Context, jwtToken string) (context.Context, error) {

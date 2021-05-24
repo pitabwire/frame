@@ -26,7 +26,7 @@ type publisher struct {
 }
 
 type SubscribeWorker interface {
-	Handle(ctx context.Context, message []byte, metadata map[string]string) error
+	Handle(ctx context.Context, message []byte) error
 }
 
 type subscriber struct {
@@ -68,7 +68,9 @@ func RegisterSubscriber(reference string, queueUrl string, concurrency int,
 	}
 }
 
-func (s Service) Publish(ctx context.Context, reference string, message []byte, metadata map[string]string) error {
+func (s Service) Publish(ctx context.Context, reference string, message []byte) error {
+
+	var metadata map[string]string
 
 	publisher := s.queue.publishQueueMap[reference]
 	if publisher == nil {
@@ -79,7 +81,14 @@ func (s Service) Publish(ctx context.Context, reference string, message []byte, 
 		return errors.New(fmt.Sprintf("Publish -- can't publish on uninitialized queue %v ", reference))
 	}
 
-	return publisher.pubTopic.Send(ctx, &pubsub.Message{
+	authClaim := ClaimsFromContext(ctx)
+	if authClaim != nil {
+		metadata = authClaim.AsMetadata()
+	}else {
+		metadata = make(map[string]string)
+	}
+
+		return publisher.pubTopic.Send(ctx, &pubsub.Message{
 		Body:     message,
 		Metadata: metadata,
 	})
@@ -208,7 +217,13 @@ func (s Service) subscribe(ctx context.Context) {
 				go func() {
 					defer func() { <-sem }() // Release the semaphore.
 
-					err := localSub.handler.Handle(ctx, msg.Body, msg.Metadata)
+					authClaim := ClaimsFromMap(msg.Metadata)
+
+					if nil != authClaim{
+						ctx = authClaim.ClaimsToContext(ctx)
+					}
+
+					err := localSub.handler.Handle(ctx, msg.Body)
 					if err != nil {
 						log.Printf(" subscribe -- Unable to process message %v : %v",
 							localSub.url, err)

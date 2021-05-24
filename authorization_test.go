@@ -109,10 +109,7 @@ func TestAuthorizationControlListHasAccess(t *testing.T) {
 	}
 
 	err, access = AuthorizationControlListHasAccess(ctx, "read", "read-master")
-	if err != nil {
-		t.Errorf("Authorization check was not possible see %v", err)
-		return
-	} else if access {
+	if err == nil || access {
 		t.Errorf("Authorization check was not forbidden yet shouldn't exist")
 		return
 	}

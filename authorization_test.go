@@ -12,7 +12,7 @@ import (
 
 func authorizationControlListWrite(ctx context.Context, action string, subject string) error {
 
-	authorizationUrl := fmt.Sprintf("%s%s", GetEnv("KETO_AUTHORIZATION_WRITE_URL", ""), "/relation-tuples")
+	authorizationUrl := fmt.Sprintf("%s%s", GetEnv("KETO_SERVICE_ADMIN_URI", ""), "/relation-tuples")
 	authClaims := ClaimsFromContext(ctx)
 	service := FromContext(ctx)
 
@@ -48,7 +48,7 @@ func authorizationControlListWrite(ctx context.Context, action string, subject s
 
 func TestAuthorizationControlListWrite(t *testing.T) {
 
-	err := os.Setenv("KETO_AUTHORIZATION_WRITE_URL", "http://localhost:4467")
+	err := os.Setenv("KETO_SERVICE_ADMIN_URI", "http://localhost:4467")
 	if err != nil {
 		t.Errorf("Authorization write url was not setable %v", err)
 		return
@@ -76,7 +76,7 @@ func TestAuthorizationControlListWrite(t *testing.T) {
 
 func TestAuthorizationControlListHasAccess(t *testing.T) {
 
-	err := os.Setenv("KETO_AUTHORIZATION_READ_URL", "http://localhost:4466")
+	err := os.Setenv(envAuthorizationServiceUri, "http://localhost:4466")
 	if err != nil {
 		t.Errorf("Authorization read url was not setable %v", err)
 		return

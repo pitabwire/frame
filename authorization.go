@@ -8,10 +8,11 @@ import (
 	"net/http"
 )
 
+const envAuthorizationServiceUri = "KETO_SERVICE_URI"
 
 func AuthorizationControlListHasAccess(ctx context.Context, action string, subject string) (error, bool) {
 
-	authorizationUrl := fmt.Sprintf("%s%s", GetEnv("KETO_AUTHORIZATION_READ_URL", ""), "/check")
+	authorizationUrl := fmt.Sprintf("%s%s", GetEnv(envAuthorizationServiceUri, ""), "/check")
 
 	authClaims := ClaimsFromContext(ctx)
 	service := FromContext(ctx)

@@ -68,7 +68,7 @@ func RegisterSubscriber(reference string, queueUrl string, concurrency int,
 	}
 }
 
-func (s Service) Publish(ctx context.Context, reference string, message []byte) error {
+func (s Service) Publish(ctx context.Context, reference string, payload interface{}) error {
 
 	var metadata map[string]string
 
@@ -88,7 +88,20 @@ func (s Service) Publish(ctx context.Context, reference string, message []byte) 
 		metadata = make(map[string]string)
 	}
 
-		return publisher.pubTopic.Send(ctx, &pubsub.Message{
+	var message []byte
+	msg, ok := payload.([]byte)
+	if !ok {
+		msg, err := json.Marshal(payload)
+		if err != nil {
+			return err
+		}
+		message = msg
+	}else {
+		message = msg
+	}
+
+
+	return publisher.pubTopic.Send(ctx, &pubsub.Message{
 		Body:     message,
 		Metadata: metadata,
 	})

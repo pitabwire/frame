@@ -29,6 +29,7 @@ type Service struct {
 	dataStore      *store
 	bundle         *i18n.Bundle
 	healthCheckers []health.Checker
+	startup        func(s *Service)
 	cleanup        func()
 }
 
@@ -69,6 +70,16 @@ func (s *Service) Init(opts ...Option) {
 	for _, opt := range opts {
 		opt(s)
 	}
+}
+
+func (s *Service) AddPreStartMethod(f func(s *Service)) {
+	if s.startup == nil {
+		s.startup = f
+		return
+	}
+
+	old := s.startup
+	s.startup = func(st *Service) { old(st); f(st) }
 }
 
 func (s *Service) AddCleanupMethod(f func()) {
@@ -123,6 +134,10 @@ func (s *Service) Run(ctx context.Context, address string) error {
 	}
 
 	s.server = server.New(s.handler, s.serverOptions)
+
+	if s.startup != nil {
+		s.startup(s)
+	}
 
 	err = s.server.ListenAndServe(address)
 	return err

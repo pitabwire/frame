@@ -130,7 +130,7 @@ func TestService_RegisterSubscriber(t *testing.T) {
 	for i := range make([]int, 30) {
 		err = srv.Publish(ctx, "test", []byte(fmt.Sprintf(" testing message %d", i)))
 		if err != nil {
-			t.Errorf("We could not publish to topic that was registered %v", err)
+			t.Errorf("We could not publish to topic that was registered %+v", err)
 		}
 
 
@@ -138,7 +138,7 @@ func TestService_RegisterSubscriber(t *testing.T) {
 
 	err = srv.Publish(ctx, "test", []byte("throw error"))
 	if err != nil {
-		t.Errorf("We could not publish to topic that was registered %v", err)
+		t.Errorf("We could not publish to topic that was registered %+v", err)
 	}
 	srv.Stop()
 }

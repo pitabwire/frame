@@ -68,7 +68,7 @@ func RegisterSubscriber(reference string, queueUrl string, concurrency int,
 	}
 }
 
-func (s Service) Publish(ctx context.Context, reference string, payload interface{}) error {
+func (s *Service) Publish(ctx context.Context, reference string, payload interface{}) error {
 
 	var metadata map[string]string
 
@@ -107,7 +107,7 @@ func (s Service) Publish(ctx context.Context, reference string, payload interfac
 	})
 }
 
-func (s Service) QObject(ctx context.Context, model BaseModelI) ([]byte, map[string]string, error) {
+func (s *Service) QObject(ctx context.Context, model BaseModelI) ([]byte, map[string]string, error) {
 
 	queueMap := make(map[string]string)
 	metaMap := make(map[string]string)
@@ -131,7 +131,7 @@ func (s Service) QObject(ctx context.Context, model BaseModelI) ([]byte, map[str
 	return payload, metaMap, err
 }
 
-func (s Service) QID(ctx context.Context, payload []byte) (string, error) {
+func (s *Service) QID(ctx context.Context, payload []byte) (string, error) {
 	var queueMap map[string]string
 	err := json.Unmarshal(payload, &queueMap)
 	if err != nil {
@@ -150,7 +150,7 @@ func (s Service) QID(ctx context.Context, payload []byte) (string, error) {
 	return queueMap[queueMessageId], nil
 }
 
-func (s Service) initPubsub(ctx context.Context) error {
+func (s *Service) initPubsub(ctx context.Context) error {
 
 	if s.queue == nil {
 		return nil
@@ -201,7 +201,7 @@ func (s Service) initPubsub(ctx context.Context) error {
 
 }
 
-func (s Service) subscribe(ctx context.Context) {
+func (s *Service) subscribe(ctx context.Context) {
 
 	for _, subsc := range s.queue.subscriptionQueueMap {
 
@@ -235,6 +235,8 @@ func (s Service) subscribe(ctx context.Context) {
 					if nil != authClaim{
 						ctx = authClaim.ClaimsToContext(ctx)
 					}
+
+					ctx = ToContext(ctx, s)
 
 					err := localSub.handler.Handle(ctx, msg.Body)
 					if err != nil {

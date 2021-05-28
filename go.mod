@@ -4,11 +4,12 @@ go 1.16
 
 require (
 	github.com/BurntSushi/toml v0.3.1
-	github.com/dgrijalva/jwt-go v3.2.0+incompatible
+	github.com/dgrijalva/jwt-go/v4 v4.0.0-preview1
+	github.com/lestrrat-go/jwx v1.2.0
 	github.com/nicksnyder/go-i18n/v2 v2.1.2
 	github.com/rs/xid v1.2.1
 	github.com/soheilhy/cmux v0.1.4
-	github.com/stretchr/testify v1.6.1
+	github.com/stretchr/testify v1.7.0
 	gocloud.dev v0.23.0
 	gocloud.dev/pubsub/natspubsub v0.23.0
 	golang.org/x/text v0.3.6

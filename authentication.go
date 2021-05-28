@@ -2,9 +2,11 @@ package frame
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
-	"github.com/dgrijalva/jwt-go"
+	"fmt"
+	"github.com/dgrijalva/jwt-go/v4"
+	"github.com/lestrrat-go/jwx/jwk"
+
 	"google.golang.org/grpc"
 	"net/http"
 	"strings"
@@ -13,6 +15,8 @@ import (
 )
 
 const ctxKeyAuthentication = "authenticationKey"
+const envOauth2WellKnownJwkUri = "OAUTH2_WELL_KNOWN_JWK_URI"
+const envSecretCacheForJWKUri = "INTERNAL_SECRET_CACHE_FOR_JWK_CERT"
 
 // AuthenticationClaims Create a struct that will be encoded to a JWT.
 // We add jwt.StandardClaims as an embedded type, to provide fields like expiry time
@@ -79,7 +83,7 @@ func authenticate(ctx context.Context, jwtToken string) (context.Context, error)
 
 	claims := &AuthenticationClaims{}
 
-	token, err := jwt.ParseWithClaims(jwtToken, claims, getPemCert)
+	token, err := jwt.ParseWithClaims(jwtToken, claims, getPemCert, jwt.WithoutAudienceValidation())
 	if err != nil {
 		return ctx, err
 	}
@@ -94,49 +98,32 @@ func authenticate(ctx context.Context, jwtToken string) (context.Context, error)
 
 }
 
-type jwks struct {
-	Keys []jsonWebKeys `json:"keys"`
-}
-
-type jsonWebKeys struct {
-	Kty string   `json:"kty"`
-	Kid string   `json:"kid"`
-	Use string   `json:"use"`
-	N   string   `json:"n"`
-	E   string   `json:"e"`
-	X5c []string `json:"x5c"`
-}
-
 func getPemCert(token *jwt.Token) (interface{}, error) {
 
-	wellKnownJWKUrl := GetEnv("AUTHENTICATION_WELL_KNOWN_JWK_URL", "https://oauth2.api.antinvestor.com/.well-known/jwks.json")
+	wellKnownJWKUrl := GetEnv(envOauth2WellKnownJwkUri, "")
 
-	resp, err := http.Get(wellKnownJWKUrl)
-
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	var jwks = jwks{}
-	err = json.NewDecoder(resp.Body).Decode(&jwks)
-
+	ctx := context.Background()
+	keySet, err := jwk.Fetch(ctx, wellKnownJWKUrl)
 	if err != nil {
 		return nil, err
 	}
 
-	cert := ""
-	for k, _ := range jwks.Keys {
-		if token.Header["kid"] == jwks.Keys[k].Kid {
-			cert = "-----BEGIN CERTIFICATE-----\n" + jwks.Keys[k].X5c[0] + "\n-----END CERTIFICATE-----"
-		}
+	kid, ok := token.Header["kid"].(string)
+	if !ok {
+		return nil, errors.New("kid header not found")
 	}
 
-	if cert == "" {
-		return cert, errors.New("Unable to find appropriate key.")
+	key, ok := keySet.LookupKeyID(kid)
+	if !ok {
+		return nil, fmt.Errorf("key %v not found", kid)
 	}
 
-	return cert, nil
+	var publickey interface{}
+	err = key.Raw(&publickey)
+	if err != nil {
+		return nil, fmt.Errorf("could not parse pubkey")
+	}
+	return publickey, nil
 }
 
 // AuthenticationMiddleware Simple http middleware function

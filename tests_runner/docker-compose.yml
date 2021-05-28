@@ -2,6 +2,36 @@ version: '3.2'
 
 services:
 
+  hydra-migrate:
+    container_name: frame_hydra_migration
+    image: oryd/hydra:v1
+    links:
+      - postgresd:postgresd
+    environment:
+      - LOG_LEVEL=debug
+      - DSN=postgres://frame:secret@postgresd:5432/framedatabase?sslmode=disable
+    command:
+      migrate sql -e --yes
+    restart: on-failure
+
+  hydra:
+    container_name: frame_hydra
+    image: oryd/hydra:v1
+    links:
+      - postgresd:postgresd
+    depends_on:
+      - hydra-migrate
+    command:
+      serve -c /etc/config/hydra.yml all --dangerous-force-http
+    environment:
+      - DSN=postgres://frame:secret@postgresd:5432/framedatabase?sslmode=disable
+    volumes:
+      - ./hydra.yaml:/etc/config/hydra.yml
+    ports:
+      - 4444:4444
+      - 4445:4445
+
+
   keto-migrate:
     container_name: frame_keto_migration
     image: oryd/keto:v0.6.0-alpha.3

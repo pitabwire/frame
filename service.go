@@ -28,6 +28,7 @@ type Service struct {
 	queue          *Queue
 	dataStore      *store
 	bundle         *i18n.Bundle
+	localizerMap   map[string]*i18n.Localizer
 	healthCheckers []health.Checker
 	startup        func(s *Service)
 	cleanup        func()
@@ -43,8 +44,9 @@ func NewService(name string, opts ...Option) *Service {
 			readDatabase:  []*gorm.DB{},
 			writeDatabase: []*gorm.DB{},
 		},
-		client: &http.Client{},
-		queue:  &Queue{},
+		client:       &http.Client{},
+		queue:        &Queue{},
+		localizerMap: make(map[string]*i18n.Localizer),
 	}
 
 	service.Init(opts...)

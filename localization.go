@@ -1,33 +1,52 @@
 package frame
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"github.com/BurntSushi/toml"
 	"github.com/nicksnyder/go-i18n/v2/i18n"
 	"golang.org/x/text/language"
+	"google.golang.org/grpc/metadata"
+	"net/http"
+	"strings"
 )
 
 func (s *Service) Bundle() *i18n.Bundle {
 	return s.bundle
 }
 
-func (s *Service) Translate(lang string, messageId string) (string, error) {
-	return s.TranslateWithMap(lang, messageId, map[string]interface{}{})
+func (s *Service) Translate(request interface{}, messageId string) (string, error) {
+	return s.TranslateWithMap(request, messageId, map[string]interface{}{})
 }
 
-func (s *Service) TranslateWithMap(lang string, messageId string, variables map[string]interface{}) (string, error) {
-	return s.TranslateWithMapAndCount(lang, messageId, variables, 1)
+func (s *Service) TranslateWithMap(request interface{}, messageId string, variables map[string]interface{}) (string, error) {
+	return s.TranslateWithMapAndCount(request, messageId, variables, 1)
 }
 
-func (s *Service) TranslateWithMapAndCount(lang string, messageId string, variables map[string]interface{}, count int) (string, error) {
+func (s *Service) TranslateWithMapAndCount(request interface{}, messageId string, variables map[string]interface{}, count int) (string, error) {
 
-	if val, ok := s.localizerMap[lang]; !ok {
+	var languageSlice []string
 
-		val = i18n.NewLocalizer(s.Bundle(), lang)
-		s.localizerMap[lang] = val
+	switch v := request.(type) {
+	case *http.Request:
+
+		languageSlice = extractLanguageFromHttpRequest(v)
+		break
+	case context.Context:
+		languageSlice = extractLanguageFromGrpcRequest(v)
+		break
+	case string:
+		languageSlice = []string{v}
+		break
+	case []string:
+		languageSlice = v
+		break
+	default:
+		return "", errors.New("no valid request object found, use string, []string, context or http.Request")
 	}
 
-	localizer := s.localizerMap[lang]
+	localizer := i18n.NewLocalizer(s.Bundle(), languageSlice...)
 
 	transVersion, err := localizer.Localize(&i18n.LocalizeConfig{
 		DefaultMessage: &i18n.Message{ID: messageId},
@@ -35,6 +54,32 @@ func (s *Service) TranslateWithMapAndCount(lang string, messageId string, variab
 		PluralCount:    count,
 	})
 	return transVersion, err
+
+}
+
+func extractLanguageFromHttpRequest(req *http.Request) []string {
+
+	lang := req.FormValue("lang")
+	acceptLanguageHeader := req.Header.Get("Accept-Language")
+	acceptedLang := strings.Split(acceptLanguageHeader, ",")
+
+	return append([]string{lang}, acceptedLang...)
+
+}
+
+func extractLanguageFromGrpcRequest(ctx context.Context) []string {
+
+	md, ok := metadata.FromIncomingContext(ctx)
+	if !ok {
+		return []string{}
+	}
+
+	header, ok := md["accept-language"]
+	if !ok || len(header) == 0 {
+		return []string{}
+	}
+	acceptLangHeader := header[0]
+	return strings.Split(acceptLangHeader, ",")
 
 }
 

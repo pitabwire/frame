@@ -2,12 +2,14 @@ package frame
 
 import (
 	"context"
+	"crypto/rsa"
+	"encoding/base64"
+	"encoding/json"
 	"errors"
-	"fmt"
 	"github.com/dgrijalva/jwt-go/v4"
-	"github.com/lestrrat-go/jwx/jwk"
-
 	"google.golang.org/grpc"
+	"io/ioutil"
+	"math/big"
 	"net/http"
 	"strings"
 
@@ -15,8 +17,7 @@ import (
 )
 
 const ctxKeyAuthentication = "authenticationKey"
-const envOauth2WellKnownJwkUri = "OAUTH2_WELL_KNOWN_JWK_URI"
-const envSecretCacheForJWKUri = "INTERNAL_SECRET_CACHE_FOR_JWK_CERT"
+const envOauth2WellKnownJwk = "OAUTH2_WELL_KNOWN_JWK"
 
 // AuthenticationClaims Create a struct that will be encoded to a JWT.
 // We add jwt.StandardClaims as an embedded type, to provide fields like expiry time
@@ -98,32 +99,81 @@ func authenticate(ctx context.Context, jwtToken string) (context.Context, error)
 
 }
 
+type Jwks struct {
+	Keys []JSONWebKeys `json:"keys"`
+}
+
+type JSONWebKeys struct {
+	Kty string   `json:"kty"`
+	Kid string   `json:"kid"`
+	Use string   `json:"use"`
+	N   string   `json:"n"`
+	E   string   `json:"e"`
+	X5c []string `json:"x5c"`
+}
+
 func getPemCert(token *jwt.Token) (interface{}, error) {
 
-	wellKnownJWKUrl := GetEnv(envOauth2WellKnownJwkUri, "")
+	wellKnownJWK := GetEnv(envOauth2WellKnownJwk, "")
 
-	ctx := context.Background()
-	keySet, err := jwk.Fetch(ctx, wellKnownJWKUrl)
+	var jwkKeyBytes []byte
+	if strings.HasPrefix(wellKnownJWK, "http") {
+
+		resp, err := http.Get(wellKnownJWK)
+
+		if err != nil {
+			return nil, err
+		}
+		defer resp.Body.Close()
+		jwkKeyBytes, err = ioutil.ReadAll(resp.Body)
+		if err != nil {
+			return nil, err
+		}
+		wellKnownJWK = string(jwkKeyBytes)
+	}
+
+	if wellKnownJWK == "" {
+		return nil, errors.New("web key is missing data")
+	}
+
+	var jwks = Jwks{}
+	err := json.NewDecoder(strings.NewReader(wellKnownJWK)).Decode(&jwks)
+
 	if err != nil {
 		return nil, err
 	}
 
-	kid, ok := token.Header["kid"].(string)
-	if !ok {
-		return nil, errors.New("kid header not found")
+	for k, val := range jwks.Keys {
+		if token.Header["kid"] == jwks.Keys[k].Kid {
+
+			var exponent []byte
+			if exponent, err = base64.RawURLEncoding.DecodeString(val.E); err != nil {
+				return nil, err
+			}
+
+			// Decode the modulus from Base64.
+			var modulus []byte
+			if modulus, err = base64.RawURLEncoding.DecodeString(val.N); err != nil {
+				return nil, err
+			}
+
+			// Create the RSA public key.
+			publicKey := &rsa.PublicKey{}
+
+			// Turn the exponent into an integer.
+			//
+			// According to RFC 7517, these numbers are in big-endian format.
+			// https://tools.ietf.org/html/rfc7517#appendix-A.1
+			publicKey.E = int(big.NewInt(0).SetBytes(exponent).Uint64())
+
+			// Turn the modulus into a *big.Int.
+			publicKey.N = big.NewInt(0).SetBytes(modulus)
+
+			return publicKey, nil
+		}
 	}
 
-	key, ok := keySet.LookupKeyID(kid)
-	if !ok {
-		return nil, fmt.Errorf("key %v not found", kid)
-	}
-
-	var publickey interface{}
-	err = key.Raw(&publickey)
-	if err != nil {
-		return nil, fmt.Errorf("could not parse pubkey")
-	}
-	return publickey, nil
+	return nil, errors.New("unable to find appropriate key")
 }
 
 // AuthenticationMiddleware Simple http middleware function

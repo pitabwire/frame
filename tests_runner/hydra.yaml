@@ -24,4 +24,7 @@ oidc:
 strategies:
   access_token: jwt
 
+ttl:
+  access_token: 876000h
+
 dsn: 'postgres://partition:secret@postgresd:5432/partitiondatabase?sslmode=disable'

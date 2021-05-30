@@ -59,35 +59,19 @@ func TestTranslationsHelpers(t *testing.T) {
 	translations := Translations("tests_runner/localization", "en", "sw")
 	srv := NewService("Test Localization Srv", translations)
 
-	englishVersion, err := srv.Translate("en", "Example")
-
-	if err != nil {
-		t.Errorf(" There was an error parsing the translations %+v", err)
-		return
-	}
-
+	englishVersion := srv.Translate("en", "Example")
 	if englishVersion != "<no value> has nothing" {
 		t.Errorf("Localizations didn't quite work like they should, found : %s expected : %s", englishVersion, "<no value> has nothing")
 		return
 	}
 
-	englishVersion, err = srv.TranslateWithMap("en", "Example", map[string]interface{}{"Name": "MapMan"})
-	if err != nil {
-		t.Errorf(" There was an error parsing the translations %+v", err)
-		return
-	}
-
+	englishVersion = srv.TranslateWithMap("en", "Example", map[string]interface{}{"Name": "MapMan"})
 	if englishVersion != "MapMan has nothing" {
 		t.Errorf("Localizations didn't quite work like they should, found : %s expected : %s", englishVersion, "MapMan has nothing")
 		return
 	}
 
-	englishVersion, err = srv.TranslateWithMapAndCount("en", "Example", map[string]interface{}{"Name": "CountMen"}, 2)
-	if err != nil {
-		t.Errorf(" There was an error parsing the translations %+v", err)
-		return
-	}
-
+	englishVersion = srv.TranslateWithMapAndCount("en", "Example", map[string]interface{}{"Name": "CountMen"}, 2)
 	if englishVersion != "CountMen have nothing" {
 		t.Errorf("Localizations didn't quite work like they should, found : %s expected : %s", englishVersion, "CountMen have nothing")
 		return

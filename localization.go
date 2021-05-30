@@ -2,12 +2,12 @@ package frame
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"github.com/BurntSushi/toml"
 	"github.com/nicksnyder/go-i18n/v2/i18n"
 	"golang.org/x/text/language"
 	"google.golang.org/grpc/metadata"
+	"log"
 	"net/http"
 	"strings"
 )
@@ -16,15 +16,15 @@ func (s *Service) Bundle() *i18n.Bundle {
 	return s.bundle
 }
 
-func (s *Service) Translate(request interface{}, messageId string) (string, error) {
+func (s *Service) Translate(request interface{}, messageId string) string {
 	return s.TranslateWithMap(request, messageId, map[string]interface{}{})
 }
 
-func (s *Service) TranslateWithMap(request interface{}, messageId string, variables map[string]interface{}) (string, error) {
+func (s *Service) TranslateWithMap(request interface{}, messageId string, variables map[string]interface{}) string {
 	return s.TranslateWithMapAndCount(request, messageId, variables, 1)
 }
 
-func (s *Service) TranslateWithMapAndCount(request interface{}, messageId string, variables map[string]interface{}, count int) (string, error) {
+func (s *Service) TranslateWithMapAndCount(request interface{}, messageId string, variables map[string]interface{}, count int) string {
 
 	var languageSlice []string
 
@@ -43,7 +43,8 @@ func (s *Service) TranslateWithMapAndCount(request interface{}, messageId string
 		languageSlice = v
 		break
 	default:
-		return "", errors.New("no valid request object found, use string, []string, context or http.Request")
+		log.Printf("TranslateWithMapAndCount -- no valid request object found, use string, []string, context or http.Request")
+		return messageId
 	}
 
 	localizer := i18n.NewLocalizer(s.Bundle(), languageSlice...)
@@ -53,7 +54,12 @@ func (s *Service) TranslateWithMapAndCount(request interface{}, messageId string
 		TemplateData:   variables,
 		PluralCount:    count,
 	})
-	return transVersion, err
+
+	if err != nil {
+		log.Printf(" TranslateWithMapAndCount -- translation problem %+v", err)
+	}
+
+	return transVersion
 
 }
 

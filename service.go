@@ -2,6 +2,7 @@ package frame
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"github.com/nicksnyder/go-i18n/v2/i18n"
 	"gocloud.dev/server"
@@ -16,6 +17,9 @@ import (
 )
 
 const ctxKeyService = "serviceKey"
+
+const envOauth2ServiceAdminClientSecret = "OAUTH2_SERVICE_ADMIN_CLIENT_SECRET"
+const envOauth2ServiceAdminUri = "OAUTH2_SERVICE_ADMIN_URI"
 
 type Service struct {
 	name           string
@@ -67,6 +71,47 @@ func FromContext(ctx context.Context) *Service {
 	return service
 }
 
+func (s *Service) registerForJwt(ctx context.Context) error {
+
+	host := GetEnv(envOauth2ServiceAdminUri, "")
+	if host == "" {
+		return nil
+	}
+	clientSecret := GetEnv(envOauth2ServiceAdminClientSecret, "")
+	if clientSecret == "" {
+		return nil
+	}
+
+	oauth2AdminUri := fmt.Sprintf("%s%s", host, "/clients")
+	oauth2AdminIDUri := fmt.Sprintf("%s/%s", oauth2AdminUri, s.name)
+
+	status, result, err := s.InvokeRestService(ctx, http.MethodGet, oauth2AdminIDUri, make(map[string]interface{}), nil)
+	if err != nil {
+		return err
+	}
+
+	if status == 200 {
+		return nil
+	}
+
+	payload := map[string]interface{}{
+		"client_id":     s.name,
+		"client_name":   s.name,
+		"client_secret": clientSecret,
+		"grant_types":   []string{"client_credentials"},
+	}
+
+	status, result, err = s.InvokeRestService(ctx, http.MethodPost, oauth2AdminUri, payload, nil)
+	if err != nil {
+		return err
+	}
+
+	if status > 299 || status < 200 {
+		return errors.New(fmt.Sprintf(" invalid response status %d had message %s", status, string(result)))
+	}
+	return nil
+}
+
 func (s *Service) Init(opts ...Option) {
 
 	for _, opt := range opts {
@@ -103,7 +148,12 @@ func (s *Service) AddHealthCheck(checker health.Checker) {
 
 func (s *Service) Run(ctx context.Context, address string) error {
 
-	err := s.initPubsub(ctx)
+	err := s.registerForJwt(ctx)
+	if err != nil {
+		return err
+	}
+
+	err = s.initPubsub(ctx)
 	if err != nil {
 		return err
 	}

@@ -93,6 +93,7 @@ func authenticate(ctx context.Context, jwtToken string) (context.Context, error)
 
 	claims := &AuthenticationClaims{}
 
+	//TODO: At a near future introduce audience validation
 	token, err := jwt.ParseWithClaims(jwtToken, claims, getPemCert, jwt.WithoutAudienceValidation())
 	if err != nil {
 		return ctx, err

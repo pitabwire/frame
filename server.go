@@ -27,7 +27,7 @@ func (gd *grpcDriver) ListenAndServe(addr string, h http.Handler) error {
 
 	if gd.listener != nil {
 		ln = gd.listener
-	}else {
+	} else {
 		ln, err = net.Listen("tcp", addr)
 		if err != nil {
 			return err
@@ -67,10 +67,9 @@ func (gd *grpcDriver) ListenAndServeTLS(addr, certFile, keyFile string, h http.H
 	gd.httpServer.Addr = addr
 	gd.httpServer.Handler = h
 
-
 	if gd.listener != nil {
 		ln = gd.listener
-	}else {
+	} else {
 		ln, err = net.Listen("tcp", addr)
 		if err != nil {
 			return err
@@ -119,7 +118,6 @@ func GrpcServer(grpcServer *grpc.Server) Option {
 		c.grpcServer = grpcServer
 	}
 }
-
 
 func ServerListener(listener net.Listener) Option {
 	return func(c *Service) {

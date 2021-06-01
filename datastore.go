@@ -25,7 +25,7 @@ type store struct {
 func TenantPartition(ctx context.Context) func(db *gorm.DB) *gorm.DB {
 	return func(db *gorm.DB) *gorm.DB {
 		authClaim := ClaimsFromContext(ctx)
-		if authClaim != nil {
+		if authClaim != nil && !authClaim.IsCCBot {
 			return db.Where("tenant_id = ? AND partition_id = ?", authClaim.TenantID, authClaim.PartitionID)
 		} else {
 			return db

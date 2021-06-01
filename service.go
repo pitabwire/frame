@@ -13,13 +13,15 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 )
 
 const ctxKeyService = "serviceKey"
 
-const envOauth2ServiceAdminClientSecret = "OAUTH2_SERVICE_ADMIN_CLIENT_SECRET"
+const envOauth2ServiceClientSecret = "OAUTH2_SERVICE_CLIENT_SECRET"
 const envOauth2ServiceAdminUri = "OAUTH2_SERVICE_ADMIN_URI"
+const envOauth2Audience = "OAUTH2_SERVICE_AUDIENCE"
 
 type Service struct {
 	name           string
@@ -32,7 +34,6 @@ type Service struct {
 	queue          *Queue
 	dataStore      *store
 	bundle         *i18n.Bundle
-	localizerMap   map[string]*i18n.Localizer
 	healthCheckers []health.Checker
 	startup        func(s *Service)
 	cleanup        func()
@@ -48,9 +49,8 @@ func NewService(name string, opts ...Option) *Service {
 			readDatabase:  []*gorm.DB{},
 			writeDatabase: []*gorm.DB{},
 		},
-		client:       &http.Client{},
-		queue:        &Queue{},
-		localizerMap: make(map[string]*i18n.Localizer),
+		client: &http.Client{},
+		queue:  &Queue{},
 	}
 
 	service.Init(opts...)
@@ -77,10 +77,12 @@ func (s *Service) registerForJwt(ctx context.Context) error {
 	if host == "" {
 		return nil
 	}
-	clientSecret := GetEnv(envOauth2ServiceAdminClientSecret, "")
+	clientSecret := GetEnv(envOauth2ServiceClientSecret, "")
 	if clientSecret == "" {
 		return nil
 	}
+
+	audienceList := strings.Split(GetEnv(envOauth2Audience, ""), ",")
 
 	oauth2AdminUri := fmt.Sprintf("%s%s", host, "/clients")
 	oauth2AdminIDUri := fmt.Sprintf("%s/%s", oauth2AdminUri, s.name)
@@ -99,6 +101,8 @@ func (s *Service) registerForJwt(ctx context.Context) error {
 		"client_name":   s.name,
 		"client_secret": clientSecret,
 		"grant_types":   []string{"client_credentials"},
+		"metadata":      map[string]string{"cc_bot": "true"},
+		"aud":           audienceList,
 	}
 
 	status, result, err = s.InvokeRestService(ctx, http.MethodPost, oauth2AdminUri, payload, nil)

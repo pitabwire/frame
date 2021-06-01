@@ -48,7 +48,6 @@ func RegisterPublisher(reference string, queueUrl string) Option {
 			url:    queueUrl,
 			isInit: false,
 		}
-
 	}
 }
 
@@ -64,7 +63,6 @@ func RegisterSubscriber(reference string, queueUrl string, concurrency int,
 			concurrency: concurrency,
 			handler:     handler,
 		}
-
 	}
 }
 
@@ -84,7 +82,7 @@ func (s Service) Publish(ctx context.Context, reference string, payload interfac
 	authClaim := ClaimsFromContext(ctx)
 	if authClaim != nil {
 		metadata = authClaim.AsMetadata()
-	}else {
+	} else {
 		metadata = make(map[string]string)
 	}
 
@@ -96,10 +94,9 @@ func (s Service) Publish(ctx context.Context, reference string, payload interfac
 			return err
 		}
 		message = msg
-	}else {
+	} else {
 		message = msg
 	}
-
 
 	return publisher.pubTopic.Send(ctx, &pubsub.Message{
 		Body:     message,
@@ -155,7 +152,6 @@ func (s Service) initPubsub(ctx context.Context) error {
 	if s.queue == nil {
 		return nil
 	}
-
 
 	for ref, publisher := range s.queue.publishQueueMap {
 
@@ -232,7 +228,7 @@ func (s Service) subscribe(ctx context.Context) {
 
 					authClaim := ClaimsFromMap(msg.Metadata)
 
-					if nil != authClaim{
+					if nil != authClaim {
 						ctx = authClaim.ClaimsToContext(ctx)
 					}
 

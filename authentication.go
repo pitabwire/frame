@@ -19,14 +19,15 @@ import (
 const ctxKeyAuthentication = "authenticationKey"
 const envOauth2WellKnownJwk = "OAUTH2_WELL_KNOWN_JWK"
 
-
 // AuthenticationClaims Create a struct that will be encoded to a JWT.
 // We add jwt.StandardClaims as an embedded type, to provide fields like expiry time
 type AuthenticationClaims struct {
-	ProfileID   string `json:"profile_id,omitempty"`
-	TenantID    string `json:"tenant_id,omitempty"`
-	PartitionID string `json:"partition_id,omitempty"`
-	AccessID    string `json:"access_id,omitempty"`
+	ProfileID   string   `json:"profile_id,omitempty"`
+	TenantID    string   `json:"tenant_id,omitempty"`
+	PartitionID string   `json:"partition_id,omitempty"`
+	AccessID    string   `json:"access_id,omitempty"`
+	Roles       []string `json:"roles,omitempty"`
+	IsCCBot     bool     `json:"cc_bot"`
 	jwt.StandardClaims
 }
 
@@ -34,10 +35,13 @@ type AuthenticationClaims struct {
 func (a *AuthenticationClaims) AsMetadata() map[string]string {
 
 	m := make(map[string]string)
-	m["tenant_id"] = a.TenantID
-	m["partition_id"] = a.PartitionID
-	m["profile_id"] = a.ProfileID
-	m["access_id"] = a.AccessID
+	if !a.IsCCBot {
+		m["tenant_id"] = a.TenantID
+		m["partition_id"] = a.PartitionID
+		m["profile_id"] = a.ProfileID
+		m["access_id"] = a.AccessID
+		m["roles"] = strings.Join(a.Roles, ",")
+	}
 	return m
 }
 
@@ -72,7 +76,11 @@ func ClaimsFromMap(m map[string]string) *AuthenticationClaims {
 
 				if val, ok := m["access_id"]; ok {
 					authenticationClaims.AccessID = val
-					return &authenticationClaims
+					if val, ok := m["roles"]; ok {
+						authenticationClaims.Roles = strings.Split(val, ",")
+						authenticationClaims.IsCCBot = false
+						return &authenticationClaims
+					}
 				}
 			}
 		}

@@ -89,12 +89,24 @@ func ClaimsFromMap(m map[string]string) *AuthenticationClaims {
 	return nil
 }
 
-func authenticate(ctx context.Context, jwtToken string) (context.Context, error) {
+func authenticate(ctx context.Context, jwtToken string, audience string, issuer string) (context.Context, error) {
 
 	claims := &AuthenticationClaims{}
 
+	options := []jwt.ParserOption{}
+
+	if audience == "" {
+		options = append(options, jwt.WithoutAudienceValidation())
+	} else {
+		options = append(options, jwt.WithAudience(audience))
+	}
+
+	if issuer != "" {
+		options = append(options, jwt.WithIssuer(issuer))
+	}
+
 	//TODO: At a near future introduce audience validation
-	token, err := jwt.ParseWithClaims(jwtToken, claims, getPemCert, jwt.WithoutAudienceValidation())
+	token, err := jwt.ParseWithClaims(jwtToken, claims, getPemCert, options...)
 	if err != nil {
 		return ctx, err
 	}
@@ -188,7 +200,7 @@ func getPemCert(token *jwt.Token) (interface{}, error) {
 
 // AuthenticationMiddleware Simple http middleware function
 // to verify and extract authentication data supplied in a jwt as authorization bearer token
-func AuthenticationMiddleware(next http.Handler) http.Handler {
+func AuthenticationMiddleware(next http.Handler, audience string, issuer string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		authorizationHeader := r.Header.Get("Authorization")
 
@@ -207,7 +219,7 @@ func AuthenticationMiddleware(next http.Handler) http.Handler {
 		jwtToken := strings.TrimSpace(extractedJwtToken[1])
 
 		ctx := r.Context()
-		ctx, err := authenticate(ctx, jwtToken)
+		ctx, err := authenticate(ctx, jwtToken, audience, issuer)
 
 		if err != nil {
 			http.Error(w, "Authorization header is invalid", http.StatusUnauthorized)
@@ -247,19 +259,23 @@ func grpcJwtTokenExtractor(ctx context.Context) (string, error) {
 }
 
 // UnaryAuthInterceptor Simple grpc interceptor to extract the jwt supplied via authorization bearer token and verify the authentication claims in the token
-func UnaryAuthInterceptor(ctx context.Context, req interface{},
-	info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
 
-	jwtToken, err := grpcJwtTokenExtractor(ctx)
-	if err != nil {
-		return nil, err
-	}
+func UnaryAuthInterceptor(audience string, issuer string) grpc.UnaryServerInterceptor {
 
-	ctx, err = authenticate(ctx, jwtToken)
-	if err != nil {
-		return nil, err
+	return func(ctx context.Context, req interface{},
+		info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+
+		jwtToken, err := grpcJwtTokenExtractor(ctx)
+		if err != nil {
+			return nil, err
+		}
+
+		ctx, err = authenticate(ctx, jwtToken, audience, issuer)
+		if err != nil {
+			return nil, err
+		}
+		return handler(ctx, req)
 	}
-	return handler(ctx, req)
 }
 
 // serverStreamWrapper simple wrapper method that stores auth claims for the server stream context
@@ -273,25 +289,27 @@ func (s *serverStreamWrapper) Context() context.Context {
 }
 
 // StreamAuthInterceptor An authentication claims extractor that will always verify the information flowing in the streams as true jwt claims
-func StreamAuthInterceptor(srv interface{}, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
+func StreamAuthInterceptor(audience string, issuer string) grpc.StreamServerInterceptor {
+	return func(srv interface{}, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
 
-	localServerStream := ss
-	authClaim := ClaimsFromContext(localServerStream.Context())
-	if authClaim == nil {
-		ctx := ss.Context()
-		jwtToken, err := grpcJwtTokenExtractor(ctx)
-		if err != nil {
-			return err
+		localServerStream := ss
+		authClaim := ClaimsFromContext(localServerStream.Context())
+		if authClaim == nil {
+			ctx := ss.Context()
+			jwtToken, err := grpcJwtTokenExtractor(ctx)
+			if err != nil {
+				return err
+			}
+
+			ctx, err = authenticate(ctx, jwtToken, audience, issuer)
+			if err != nil {
+				return err
+			}
+
+			authClaim = ClaimsFromContext(ctx)
+
+			localServerStream = &serverStreamWrapper{authClaim, ss}
 		}
-
-		ctx, err = authenticate(ctx, jwtToken)
-		if err != nil {
-			return err
-		}
-
-		authClaim = ClaimsFromContext(ctx)
-
-		localServerStream = &serverStreamWrapper{authClaim, ss}
+		return handler(srv, localServerStream)
 	}
-	return handler(srv, localServerStream)
 }

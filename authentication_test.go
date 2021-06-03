@@ -36,9 +36,57 @@ func TestSimpleAuthenticate(t *testing.T) {
 		return
 	}
 
-	ctx2, err := authenticate(ctx, sampleAccessKey)
+	ctx2, err := authenticate(ctx, sampleAccessKey, "", "")
 	if err != nil {
 		t.Errorf("There was an error authenticating access key, %v", err)
+		return
+	}
+
+	claims := ClaimsFromContext(ctx2)
+	assert.NotNil(t, claims, "supplied context should contain authentication claims")
+
+}
+
+
+
+
+func TestSimpleAuthenticateWithAudience(t *testing.T) {
+
+	ctx := context.Background()
+
+	err := os.Setenv(envOauth2WellKnownJwk, sampleWellKnownJwk)
+
+	if err != nil {
+		t.Errorf("well known JWK uri was not setable %v", err)
+		return
+	}
+
+	ctx2, err := authenticate(ctx, sampleAccessKey, "c2f4j7au6s7f91uqnokg", "")
+	if err != nil {
+		t.Errorf("There was an error authenticating access key due to audience, %v", err)
+		return
+	}
+
+	claims := ClaimsFromContext(ctx2)
+	assert.NotNil(t, claims, "supplied context should contain authentication claims")
+
+}
+
+
+func TestSimpleAuthenticateWithIssuer(t *testing.T) {
+
+	ctx := context.Background()
+
+	err := os.Setenv(envOauth2WellKnownJwk, sampleWellKnownJwk)
+
+	if err != nil {
+		t.Errorf("well known JWK uri was not setable %v", err)
+		return
+	}
+
+	ctx2, err := authenticate(ctx, sampleAccessKey, "", "http://127.0.0.1:4444/")
+	if err != nil {
+		t.Errorf("There was an error authenticating access key due to issuer, %v", err)
 		return
 	}
 

@@ -27,7 +27,6 @@ type AuthenticationClaims struct {
 	PartitionID string   `json:"partition_id,omitempty"`
 	AccessID    string   `json:"access_id,omitempty"`
 	Roles       []string `json:"roles,omitempty"`
-	IsCCBot     bool     `json:"cc_bot"`
 	jwt.StandardClaims
 }
 
@@ -35,13 +34,11 @@ type AuthenticationClaims struct {
 func (a *AuthenticationClaims) AsMetadata() map[string]string {
 
 	m := make(map[string]string)
-	if !a.IsCCBot {
-		m["tenant_id"] = a.TenantID
-		m["partition_id"] = a.PartitionID
-		m["profile_id"] = a.ProfileID
-		m["access_id"] = a.AccessID
-		m["roles"] = strings.Join(a.Roles, ",")
-	}
+	m["tenant_id"] = a.TenantID
+	m["partition_id"] = a.PartitionID
+	m["profile_id"] = a.ProfileID
+	m["access_id"] = a.AccessID
+	m["roles"] = strings.Join(a.Roles, ",")
 	return m
 }
 
@@ -78,7 +75,6 @@ func ClaimsFromMap(m map[string]string) *AuthenticationClaims {
 					authenticationClaims.AccessID = val
 					if val, ok := m["roles"]; ok {
 						authenticationClaims.Roles = strings.Split(val, ",")
-						authenticationClaims.IsCCBot = false
 						return &authenticationClaims
 					}
 				}
@@ -93,19 +89,18 @@ func authenticate(ctx context.Context, jwtToken string, audience string, issuer 
 
 	claims := &AuthenticationClaims{}
 
-	options := []jwt.ParserOption{}
+	var options []jwt.ParserOption
 
 	if audience == "" {
-		options = append(options, jwt.WithoutAudienceValidation())
+		options = []jwt.ParserOption{jwt.WithoutAudienceValidation()}
 	} else {
-		options = append(options, jwt.WithAudience(audience))
+		options = []jwt.ParserOption{jwt.WithAudience(audience)}
 	}
 
 	if issuer != "" {
 		options = append(options, jwt.WithIssuer(issuer))
 	}
 
-	//TODO: At a near future introduce audience validation
 	token, err := jwt.ParseWithClaims(jwtToken, claims, getPemCert, options...)
 	if err != nil {
 		return ctx, err

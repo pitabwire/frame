@@ -30,6 +30,13 @@ type AuthenticationClaims struct {
 	jwt.StandardClaims
 }
 
+func (a *AuthenticationClaims) isSystem() bool {
+	//TODO: tokens which are granted as client credentials have no partition information attached
+	// Since we cannot pass custom information to token to allow specifying who is an admin.
+	// We will check if the subject starts with service. for now and make them system see: https://github.com/ory/hydra/issues/1748
+	return strings.HasPrefix(a.Subject, "service.")
+}
+
 // AsMetadata Creates a string map to be used as metadata in queue data
 func (a *AuthenticationClaims) AsMetadata() map[string]string {
 

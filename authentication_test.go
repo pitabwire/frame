@@ -21,10 +21,6 @@ func TestAuthenticationFromContext(t *testing.T) {
 	assert.NotNil(t, claims, "A context with claims should produce one")
 }
 
-
-
-
-
 func TestSimpleAuthenticate(t *testing.T) {
 
 	ctx := context.Background()
@@ -46,9 +42,6 @@ func TestSimpleAuthenticate(t *testing.T) {
 	assert.NotNil(t, claims, "supplied context should contain authentication claims")
 
 }
-
-
-
 
 func TestSimpleAuthenticateWithAudience(t *testing.T) {
 
@@ -72,7 +65,6 @@ func TestSimpleAuthenticateWithAudience(t *testing.T) {
 
 }
 
-
 func TestSimpleAuthenticateWithIssuer(t *testing.T) {
 
 	ctx := context.Background()
@@ -94,5 +86,3 @@ func TestSimpleAuthenticateWithIssuer(t *testing.T) {
 	assert.NotNil(t, claims, "supplied context should contain authentication claims")
 
 }
-
-

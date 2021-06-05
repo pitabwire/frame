@@ -2,12 +2,23 @@ version: '3.2'
 
 services:
 
+  postgresd:
+    container_name: frame_postgres
+    image: postgres:13
+    environment:
+      - POSTGRES_USER=frame
+      - POSTGRES_PASSWORD=secret
+      - POSTGRES_DB=framedatabase
+    ports:
+      - 5423:5432
 
   keto-migrate:
     container_name: frame_keto_migration
     image: oryd/keto:v0.6.0-alpha.3
     links:
       - postgresd:postgresd
+    depends_on:
+      - postgresd
     environment:
       - LOG_LEVEL=debug
     command:
@@ -22,6 +33,7 @@ services:
     links:
       - postgresd:postgresd
     depends_on:
+      - postgresd
       - keto-migrate
     volumes:
       - ./keto.yaml:/home/ory/keto.yml
@@ -29,12 +41,3 @@ services:
       - 4466:4466
       - 4467:4467
       
-  postgresd:
-    container_name: frame_postgres
-    image: postgres:13
-    environment:
-      - POSTGRES_USER=frame
-      - POSTGRES_PASSWORD=secret
-      - POSTGRES_DB=framedatabase
-    ports:
-      - 5423:5432

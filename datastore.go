@@ -3,10 +3,12 @@ package frame
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"gocloud.dev/postgres"
 	"gocloud.dev/server/health/sqlhealth"
+	"gorm.io/datatypes"
 	gormPostgres "gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"io/ioutil"
@@ -22,7 +24,7 @@ type store struct {
 	readDatabase  []*gorm.DB
 }
 
-func TenantPartition(ctx context.Context) func(db *gorm.DB) *gorm.DB {
+func tenantPartition(ctx context.Context) func(db *gorm.DB) *gorm.DB {
 	return func(db *gorm.DB) *gorm.DB {
 		authClaim := ClaimsFromContext(ctx)
 		if authClaim != nil && !authClaim.isSystem() {
@@ -32,6 +34,46 @@ func TenantPartition(ctx context.Context) func(db *gorm.DB) *gorm.DB {
 			return db
 		}
 	}
+}
+
+func PropertiesToMap(props datatypes.JSONMap) map[string]string {
+
+	payload := make(map[string]string)
+	properties := make(map[string]interface{})
+	payloadValue, _ := props.MarshalJSON()
+	err := json.Unmarshal(payloadValue, &properties)
+	if err != nil {
+		return payload
+	}
+
+	for k, val := range properties {
+		marVal, err := json.Marshal(val)
+		if err != nil {
+			continue
+		}
+		payload[k] = string(marVal)
+
+	}
+
+	return payload
+
+}
+
+func PropertiesFromMap(propsMap map[string]string) datatypes.JSONMap {
+
+	jsonMap := make(datatypes.JSONMap)
+
+	for k, val := range propsMap {
+		var prop interface{}
+		err := json.Unmarshal([]byte(val), prop)
+		if err != nil {
+			continue
+		}
+		jsonMap[k] = prop
+	}
+
+	return jsonMap
+
 }
 
 func (s *Service) DB(ctx context.Context, readOnly bool) *gorm.DB {
@@ -65,7 +107,7 @@ func (s *Service) DB(ctx context.Context, readOnly bool) *gorm.DB {
 		db = s.dataStore.writeDatabase[randomIndex]
 	}
 
-	return db.WithContext(ctx).Scopes(TenantPartition(ctx))
+	return db.WithContext(ctx).Scopes(tenantPartition(ctx))
 }
 
 func Datastore(ctx context.Context, postgresqlConnection string, readOnly bool) Option {

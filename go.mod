@@ -16,4 +16,5 @@ require (
 	google.golang.org/grpc/examples v0.0.0-20210128004832-e526a2922747
 	gorm.io/driver/postgres v1.0.5
 	gorm.io/gorm v1.20.10
+	gorm.io/datatypes v1.0.1
 )

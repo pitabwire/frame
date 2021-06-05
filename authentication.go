@@ -22,7 +22,7 @@ const envOauth2WellKnownJwk = "OAUTH2_WELL_KNOWN_JWK"
 // AuthenticationClaims Create a struct that will be encoded to a JWT.
 // We add jwt.StandardClaims as an embedded type, to provide fields like expiry time
 type AuthenticationClaims struct {
-	ProfileID   string   `json:"profile_id,omitempty"`
+	ProfileID   string   `json:"sub,omitempty"`
 	TenantID    string   `json:"tenant_id,omitempty"`
 	PartitionID string   `json:"partition_id,omitempty"`
 	AccessID    string   `json:"access_id,omitempty"`

@@ -9,6 +9,7 @@ import (
 	"github.com/dgrijalva/jwt-go/v4"
 	"google.golang.org/grpc"
 	"io/ioutil"
+	"log"
 	"math/big"
 	"net/http"
 	"strings"
@@ -34,7 +35,7 @@ func (a *AuthenticationClaims) isSystem() bool {
 	//TODO: tokens which are granted as client credentials have no partition information attached
 	// Since we cannot pass custom information to token to allow specifying who is an admin.
 	// We will check if the subject starts with service. for now and make them system see: https://github.com/ory/hydra/issues/1748
-	return strings.HasPrefix(a.Subject, "service.")
+	return strings.HasPrefix(a.Subject, "service_")
 }
 
 // AsMetadata Creates a string map to be used as metadata in queue data
@@ -224,6 +225,7 @@ func AuthenticationMiddleware(next http.Handler, audience string, issuer string)
 		ctx, err := authenticate(ctx, jwtToken, audience, issuer)
 
 		if err != nil {
+			log.Printf(" AuthenticationMiddleware -- could not authenticate token : [%s]  due to error : %+v", jwtToken, err)
 			http.Error(w, "Authorization header is invalid", http.StatusUnauthorized)
 			return
 		}
@@ -274,6 +276,7 @@ func UnaryAuthInterceptor(audience string, issuer string) grpc.UnaryServerInterc
 
 		ctx, err = authenticate(ctx, jwtToken, audience, issuer)
 		if err != nil {
+			log.Printf(" UnaryAuthInterceptor -- could not authenticate token : [%s]  due to error : %+v", jwtToken, err)
 			return nil, err
 		}
 		return handler(ctx, req)
@@ -305,6 +308,7 @@ func StreamAuthInterceptor(audience string, issuer string) grpc.StreamServerInte
 
 			ctx, err = authenticate(ctx, jwtToken, audience, issuer)
 			if err != nil {
+				log.Printf(" StreamAuthInterceptor -- could not authenticate token : [%s]  due to error : %+v", jwtToken, err)
 				return err
 			}
 

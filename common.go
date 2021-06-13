@@ -31,12 +31,19 @@ func (model *BaseModel) GetID() string {
 	return model.ID
 }
 
-// BeforeCreate Ensures we update a migrations time stamps
-func (model *BaseModel) BeforeCreate(db *gorm.DB) error {
+//GenID creates a new id for model if its not existent
+func (model *BaseModel) GenID() {
 	if model.ID == "" {
 		model.ID = xid.New().String()
 	}
-	if model.Version > 0 {
+}
+
+// BeforeCreate Ensures we update a migrations time stamps
+func (model *BaseModel) BeforeCreate(db *gorm.DB) error {
+
+	model.GenID()
+
+	if model.Version <= 0 {
 		model.CreatedAt = time.Now()
 		model.ModifiedAt = time.Now()
 		model.Version = 1

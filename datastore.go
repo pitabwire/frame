@@ -200,8 +200,6 @@ func scanForNewMigrations(db *gorm.DB, migrationsDirPath string) error {
 		return err
 	}
 
-	log.Printf("scanForNewMigrations found %d migrations to process", len(files))
-
 	for _, file := range files {
 
 		filename := filepath.Base(file)
@@ -246,8 +244,8 @@ func saveNewMigrations(db *gorm.DB, filename string, migrationPatch string) erro
 
 func applyNewMigrations(db *gorm.DB) error {
 
-	var unAppliedMigrations []Migration
-	if err := db.Where("applied_at IS NULL").Find(&unAppliedMigrations).Error; err != nil {
+	var unAppliedMigrations []*Migration
+	if err := db.Debug().Where("applied_at IS NULL").Find(&unAppliedMigrations).Error; err != nil {
 
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			log.Printf("No migrations found to be applied ")
@@ -266,7 +264,7 @@ func applyNewMigrations(db *gorm.DB) error {
 			Time:  time.Now(),
 			Valid: true,
 		}
-		if err := db.Model(&migration).Save(migration).Error; err != nil {
+		if err := db.Save(migration).Error; err != nil {
 			return err
 		}
 

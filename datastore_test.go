@@ -2,6 +2,7 @@ package frame
 
 import (
 	"context"
+	"gorm.io/gorm"
 	"io/ioutil"
 	"testing"
 )
@@ -79,6 +80,7 @@ func TestService_MigrateDatastore(t *testing.T) {
 	mainDb := Datastore(ctx, testDatastoreConnection, false)
 
 	srv := NewService("Test Migrations Srv", mainDb)
+	srv.DB(ctx, false).Session(&gorm.Session{AllowGlobalUpdate: true}).Unscoped().Delete(&Migration{})
 
 	migrationPath := "./migrations/default"
 
@@ -94,6 +96,9 @@ func TestSaveNewMigrations(t *testing.T) {
 	ctx := context.Background()
 	mainDb := Datastore(ctx, testDatastoreConnection, false)
 	srv := NewService("Test Migrations Srv", mainDb)
+
+	srv.DB(ctx, false).Session(&gorm.Session{AllowGlobalUpdate: true}).Unscoped().Delete(&Migration{})
+
 	err := srv.MigrateDatastore(ctx, "./tests_runner/migrations/default")
 	if err != nil {
 		t.Errorf("Could not migrate successfully because : %v", err)
@@ -160,6 +165,9 @@ func TestApplyMigrations(t *testing.T) {
 	ctx := context.Background()
 	mainDb := Datastore(ctx, testDatastoreConnection, false)
 	srv := NewService("Test Migrations Srv", mainDb)
+
+	srv.DB(ctx, false).Session(&gorm.Session{AllowGlobalUpdate: true}).Unscoped().Delete(&Migration{})
+
 	err := srv.MigrateDatastore(ctx, "./tests_runner/migrations/default")
 	if err != nil {
 		t.Errorf("Could not migrate successfully because : %v", err)

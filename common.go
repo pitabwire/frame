@@ -38,7 +38,11 @@ func (model *BaseModel) GenID() {
 	}
 }
 
-// BeforeCreate Ensures we update a migrations time stamps
+// BeforeSave Ensures we update a migrations time stamps
+func (model *BaseModel) BeforeSave(db *gorm.DB) error {
+	return model.BeforeCreate(db)
+}
+
 func (model *BaseModel) BeforeCreate(db *gorm.DB) error {
 
 	model.GenID()
@@ -69,7 +73,7 @@ func (model *BaseModel) BeforeUpdate(db *gorm.DB) error {
 type Migration struct {
 	BaseModel
 
-	Name      string `gorm:"type:varchar(50);unique_index"`
+	Name      string `gorm:"type:varchar(50);uniqueIndex"`
 	Patch     string `gorm:"type:text"`
 	AppliedAt sql.NullTime
 }

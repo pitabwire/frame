@@ -77,10 +77,10 @@ func DBPropertiesFromMap(propsMap map[string]string) datatypes.JSONMap {
 }
 
 func DBErrorIsRecordNotFound(err error) bool {
-	return err == gorm.ErrRecordNotFound
+	return errors.Is(err, gorm.ErrRecordNotFound)
 }
 
-func (s *Service) DB(ctx context.Context, readOnly bool) *gorm.DB {
+func (s *Service)  DB(ctx context.Context, readOnly bool) *gorm.DB {
 
 	var db *gorm.DB
 
@@ -138,7 +138,10 @@ func Datastore(ctx context.Context, postgresqlConnection string, readOnly bool) 
 
 		if db != nil {
 
-			gormDb, _ := gorm.Open(gormPostgres.New(gormPostgres.Config{Conn: db}), &gorm.Config{})
+			gormDb, _ := gorm.Open(gormPostgres.New(gormPostgres.Config{Conn: db}), &gorm.Config{
+				SkipDefaultTransaction: true,
+				PrepareStmt: true,
+			})
 
 			s.AddCleanupMethod(func() {
 				_ = db.Close()
@@ -223,17 +226,29 @@ func scanForNewMigrations(db *gorm.DB, migrationsDirPath string) error {
 
 func saveNewMigrations(db *gorm.DB, filename string, migrationPatch string) error {
 
-	migration := Migration{Name: filename, Patch: migrationPatch}
+	migration := Migration{}
 
-	err := db.FirstOrCreate(&migration, "name = ?", filename).Error
+	err := db.Model(&migration).First(&migration, "name = ?", filename).Error
 	if err != nil {
-		return err
+
+		if !DBErrorIsRecordNotFound(err) {
+			return err
+		}
+
+		migration := Migration{
+			Name:  filename,
+			Patch: migrationPatch,
+		}
+		err = db.Session(&gorm.Session{}).Create(&migration).Error
+		if err != nil {
+			return err
+		}
+
+		return nil
 	}
 
 	if !migration.AppliedAt.Valid && migration.Patch != migrationPatch {
-
 		err := db.Model(&migration).Update("patch", migrationPatch).Error
-
 		if err != nil {
 			return err
 		}
@@ -245,7 +260,7 @@ func saveNewMigrations(db *gorm.DB, filename string, migrationPatch string) erro
 func applyNewMigrations(db *gorm.DB) error {
 
 	var unAppliedMigrations []*Migration
-	err := db.Debug().Where("applied_at IS NULL").Find(&unAppliedMigrations).Error
+	err := db.Where("applied_at IS NULL").Find(&unAppliedMigrations).Error
 	if err != nil {
 
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -257,14 +272,11 @@ func applyNewMigrations(db *gorm.DB) error {
 
 	for _, migration := range unAppliedMigrations {
 
-		if err := db.Exec(migration.Patch).Error; err != nil {
+		if err := db.Session(&gorm.Session{}).Exec(migration.Patch).Error; err != nil {
 			return err
 		}
 
-		err := db.Debug().Model(migration).Update("applied_at", sql.NullTime{
-			Time:  time.Now(),
-			Valid: true,
-		}).Error
+		err := db.Session(&gorm.Session{}).Model(migration).Update("applied_at", time.Now()).Error
 		if err != nil {
 			return err
 		}

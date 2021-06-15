@@ -119,6 +119,8 @@ func TestSaveNewMigrations(t *testing.T) {
 		return
 	}
 
+
+
 	err = saveNewMigrations(srv.DB(ctx, false), migrationPath, string(migrationContent))
 	if err != nil {
 		t.Errorf("Could not save new migration %v", err)

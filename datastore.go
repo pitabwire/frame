@@ -245,7 +245,8 @@ func saveNewMigrations(db *gorm.DB, filename string, migrationPatch string) erro
 func applyNewMigrations(db *gorm.DB) error {
 
 	var unAppliedMigrations []*Migration
-	if err := db.Debug().Where("applied_at IS NULL").Find(&unAppliedMigrations).Error; err != nil {
+	err := db.Debug().Where("applied_at IS NULL").Find(&unAppliedMigrations).Error
+	if err != nil {
 
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			log.Printf("No migrations found to be applied ")
@@ -260,11 +261,11 @@ func applyNewMigrations(db *gorm.DB) error {
 			return err
 		}
 
-		migration.AppliedAt = sql.NullTime{
+		err := db.Debug().Model(migration).Update("applied_at", sql.NullTime{
 			Time:  time.Now(),
 			Valid: true,
-		}
-		if err := db.Save(migration).Error; err != nil {
+		}).Error
+		if err != nil {
 			return err
 		}
 

@@ -5,18 +5,13 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"gocloud.dev/postgres"
 	"gocloud.dev/server/health/sqlhealth"
 	"gorm.io/datatypes"
 	gormPostgres "gorm.io/driver/postgres"
 	"gorm.io/gorm"
-	"io/ioutil"
 	"log"
 	"math/rand"
-	"path/filepath"
-	"strings"
-	"time"
 )
 
 type store struct {
@@ -80,7 +75,7 @@ func DBErrorIsRecordNotFound(err error) bool {
 	return errors.Is(err, gorm.ErrRecordNotFound)
 }
 
-func (s *Service)  DB(ctx context.Context, readOnly bool) *gorm.DB {
+func (s *Service) DB(ctx context.Context, readOnly bool) *gorm.DB {
 
 	var db *gorm.DB
 
@@ -140,7 +135,7 @@ func Datastore(ctx context.Context, postgresqlConnection string, readOnly bool) 
 
 			gormDb, _ := gorm.Open(gormPostgres.New(gormPostgres.Config{Conn: db}), &gorm.Config{
 				SkipDefaultTransaction: true,
-				PrepareStmt: true,
+				PrepareStmt:            true,
 			})
 
 			s.AddCleanupMethod(func() {
@@ -170,7 +165,6 @@ func addSqlHealthChecker(s *Service, db *sql.DB) {
 // MigrateDatastore finds missing migrations and records them in the database
 func (s *Service) MigrateDatastore(ctx context.Context, migrationsDirPath string, migrations ...interface{}) error {
 
-	db := s.DB(ctx, false)
 	if migrationsDirPath == "" {
 		migrationsDirPath = "./migrations/0001"
 	}
@@ -178,111 +172,22 @@ func (s *Service) MigrateDatastore(ctx context.Context, migrationsDirPath string
 	migrations = append(migrations, &Migration{})
 
 	// Migrate the schema
-	err := db.AutoMigrate(migrations...)
+	err := s.DB(ctx, false).AutoMigrate(migrations...)
 	if err != nil {
 		log.Printf("Error scanning for new migrations : %v ", err)
 		return err
 	}
-	if err := scanForNewMigrations(db, migrationsDirPath); err != nil {
+
+	migrator := migrator{service: s}
+
+	if err := migrator.scanForNewMigrations(ctx, migrationsDirPath); err != nil {
 		log.Printf("Error scanning for new migrations : %v ", err)
 		return err
 	}
 
-	if err := applyNewMigrations(db); err != nil {
+	if err := migrator.applyNewMigrations(ctx); err != nil {
 		log.Printf("There was an error applying migrations : %v ", err)
 		return err
 	}
-	return nil
-}
-
-func scanForNewMigrations(db *gorm.DB, migrationsDirPath string) error {
-
-	// Get a list of migration files
-	files, err := filepath.Glob(migrationsDirPath + "/*.sql")
-	if err != nil {
-		return err
-	}
-
-	for _, file := range files {
-
-		filename := filepath.Base(file)
-		filename = strings.Replace(filename, ".sql", "", 1)
-
-		migrationPatch, err := ioutil.ReadFile(file)
-
-		if err != nil {
-			log.Printf("Problem reading migration file content : %v", err)
-			continue
-		}
-
-		err = saveNewMigrations(db, filename, string(migrationPatch))
-		if err != nil {
-			log.Printf("new migration :%s could not be processed because: %+v", file, err)
-		}
-
-	}
-	return nil
-}
-
-func saveNewMigrations(db *gorm.DB, filename string, migrationPatch string) error {
-
-	migration := Migration{}
-
-	err := db.Model(&migration).First(&migration, "name = ?", filename).Error
-	if err != nil {
-
-		if !DBErrorIsRecordNotFound(err) {
-			return err
-		}
-
-		migration := Migration{
-			Name:  filename,
-			Patch: migrationPatch,
-		}
-		err = db.Session(&gorm.Session{}).Create(&migration).Error
-		if err != nil {
-			return err
-		}
-
-		return nil
-	}
-
-	if !migration.AppliedAt.Valid && migration.Patch != migrationPatch {
-		err := db.Model(&migration).Update("patch", migrationPatch).Error
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-func applyNewMigrations(db *gorm.DB) error {
-
-	var unAppliedMigrations []*Migration
-	err := db.Where("applied_at IS NULL").Find(&unAppliedMigrations).Error
-	if err != nil {
-
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			log.Printf("No migrations found to be applied ")
-			return nil
-		}
-		return err
-	}
-
-	for _, migration := range unAppliedMigrations {
-
-		if err := db.Session(&gorm.Session{}).Exec(migration.Patch).Error; err != nil {
-			return err
-		}
-
-		err := db.Session(&gorm.Session{}).Model(migration).Update("applied_at", time.Now()).Error
-		if err != nil {
-			return err
-		}
-
-		log.Printf("Successfully applied the file : %v", fmt.Sprintf("%s.sql", migration.Name))
-	}
-
 	return nil
 }

@@ -135,7 +135,6 @@ func Datastore(ctx context.Context, postgresqlConnection string, readOnly bool) 
 
 			gormDb, _ := gorm.Open(gormPostgres.New(gormPostgres.Config{Conn: db}), &gorm.Config{
 				SkipDefaultTransaction: true,
-				PrepareStmt:            true,
 			})
 
 			s.AddCleanupMethod(func() {

@@ -1,3 +1,2 @@
 
-
-SELECT 1;
+DROP TABLE contact_types;

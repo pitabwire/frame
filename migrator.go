@@ -17,7 +17,7 @@ type migrator struct {
 }
 
 func (m *migrator)DB(ctx context.Context) *gorm.DB {
-	return m.service.DB(ctx, false).Session(&gorm.Session{Context: ctx, PrepareStmt: false})
+	return m.service.DB(ctx, false)
 }
 
 

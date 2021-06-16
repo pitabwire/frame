@@ -50,7 +50,7 @@ func TestAuthorizationControlListWrite(t *testing.T) {
 
 	err := os.Setenv("KETO_SERVICE_ADMIN_URI", "http://localhost:4467")
 	if err != nil {
-		t.Errorf("Authorization write url was not setable %v", err)
+		t.Errorf("Authorization write url was not setable %+v", err)
 		return
 	}
 
@@ -68,7 +68,7 @@ func TestAuthorizationControlListWrite(t *testing.T) {
 
 	err = authorizationControlListWrite(ctx, "read", "tested")
 	if err != nil {
-		t.Errorf("Authorization write was not possible see %v", err)
+		t.Errorf("Authorization write was not possible see %+v", err)
 		return
 	}
 
@@ -78,7 +78,7 @@ func TestAuthorizationControlListHasAccess(t *testing.T) {
 
 	err := os.Setenv(envAuthorizationServiceUri, "http://localhost:4466")
 	if err != nil {
-		t.Errorf("Authorization read url was not setable %v", err)
+		t.Errorf("Authorization read url was not setable %+v", err)
 		return
 	}
 
@@ -96,13 +96,13 @@ func TestAuthorizationControlListHasAccess(t *testing.T) {
 
 	err = authorizationControlListWrite(ctx, "read", "reader")
 	if err != nil {
-		t.Errorf("Authorization write was not possible see %v", err)
+		t.Errorf("Authorization write was not possible see %+v", err)
 		return
 	}
 
 	err, access := AuthorizationControlListHasAccess(ctx, "read", "reader")
 	if err != nil {
-		t.Errorf("Authorization check was not possible see %v", err)
+		t.Errorf("Authorization check was not possible see %+v", err)
 	} else if !access {
 		t.Errorf("Authorization check was forbidden")
 		return

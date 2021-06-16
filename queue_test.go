@@ -46,13 +46,13 @@ func TestService_RegisterPublisher(t *testing.T) {
 
 	err := srv.initPubsub(ctx)
 	if err != nil  {
-		t.Errorf("We couldn't instantiate queue  %v", err)
+		t.Errorf("We couldn't instantiate queue  %+v", err)
 		return
 	}
 
 	err = srv.Publish(ctx, "test", []byte("") )
 	if err != nil  {
-		t.Errorf("We could not publish to topic that was registered %v", err)
+		t.Errorf("We could not publish to topic that was registered %+v", err)
 	}
 
 	srv.Stop()
@@ -70,18 +70,18 @@ func TestService_RegisterPublisherMultiple(t *testing.T) {
 
 	err := srv.initPubsub(ctx)
 	if err != nil  {
-		t.Errorf("We couldn't instantiate queue  %v", err)
+		t.Errorf("We couldn't instantiate queue  %+v", err)
 		return
 	}
 
 	err = srv.Publish(ctx, "test", []byte("Testament") )
 	if err != nil  {
-		t.Errorf("We could not publish to topic that was registered %v", err)
+		t.Errorf("We could not publish to topic that was registered %+v", err)
 	}
 
 	err = srv.Publish(ctx, "test-2", []byte("Testament") )
 	if err != nil  {
-		t.Errorf("We could not publish to topic that was registered %v", err)
+		t.Errorf("We could not publish to topic that was registered %+v", err)
 	}
 
 	err = srv.Publish(ctx, "test-3", []byte("Testament") )
@@ -123,7 +123,7 @@ func TestService_RegisterSubscriber(t *testing.T) {
 
 	err := srv.initPubsub(ctx)
 	if err != nil  {
-		t.Errorf("We couldn't instantiate queue  %v", err)
+		t.Errorf("We couldn't instantiate queue  %+v", err)
 		return
 	}
 
@@ -157,13 +157,13 @@ func TestService_RegisterSubscriberWithError(t *testing.T) {
 
 	err := srv.initPubsub(ctx)
 	if err != nil  {
-		t.Errorf("We couldn't instantiate queue  %v", err)
+		t.Errorf("We couldn't instantiate queue  %+v", err)
 		return
 	}
 
 		err = srv.Publish(ctx, "test", []byte(fmt.Sprintf(" testing message with error")))
 		if err != nil {
-			t.Errorf("We could not publish to topic that was registered %v", err)
+			t.Errorf("We could not publish to topic that was registered %+v", err)
 		}
 	srv.Stop()
 }

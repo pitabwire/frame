@@ -37,7 +37,7 @@ func (m *migrator) scanForNewMigrations(ctx context.Context, migrationsDirPath s
 		migrationPatch, err := ioutil.ReadFile(file)
 
 		if err != nil {
-			log.Printf("Problem reading migration file content : %v", err)
+			log.Printf("Problem reading migration file content : %+v", err)
 			continue
 		}
 
@@ -113,3 +113,33 @@ func (m *migrator) applyNewMigrations(ctx context.Context) error {
 	return nil
 }
 
+
+// MigrateDatastore finds missing migrations and records them in the database
+func (s *Service) MigrateDatastore(ctx context.Context, migrationsDirPath string, migrations ...interface{}) error {
+
+	if migrationsDirPath == "" {
+		migrationsDirPath = "./migrations/0001"
+	}
+
+	migrations = append(migrations, &Migration{})
+
+	// Migrate the schema
+	err := s.DB(ctx, false).AutoMigrate(migrations...)
+	if err != nil {
+		log.Printf("Error scanning for new migrations : %+v ", err)
+		return err
+	}
+
+	migrator := migrator{service: s}
+
+	if err := migrator.scanForNewMigrations(ctx, migrationsDirPath); err != nil {
+		log.Printf("Error scanning for new migrations : %+v ", err)
+		return err
+	}
+
+	if err := migrator.applyNewMigrations(ctx); err != nil {
+		log.Printf("There was an error applying migrations : %+v ", err)
+		return err
+	}
+	return nil
+}

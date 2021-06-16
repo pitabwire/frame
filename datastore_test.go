@@ -2,7 +2,6 @@ package frame
 
 import (
 	"context"
-	"gorm.io/gorm"
 	"testing"
 )
 
@@ -69,23 +68,6 @@ func TestService_DatastoreNotSet(t *testing.T) {
 	w := srv.DB(ctx, false)
 	if w != nil {
 		t.Errorf("When no connection is set no db is expected")
-	}
-
-}
-
-func TestService_MigrateDatastore(t *testing.T) {
-
-	ctx := context.Background()
-	mainDb := Datastore(ctx, testDatastoreConnection, false)
-
-	srv := NewService("Test Migrations Srv", mainDb)
-	srv.DB(ctx, false).Session(&gorm.Session{AllowGlobalUpdate: true}).Unscoped().Delete(&Migration{})
-
-	migrationPath := "./migrations/default"
-
-	err := srv.MigrateDatastore(ctx, migrationPath)
-	if err != nil {
-		t.Errorf("Could not migrate successfully because : %v", err)
 	}
 
 }

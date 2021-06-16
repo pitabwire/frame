@@ -174,7 +174,7 @@ func (s Service) initPubsub(ctx context.Context) error {
 	for ref, subscriber := range s.queue.subscriptionQueueMap {
 		subs, err := pubsub.OpenSubscription(ctx, subscriber.url)
 		if err != nil {
-			return fmt.Errorf("could not open topic subscription: %v", err)
+			return fmt.Errorf("could not open topic subscription: %+v", err)
 		}
 
 		s.AddCleanupMethod(func() {
@@ -209,7 +209,7 @@ func (s Service) subscribe(ctx context.Context) {
 				msg, err := localSub.subscription.Receive(ctx)
 				if err != nil {
 					// Errors from Receive indicate that Receive will no longer succeed.
-					log.Printf(" subscribe -- Could not pull message because : %v", err)
+					log.Printf(" subscribe -- Could not pull message because : %+v", err)
 					localSub.isInit = false
 					return
 				}

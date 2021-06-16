@@ -44,14 +44,14 @@ func (gd *grpcDriver) ListenAndServe(addr string, h http.Handler) error {
 	go func() {
 		err := gd.grpcServer.Serve(grpcL)
 		if err != nil {
-			log.Printf(" ListenAndServe -- stopping grpc server because : %v", err)
+			log.Printf(" ListenAndServe -- stopping grpc server because : %+v", err)
 		}
 	}()
 
 	go func() {
 		err := gd.httpServer.Serve(anyL)
 		if err != nil {
-			log.Printf(" ListenAndServe -- stopping http server because : %v", err)
+			log.Printf(" ListenAndServe -- stopping http server because : %+v", err)
 		}
 	}()
 
@@ -87,14 +87,14 @@ func (gd *grpcDriver) ListenAndServeTLS(addr, certFile, keyFile string, h http.H
 	go func() {
 		err := gd.grpcServer.Serve(grpcL)
 		if err != nil {
-			log.Printf(" ListenAndServeTLS -- stopping grpc server because : %v", err)
+			log.Printf(" ListenAndServeTLS -- stopping grpc server because : %+v", err)
 		}
 	}()
 
 	go func() {
 		err := gd.httpServer.ServeTLS(anyL, certFile, keyFile)
 		if err != nil {
-			log.Printf(" ListenAndServeTLS -- stopping http server because : %v", err)
+			log.Printf(" ListenAndServeTLS -- stopping http server because : %+v", err)
 		}
 	}()
 

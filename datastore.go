@@ -128,7 +128,7 @@ func Datastore(ctx context.Context, postgresqlConnection string, readOnly bool) 
 		}
 		db, err := postgres.Open(ctx, postgresqlConnection)
 		if err != nil {
-			log.Printf("Datastore -- problem instantiating database : %v", err)
+			log.Printf("Datastore -- problem instantiating database : %+v", err)
 		}
 
 		if db != nil {
@@ -159,34 +159,4 @@ func addSqlHealthChecker(s *Service, db *sql.DB) {
 	s.AddCleanupMethod(func() {
 		dbCheck.Stop()
 	})
-}
-
-// MigrateDatastore finds missing migrations and records them in the database
-func (s *Service) MigrateDatastore(ctx context.Context, migrationsDirPath string, migrations ...interface{}) error {
-
-	if migrationsDirPath == "" {
-		migrationsDirPath = "./migrations/0001"
-	}
-
-	migrations = append(migrations, &Migration{})
-
-	// Migrate the schema
-	err := s.DB(ctx, false).AutoMigrate(migrations...)
-	if err != nil {
-		log.Printf("Error scanning for new migrations : %v ", err)
-		return err
-	}
-
-	migrator := migrator{service: s}
-
-	if err := migrator.scanForNewMigrations(ctx, migrationsDirPath); err != nil {
-		log.Printf("Error scanning for new migrations : %v ", err)
-		return err
-	}
-
-	if err := migrator.applyNewMigrations(ctx); err != nil {
-		log.Printf("There was an error applying migrations : %v ", err)
-		return err
-	}
-	return nil
 }

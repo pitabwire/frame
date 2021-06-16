@@ -49,7 +49,7 @@ func startGRPCServer() (*grpc.Server, *bufconn.Listener) {
 
 	go func() {
 		if err := srv.Serve(listener); err != nil {
-			log.Fatalf("failed to start grpc server: %v", err)
+			log.Fatalf("failed to start grpc server: %+v", err)
 		}
 	}()
 	return srv, listener
@@ -70,7 +70,7 @@ func TestRawGrpcServer(t *testing.T) {
 
 	err := clientInvokeGrpc(listener)
 	if err != nil {
-		t.Fatalf("failed to dial: %v", err)
+		t.Fatalf("failed to dial: %+v", err)
 	}
 }
 
@@ -98,7 +98,7 @@ func TestServiceGrpcServer(t *testing.T) {
 
 	err := clientInvokeGrpc(listener)
 	if err != nil {
-		t.Fatalf("failed to dial: %v", err)
+		t.Fatalf("failed to dial: %+v", err)
 	}
 
 }
@@ -154,7 +154,7 @@ func TestService_Run(t *testing.T) {
 
 	err := srv.Run(ctx, ":")
 	if err != nil {
-		t.Errorf("Could not run Server : %v", err)
+		t.Errorf("Could not run Server : %+v", err)
 	}
 
 	srv.Stop()

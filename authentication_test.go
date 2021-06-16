@@ -28,13 +28,13 @@ func TestSimpleAuthenticate(t *testing.T) {
 	err := os.Setenv(envOauth2WellKnownJwk, sampleWellKnownJwk)
 
 	if err != nil {
-		t.Errorf("well known JWK uri was not setable %v", err)
+		t.Errorf("well known JWK uri was not setable %+v", err)
 		return
 	}
 
 	ctx2, err := authenticate(ctx, sampleAccessKey, "", "")
 	if err != nil {
-		t.Errorf("There was an error authenticating access key, %v", err)
+		t.Errorf("There was an error authenticating access key, %+v", err)
 		return
 	}
 
@@ -50,13 +50,13 @@ func TestSimpleAuthenticateWithAudience(t *testing.T) {
 	err := os.Setenv(envOauth2WellKnownJwk, sampleWellKnownJwk)
 
 	if err != nil {
-		t.Errorf("well known JWK uri was not setable %v", err)
+		t.Errorf("well known JWK uri was not setable %+v", err)
 		return
 	}
 
 	ctx2, err := authenticate(ctx, sampleAccessKey, "c2f4j7au6s7f91uqnokg", "")
 	if err != nil {
-		t.Errorf("There was an error authenticating access key due to audience, %v", err)
+		t.Errorf("There was an error authenticating access key due to audience, %+v", err)
 		return
 	}
 
@@ -72,13 +72,13 @@ func TestSimpleAuthenticateWithIssuer(t *testing.T) {
 	err := os.Setenv(envOauth2WellKnownJwk, sampleWellKnownJwk)
 
 	if err != nil {
-		t.Errorf("well known JWK uri was not setable %v", err)
+		t.Errorf("well known JWK uri was not setable %+v", err)
 		return
 	}
 
 	ctx2, err := authenticate(ctx, sampleAccessKey, "", "http://127.0.0.1:4444/")
 	if err != nil {
-		t.Errorf("There was an error authenticating access key due to issuer, %v", err)
+		t.Errorf("There was an error authenticating access key due to issuer, %+v", err)
 		return
 	}
 

@@ -128,7 +128,7 @@ func Datastore(ctx context.Context, postgresqlConnection string, readOnly bool) 
 		}
 		db, err := postgres.Open(ctx, postgresqlConnection)
 		if err != nil {
-			log.Printf("AddDB -- problem instantiating database : %v", err)
+			log.Printf("Datastore -- problem instantiating database : %v", err)
 		}
 
 		if db != nil {

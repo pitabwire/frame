@@ -37,13 +37,14 @@ func (m *migrator) scanForNewMigrations(ctx context.Context, migrationsDirPath s
 		migrationPatch, err := ioutil.ReadFile(file)
 
 		if err != nil {
-			log.Printf("Problem reading migration file content : %+v", err)
+			log.Printf("scanForNewMigrations -- Problem reading migration file content : %+v", err)
 			continue
 		}
 
 		err = m.saveNewMigrations(ctx, filename, string(migrationPatch))
 		if err != nil {
-			log.Printf("new migration :%s could not be processed because: %+v", file, err)
+			log.Printf("scanForNewMigrations -- new migration :%s could not be processed because: %+v", file, err)
+			return err
 		}
 
 	}
@@ -90,7 +91,7 @@ func (m *migrator) applyNewMigrations(ctx context.Context) error {
 	if err != nil {
 
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			log.Printf("No migrations found to be applied ")
+			log.Printf("applyNewMigrations -- No migrations found to be applied ")
 			return nil
 		}
 		return err
@@ -107,7 +108,7 @@ func (m *migrator) applyNewMigrations(ctx context.Context) error {
 			return err
 		}
 
-		log.Printf("Successfully applied the file : %v", fmt.Sprintf("%s.sql", migration.Name))
+		log.Printf("applyNewMigrations -- Successfully applied the file : %v", fmt.Sprintf("%s.sql", migration.Name))
 	}
 
 	return nil
@@ -126,19 +127,19 @@ func (s *Service) MigrateDatastore(ctx context.Context, migrationsDirPath string
 	// Migrate the schema
 	err := s.DB(ctx, false).AutoMigrate(migrations...)
 	if err != nil {
-		log.Printf("Error scanning for new migrations : %+v ", err)
+		log.Printf("MigrateDatastore -- Error scanning for new migrations : %+v ", err)
 		return err
 	}
 
 	migrator := migrator{service: s}
 
 	if err := migrator.scanForNewMigrations(ctx, migrationsDirPath); err != nil {
-		log.Printf("Error scanning for new migrations : %+v ", err)
+		log.Printf("MigrateDatastore -- Error scanning for new migrations : %+v ", err)
 		return err
 	}
 
 	if err := migrator.applyNewMigrations(ctx); err != nil {
-		log.Printf("There was an error applying migrations : %+v ", err)
+		log.Printf("MigrateDatastore -- There was an error applying migrations : %+v ", err)
 		return err
 	}
 	return nil

@@ -3,29 +3,16 @@ package frame
 import (
 	"context"
 	"errors"
-	"gocloud.dev/server"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/examples/helloworld/helloworld"
 	grpchello "google.golang.org/grpc/examples/helloworld/helloworld"
 	"google.golang.org/grpc/test/bufconn"
 	"log"
 	"net"
-	"net/http"
 	"strings"
 	"testing"
 	"time"
 )
-
-type testDriver struct {
-}
-
-func (t *testDriver) ListenAndServe(addr string, h http.Handler) error {
-	return nil
-}
-
-func (t *testDriver) Shutdown(ctx context.Context) error {
-	return nil
-}
 
 type grpcServer struct {
 	helloworld.UnimplementedGreeterServer
@@ -74,7 +61,6 @@ func TestRawGrpcServer(t *testing.T) {
 	}
 }
 
-
 func TestServiceGrpcServer(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -91,7 +77,6 @@ func TestServiceGrpcServer(t *testing.T) {
 	defer func() { time.Sleep(100 * time.Millisecond) }()
 	defer srv.Stop()
 
-
 	go func() {
 		_ = srv.Run(ctx, "")
 	}()
@@ -103,7 +88,7 @@ func TestServiceGrpcServer(t *testing.T) {
 
 }
 
-func clientInvokeGrpc( listener *bufconn.Listener) error {
+func clientInvokeGrpc(listener *bufconn.Listener) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -142,15 +127,10 @@ func TestService_Run(t *testing.T) {
 		}
 	}()
 
-	time.Sleep(500*time.Millisecond)
+	time.Sleep(500 * time.Millisecond)
 	srv.Stop()
 
-
-	srvOptions := &server.Options{
-		Driver: &testDriver{},
-	}
-
-	srv = NewService("Testing", HttpOptions(srvOptions))
+	srv = NewService("Testing", NoopHttpOptions())
 
 	err := srv.Run(ctx, ":")
 	if err != nil {

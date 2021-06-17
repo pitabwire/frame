@@ -10,6 +10,18 @@ import (
 	"net/http"
 )
 
+type noopDriver struct {
+}
+
+func (t *noopDriver) ListenAndServe(addr string, h http.Handler) error {
+	return nil
+}
+
+func (t *noopDriver) Shutdown(ctx context.Context) error {
+	return nil
+}
+
+
 type grpcDriver struct {
 	httpServer *http.Server
 	grpcServer *grpc.Server
@@ -136,3 +148,14 @@ func HttpOptions(httpOpts *server.Options) Option {
 		c.serverOptions = httpOpts
 	}
 }
+
+func NoopHttpOptions() Option {
+	return func(c *Service) {
+		nopOptions := &server.Options{
+			Driver: &noopDriver{},
+		}
+
+		c.serverOptions = nopOptions
+	}
+}
+

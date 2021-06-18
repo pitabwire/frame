@@ -55,7 +55,10 @@ func (model *BaseModel) BeforeCreate(db *gorm.DB) error {
 
 	ctx := db.Statement.Context
 	authClaim := ClaimsFromContext(ctx)
-	if  model.TenantID == "" && authClaim != nil {
+	if model.TenantID == "" &&
+		authClaim != nil &&
+		authClaim.TenantID != "" &&
+		authClaim.PartitionID != "" {
 		model.PartitionID = authClaim.PartitionID
 		model.TenantID = authClaim.TenantID
 	}

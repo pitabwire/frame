@@ -22,12 +22,14 @@ type store struct {
 func tenantPartition(ctx context.Context) func(db *gorm.DB) *gorm.DB {
 	return func(db *gorm.DB) *gorm.DB {
 		authClaim := ClaimsFromContext(ctx)
-		if authClaim != nil && !authClaim.isSystem() {
-
+		if authClaim != nil &&
+			authClaim.TenantID != "" &&
+			authClaim.PartitionID != "" &&
+			!authClaim.isSystem() {
 			return db.Where("tenant_id = ? AND partition_id = ?", authClaim.TenantID, authClaim.PartitionID)
-		} else {
-			return db
 		}
+		return db
+
 	}
 }
 

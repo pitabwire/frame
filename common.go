@@ -1,6 +1,7 @@
 package frame
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"github.com/rs/xid"
@@ -32,9 +33,22 @@ func (model *BaseModel) GetID() string {
 }
 
 //GenID creates a new id for model if its not existent
-func (model *BaseModel) GenID() {
-	if model.ID == "" {
-		model.ID = xid.New().String()
+func (model *BaseModel) GenID(ctx context.Context) {
+
+	if model.ID != "" {
+		return
+	}
+
+	model.ID = xid.New().String()
+	
+	authClaim := ClaimsFromContext(ctx)
+	if authClaim == nil || authClaim.isSystem() {
+		return
+	}
+
+	if authClaim.TenantID != "" && authClaim.PartitionID != "" {
+		model.PartitionID = authClaim.PartitionID
+		model.TenantID = authClaim.TenantID
 	}
 }
 
@@ -45,23 +59,13 @@ func (model *BaseModel) BeforeSave(db *gorm.DB) error {
 
 func (model *BaseModel) BeforeCreate(db *gorm.DB) error {
 
-	model.GenID()
-
 	if model.Version <= 0 {
 		model.CreatedAt = time.Now()
 		model.ModifiedAt = time.Now()
 		model.Version = 1
 	}
 
-	ctx := db.Statement.Context
-	authClaim := ClaimsFromContext(ctx)
-	if model.TenantID == "" &&
-		authClaim != nil &&
-		authClaim.TenantID != "" &&
-		authClaim.PartitionID != "" {
-		model.PartitionID = authClaim.PartitionID
-		model.TenantID = authClaim.TenantID
-	}
+	model.GenID(db.Statement.Context)
 	return nil
 }
 

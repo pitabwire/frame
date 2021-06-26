@@ -36,6 +36,11 @@ func tenantPartition(ctx context.Context) func(db *gorm.DB) *gorm.DB {
 func DBPropertiesToMap(props datatypes.JSONMap) map[string]string {
 
 	payload := make(map[string]string)
+
+	if props == nil {
+		return payload
+	}
+
 	properties := make(map[string]interface{})
 	payloadValue, _ := props.MarshalJSON()
 	err := json.Unmarshal(payloadValue, &properties)
@@ -59,6 +64,10 @@ func DBPropertiesToMap(props datatypes.JSONMap) map[string]string {
 func DBPropertiesFromMap(propsMap map[string]string) datatypes.JSONMap {
 
 	jsonMap := make(datatypes.JSONMap)
+
+	if propsMap == nil {
+		return jsonMap
+	}
 
 	for k, val := range propsMap {
 		var prop interface{}

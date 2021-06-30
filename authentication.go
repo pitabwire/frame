@@ -8,6 +8,8 @@ import (
 	"errors"
 	"github.com/dgrijalva/jwt-go/v4"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"io/ioutil"
 	"log"
 	"math/big"
@@ -239,24 +241,24 @@ func AuthenticationMiddleware(next http.Handler, audience string, issuer string)
 func grpcJwtTokenExtractor(ctx context.Context) (string, error) {
 	requestMetadata, ok := metadata.FromIncomingContext(ctx)
 	if !ok {
-		return "", errors.New("no metadata was saved in context before")
+		return "", status.Error(codes.Unauthenticated,"no metadata was saved in context before")
 	}
 
 	vv, ok := requestMetadata["authorization"]
 	if !ok {
-		return "", errors.New("no authorization key found in request metadata")
+		return "", status.Error(codes.Unauthenticated,"no authorization key found in request metadata")
 	}
 
 	authorizationHeader := vv[0]
 
 	if authorizationHeader == "" || !strings.HasPrefix(authorizationHeader, "bearer ") {
-		return "", errors.New("an authorization header is required")
+		return "", status.Error(codes.Unauthenticated,"an authorization header is required")
 	}
 
 	extractedJwtToken := strings.Split(authorizationHeader, "bearer ")
 
 	if len(extractedJwtToken) != 2 {
-		return "", errors.New("malformed Authorization header")
+		return "", status.Error(codes.Unauthenticated,"malformed Authorization header")
 	}
 
 	return strings.TrimSpace(extractedJwtToken[1]), nil
@@ -277,7 +279,7 @@ func UnaryAuthInterceptor(audience string, issuer string) grpc.UnaryServerInterc
 		ctx, err = authenticate(ctx, jwtToken, audience, issuer)
 		if err != nil {
 			log.Printf(" UnaryAuthInterceptor -- could not authenticate token : [%s]  due to error : %+v", jwtToken, err)
-			return nil, err
+			return nil, status.Error(codes.Unauthenticated, err.Error())
 		}
 		return handler(ctx, req)
 	}
@@ -309,7 +311,7 @@ func StreamAuthInterceptor(audience string, issuer string) grpc.StreamServerInte
 			ctx, err = authenticate(ctx, jwtToken, audience, issuer)
 			if err != nil {
 				log.Printf(" StreamAuthInterceptor -- could not authenticate token : [%s]  due to error : %+v", jwtToken, err)
-				return err
+				return status.Error(codes.Unauthenticated, err.Error())
 			}
 
 			authClaim = ClaimsFromContext(ctx)

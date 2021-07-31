@@ -1,6 +1,6 @@
 # frame        [![Build Status](https://travis-ci.com/pitabwire/frame.svg?branch=main)](https://travis-ci.com/pitabwire/frame)
 
-A simple bootstrap for quickly standing up small servers based on [gocloud](https://github.com/google/go-cloud) framework.
+A simple frame for quickly setting up api servers based on [gocloud](https://github.com/google/go-cloud) framework.
 
 Features include:
 

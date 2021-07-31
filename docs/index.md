@@ -1,37 +1,38 @@
-## Welcome to GitHub Pages
+## Frame
 
-You can use the [editor on GitHub](https://github.com/pitabwire/frame/edit/main/docs/index.md) to maintain and preview the content for your website in Markdown files.
+A simple frame for quickly setting up api servers based on [go-cloud](https://github.com/google/go-cloud) framework
 
-Whenever you commit to this repository, GitHub Pages will run [Jekyll](https://jekyllrb.com/) to rebuild the pages in your site, from the content in your Markdown files.
+### Overview
 
-### Markdown
+Frame lets you do anything you want to do your way. It organizes and simplifies access to the things 
+you utilize within your setup. Only what is initialized at startup is what frame will instantiate at runtime.
+Under the hood, frame utilizes [go-cloud](https://github.com/google/go-cloud) to be cloud native without a lot of worries on being locked in.
 
-Markdown is a lightweight and easy-to-use syntax for styling your writing. It includes conventions for
+### Content
 
-```markdown
-Syntax highlighted code block
+- [Service](service)
+- [Servers](servers)
+- [Datastores](datastore)
+- [Queues](queues)
+- [Authentication](authentication)
+- [Authorization](authorization)
+- [Miscellaneous](miscellaneous)
 
-# Header 1
-## Header 2
-### Header 3
+### Contribution
 
-- Bulleted
-- List
+You can become a part to deliver a better frame! by:
 
-1. Numbered
-2. List
+Spreading the word
 
-**Bold** and _Italic_ and `Code` text
+   - Simply tell people who might be interested about it
+   - Help others solve blockers on Stack Overflow and Github Issues
+   - Write missing tutorials and suggesting improvements
+   - Promote frame on GitHub by Starring and Watching the repository
 
-[Link](url) and ![Image](src)
-```
+Program
 
-For more details see [GitHub Flavored Markdown](https://guides.github.com/features/mastering-markdown/).
+   - Create a pull request on Github to fix issues, new features
+   - Create issues on Github whenever something is broken or needs to be improved on
 
-### Jekyll Themes
 
-Your Pages site will use the layout and styles from the Jekyll theme you have selected in your [repository settings](https://github.com/pitabwire/frame/settings/pages). The name of this theme is saved in the Jekyll `_config.yml` configuration file.
 
-### Support or Contact
-
-Having trouble with Pages? Check out our [documentation](https://docs.github.com/categories/github-pages-basics/) or [contact support](https://support.github.com/contact) and we’ll help you sort it out.

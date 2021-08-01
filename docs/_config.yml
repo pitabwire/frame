@@ -3,5 +3,3 @@ plugins:
   - jekyll-remote-theme
 title: Frame
 description: A simple frame for quickly setting up api services based on [go-cloud](https://github.com/google/go-cloud) framework
-show_downloads: "false"
-google_analytics: 281255514

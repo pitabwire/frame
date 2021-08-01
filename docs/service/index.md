@@ -1,14 +1,12 @@
 
 # Service
 
-### About
-
 Service is the glue that holds together components in the frame library.
 All components that are to be used in the lifecycle of the application are instantiated at startup. 
 
 ### Initialization
 
-A new service object is created by supplying the service name and or a list of [components](components) that will be utilized by the application. 
+A new service object is created by supplying the service name and or a list of [components](../components) that will be utilized by the application. 
     
 ````go
      import(
@@ -23,7 +21,7 @@ A new service object is created by supplying the service name and or a list of [
 
 ````
 
-[Components](components) can also be added by calling the init method of the app however this should be done before calling the run method. 
+[Components](../components) can also be added by calling the init method of the app however this should be done before calling the run method. 
    
 ````go
 serviceName = "Notification Service"

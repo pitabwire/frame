@@ -12,7 +12,7 @@ Under the hood, frame utilizes [go-cloud](https://github.com/google/go-cloud) to
 
 - [Service](service)
 - [Components](components)
-- [Migrations](datastore)
+- [Migrations](components/datastore)
 - [Authentication](authentication)
 - [Authorization](authorization)
 - [Miscellaneous](miscellaneous)

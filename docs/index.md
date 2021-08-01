@@ -11,16 +11,22 @@ Under the hood, frame utilizes [go-cloud](https://github.com/google/go-cloud) to
 ### Content
 
 - [Service](service)
-- [Servers](servers)
-- [Datastores](datastore)
-- [Queues](queues)
+- [Components](components)
+- [Migrations](datastore)
 - [Authentication](authentication)
 - [Authorization](authorization)
 - [Miscellaneous](miscellaneous)
 
+### Quick start
+```
+go get -u github.com/pitabwire/frame
+```
+
+
+
 ### Contribution
 
-You can become a part to deliver a better frame! by:
+Join us in delivering a better frame! by:
 
 Spreading the word
 

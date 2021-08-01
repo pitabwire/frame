@@ -2,6 +2,6 @@ remote_theme: pages-themes/minimal@v0.2.0
 plugins:
   - jekyll-remote-theme
 title: Frame
-description: A simple frame for quickly setting up api servers based on [go-cloud](https://github.com/google/go-cloud) framework
-show_downloads: "true"
-google_analytics: G-3J1H6GWT6S
+description: A simple frame for quickly setting up api services based on [go-cloud](https://github.com/google/go-cloud) framework
+show_downloads: "false"
+google_analytics: 281255514

@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/examples/helloworld/helloworld"
 	grpchello "google.golang.org/grpc/examples/helloworld/helloworld"
 	"google.golang.org/grpc/test/bufconn"
 	"log"
@@ -15,7 +14,7 @@ import (
 )
 
 type grpcServer struct {
-	helloworld.UnimplementedGreeterServer
+	grpchello.UnimplementedGreeterServer
 }
 
 func (s *grpcServer) SayHello(ctx context.Context, in *grpchello.HelloRequest) (
@@ -99,7 +98,7 @@ func clientInvokeGrpc(listener *bufconn.Listener) error {
 
 	cli := grpchello.NewGreeterClient(conn)
 
-	req := helloworld.HelloRequest{
+	req := grpchello.HelloRequest{
 		Name: "Testing Roma",
 	}
 

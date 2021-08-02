@@ -18,8 +18,8 @@ Customizations can be done on the server by supplying a custom [driver](https://
 
 Available servers include :
     
-- [http server](#Http server)
-- [grpc server](#Grpc server)
+- [http server](#http-server)
+- [grpc server](#grpc-server)
 
 ### Http server
 To create a http handler for the server, you can use [gorilla mux](https://github.com/gorilla/mux)
@@ -30,7 +30,7 @@ import(
 	"fmt"
 	"github.com/gorilla/mux"
     "github.com/pitabwire/frame"
-	"log"
+	"http"
 )
 
 func HomeHandler(w http.ResponseWriter, r *http.Request) {
@@ -45,7 +45,7 @@ r.HandleFunc("/", HomeHandler)
 serverOption := frame.HttpHandler(r)
 
 service := frame.NewService("Testing service",serverOption)
-service.Run(ctx, ":7654")
+...
 
 }
 ````
@@ -80,13 +80,9 @@ You can utilize your grpc implementation within frame easily.
 Simply declare your implementation and supply it as an option to service at startup.
 
 ````go
-package main
 import(
-	
-"fmt"	
-"github.com/pitabwire/frame"
-grpchello "google.golang.org/grpc/examples/helloworld/helloworld"
-"os"
+    "github.com/pitabwire/frame"
+    grpchello "google.golang.org/grpc/examples/helloworld/helloworld"
 )
 
 type grpcServer struct {
@@ -110,4 +106,39 @@ service := NewService("Testing Service Grpc", grpcServerOption)
 
 
 ## Datastore
+
+Database access is via [gorm](https://gorm.io/docs/) by default and postgres is the database of choice. 
+An orm allows for easier addition of multitenant constraints removal of boiler plate code such that as a developer one does not need to think about those constraints.
+[See how Tod from AWS suggests handling multitenant architecture](https://www.youtube.com/watch?v=mwQ5lipGTBI)
+However there is always a performance hit taken while increasing productivity of a developer.
+
+If you don't need to use such features, or just dont like an orm on your path. 
+You can always get the raw connection and suit yourself.
+
+Creating a database component is straight forward
+
+````go
+package main
+
+import (
+	"context"
+	"github.com/pitabwire/frame"
+	
+)
+
+func main() {
+
+	ctx := context.Background()
+	mainDbOption := frame.Datastore(ctx, "postgres://user:secret@primary_server/service_db", false)
+	readDbOption := frame.Datastore(ctx, "postgres://user:secret@secondary_server/service_db", true)
+
+	service := frame.NewService("Data service", mainDbOption, readDbOption)
+
+	...
+}
+````
+
+Frame allows you to create multiple databases and specify whether they are read databases or write databases.
+If only one database is supplied frame will utilize it for both reads and writes.
+
 ## Queues

@@ -142,3 +142,69 @@ Frame allows you to create multiple databases and specify whether they are read 
 If only one database is supplied frame will utilize it for both reads and writes.
 
 ## Queues
+
+Message queueing is essential for scalable systems as they allow the system to consume more than they can handle in an instant
+and reliably process the messages later.
+
+Currently message publishing and subscription functionality requires all queues that are going to participate to be instantiated at startup.
+Out of the box the supported queues include: memory queue, nats io and gcp pubsub.
+
+````go
+package main
+
+import (
+	"context"
+	"github.com/pitabwire/frame"
+	
+)
+
+
+type messageHandler struct {}
+
+func (m *messageHandler) Handle(ctx context.Context, message []byte) error {
+
+	log.Printf(" Frame is handling messages: %v", string(message))
+	return nil
+}
+
+func main() {
+
+	ctx := context.Background()
+	opt := RegisterPublisher("test", "mem://topicA")
+	opt := RegisterSubscriber("test", "mem://topicA", 5, &messageHandler{} )
+	service := frame.NewService("Data service", mainDbOption, readDbOption)
+
+	...
+}
+````
+
+### Publisher:
+
+Takes two arguments 
+	- reference that is going to be used within the app
+	- url to the queue that will handle the message
+
+Utilizing the registered publisher is as shown below.
+
+	
+````go
+	
+...
+
+	err = srv.Publish(ctx, "test", []byte(" we are testing message publishing"))
+...
+
+````
+
+###  Subscriber:
+
+Requires four input parameters
+
+	- A reference to be used within the app
+	- A url to the queue that will listen for new messages and process them
+	- Number of messages to process in parallel.
+	- An interface of [message handler](https://pkg.go.dev/github.com/pitabwire/frame#SubscribeWorker) to do the actual message processing
+	
+
+*Note:* For message queue managment frame takes the traditional approach of maintaining long running connections that are subscribed. 
+We however recognize that there are superior implementations like what is done with Knative

@@ -2,8 +2,8 @@ package frame
 
 import (
 	"context"
-	"errors"
 	"fmt"
+	cloudevents "github.com/cloudevents/sdk-go/v2"
 	"github.com/nicksnyder/go-i18n/v2/i18n"
 	"gocloud.dev/server"
 	"gocloud.dev/server/health"
@@ -13,16 +13,14 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"strings"
 	"time"
 )
 
 const ctxKeyService = "serviceKey"
 
-const envOauth2ServiceClientSecret = "OAUTH2_SERVICE_CLIENT_SECRET"
-const envOauth2ServiceAdminUri = "OAUTH2_SERVICE_ADMIN_URI"
-const envOauth2Audience = "OAUTH2_SERVICE_AUDIENCE"
-
+// Service framework struct to hold together all application components
+// An instance of this type scoped to stay for the lifetime of the application.
+// It is pushed and pulled from contexts to make it easy to pass around.
 type Service struct {
 	name           string
 	server         *server.Server
@@ -31,7 +29,8 @@ type Service struct {
 	grpcServer     *grpc.Server
 	listener       net.Listener
 	client         *http.Client
-	queue          *Queue
+	queue          *queue
+	queuePath      string
 	dataStore      *store
 	bundle         *i18n.Bundle
 	healthCheckers []health.Checker
@@ -41,7 +40,11 @@ type Service struct {
 
 type Option func(service *Service)
 
+// NewService creates a new instance of Service with the name and supplied options
+// It is used together with the Init option to setup components of a service that is not yet running.
 func NewService(name string, opts ...Option) *Service {
+
+	q, _ := newQueue()
 
 	service := &Service{
 		name: name,
@@ -50,7 +53,7 @@ func NewService(name string, opts ...Option) *Service {
 			writeDatabase: []*gorm.DB{},
 		},
 		client: &http.Client{},
-		queue:  &Queue{},
+		queue:  q,
 	}
 
 	service.Init(opts...)
@@ -58,10 +61,12 @@ func NewService(name string, opts ...Option) *Service {
 	return service
 }
 
+// ToContext pushes a service instance into the supplied context for easier propagation
 func ToContext(ctx context.Context, service *Service) context.Context {
 	return context.WithValue(ctx, ctxKeyService, service)
 }
 
+// FromContext obtains a service instance being propagated through the context
 func FromContext(ctx context.Context) *Service {
 	service, ok := ctx.Value(ctxKeyService).(*Service)
 	if !ok {
@@ -71,51 +76,12 @@ func FromContext(ctx context.Context) *Service {
 	return service
 }
 
-func (s *Service) registerForJwt(ctx context.Context) error {
-
-	host := GetEnv(envOauth2ServiceAdminUri, "")
-	if host == "" {
-		return nil
-	}
-	clientSecret := GetEnv(envOauth2ServiceClientSecret, "")
-	if clientSecret == "" {
-		return nil
-	}
-
-	audienceList := strings.Split(GetEnv(envOauth2Audience, ""), ",")
-
-	oauth2AdminUri := fmt.Sprintf("%s%s", host, "/clients")
-	oauth2AdminIDUri := fmt.Sprintf("%s/%s", oauth2AdminUri, s.name)
-
-	status, result, err := s.InvokeRestService(ctx, http.MethodGet, oauth2AdminIDUri, make(map[string]interface{}), nil)
-	if err != nil {
-		return err
-	}
-
-	if status == 200 {
-		return nil
-	}
-
-	payload := map[string]interface{}{
-		"client_id":     s.name,
-		"client_name":   s.name,
-		"client_secret": clientSecret,
-		"grant_types":   []string{"client_credentials"},
-		"metadata":      map[string]string{"cc_bot": "true"},
-		"aud":           audienceList,
-	}
-
-	status, result, err = s.InvokeRestService(ctx, http.MethodPost, oauth2AdminUri, payload, nil)
-	if err != nil {
-		return err
-	}
-
-	if status > 299 || status < 200 {
-		return errors.New(fmt.Sprintf(" invalid response status %d had message %s", status, string(result)))
-	}
-	return nil
+// Name gets the name of the service. Its the first argument used when NewService is called
+func (s *Service) Name() string {
+	return s.name
 }
 
+// Init evaluates the options provided as arguments and supplies them to the service object
 func (s *Service) Init(opts ...Option) {
 
 	for _, opt := range opts {
@@ -123,6 +89,7 @@ func (s *Service) Init(opts ...Option) {
 	}
 }
 
+// AddPreStartMethod Adds user defined functions that can be run just before the service starts receiving requests but is fully initialized.
 func (s *Service) AddPreStartMethod(f func(s *Service)) {
 	if s.startup == nil {
 		s.startup = f
@@ -133,6 +100,8 @@ func (s *Service) AddPreStartMethod(f func(s *Service)) {
 	s.startup = func(st *Service) { old(st); f(st) }
 }
 
+// AddCleanupMethod Adds user defined functions to be run just before completely stopping the service.
+// These are responsible for properly and gracefully stopping active components.
 func (s *Service) AddCleanupMethod(f func()) {
 	if s.cleanup == nil {
 		s.cleanup = f
@@ -143,6 +112,8 @@ func (s *Service) AddCleanupMethod(f func()) {
 	s.cleanup = func() { old(); f() }
 }
 
+// AddHealthCheck Adds health checks that are run periodically to ascertain the system is ok
+// The arguments are implementations of the checker interface and should work with just about any system that is given to them.
 func (s *Service) AddHealthCheck(checker health.Checker) {
 	if s.healthCheckers != nil {
 		s.healthCheckers = []health.Checker{}
@@ -150,6 +121,8 @@ func (s *Service) AddHealthCheck(checker health.Checker) {
 	s.healthCheckers = append(s.healthCheckers, checker)
 }
 
+// Run is used to actually instantiate the initialised components and
+// keep them useful by handling incoming requests
 func (s *Service) Run(ctx context.Context, address string) error {
 
 	err := s.registerForJwt(ctx)
@@ -173,6 +146,30 @@ func (s *Service) Run(ctx context.Context, address string) error {
 	if s.serverOptions.RequestLogger == nil {
 		s.serverOptions.RequestLogger = requestlog.NewNCSALogger(os.Stdout, func(e error) { fmt.Println(e) })
 	}
+
+	if s.queuePath == "" {
+		s.queuePath = "/queue"
+	}
+
+	s.queuePath = fmt.Sprintf("%s/{queueReferencePath}", s.queuePath)
+
+	p, err := cloudevents.NewHTTP()
+	if err != nil {
+		return err
+	}
+
+	queueHandler, err := cloudevents.NewHTTPReceiveHandler(ctx, 	p, receiveCloudEvents)
+	if err != nil {
+		return err
+	}
+
+	h := s.handler
+
+	mux := http.NewServeMux()
+	mux.Handle(s.queuePath, queueHandler)
+	mux.Handle("/", h)
+
+	s.handler = mux
 
 	// If grpc server is setup we should use the correct driver
 	if s.grpcServer != nil {
@@ -199,6 +196,7 @@ func (s *Service) Run(ctx context.Context, address string) error {
 	return err
 }
 
+// Stop Used to gracefully run clean up methods to ensure all requests that were being handled are completed well without interuptions.
 func (s *Service) Stop() {
 	if s.cleanup != nil {
 		s.cleanup()

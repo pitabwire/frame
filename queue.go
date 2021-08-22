@@ -5,24 +5,67 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	cloudevents "github.com/cloudevents/sdk-go/v2"
 	"gocloud.dev/pubsub"
-	_ "gocloud.dev/pubsub/gcppubsub"
 	_ "gocloud.dev/pubsub/mempubsub"
-	_ "gocloud.dev/pubsub/natspubsub"
 	"log"
+	"strings"
 )
 
-var queueMessageId = "q_id"
+type queue struct {
+	ceClient cloudevents.Client
 
-type Queue struct {
 	publishQueueMap      map[string]*publisher
 	subscriptionQueueMap map[string]*subscriber
 }
 
+func (q queue) getPublisherByReference(reference string) (*publisher, error) {
+	p := q.publishQueueMap[reference]
+	if p == nil {
+		return nil, errors.New(fmt.Sprintf("getPublisherByReference -- you need to register a queue : [%v] first before publishing ", reference))
+	}
+
+	if !p.isInit {
+		return nil, errors.New(fmt.Sprintf("getPublisherByReference -- can't publish on uninitialized queue %v ", reference))
+	}
+
+	return p, nil
+}
+
+func (q queue) getSubscriberByReference(reference string) (*subscriber, error) {
+	s := q.subscriptionQueueMap[reference]
+	if s == nil {
+		return nil, errors.New(fmt.Sprintf("getSubscriberByReference -- you need to register a queue : [%v] first before publishing ", reference))
+	}
+	return s, nil
+}
+
+func newQueue() (*queue, error) {
+
+	cl, err := cloudevents.NewClientHTTP()
+	if err != nil {
+		return nil, err
+	}
+	q := &queue{
+		ceClient:             cl,
+		publishQueueMap:      make(map[string]*publisher),
+		subscriptionQueueMap: make(map[string]*subscriber),
+	}
+
+	return q, nil
+
+}
+
 type publisher struct {
-	url      string
-	pubTopic *pubsub.Topic
-	isInit   bool
+	reference string
+	url       string
+	pubTopic  *pubsub.Topic
+	isInit    bool
+}
+
+func (p publisher) isCloudEvent() bool {
+	return strings.HasPrefix(strings.ToLower(p.url), "http")
+
 }
 
 type SubscribeWorker interface {
@@ -37,26 +80,22 @@ type subscriber struct {
 	isInit       bool
 }
 
+// RegisterPublisher Option to register publishing path referenced within the system
 func RegisterPublisher(reference string, queueUrl string) Option {
 	return func(s *Service) {
 
-		if s.queue.publishQueueMap == nil {
-			s.queue.publishQueueMap = make(map[string]*publisher)
-		}
-
 		s.queue.publishQueueMap[reference] = &publisher{
-			url:    queueUrl,
-			isInit: false,
+			reference: reference,
+			url:       queueUrl,
+			isInit:    false,
 		}
 	}
 }
 
+// RegisterSubscriber Option to register a new subscription handler
 func RegisterSubscriber(reference string, queueUrl string, concurrency int,
 	handler SubscribeWorker) Option {
 	return func(s *Service) {
-		if s.queue.subscriptionQueueMap == nil {
-			s.queue.subscriptionQueueMap = make(map[string]*subscriber)
-		}
 
 		s.queue.subscriptionQueueMap[reference] = &subscriber{
 			url:         queueUrl,
@@ -66,24 +105,47 @@ func RegisterSubscriber(reference string, queueUrl string, concurrency int,
 	}
 }
 
+// QueuePath Option that helps to specify or override the default /queue path to handle cloud events
+func QueuePath(path string) Option {
+	return func(s *Service) {
+		s.queuePath = path
+	}
+}
+
+// Publish Queue method to write a new message into the queue pre initialized with the supplied reference
 func (s Service) Publish(ctx context.Context, reference string, payload interface{}) error {
 
 	var metadata map[string]string
-
-	publisher := s.queue.publishQueueMap[reference]
-	if publisher == nil {
-		return errors.New(fmt.Sprintf("Publish -- you need to register a queue : [%v] first before publishing ", reference))
-	}
-
-	if !publisher.isInit {
-		return errors.New(fmt.Sprintf("Publish -- can't publish on uninitialized queue %v ", reference))
-	}
 
 	authClaim := ClaimsFromContext(ctx)
 	if authClaim != nil {
 		metadata = authClaim.AsMetadata()
 	} else {
 		metadata = make(map[string]string)
+	}
+
+	publisher, err := s.queue.getPublisherByReference(reference)
+	if err != nil {
+		return err
+	}
+
+	if publisher.isCloudEvent() {
+
+		event := cloudevents.NewEvent()
+		event.SetSource(fmt.Sprintf("%s/%s", s.Name(), publisher.reference))
+		event.SetType(fmt.Sprintf("%s.%T", s.Name(), payload))
+		err := event.SetData(cloudevents.ApplicationJSON, payload)
+		if err != nil {
+			return err
+		}
+		ctx := cloudevents.ContextWithTarget(ctx, publisher.url)
+
+		result := s.queue.ceClient.Send(ctx, event)
+		if cloudevents.IsUndelivered(result) {
+			return result
+		}
+
+		return nil
 	}
 
 	var message []byte
@@ -102,49 +164,7 @@ func (s Service) Publish(ctx context.Context, reference string, payload interfac
 		Body:     message,
 		Metadata: metadata,
 	})
-}
 
-func (s Service) QObject(ctx context.Context, model BaseModelI) ([]byte, map[string]string, error) {
-
-	queueMap := make(map[string]string)
-	metaMap := make(map[string]string)
-	queueMap[queueMessageId] = model.GetID()
-
-	////Serialize span
-	//if span := opentracing.SpanFromContext(ctx); span != nil {
-	//
-	//	carrier := opentracing.TextMapCarrier(queueMap)
-	//	err := opentracing.GlobalTracer().Inject(
-	//		span.Context(),
-	//		opentracing.TextMap,
-	//		carrier)
-	//	if err != nil {
-	//		return nil, err
-	//	}
-	//}
-
-	payload, err := json.Marshal(queueMap)
-
-	return payload, metaMap, err
-}
-
-func (s Service) QID(ctx context.Context, payload []byte) (string, error) {
-	var queueMap map[string]string
-	err := json.Unmarshal(payload, &queueMap)
-	if err != nil {
-		return "", err
-	}
-
-	//carrier := opentracing.TextMapCarrier(queueMap)
-	//spanCtx, err := opentracing.GlobalTracer().Extract(opentracing.TextMap, carrier)
-	//if err != nil {
-	//	return "", nil, err
-	//}
-	//
-	//bCtx := context.Background()
-	//span, ctx := opentracing.StartSpanFromContext(bCtx, traceId, opentracing.ChildOf(spanCtx))
-
-	return queueMap[queueMessageId], nil
 }
 
 func (s Service) initPubsub(ctx context.Context) error {
@@ -258,5 +278,28 @@ func (s Service) subscribe(ctx context.Context) {
 		}(subsc)
 
 	}
+
+}
+
+func receiveCloudEvents(ctx context.Context, event cloudevents.Event) cloudevents.Result {
+
+	sourceUrl := cloudevents.TargetFromContext(ctx)
+	sourcePathList := strings.Split(sourceUrl.Path, "/")
+
+	subscriptionReference := sourcePathList[len(sourcePathList)-1]
+
+	service := FromContext(ctx)
+	sub, err := service.queue.getSubscriberByReference(subscriptionReference)
+	if err != nil {
+		return cloudevents.NewHTTPResult(404, "failed to match subscription due to : %s", err)
+	}
+
+	err = sub.handler.Handle(ctx, event.Data())
+	if err != nil {
+		log.Printf(" receiveCloudEvents -- Unable to process message to %v because : %v", sourceUrl, err)
+		return cloudevents.NewHTTPResult(400, "failed to handle inbound request due to : %s", err)
+	}
+
+	return nil
 
 }

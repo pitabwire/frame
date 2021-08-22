@@ -125,30 +125,36 @@ func (gd *grpcDriver) Shutdown(ctx context.Context) error {
 	return nil
 }
 
+// GrpcServer Option to specify an instantiated grpc server with an implementation that can be utilized to handle incoming requests.
 func GrpcServer(grpcServer *grpc.Server) Option {
 	return func(c *Service) {
 		c.grpcServer = grpcServer
 	}
 }
 
+// ServerListener Option to specify user preferred listener instead of the default provided one.
 func ServerListener(listener net.Listener) Option {
 	return func(c *Service) {
 		c.listener = listener
 	}
 }
 
+// HttpHandler Option to specify an http handler that can be used to handle inbound http requests
 func HttpHandler(h http.Handler) Option {
 	return func(c *Service) {
 		c.handler = h
 	}
 }
 
+// HttpOptions Option to customize the default http server further to utilize enhanced features
 func HttpOptions(httpOpts *server.Options) Option {
 	return func(c *Service) {
 		c.serverOptions = httpOpts
 	}
 }
 
+// NoopHttpOptions Option to force the underlying http driver to not listen on a port.
+// This is mostly useful when writing tests especially against the frame service
 func NoopHttpOptions() Option {
 	return func(c *Service) {
 		nopOptions := &server.Options{

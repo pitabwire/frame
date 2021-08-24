@@ -33,6 +33,7 @@ func tenantPartition(ctx context.Context) func(db *gorm.DB) *gorm.DB {
 	}
 }
 
+// DBPropertiesToMap converts the supplied db json content into a golang map
 func DBPropertiesToMap(props datatypes.JSONMap) map[string]string {
 
 	payload := make(map[string]string)
@@ -61,6 +62,7 @@ func DBPropertiesToMap(props datatypes.JSONMap) map[string]string {
 
 }
 
+// DBPropertiesFromMap converts a map into a JSONMap object
 func DBPropertiesFromMap(propsMap map[string]string) datatypes.JSONMap {
 
 	jsonMap := make(datatypes.JSONMap)
@@ -82,10 +84,13 @@ func DBPropertiesFromMap(propsMap map[string]string) datatypes.JSONMap {
 
 }
 
+// DBErrorIsRecordNotFound validate if supplied error is because of record missing in DB
 func DBErrorIsRecordNotFound(err error) bool {
 	return errors.Is(err, gorm.ErrRecordNotFound)
 }
 
+// DB obtains an already instantiated db connection with the option
+//to specify if you want write or read only db connection
 func (s *Service) DB(ctx context.Context, readOnly bool) *gorm.DB {
 
 	var db *gorm.DB
@@ -120,6 +125,7 @@ func (s *Service) DB(ctx context.Context, readOnly bool) *gorm.DB {
 	return db.WithContext(ctx).Scopes(tenantPartition(ctx))
 }
 
+// Datastore Option method to store a connection that will be utilized when connecting to the database
 func Datastore(ctx context.Context, postgresqlConnection string, readOnly bool) Option {
 	return func(s *Service) {
 

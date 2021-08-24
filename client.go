@@ -8,7 +8,9 @@ import (
 	"net/http"
 )
 
-func (s *Service) InvokeRestService(ctx context.Context, method string, authorizationUrl string, payload map[string]interface{}, headers map[string][]string) (int, []byte, error) {
+
+// InvokeRestService convenience method to call a http endpoint and utilize the raw results
+func (s *Service) InvokeRestService(ctx context.Context, method string, endpointUrl string, payload map[string]interface{}, headers map[string][]string) (int, []byte, error) {
 
 	if headers == nil {
 		headers = map[string][]string{
@@ -22,7 +24,7 @@ func (s *Service) InvokeRestService(ctx context.Context, method string, authoriz
 		return 0, nil, err
 	}
 
-	req, err := http.NewRequestWithContext(ctx, method, authorizationUrl, bytes.NewBuffer(postBody))
+	req, err := http.NewRequestWithContext(ctx, method, endpointUrl, bytes.NewBuffer(postBody))
 	if err != nil {
 		return 0, nil, err
 	}

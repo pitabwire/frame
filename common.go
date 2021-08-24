@@ -17,7 +17,7 @@ type BaseModelI interface {
 	GetID() string
 }
 
-// BaseModel Our simple table holding all the migration data
+// BaseModel base table struct to be extended by other models
 type BaseModel struct {
 	ID          string `gorm:"type:varchar(50);primary_key"`
 	CreatedAt   time.Time
@@ -85,6 +85,7 @@ type Migration struct {
 	AppliedAt sql.NullTime
 }
 
+// GetIp convenience method to extract the remote ip address from our inbound request
 func GetIp(r *http.Request) string {
 	sourceIp := r.Header.Get("X-FORWARDED-FOR")
 	if sourceIp == "" {
@@ -102,6 +103,7 @@ func GetEnv(key, fallback string) string {
 	return fallback
 }
 
+// GetLocalIP convenince method that obtains the non localhost ip address for machine running app
 func GetLocalIP() string {
 
 	addrs, _ := net.InterfaceAddrs()
@@ -121,6 +123,7 @@ func GetLocalIP() string {
 
 }
 
+// GetMacAddress convenience method to get some unique address based on the network interfaces the application is running on.
 func GetMacAddress() string {
 
 	currentIP := GetLocalIP()

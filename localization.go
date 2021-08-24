@@ -12,18 +12,22 @@ import (
 	"strings"
 )
 
+// Bundle Access the translation bundle instatiated in the system
 func (s *Service) Bundle() *i18n.Bundle {
 	return s.bundle
 }
 
+// Translate performs a quick translation based on the supplied message id
 func (s *Service) Translate(request interface{}, messageId string) string {
 	return s.TranslateWithMap(request, messageId, map[string]interface{}{})
 }
 
+// TranslateWithMap performs a translation with variables based on the supplied message id
 func (s *Service) TranslateWithMap(request interface{}, messageId string, variables map[string]interface{}) string {
 	return s.TranslateWithMapAndCount(request, messageId, variables, 1)
 }
 
+// TranslateWithMapAndCount performs a translation with variables based on the supplied message id and can pluralize
 func (s *Service) TranslateWithMapAndCount(request interface{}, messageId string, variables map[string]interface{}, count int) string {
 
 	var languageSlice []string
@@ -89,6 +93,7 @@ func extractLanguageFromGrpcRequest(ctx context.Context) []string {
 
 }
 
+// Translations Option to initialize/load different language packs
 func Translations(translationsFolder string, languages ...string) Option {
 
 	if translationsFolder == "" {

@@ -8,9 +8,10 @@ import (
 	"net/http"
 )
 
-const envAuthorizationServiceUri = "KETO_SERVICE_URI"
+const envAuthorizationServiceUri = "AUTHORIZATION_SERVICE_URI"
 
-func AuthorizationControlListHasAccess(ctx context.Context, action string, subject string) (error, bool) {
+// AuthHasAccess binary check to confirm if subject can perform action specified
+func AuthHasAccess(ctx context.Context, action string, subject string) (error, bool) {
 
 	authorizationUrl := fmt.Sprintf("%s%s", GetEnv(envAuthorizationServiceUri, ""), "/check")
 

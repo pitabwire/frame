@@ -74,7 +74,7 @@ func TestAuthorizationControlListWrite(t *testing.T) {
 
 }
 
-func TestAuthorizationControlListHasAccess(t *testing.T) {
+func TestAuthHasAccess(t *testing.T) {
 
 	err := os.Setenv(envAuthorizationServiceUri, "http://localhost:4466")
 	if err != nil {
@@ -100,7 +100,7 @@ func TestAuthorizationControlListHasAccess(t *testing.T) {
 		return
 	}
 
-	err, access := AuthorizationControlListHasAccess(ctx, "read", "reader")
+	err, access := AuthHasAccess(ctx, "read", "reader")
 	if err != nil {
 		t.Errorf("Authorization check was not possible see %+v", err)
 	} else if !access {
@@ -108,7 +108,7 @@ func TestAuthorizationControlListHasAccess(t *testing.T) {
 		return
 	}
 
-	err, access = AuthorizationControlListHasAccess(ctx, "read", "read-master")
+	err, access = AuthHasAccess(ctx, "read", "read-master")
 	if err == nil || access {
 		t.Errorf("Authorization check was not forbidden yet shouldn't exist")
 		return

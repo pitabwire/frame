@@ -265,7 +265,6 @@ func grpcJwtTokenExtractor(ctx context.Context) (string, error) {
 }
 
 // UnaryAuthInterceptor Simple grpc interceptor to extract the jwt supplied via authorization bearer token and verify the authentication claims in the token
-
 func UnaryAuthInterceptor(audience string, issuer string) grpc.UnaryServerInterceptor {
 
 	return func(ctx context.Context, req interface{},
@@ -291,6 +290,7 @@ type serverStreamWrapper struct {
 	grpc.ServerStream
 }
 
+// Context convert the stream wrappers claims to be contained in the streams context
 func (s *serverStreamWrapper) Context() context.Context {
 	return s.authClaim.ClaimsToContext(s.Context())
 }

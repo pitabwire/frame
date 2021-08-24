@@ -110,11 +110,11 @@ func authenticate(ctx context.Context, jwtToken string, audience string, issuer 
 		return ctx, errors.New("supplied token was invalid")
 	}
 
-	if claims.VerifyAudience(audience, audience != ""){
+	if !claims.VerifyAudience(audience, audience != ""){
 		return ctx, errors.New(fmt.Sprintf("token audience does not match %s", audience))
 	}
 
-	if claims.VerifyIssuer(issuer, issuer != "") {
+	if !claims.VerifyIssuer(issuer, issuer != "") {
 		return ctx, errors.New(fmt.Sprintf("token issuer does not match %s", issuer))
 	}
 

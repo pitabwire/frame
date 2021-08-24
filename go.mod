@@ -5,8 +5,7 @@ go 1.16
 require (
 	github.com/BurntSushi/toml v0.3.1
 	github.com/cloudevents/sdk-go/v2 v2.5.0
-	github.com/dgrijalva/jwt-go/v4 v4.0.0-preview1
-	github.com/google/uuid v1.2.0
+	github.com/golang-jwt/jwt/v4 v4.0.0
 	github.com/nicksnyder/go-i18n/v2 v2.1.2
 	github.com/rs/xid v1.2.1
 	github.com/soheilhy/cmux v0.1.4

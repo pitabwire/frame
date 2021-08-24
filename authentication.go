@@ -6,7 +6,8 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
-	"github.com/dgrijalva/jwt-go/v4"
+	"fmt"
+	"github.com/golang-jwt/jwt/v4"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -99,25 +100,22 @@ func authenticate(ctx context.Context, jwtToken string, audience string, issuer 
 
 	claims := &AuthenticationClaims{}
 
-	var options []jwt.ParserOption
 
-	if audience == "" {
-		options = []jwt.ParserOption{jwt.WithoutAudienceValidation()}
-	} else {
-		options = []jwt.ParserOption{jwt.WithAudience(audience)}
-	}
-
-	if issuer != "" {
-		options = append(options, jwt.WithIssuer(issuer))
-	}
-
-	token, err := jwt.ParseWithClaims(jwtToken, claims, getPemCert, options...)
+	token, err := jwt.ParseWithClaims(jwtToken, claims, getPemCert)
 	if err != nil {
 		return ctx, err
 	}
 
 	if !token.Valid {
 		return ctx, errors.New("supplied token was invalid")
+	}
+
+	if claims.VerifyAudience(audience, audience != ""){
+		return ctx, errors.New(fmt.Sprintf("token audience does not match %s", audience))
+	}
+
+	if claims.VerifyIssuer(issuer, issuer != "") {
+		return ctx, errors.New(fmt.Sprintf("token issuer does not match %s", issuer))
 	}
 
 	ctx = claims.ClaimsToContext(ctx)

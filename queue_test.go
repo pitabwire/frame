@@ -2,8 +2,11 @@ package frame
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	cloudevents "github.com/cloudevents/sdk-go/v2"
+	"google.golang.org/grpc/test/bufconn"
 	"log"
 	"testing"
 	"time"
@@ -212,5 +215,67 @@ func TestService_RegisterSubscriberContextCancelWorks(t *testing.T) {
 		t.Errorf("Subscription is valid yet it should not be ok")
 	}
 
+
+}
+
+func TestPublishCloudEvent(t *testing.T)  {
+
+}
+
+func TestReceiveCloudEvents(t *testing.T) {
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	bufferSize := 1024 * 1024
+	listener := bufconn.Listen(bufferSize)
+
+
+	opt := RegisterSubscriber("test", "http://0.0.0.0/queue/topicA",
+		5, &messageHandler{} )
+
+	srv := NewService( "Test Srv", opt, ServerListener(listener))
+
+	err := srv.initPubsub(ctx)
+	if err != nil  {
+		t.Errorf("We somehow fail to instantiate subscription ")
+	}
+
+	// it is here to properly stop the server
+	defer func() { time.Sleep(100 * time.Millisecond) }()
+	defer srv.Stop()
+
+	go func() {
+		_ = srv.Run(ctx, "")
+	}()
+
+
+	err = clientInvokeWithCloudEventPayload(listener)
+	if err != nil {
+		t.Fatalf("failed to dial: %+v", err)
+	}
+}
+
+
+func clientInvokeWithCloudEventPayload(listener *bufconn.Listener) error {
+
+	e := cloudevents.NewEvent()
+	e.SetType("com.cloudevents.test.sent")
+	e.SetSource("https://frame/sender/queue")
+	_ = e.SetData(cloudevents.ApplicationJSON, map[string]interface{}{
+		"id":      "testing test",
+		"message": "Hello, World!",
+	})
+
+
+	_, err := json.Marshal(e)
+	if err != nil {
+		return err
+	}
+
+
+	//TODO test that the queue will pickup cloudevents
+
+	return nil
 
 }

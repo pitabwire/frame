@@ -192,19 +192,23 @@ func (s Service) initPubsub(ctx context.Context) error {
 	}
 
 	for ref, subscriber := range s.queue.subscriptionQueueMap {
-		subs, err := pubsub.OpenSubscription(ctx, subscriber.url)
-		if err != nil {
-			return fmt.Errorf("could not open topic subscription: %+v", err)
-		}
 
-		s.AddCleanupMethod(func() {
-			err := subs.Shutdown(ctx)
+		if !strings.HasPrefix(subscriber.url, "http") {
+
+			subs, err := pubsub.OpenSubscription(ctx, subscriber.url)
 			if err != nil {
-				log.Printf("Subscribe -- subscription %s could not be stopped well : %v", ref, err)
+				return fmt.Errorf("could not open topic subscription: %+v", err)
 			}
-		})
 
-		subscriber.subscription = subs
+			s.AddCleanupMethod(func() {
+				err := subs.Shutdown(ctx)
+				if err != nil {
+					log.Printf("Subscribe -- subscription %s could not be stopped well : %v", ref, err)
+				}
+			})
+
+			subscriber.subscription = subs
+		}
 		subscriber.isInit = true
 
 	}
@@ -220,6 +224,12 @@ func (s Service) initPubsub(ctx context.Context) error {
 func (s Service) subscribe(ctx context.Context) {
 
 	for _, subsc := range s.queue.subscriptionQueueMap {
+
+		// cloud event subscriptions are not held as long running processes
+		if strings.HasPrefix(subsc.url, "http") {
+			continue
+		}
+
 
 		go func(localSub *subscriber) {
 

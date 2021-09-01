@@ -230,7 +230,6 @@ func (s Service) subscribe(ctx context.Context) {
 			continue
 		}
 
-
 		go func(localSub *subscriber) {
 
 			sem := make(chan struct{}, localSub.concurrency)

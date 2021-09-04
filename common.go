@@ -25,6 +25,7 @@ type BaseModel struct {
 	Version     uint32         `gorm:"DEFAULT 0"`
 	TenantID    string         `gorm:"type:varchar(50);"`
 	PartitionID string         `gorm:"type:varchar(50);"`
+	AccessID    string         `gorm:"type:varchar(50);"`
 	DeletedAt   gorm.DeletedAt `sql:"index"`
 }
 
@@ -40,10 +41,14 @@ func (model *BaseModel) GenID(ctx context.Context) {
 	}
 
 	model.ID = xid.New().String()
-	
+
 	authClaim := ClaimsFromContext(ctx)
 	if authClaim == nil || authClaim.isSystem() {
 		return
+	}
+
+	if authClaim.AccessID != "" {
+		model.AccessID = authClaim.AccessID
 	}
 
 	if authClaim.TenantID != "" && authClaim.PartitionID != "" {

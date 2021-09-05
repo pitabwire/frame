@@ -127,6 +127,9 @@ func (s *Service) AddHealthCheck(checker health.Checker) {
 // keep them useful by handling incoming requests
 func (s *Service) Run(ctx context.Context, address string) error {
 
+	loggingOption := Logger()
+	loggingOption(s)
+
 	err := s.registerForJwt(ctx)
 	if err != nil {
 		return err

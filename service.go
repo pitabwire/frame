@@ -23,6 +23,7 @@ const ctxKeyService = "serviceKey"
 // It is pushed and pulled from contexts to make it easy to pass around.
 type Service struct {
 	name           string
+	logger 		   ILogger
 	server         *server.Server
 	handler        http.Handler
 	serverOptions  *server.Options
@@ -36,6 +37,7 @@ type Service struct {
 	healthCheckers []health.Checker
 	startup        func(s *Service)
 	cleanup        func()
+	eventRegistry  map[string]EventI
 }
 
 type Option func(service *Service)
@@ -128,6 +130,20 @@ func (s *Service) Run(ctx context.Context, address string) error {
 	err := s.registerForJwt(ctx)
 	if err != nil {
 		return err
+	}
+
+
+	// Whenever the registry is not empty the events queue is automatically initiated
+	if s.eventRegistry != nil && len(s.eventRegistry) > 0 {
+
+		eventsQueueHandler := eventQueueHandler{
+			service: s,
+		}
+		eventsQueueURL := GetEnv(envEventsQueueUrl, fmt.Sprintf("mem://%s", eventsQueueName))
+		eventsQueue := RegisterSubscriber(eventsQueueName, eventsQueueURL, 10, &eventsQueueHandler)
+		eventsQueue(s)
+		eventsQueueP := RegisterPublisher(eventsQueueName, eventsQueueURL)
+		eventsQueueP(s)
 	}
 
 	err = s.initPubsub(ctx)

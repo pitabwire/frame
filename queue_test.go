@@ -229,9 +229,9 @@ func TestPublishCloudEvent(t *testing.T) {
 	bufferSize := 1024 * 1024
 	listener := bufconn.Listen(bufferSize)
 
-	optSubscriber := RegisterSubscriber("test", "gcppubsub://projects/myproject/topics/mytopic",
+	optSubscriber := RegisterSubscriber("test", "https://us-east-2.amazonaws.com/462380225722/queue",
 		5, &messageHandler{})
-	optPublisher := RegisterPublisher("test", "gcppubsub://projects/myproject/topics/mytopic")
+	optPublisher := RegisterPublisher("test", "https://us-east-2.amazonaws.com/462380225722/queue")
 
 	q, err := newQueue()
 	if err != nil {
@@ -268,7 +268,7 @@ func TestPublishCloudEvent(t *testing.T) {
 		t.Fatalf("failed to dial: %+v", err)
 	}
 
-
+	
 }
 
 func TestReceiveCloudEvents(t *testing.T) {

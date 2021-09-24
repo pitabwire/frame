@@ -1,5 +1,7 @@
 package frame
 
+//go:generate go run github.com/maxbrunsfeld/counterfeiter/v6 -generate
+
 import (
 	"context"
 	"encoding/json"
@@ -10,16 +12,30 @@ import (
 	_ "gocloud.dev/pubsub/mempubsub"
 	"log"
 	"strings"
+	"sync"
 )
 
-type queue struct {
-	ceClient cloudevents.Client
+//counterfeiter:generate . ICEClient
+type ICEClient interface {
+	cloudevents.Client
+}
 
+//counterfeiter:generate . IPSClient
+type IPSClient interface {
+	OpenTopic(context.Context, string) (*pubsub.Topic, error)
+	OpenSubscription(context.Context, string) (*pubsub.Subscription, error)
+}
+
+type queue struct {
+	pubSub   IPSClient
+	ceClient ICEClient
+
+	muPublishQueue       sync.Mutex
 	publishQueueMap      map[string]*publisher
 	subscriptionQueueMap map[string]*subscriber
 }
 
-func (q queue) getPublisherByReference(reference string) (*publisher, error) {
+func (q *queue) getPublisherByReference(reference string) (*publisher, error) {
 	p := q.publishQueueMap[reference]
 	if p == nil {
 		return nil, errors.New(fmt.Sprintf("getPublisherByReference -- you need to register a queue : [%v] first before publishing ", reference))
@@ -32,12 +48,20 @@ func (q queue) getPublisherByReference(reference string) (*publisher, error) {
 	return p, nil
 }
 
-func (q queue) getSubscriberByReference(reference string) (*subscriber, error) {
+func (q *queue) getSubscriberByReference(reference string) (*subscriber, error) {
 	s := q.subscriptionQueueMap[reference]
 	if s == nil {
 		return nil, errors.New(fmt.Sprintf("getSubscriberByReference -- you need to register a queue : [%v] first before publishing ", reference))
 	}
 	return s, nil
+}
+
+func (q *queue) WithClient(ceClient ICEClient) {
+	q.ceClient = ceClient
+}
+
+func (q *queue) WithPubSub(pubSubClient IPSClient) {
+	q.pubSub = pubSubClient
 }
 
 func newQueue() (*queue, error) {
@@ -47,6 +71,7 @@ func newQueue() (*queue, error) {
 		return nil, err
 	}
 	q := &queue{
+		pubSub:               pubsub.DefaultURLMux(),
 		ceClient:             cl,
 		publishQueueMap:      make(map[string]*publisher),
 		subscriptionQueueMap: make(map[string]*subscriber),
@@ -64,8 +89,7 @@ type publisher struct {
 }
 
 func (p publisher) isCloudEvent() bool {
-	return strings.HasPrefix(strings.ToLower(p.url), "http")
-
+	return !strings.HasPrefix(strings.ToLower(p.url), "mem")
 }
 
 type SubscribeWorker interface {
@@ -78,6 +102,14 @@ type subscriber struct {
 	handler      SubscribeWorker
 	subscription *pubsub.Subscription
 	isInit       bool
+}
+
+//RegisterQueue Option to specify of override the default queue handle
+func RegisterQueue(q *queue) Option {
+	return func(s *Service) {
+
+		s.queue = q
+	}
 }
 
 // RegisterPublisher Option to register publishing path referenced within the system
@@ -175,7 +207,7 @@ func (s Service) initPubsub(ctx context.Context) error {
 
 	for ref, publisher := range s.queue.publishQueueMap {
 
-		topic, err := pubsub.OpenTopic(ctx, publisher.url)
+		topic, err := s.queue.pubSub.OpenTopic(ctx, publisher.url)
 		if err != nil {
 			return err
 		}
@@ -195,7 +227,7 @@ func (s Service) initPubsub(ctx context.Context) error {
 
 		if !strings.HasPrefix(subscriber.url, "http") {
 
-			subs, err := pubsub.OpenSubscription(ctx, subscriber.url)
+			subs, err := s.queue.pubSub.OpenSubscription(ctx, subscriber.url)
 			if err != nil {
 				return fmt.Errorf("could not open topic subscription: %+v", err)
 			}
@@ -210,7 +242,6 @@ func (s Service) initPubsub(ctx context.Context) error {
 			subscriber.subscription = subs
 		}
 		subscriber.isInit = true
-
 	}
 
 	if len(s.queue.subscriptionQueueMap) > 0 {

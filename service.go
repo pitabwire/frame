@@ -58,6 +58,8 @@ func NewService(name string, opts ...Option) *Service {
 		queue:  q,
 	}
 
+	opts = append(opts, Logger())
+
 	service.Init(opts...)
 
 	return service
@@ -126,9 +128,6 @@ func (s *Service) AddHealthCheck(checker health.Checker) {
 // Run is used to actually instantiate the initialised components and
 // keep them useful by handling incoming requests
 func (s *Service) Run(ctx context.Context, address string) error {
-
-	loggingOption := Logger()
-	loggingOption(s)
 
 	err := s.registerForJwt(ctx)
 	if err != nil {

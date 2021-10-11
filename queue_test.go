@@ -154,7 +154,7 @@ func TestService_RegisterSubscriberWithError(t *testing.T) {
 		return
 	}
 
-	err = srv.Publish(ctx, "test", []byte(fmt.Sprintf(" testing message with error")))
+	err = srv.Publish(ctx, "test", []byte(" testing message with error"))
 	if err != nil {
 		t.Errorf("We could not publish to topic that was registered %+v", err)
 	}

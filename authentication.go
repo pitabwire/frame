@@ -19,7 +19,7 @@ import (
 	"google.golang.org/grpc/metadata"
 )
 
-const ctxKeyAuthentication = "authenticationKey"
+const ctxKeyAuthentication = contextKey("authenticationKey")
 const envOauth2WellKnownJwk = "OAUTH2_WELL_KNOWN_JWK"
 
 // AuthenticationClaims Create a struct that will be encoded to a JWT.
@@ -300,7 +300,8 @@ type serverStreamWrapper struct {
 
 // Context convert the stream wrappers claims to be contained in the streams context
 func (s *serverStreamWrapper) Context() context.Context {
-	return s.authClaim.ClaimsToContext(s.Context())
+	ctx := s.ServerStream.Context()
+	return s.authClaim.ClaimsToContext(ctx)
 }
 
 // StreamAuthInterceptor An authentication claims extractor that will always verify the information flowing in the streams as true jwt claims

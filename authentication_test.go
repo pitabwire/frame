@@ -17,7 +17,7 @@ func TestAuthenticationFromContext(t *testing.T) {
 	assert.Nil(t, claims, "A context without claims should not produce one")
 
 	claims = &AuthenticationClaims{}
-	ctx = context.WithValue(ctx, ctxKeyAuthentication, claims)
+	_ = context.WithValue(ctx, ctxKeyAuthentication, claims)
 	assert.NotNil(t, claims, "A context with claims should produce one")
 }
 

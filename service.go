@@ -16,7 +16,13 @@ import (
 	"time"
 )
 
-const ctxKeyService = "serviceKey"
+type contextKey string
+
+func (c contextKey) String() string {
+	return "frame/" + string(c)
+}
+
+const ctxKeyService = contextKey("serviceKey")
 
 // Service framework struct to hold together all application components
 // An instance of this type scoped to stay for the lifetime of the application.

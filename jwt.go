@@ -27,7 +27,7 @@ func (s *Service) registerForJwt(ctx context.Context) error {
 	oauth2AdminUri := fmt.Sprintf("%s%s", host, "/clients")
 	oauth2AdminIDUri := fmt.Sprintf("%s/%s", oauth2AdminUri, s.name)
 
-	status, result, err := s.InvokeRestService(ctx, http.MethodGet, oauth2AdminIDUri, make(map[string]interface{}), nil)
+	status, _, err := s.InvokeRestService(ctx, http.MethodGet, oauth2AdminIDUri, make(map[string]interface{}), nil)
 	if err != nil {
 		return err
 	}

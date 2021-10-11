@@ -36,16 +36,16 @@ func (s *Service) TranslateWithMapAndCount(request interface{}, messageId string
 	case *http.Request:
 
 		languageSlice = extractLanguageFromHttpRequest(v)
-		break
+
 	case context.Context:
 		languageSlice = extractLanguageFromGrpcRequest(v)
-		break
+
 	case string:
 		languageSlice = []string{v}
-		break
+
 	case []string:
 		languageSlice = v
-		break
+
 	default:
 		log.Printf("TranslateWithMapAndCount -- no valid request object found, use string, []string, context or http.Request")
 		return messageId

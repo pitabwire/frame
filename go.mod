@@ -9,7 +9,6 @@ require (
 	github.com/nicksnyder/go-i18n/v2 v2.1.2
 	github.com/rs/xid v1.3.0
 	github.com/soheilhy/cmux v0.1.5
-	github.com/stretchr/testify v1.7.0
 	go.uber.org/zap v1.19.1
 	gocloud.dev v0.24.0
 	golang.org/x/text v0.3.7

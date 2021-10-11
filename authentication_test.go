@@ -2,7 +2,6 @@ package frame
 
 import (
 	"context"
-	"github.com/stretchr/testify/assert"
 	"os"
 	"testing"
 )
@@ -14,12 +13,17 @@ func TestAuthenticationFromContext(t *testing.T) {
 	ctx := context.Background()
 	claims := ClaimsFromContext(ctx)
 
-	assert.Nil(t, claims, "A context without claims should not produce one")
+	if claims != nil {
+		t.Errorf("A context without claims should not produce one")
+	}
 
 	claims = &AuthenticationClaims{}
 	_ = context.WithValue(ctx, ctxKeyAuthentication, claims)
-	assert.NotNil(t, claims, "A context with claims should produce one")
-}
+
+	if claims == nil {
+		t.Errorf("A context with claims should produce one")
+	}
+	}
 
 func TestSimpleAuthenticate(t *testing.T) {
 
@@ -39,8 +43,9 @@ func TestSimpleAuthenticate(t *testing.T) {
 	}
 
 	claims := ClaimsFromContext(ctx2)
-	assert.NotNil(t, claims, "supplied context should contain authentication claims")
-
+	if claims == nil {
+		t.Errorf("supplied context should contain authentication claims")
+	}
 }
 
 func TestSimpleAuthenticateWithAudience(t *testing.T) {
@@ -61,7 +66,9 @@ func TestSimpleAuthenticateWithAudience(t *testing.T) {
 	}
 
 	claims := ClaimsFromContext(ctx2)
-	assert.NotNil(t, claims, "supplied context should contain authentication claims")
+	if claims == nil {
+		t.Errorf("supplied context should contain authentication claims")
+	}
 
 }
 
@@ -83,6 +90,9 @@ func TestSimpleAuthenticateWithIssuer(t *testing.T) {
 	}
 
 	claims := ClaimsFromContext(ctx2)
-	assert.NotNil(t, claims, "supplied context should contain authentication claims")
+
+	if claims == nil {
+		t.Errorf( "supplied context should contain authentication claims")
+	}
 
 }

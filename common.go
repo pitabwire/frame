@@ -58,7 +58,7 @@ func (model *BaseModel) GenID(ctx context.Context) {
 }
 
 // ValidXID Validates that the supplied string is an xid
-func (model *BaseModel) ValidXID(id string) bool{
+func (model *BaseModel) ValidXID(id string) bool {
 	_, err := xid.FromString(id)
 	return err == nil
 }

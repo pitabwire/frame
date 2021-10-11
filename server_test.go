@@ -23,10 +23,6 @@ func (s *grpcServer) SayHello(ctx context.Context, in *grpchello.HelloRequest) (
 	return &grpchello.HelloReply{Message: "Hello " + in.Name + " from frame"}, nil
 }
 
-func runHelloClient() {
-
-}
-
 func startGRPCServer() (*grpc.Server, *bufconn.Listener) {
 	bufferSize := 1024 * 1024
 	listener := bufconn.Listen(bufferSize)

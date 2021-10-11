@@ -14,7 +14,7 @@ func TestGetLocalIP(t *testing.T) {
 
 	if localIp == "" {
 		t.Error("Could not get a local ip even localhost")
-	}else if ! strings.Contains(localIp,".") && !strings.Contains(localIp,":"){
+	} else if !strings.Contains(localIp, ".") && !strings.Contains(localIp, ":") {
 		t.Errorf(" The obtained ip %v is not valid ", localIp)
 	}
 
@@ -54,7 +54,6 @@ func TestGetIp(t *testing.T) {
 
 	req, _ := http.NewRequest(http.MethodGet, "", bytes.NewReader([]byte("")))
 
-
 	ip := GetIp(req)
 
 	if ip != "" {
@@ -66,7 +65,6 @@ func TestGetIp(t *testing.T) {
 	if ip != "testamentor" {
 		t.Errorf("Somehow we found the ip %v yet testamentor is expected", ip)
 	}
-
 
 	req.Header.Add("X-FORWARDED-FOR", "testamento")
 	ip = GetIp(req)

@@ -23,7 +23,7 @@ const ctxKeyService = "serviceKey"
 // It is pushed and pulled from contexts to make it easy to pass around.
 type Service struct {
 	name           string
-	logger 		   ILogger
+	logger         ILogger
 	server         *server.Server
 	handler        http.Handler
 	serverOptions  *server.Options
@@ -134,7 +134,6 @@ func (s *Service) Run(ctx context.Context, address string) error {
 		return err
 	}
 
-
 	// Whenever the registry is not empty the events queue is automatically initiated
 	if s.eventRegistry != nil && len(s.eventRegistry) > 0 {
 
@@ -176,7 +175,7 @@ func (s *Service) Run(ctx context.Context, address string) error {
 		return err
 	}
 
-	queueHandler, err := cloudevents.NewHTTPReceiveHandler(ctx, 	p, receiveCloudEvents)
+	queueHandler, err := cloudevents.NewHTTPReceiveHandler(ctx, p, receiveCloudEvents)
 	if err != nil {
 		return err
 	}

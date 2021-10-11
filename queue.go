@@ -3,7 +3,6 @@ package frame
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	cloudevents "github.com/cloudevents/sdk-go/v2"
 	"gocloud.dev/pubsub"
@@ -22,11 +21,11 @@ type queue struct {
 func (q queue) getPublisherByReference(reference string) (*publisher, error) {
 	p := q.publishQueueMap[reference]
 	if p == nil {
-		return nil, errors.New(fmt.Sprintf("getPublisherByReference -- you need to register a queue : [%v] first before publishing ", reference))
+		return nil, fmt.Errorf("getPublisherByReference -- you need to register a queue : [%v] first before publishing ", reference)
 	}
 
 	if !p.isInit {
-		return nil, errors.New(fmt.Sprintf("getPublisherByReference -- can't publish on uninitialized queue %v ", reference))
+		return nil, fmt.Errorf("getPublisherByReference -- can't publish on uninitialized queue %v ", reference)
 	}
 
 	return p, nil
@@ -35,7 +34,7 @@ func (q queue) getPublisherByReference(reference string) (*publisher, error) {
 func (q queue) getSubscriberByReference(reference string) (*subscriber, error) {
 	s := q.subscriptionQueueMap[reference]
 	if s == nil {
-		return nil, errors.New(fmt.Sprintf("getSubscriberByReference -- you need to register a queue : [%v] first before publishing ", reference))
+		return nil, fmt.Errorf("getSubscriberByReference -- you need to register a queue : [%v] first before publishing ", reference)
 	}
 	return s, nil
 }

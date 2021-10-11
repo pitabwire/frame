@@ -34,7 +34,7 @@ func authorizationControlListWrite(ctx context.Context, action string, subject s
 	}
 
 	if status > 299 || status < 200 {
-		return errors.New(fmt.Sprintf(" invalid response status %d had message %s", status, string(result)))
+		return fmt.Errorf(" invalid response status %d had message %s", status, string(result))
 	}
 
 	var response map[string]interface{}

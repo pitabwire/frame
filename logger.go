@@ -17,35 +17,33 @@ type internalLogger struct {
 
 // Debug uses fmt.Sprint to construct and log a message.
 func (iLogger *internalLogger) Debug(template string, args ...interface{}) {
-	iLogger.l.Debugf(template, args ...)
+	iLogger.l.Debugf(template, args...)
 }
 
 // Info uses fmt.Sprint to construct and log a message.
 func (iLogger *internalLogger) Info(template string, args ...interface{}) {
-	iLogger.l.Infof(template, args ...)
+	iLogger.l.Infof(template, args...)
 }
 
 // Warn uses fmt.Sprint to construct and log a message.
 func (iLogger *internalLogger) Warn(template string, args ...interface{}) {
-	iLogger.l.Warnf(template, args ...)
+	iLogger.l.Warnf(template, args...)
 }
 
 // Error uses fmt.Sprint to construct and log a message.
 func (iLogger *internalLogger) Error(template string, args ...interface{}) {
-	iLogger.l.Errorf(template, args ...)
+	iLogger.l.Errorf(template, args...)
 }
 
 // Panic uses fmt.Sprint to construct and log a message, then panics.
 func (iLogger *internalLogger) Panic(template string, args ...interface{}) {
-	iLogger.l.Panicf(template, args ...)
+	iLogger.l.Panicf(template, args...)
 }
 
 // Fatal uses fmt.Sprint to construct and log a message, then calls os.Exit.
 func (iLogger *internalLogger) Fatal(template string, args ...interface{}) {
-	iLogger.l.Fatalf(template, args ...)
+	iLogger.l.Fatalf(template, args...)
 }
-
-
 
 // Logger Option that helps with initialization of our internal logger
 func Logger() Option {
@@ -62,6 +60,6 @@ func Logger() Option {
 	}
 }
 
-func (s *Service) L() ILogger  {
+func (s *Service) L() ILogger {
 	return s.logger
 }

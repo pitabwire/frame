@@ -21,7 +21,6 @@ func (t *noopDriver) Shutdown(ctx context.Context) error {
 	return nil
 }
 
-
 type grpcDriver struct {
 	httpServer *http.Server
 	grpcServer *grpc.Server
@@ -164,4 +163,3 @@ func NoopHttpOptions() Option {
 		c.serverOptions = nopOptions
 	}
 }
-

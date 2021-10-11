@@ -121,11 +121,11 @@ func authenticate(ctx context.Context, jwtToken string, audience string, issuer 
 	}
 
 	//if !claims.VerifyAudience(audience, audience != ""){
-	//	return ctx, errors.New(fmt.Sprintf("token audience does not match %s", audience))
+	//	return ctx, fmt.Errorf("token audience does not match %s", audience))
 	//}
 	//
 	//if !claims.VerifyIssuer(issuer, issuer != "") {
-	//	return ctx, errors.New(fmt.Sprintf("token issuer does not match %s", issuer))
+	//	return ctx, fmt.Errorf("token issuer does not match %s", issuer))
 	//}
 
 	ctx = claims.ClaimsToContext(ctx)
@@ -249,24 +249,24 @@ func AuthenticationMiddleware(next http.Handler, audience string, issuer string)
 func grpcJwtTokenExtractor(ctx context.Context) (string, error) {
 	requestMetadata, ok := metadata.FromIncomingContext(ctx)
 	if !ok {
-		return "", status.Error(codes.Unauthenticated,"no metadata was saved in context before")
+		return "", status.Error(codes.Unauthenticated, "no metadata was saved in context before")
 	}
 
 	vv, ok := requestMetadata["authorization"]
 	if !ok {
-		return "", status.Error(codes.Unauthenticated,"no authorization key found in request metadata")
+		return "", status.Error(codes.Unauthenticated, "no authorization key found in request metadata")
 	}
 
 	authorizationHeader := vv[0]
 
 	if authorizationHeader == "" || !strings.HasPrefix(authorizationHeader, "bearer ") {
-		return "", status.Error(codes.Unauthenticated,"an authorization header is required")
+		return "", status.Error(codes.Unauthenticated, "an authorization header is required")
 	}
 
 	extractedJwtToken := strings.Split(authorizationHeader, "bearer ")
 
 	if len(extractedJwtToken) != 2 {
-		return "", status.Error(codes.Unauthenticated,"malformed Authorization header")
+		return "", status.Error(codes.Unauthenticated, "malformed Authorization header")
 	}
 
 	return strings.TrimSpace(extractedJwtToken[1]), nil

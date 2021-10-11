@@ -15,46 +15,43 @@ import (
 func TestService_RegisterPublisherNotSet(t *testing.T) {
 	ctx := context.Background()
 
-	srv := NewService( "Test Srv")
+	srv := NewService("Test Srv")
 
-	err := srv.Publish(ctx, "random", []byte("") )
+	err := srv.Publish(ctx, "random", []byte(""))
 
-	if err == nil  {
+	if err == nil {
 		t.Errorf("We shouldn't be able to publish when no topic was registered")
 	}
 
 }
-
-
 
 func TestService_RegisterPublisherNotInitialized(t *testing.T) {
 	ctx := context.Background()
 	opt := RegisterPublisher("test", "mem://topicA")
-	srv := NewService( "Test Srv", opt)
+	srv := NewService("Test Srv", opt)
 
-	err := srv.Publish(ctx, "random", []byte("") )
+	err := srv.Publish(ctx, "random", []byte(""))
 
-	if err == nil  {
+	if err == nil {
 		t.Errorf("We shouldn't be able to publish when no topic was registered")
 	}
 
 }
-
 
 func TestService_RegisterPublisher(t *testing.T) {
 	ctx := context.Background()
 
 	opt := RegisterPublisher("test", "mem://topicA")
-	srv := NewService( "Test Srv", opt)
+	srv := NewService("Test Srv", opt)
 
 	err := srv.initPubsub(ctx)
-	if err != nil  {
+	if err != nil {
 		t.Errorf("We couldn't instantiate queue  %+v", err)
 		return
 	}
 
-	err = srv.Publish(ctx, "test", []byte("") )
-	if err != nil  {
+	err = srv.Publish(ctx, "test", []byte(""))
+	if err != nil {
 		t.Errorf("We could not publish to topic that was registered %+v", err)
 	}
 
@@ -62,41 +59,39 @@ func TestService_RegisterPublisher(t *testing.T) {
 
 }
 
-
-
 func TestService_RegisterPublisherMultiple(t *testing.T) {
 	ctx := context.Background()
 
 	opt := RegisterPublisher("test", "mem://topicA")
 	opt1 := RegisterPublisher("test-2", "mem://topicB")
-	srv := NewService( "Test Srv", opt, opt1)
+	srv := NewService("Test Srv", opt, opt1)
 
 	err := srv.initPubsub(ctx)
-	if err != nil  {
+	if err != nil {
 		t.Errorf("We couldn't instantiate queue  %+v", err)
 		return
 	}
 
-	err = srv.Publish(ctx, "test", []byte("Testament") )
-	if err != nil  {
+	err = srv.Publish(ctx, "test", []byte("Testament"))
+	if err != nil {
 		t.Errorf("We could not publish to topic that was registered %+v", err)
 	}
 
-	err = srv.Publish(ctx, "test-2", []byte("Testament") )
-	if err != nil  {
+	err = srv.Publish(ctx, "test-2", []byte("Testament"))
+	if err != nil {
 		t.Errorf("We could not publish to topic that was registered %+v", err)
 	}
 
-	err = srv.Publish(ctx, "test-3", []byte("Testament") )
-	if err == nil  {
+	err = srv.Publish(ctx, "test-3", []byte("Testament"))
+	if err == nil {
 		t.Errorf("We should not be able to publish to topic that was not registered")
 	}
 
 }
 
 type messageHandler struct {
-
 }
+
 func (m *messageHandler) Handle(ctx context.Context, message []byte) error {
 
 	log.Printf(" A nice message to handle: %v", string(message))
@@ -104,8 +99,8 @@ func (m *messageHandler) Handle(ctx context.Context, message []byte) error {
 }
 
 type handlerWithError struct {
-
 }
+
 func (m *handlerWithError) Handle(ctx context.Context, message []byte) error {
 
 	log.Printf(" A dreadful message to handle: %v", string(message))
@@ -113,19 +108,18 @@ func (m *handlerWithError) Handle(ctx context.Context, message []byte) error {
 
 }
 
-
 func TestService_RegisterSubscriber(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	optTopic := RegisterPublisher("test", "mem://topicA")
 	opt := RegisterSubscriber("test", "mem://topicA",
-		5, &messageHandler{} )
+		5, &messageHandler{})
 
-	srv := NewService( "Test Srv", optTopic, opt)
+	srv := NewService("Test Srv", optTopic, opt)
 
 	err := srv.initPubsub(ctx)
-	if err != nil  {
+	if err != nil {
 		t.Errorf("We couldn't instantiate queue  %+v", err)
 		return
 	}
@@ -136,7 +130,6 @@ func TestService_RegisterSubscriber(t *testing.T) {
 			t.Errorf("We could not publish to topic that was registered %+v", err)
 		}
 
-
 	}
 
 	err = srv.Publish(ctx, "test", []byte("throw error"))
@@ -146,79 +139,71 @@ func TestService_RegisterSubscriber(t *testing.T) {
 	srv.Stop()
 }
 
-
-
-
 func TestService_RegisterSubscriberWithError(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	optTopic := RegisterPublisher("test", "mem://topicA")
-	opt := RegisterSubscriber("test", "mem://topicA", 1, &handlerWithError{} )
+	opt := RegisterSubscriber("test", "mem://topicA", 1, &handlerWithError{})
 
-	srv := NewService( "Test Srv", optTopic, opt)
+	srv := NewService("Test Srv", optTopic, opt)
 
 	err := srv.initPubsub(ctx)
-	if err != nil  {
+	if err != nil {
 		t.Errorf("We couldn't instantiate queue  %+v", err)
 		return
 	}
 
-		err = srv.Publish(ctx, "test", []byte(fmt.Sprintf(" testing message with error")))
-		if err != nil {
-			t.Errorf("We could not publish to topic that was registered %+v", err)
-		}
+	err = srv.Publish(ctx, "test", []byte(fmt.Sprintf(" testing message with error")))
+	if err != nil {
+		t.Errorf("We could not publish to topic that was registered %+v", err)
+	}
 	srv.Stop()
 }
-
 
 func TestService_RegisterSubscriberInvalid(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	opt := RegisterSubscriber("test", "memt+://topicA",
-		5, &messageHandler{} )
+		5, &messageHandler{})
 
-	srv := NewService( "Test Srv", opt)
+	srv := NewService("Test Srv", opt)
 
 	err := srv.initPubsub(ctx)
-	if err == nil  {
+	if err == nil {
 		t.Errorf("We somehow instantiated an invalid subscription ")
 	}
 }
-
-
 
 func TestService_RegisterSubscriberContextCancelWorks(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	optTopic := RegisterPublisher("test", "mem://topicA")
 	opt := RegisterSubscriber("test", "mem://topicA",
-		5, &messageHandler{} )
+		5, &messageHandler{})
 
-	srv := NewService( "Test Srv", opt, optTopic)
+	srv := NewService("Test Srv", opt, optTopic)
 
 	err := srv.initPubsub(ctx)
-	if err != nil  {
+	if err != nil {
 		t.Errorf("We somehow fail to instantiate subscription ")
 	}
 
-
-	if !srv.queue.subscriptionQueueMap["test"].isInit{
+	if !srv.queue.subscriptionQueueMap["test"].isInit {
 		t.Errorf("Subscription is invalid yet it should be ok")
 	}
 
 	cancel()
 	time.Sleep(3 * time.Second)
 
-	if srv.queue.subscriptionQueueMap["test"].isInit{
+	if srv.queue.subscriptionQueueMap["test"].isInit {
 		t.Errorf("Subscription is valid yet it should not be ok")
 	}
 
-
 }
 
-func TestPublishCloudEvent(t *testing.T)  {
+func TestPublishCloudEvent(t *testing.T) {
 
 }
 
@@ -230,14 +215,13 @@ func TestReceiveCloudEvents(t *testing.T) {
 	bufferSize := 1024 * 1024
 	listener := bufconn.Listen(bufferSize)
 
-
 	opt := RegisterSubscriber("test", "http://0.0.0.0/queue/topicA",
-		5, &messageHandler{} )
+		5, &messageHandler{})
 
-	srv := NewService( "Test Srv", opt, ServerListener(listener))
+	srv := NewService("Test Srv", opt, ServerListener(listener))
 
 	err := srv.initPubsub(ctx)
-	if err != nil  {
+	if err != nil {
 		t.Errorf("We somehow fail to instantiate subscription ")
 	}
 
@@ -249,13 +233,11 @@ func TestReceiveCloudEvents(t *testing.T) {
 		_ = srv.Run(ctx, "")
 	}()
 
-
 	err = clientInvokeWithCloudEventPayload(listener)
 	if err != nil {
 		t.Fatalf("failed to dial: %+v", err)
 	}
 }
-
 
 func clientInvokeWithCloudEventPayload(listener *bufconn.Listener) error {
 
@@ -267,12 +249,10 @@ func clientInvokeWithCloudEventPayload(listener *bufconn.Listener) error {
 		"message": "Hello, World!",
 	})
 
-
 	_, err := json.Marshal(e)
 	if err != nil {
 		return err
 	}
-
 
 	//TODO test that the queue will pickup cloudevents
 

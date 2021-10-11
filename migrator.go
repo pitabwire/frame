@@ -16,10 +16,9 @@ type migrator struct {
 	service *Service
 }
 
-func (m *migrator)DB(ctx context.Context) *gorm.DB {
+func (m *migrator) DB(ctx context.Context) *gorm.DB {
 	return m.service.DB(ctx, false)
 }
-
 
 func (m *migrator) scanForNewMigrations(ctx context.Context, migrationsDirPath string) error {
 
@@ -113,7 +112,6 @@ func (m *migrator) applyNewMigrations(ctx context.Context) error {
 
 	return nil
 }
-
 
 // MigrateDatastore finds missing migrations and records them in the database
 func (s *Service) MigrateDatastore(ctx context.Context, migrationsDirPath string, migrations ...interface{}) error {

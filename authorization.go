@@ -34,8 +34,8 @@ func AuthHasAccess(ctx context.Context, action string, subject string) (error, b
 		return err, false
 	}
 
-	if status > 299 || status < 200{
-		return errors.New(fmt.Sprintf(" invalid response status %d had message %s", status, string(result))), false
+	if status > 299 || status < 200 {
+		return fmt.Errorf(" invalid response status %d had message %s", status, string(result)), false
 	}
 
 	var response map[string]interface{}
@@ -49,5 +49,3 @@ func AuthHasAccess(ctx context.Context, action string, subject string) (error, b
 	}
 	return nil, false
 }
-
-

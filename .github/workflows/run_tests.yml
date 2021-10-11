@@ -1,4 +1,4 @@
-name: Docker Image CI
+name: Test
 
 on: [push]
 
@@ -7,18 +7,11 @@ jobs:
   build:
 
     runs-on: ubuntu-latest
-    env:
-      PG_PASS: ${{ secrets.PG_PASS }}
-      DATABASE_URL: postgresql://postgres:${{ secrets.SECRET_PASSWORD }}@postgres/postgres
-      DJANGO_SETTINGS_MODULE: app_name.settings.dev
-      SECRET_KEY: ${{ secrets.SECRET_KEY }}
-      PORT: 8000
-
     steps:
       - uses: actions/checkout@v2
       - uses: actions/setup-go@v2
         with:
-          go-version: '^1.16'
+          go-version: '^1.17'
       - name: Build the docker-compose stack
         run: docker-compose -f tests_runner/docker-compose.yml up -d
       - name: Wait for afew seconds

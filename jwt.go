@@ -2,17 +2,14 @@ package frame
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net/http"
 	"strings"
 )
 
-
 const envOauth2ServiceClientSecret = "OAUTH2_SERVICE_CLIENT_SECRET"
 const envOauth2ServiceAdminUri = "OAUTH2_SERVICE_ADMIN_URI"
 const envOauth2Audience = "OAUTH2_SERVICE_AUDIENCE"
-
 
 func (s *Service) registerForJwt(ctx context.Context) error {
 
@@ -54,8 +51,7 @@ func (s *Service) registerForJwt(ctx context.Context) error {
 	}
 
 	if status > 299 || status < 200 {
-		return errors.New(fmt.Sprintf(" invalid response status %d had message %s", status, string(result)))
+		return fmt.Errorf(" invalid response status %d had message %s", status, string(result))
 	}
 	return nil
 }
-

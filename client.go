@@ -8,7 +8,6 @@ import (
 	"net/http"
 )
 
-
 // InvokeRestService convenience method to call a http endpoint and utilize the raw results
 func (s *Service) InvokeRestService(ctx context.Context, method string, endpointUrl string, payload map[string]interface{}, headers map[string][]string) (int, []byte, error) {
 
@@ -41,4 +40,3 @@ func (s *Service) InvokeRestService(ctx context.Context, method string, endpoint
 	return resp.StatusCode, response, err
 
 }
-

@@ -6,13 +6,12 @@ import (
 	"log"
 )
 
-
 const eventsQueueName = "frame.events.internal_._queue"
 const envEventsQueueUrl = "EVENTS_QUEUE_URL"
 
 type eventPayload struct {
-	ID string `json:",omitempty"`
-	Name string `json:",omitempty"`
+	ID      string `json:",omitempty"`
+	Name    string `json:",omitempty"`
 	Payload string `json:",omitempty"`
 }
 
@@ -35,7 +34,7 @@ type EventI interface {
 
 // RegisterEvents Option to write an event or list of events into the service registry for future use.
 //All events are unique and shouldn't share a name otherwise the last one registered will take presedence
-func RegisterEvents(events ... EventI) Option {
+func RegisterEvents(events ...EventI) Option {
 	return func(s *Service) {
 
 		if s.eventRegistry == nil {
@@ -48,7 +47,6 @@ func RegisterEvents(events ... EventI) Option {
 
 	}
 }
-
 
 // Emit a simple method used to deploy
 func (s *Service) Emit(ctx context.Context, name string, payload interface{}) error {
@@ -72,7 +70,7 @@ func (s *Service) Emit(ctx context.Context, name string, payload interface{}) er
 }
 
 type eventQueueHandler struct {
-	service    *Service
+	service *Service
 }
 
 func (eq *eventQueueHandler) Handle(ctx context.Context, payload []byte) error {
@@ -106,4 +104,3 @@ func (eq *eventQueueHandler) Handle(ctx context.Context, payload []byte) error {
 
 	return nil
 }
-

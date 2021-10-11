@@ -7,7 +7,7 @@ import (
 
 func TestDefaultService(t *testing.T) {
 
-	srv := NewService( "Test Srv")
+	srv := NewService("Test Srv")
 	if srv == nil {
 		t.Errorf("No default service could be instaniated")
 		return
@@ -20,18 +20,17 @@ func TestDefaultService(t *testing.T) {
 
 func TestService(t *testing.T) {
 
-	srv := NewService( "Test")
+	srv := NewService("Test")
 	if srv == nil {
 		t.Errorf("No default service could be instaniated")
 	}
 }
 
-
 func TestFromContext(t *testing.T) {
 
 	ctx := context.Background()
 
-	srv := NewService( "Test Srv")
+	srv := NewService("Test Srv")
 
 	nullSrv := FromContext(ctx)
 	if nullSrv != nil {
@@ -49,7 +48,7 @@ func TestFromContext(t *testing.T) {
 
 func TestService_AddCleanupMethod(t *testing.T) {
 
-	srv := NewService( "Test Srv")
+	srv := NewService("Test Srv")
 
 	a := 30
 
@@ -61,15 +60,13 @@ func TestService_AddCleanupMethod(t *testing.T) {
 		a += 1
 	})
 
-
-	if a != 30{
+	if a != 30 {
 		t.Errorf("Clean up method is running prematurely")
 	}
 
-
 	srv.Stop()
 
-	if a != 32{
+	if a != 32 {
 		t.Errorf("Clean up method is not running at shutdown")
 	}
 }
@@ -83,8 +80,7 @@ func (h *testHC) CheckHealth() error {
 
 func TestService_AddHealthCheck(t *testing.T) {
 
-	srv := NewService( "Test Srv")
-
+	srv := NewService("Test Srv")
 
 	healthChecker := new(testHC)
 
@@ -98,4 +94,3 @@ func TestService_AddHealthCheck(t *testing.T) {
 		t.Errorf("Health checkers are not being added to list")
 	}
 }
-

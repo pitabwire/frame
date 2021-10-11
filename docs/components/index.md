@@ -26,26 +26,27 @@ To create a http handler for the server, you can use [gorilla mux](https://githu
 
 ````go
 package main
-import(
+
+import (
 	"fmt"
 	"github.com/gorilla/mux"
-    "github.com/pitabwire/frame"
+	"github.com/pitabwire/frame"
 	"http"
 )
 
 func HomeHandler(w http.ResponseWriter, r *http.Request) {
-    fmt.Fprintf(w, "Frame says yelloo!")
+	_, _ = fmt.Fprintf(w, "Frame says yelloo!")
 }
 
 func main() {
 
-r := mux.NewRouter()
-r.HandleFunc("/", HomeHandler)
+	r := mux.NewRouter()
+	r.HandleFunc("/", HomeHandler)
 
-serverOption := frame.HttpHandler(r)
+	serverOption := frame.HttpHandler(r)
 
-service := frame.NewService("Testing service",serverOption)
-...
+	service := frame.NewService("Testing service", serverOption)
+	...
 
 }
 ````
@@ -58,17 +59,17 @@ Of [Server options](https://pkg.go.dev/gocloud.dev/server#Options). These can be
 
 ````go
 package main
-import(
-	
-"fmt"	
-"github.com/pitabwire/frame"
-"gocloud.dev/server/requestlog"
-"os"
+
+import (
+	"fmt"
+	"github.com/pitabwire/frame"
+	"gocloud.dev/server/requestlog"
+	"os"
 )
 
-... 
+...
 
-reqLogger := requestlog.NewNCSALogger(os.Stdout, func(e error) { fmt.Fprintln(os.Stderr, e) })
+reqLogger := requestlog.NewNCSALogger(os.Stdout, func (e error) { _, _ = fmt.Fprintln(os.Stderr, e) })
 requestLogOption := frame.HttpOptions(reqLogger)
 
 ...

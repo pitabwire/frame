@@ -45,7 +45,7 @@ func (s *Service) registerForJwt(ctx context.Context) error {
 		"aud":           audienceList,
 	}
 
-	status, result, err = s.InvokeRestService(ctx, http.MethodPost, oauth2AdminUri, payload, nil)
+	status, result, err := s.InvokeRestService(ctx, http.MethodPost, oauth2AdminUri, payload, nil)
 	if err != nil {
 		return err
 	}

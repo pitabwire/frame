@@ -3,10 +3,12 @@ package frame
 import (
 	"context"
 	"crypto/rsa"
+	"crypto/subtle"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
-	"github.com/dgrijalva/jwt-go/v4"
+	"fmt"
+	"github.com/golang-jwt/jwt/v4"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -30,7 +32,7 @@ type AuthenticationClaims struct {
 	PartitionID string   `json:"partition_id,omitempty"`
 	AccessID    string   `json:"access_id,omitempty"`
 	Roles       []string `json:"roles,omitempty"`
-	jwt.StandardClaims
+	jwt.RegisteredClaims
 }
 
 func (a *AuthenticationClaims) isSystem() bool {
@@ -50,6 +52,19 @@ func (a *AuthenticationClaims) AsMetadata() map[string]string {
 	m["access_id"] = a.AccessID
 	m["roles"] = strings.Join(a.Roles, ",")
 	return m
+}
+
+// VerifyIssuer compares the iss claim against cmp.
+// If required is false, this method will return true if the value matches or is unset
+func (a *AuthenticationClaims) VerifyIssuer(cmp string, req bool) bool {
+	if a.Issuer == "" {
+		return !req
+	}
+	if subtle.ConstantTimeCompare([]byte(a.Issuer), []byte(cmp)) != 0 {
+		return true
+	} else {
+		return false
+	}
 }
 
 // ClaimsToContext adds authentication claims to the current supplied context
@@ -99,19 +114,7 @@ func authenticate(ctx context.Context, jwtToken string, audience string, issuer 
 
 	claims := &AuthenticationClaims{}
 
-	var options []jwt.ParserOption
-
-	if audience == "" {
-		options = []jwt.ParserOption{jwt.WithoutAudienceValidation()}
-	} else {
-		options = []jwt.ParserOption{jwt.WithAudience(audience)}
-	}
-
-	if issuer != "" {
-		options = append(options, jwt.WithIssuer(issuer))
-	}
-
-	token, err := jwt.ParseWithClaims(jwtToken, claims, getPemCert, options...)
+	token, err := jwt.ParseWithClaims(jwtToken, claims, getPemCert)
 	if err != nil {
 		return ctx, err
 	}
@@ -120,13 +123,17 @@ func authenticate(ctx context.Context, jwtToken string, audience string, issuer 
 		return ctx, errors.New("supplied token was invalid")
 	}
 
-	//if !claims.VerifyAudience(audience, audience != ""){
-	//	return ctx, fmt.Errorf("token audience does not match %s", audience))
-	//}
-	//
-	//if !claims.VerifyIssuer(issuer, issuer != "") {
-	//	return ctx, fmt.Errorf("token issuer does not match %s", issuer))
-	//}
+	if audience != "" {
+		if !claims.VerifyAudience(audience, true) {
+			return ctx, fmt.Errorf("token audience does not match %v :-> %s", claims.Audience, audience)
+		}
+	}
+
+	if issuer != "" {
+		if !claims.VerifyIssuer(issuer, true) {
+			return ctx, fmt.Errorf("token issuer does not match %s :-> %s", claims.Issuer, issuer)
+		}
+	}
 
 	ctx = claims.ClaimsToContext(ctx)
 

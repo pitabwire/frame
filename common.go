@@ -15,6 +15,7 @@ import (
 
 type BaseModelI interface {
 	GetID() string
+	GetVersion() uint
 }
 
 // BaseModel base table struct to be extended by other models
@@ -22,7 +23,7 @@ type BaseModel struct {
 	ID          string `gorm:"type:varchar(50);primary_key"`
 	CreatedAt   time.Time
 	ModifiedAt  time.Time
-	Version     uint32         `gorm:"DEFAULT 0"`
+	Version     uint           `gorm:"DEFAULT 0"`
 	TenantID    string         `gorm:"type:varchar(50);"`
 	PartitionID string         `gorm:"type:varchar(50);"`
 	AccessID    string         `gorm:"type:varchar(50);"`
@@ -61,6 +62,10 @@ func (model *BaseModel) GenID(ctx context.Context) {
 func (model *BaseModel) ValidXID(id string) bool {
 	_, err := xid.FromString(id)
 	return err == nil
+}
+
+func (model *BaseModel) GetVersion() uint {
+	return model.Version
 }
 
 // BeforeSave Ensures we update a migrations time stamps

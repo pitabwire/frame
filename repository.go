@@ -12,6 +12,14 @@ type BaseRepository struct {
 	instanceCreator func() BaseModelI
 }
 
+func NewBaseRepository(readDb *gorm.DB, writeDB *gorm.DB, instanceCreator func() BaseModelI) BaseRepository {
+	return BaseRepository{
+		readDb:          readDb,
+		writeDb:         writeDB,
+		instanceCreator: instanceCreator,
+	}
+}
+
 func (repo *BaseRepository) getReadDb() *gorm.DB {
 	return repo.readDb
 }

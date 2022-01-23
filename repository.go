@@ -6,6 +6,12 @@ import (
 	"gorm.io/gorm/clause"
 )
 
+type BaseRepositoryI interface {
+	GetByID(id string, result BaseModelI) error
+	Delete(id string) error
+	Save(instance BaseModelI) error
+}
+
 type BaseRepository struct {
 	readDb          *gorm.DB
 	writeDb         *gorm.DB
@@ -29,7 +35,8 @@ func (repo *BaseRepository) getWriteDb() *gorm.DB {
 }
 
 func (repo *BaseRepository) Delete(id string) error {
-	deleteInstance, err := repo.GetByID(id)
+	deleteInstance := repo.instanceCreator()
+	err := repo.GetByID(id, deleteInstance)
 	if err != nil {
 		return err
 	}
@@ -38,17 +45,11 @@ func (repo *BaseRepository) Delete(id string) error {
 
 }
 
-func (repo *BaseRepository) GetByID(id string) (BaseModelI, error) {
-	getInstance := repo.instanceCreator()
-	err := repo.getReadDb().Preload(clause.Associations).First(getInstance, "id = ?", id).Error
-	if err != nil {
-		return nil, err
-	}
-	return getInstance, nil
+func (repo *BaseRepository) GetByID(id string, result BaseModelI) error {
+	return repo.getReadDb().Preload(clause.Associations).First(result, "id = ?", id).Error
 }
 
-func (repo *BaseRepository) GetLastestBy(properties map[string]interface{}) (BaseModelI, error) {
-	getInstance := repo.instanceCreator()
+func (repo *BaseRepository) GetLastestBy(properties map[string]interface{}, result BaseModelI) error {
 
 	db := repo.getReadDb()
 
@@ -56,14 +57,10 @@ func (repo *BaseRepository) GetLastestBy(properties map[string]interface{}) (Bas
 		db.Where(fmt.Sprintf("%s = ?", key), value)
 	}
 
-	err := db.Last(getInstance).Error
-	if err != nil {
-		return nil, err
-	}
-	return getInstance, nil
+	return db.Last(result).Error
 }
 
-func (repo *BaseRepository) GetAllBy(properties map[string]interface{}, instanceList interface{}) error {
+func (repo *BaseRepository) GetAllBy(properties map[string]interface{}, result []BaseModelI) error {
 
 	db := repo.getReadDb()
 
@@ -71,10 +68,10 @@ func (repo *BaseRepository) GetAllBy(properties map[string]interface{}, instance
 		db.Where(fmt.Sprintf("%s = ?", key), value)
 	}
 
-	return db.Find(instanceList).Error
+	return db.Find(result).Error
 }
 
-func (repo *BaseRepository) Search(query string, searchFields []string, instanceList interface{}) error {
+func (repo *BaseRepository) Search(query string, searchFields []string, result []BaseModelI) error {
 
 	db := repo.getReadDb()
 
@@ -86,7 +83,7 @@ func (repo *BaseRepository) Search(query string, searchFields []string, instance
 		}
 	}
 
-	return db.Find(instanceList).Error
+	return db.Find(result).Error
 }
 
 func (repo *BaseRepository) Save(instance BaseModelI) error {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 	grpchello "google.golang.org/grpc/examples/helloworld/helloworld"
 	"google.golang.org/grpc/test/bufconn"
 	"log"
@@ -87,7 +88,9 @@ func clientInvokeGrpc(listener *bufconn.Listener) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	conn, err := grpc.DialContext(ctx, "", grpc.WithContextDialer(getBufDialer(listener)), grpc.WithInsecure())
+	conn, err := grpc.DialContext(ctx, "",
+		grpc.WithContextDialer(getBufDialer(listener)),
+		grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return err
 	}

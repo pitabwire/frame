@@ -2,6 +2,7 @@ package frame
 
 import (
 	"context"
+	"github.com/improbable-eng/grpc-web/go/grpcweb"
 	"github.com/soheilhy/cmux"
 	"gocloud.dev/server"
 	"google.golang.org/grpc"
@@ -34,7 +35,11 @@ func (gd *grpcDriver) ListenAndServe(addr string, h http.Handler) error {
 	var err error
 
 	gd.httpServer.Addr = addr
-	gd.httpServer.Handler = h
+
+	gd.httpServer.Handler = grpcweb.WrapHandler(
+		h,
+		grpcweb.WithOriginFunc(func(origin string) bool { return true }),
+	)
 
 	if gd.listener != nil {
 		ln = gd.listener
@@ -53,6 +58,7 @@ func (gd *grpcDriver) ListenAndServe(addr string, h http.Handler) error {
 	anyL := m.Match(cmux.Any())
 
 	go func() {
+
 		err := gd.grpcServer.Serve(grpcL)
 		if err != nil {
 			log.Printf(" ListenAndServe -- stopping grpc server because : %+v", err)
@@ -76,7 +82,10 @@ func (gd *grpcDriver) ListenAndServeTLS(addr, certFile, keyFile string, h http.H
 	var err error
 
 	gd.httpServer.Addr = addr
-	gd.httpServer.Handler = h
+	gd.httpServer.Handler = grpcweb.WrapHandler(
+		h,
+		grpcweb.WithOriginFunc(func(origin string) bool { return true }),
+	)
 
 	if gd.listener != nil {
 		ln = gd.listener
@@ -91,8 +100,8 @@ func (gd *grpcDriver) ListenAndServeTLS(addr, certFile, keyFile string, h http.H
 
 	var grpcL net.Listener
 	grpcMatcher := cmux.HTTP2HeaderField("content-type", "application/grpc")
-	grpcL = m.Match(grpcMatcher)
 
+	grpcL = m.Match(grpcMatcher)
 	anyL := m.Match(cmux.Any())
 
 	go func() {

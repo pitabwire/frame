@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	cloudevents "github.com/cloudevents/sdk-go/v2"
+	"github.com/improbable-eng/grpc-web/go/grpcweb"
 	"github.com/nicksnyder/go-i18n/v2/i18n"
 	"gocloud.dev/server"
 	"gocloud.dev/server/health"
@@ -196,9 +197,12 @@ func (s *Service) Run(ctx context.Context, address string) error {
 
 	// If grpc server is setup we should use the correct driver
 	if s.grpcServer != nil {
-
 		s.serverOptions.Driver = &grpcDriver{
 			grpcServer: s.grpcServer,
+			wrappedGrpcServer: grpcweb.WrapServer(
+				s.grpcServer,
+				grpcweb.WithOriginFunc(func(origin string) bool { return true }),
+			),
 			httpServer: &http.Server{
 				ReadTimeout:  30 * time.Second,
 				WriteTimeout: 30 * time.Second,
@@ -219,7 +223,8 @@ func (s *Service) Run(ctx context.Context, address string) error {
 	return err
 }
 
-// Stop Used to gracefully run clean up methods to ensure all requests that were being handled are completed well without interuptions.
+// Stop Used to gracefully run clean up methods.
+//Ensuring all requests that were being handled are completed well without interuptions.
 func (s *Service) Stop() {
 	if s.cleanup != nil {
 		s.cleanup()

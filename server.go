@@ -23,20 +23,27 @@ func (t *noopDriver) Shutdown(ctx context.Context) error {
 }
 
 type grpcDriver struct {
-	httpServer *http.Server
-	grpcServer *grpc.Server
-
-	listener net.Listener
+	httpServer        *http.Server
+	grpcServer        *grpc.Server
+	wrappedGrpcServer *grpcweb.WrappedGrpcServer
+	listener          net.Listener
 }
 
 func (gd *grpcDriver) ListenAndServe(addr string, h http.Handler) error {
-
 	var ln net.Listener
 	var err error
 
 	gd.httpServer.Addr = addr
 
-	gd.httpServer.Handler = grpcweb.WrapHandler(
+	gd.httpServer.Handler = http.HandlerFunc(func(resp http.ResponseWriter, req *http.Request) {
+		if gd.wrappedGrpcServer.IsGrpcWebRequest(req) {
+			gd.wrappedGrpcServer.ServeHTTP(resp, req)
+			return
+		}
+		h.ServeHTTP(resp, req)
+	})
+
+	grpcweb.WrapHandler(
 		h,
 		grpcweb.WithOriginFunc(func(origin string) bool { return true }),
 	)
@@ -58,7 +65,6 @@ func (gd *grpcDriver) ListenAndServe(addr string, h http.Handler) error {
 	anyL := m.Match(cmux.Any())
 
 	go func() {
-
 		err := gd.grpcServer.Serve(grpcL)
 		if err != nil {
 			log.Printf(" ListenAndServe -- stopping grpc server because : %+v", err)
@@ -77,15 +83,17 @@ func (gd *grpcDriver) ListenAndServe(addr string, h http.Handler) error {
 }
 
 func (gd *grpcDriver) ListenAndServeTLS(addr, certFile, keyFile string, h http.Handler) error {
-
 	var ln net.Listener
 	var err error
 
 	gd.httpServer.Addr = addr
-	gd.httpServer.Handler = grpcweb.WrapHandler(
-		h,
-		grpcweb.WithOriginFunc(func(origin string) bool { return true }),
-	)
+	gd.httpServer.Handler = http.HandlerFunc(func(resp http.ResponseWriter, req *http.Request) {
+		if gd.wrappedGrpcServer.IsGrpcWebRequest(req) {
+			gd.wrappedGrpcServer.ServeHTTP(resp, req)
+			return
+		}
+		h.ServeHTTP(resp, req)
+	})
 
 	if gd.listener != nil {
 		ln = gd.listener
@@ -133,7 +141,8 @@ func (gd *grpcDriver) Shutdown(ctx context.Context) error {
 	return nil
 }
 
-// GrpcServer Option to specify an instantiated grpc server with an implementation that can be utilized to handle incoming requests.
+// GrpcServer Option to specify an instantiated grpc server
+//with an implementation that can be utilized to handle incoming requests.
 func GrpcServer(grpcServer *grpc.Server) Option {
 	return func(c *Service) {
 		c.grpcServer = grpcServer

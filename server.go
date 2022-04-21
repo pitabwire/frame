@@ -36,7 +36,9 @@ func (gd *grpcDriver) ListenAndServe(addr string, h http.Handler) error {
 	gd.httpServer.Addr = addr
 
 	gd.httpServer.Handler = http.HandlerFunc(func(resp http.ResponseWriter, req *http.Request) {
-		if gd.wrappedGrpcServer.IsGrpcWebRequest(req) {
+		if gd.wrappedGrpcServer.IsGrpcWebRequest(req) ||
+			gd.wrappedGrpcServer.IsAcceptableGrpcCorsRequest(req) ||
+			gd.wrappedGrpcServer.IsGrpcWebSocketRequest(req) {
 			gd.wrappedGrpcServer.ServeHTTP(resp, req)
 			return
 		}

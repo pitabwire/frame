@@ -23,6 +23,7 @@ func (t *noopDriver) Shutdown(ctx context.Context) error {
 }
 
 type grpcDriver struct {
+	corsPolicy        string
 	httpServer        *http.Server
 	grpcServer        *grpc.Server
 	wrappedGrpcServer *grpcweb.WrappedGrpcServer
@@ -36,6 +37,9 @@ func (gd *grpcDriver) ListenAndServe(addr string, h http.Handler) error {
 	gd.httpServer.Addr = addr
 
 	gd.httpServer.Handler = http.HandlerFunc(func(resp http.ResponseWriter, req *http.Request) {
+
+		resp.Header().Set("Access-Control-Allow-Origin", gd.corsPolicy)
+
 		if gd.wrappedGrpcServer.IsGrpcWebRequest(req) ||
 			gd.wrappedGrpcServer.IsAcceptableGrpcCorsRequest(req) ||
 			gd.wrappedGrpcServer.IsGrpcWebSocketRequest(req) {
@@ -155,6 +159,13 @@ func GrpcServer(grpcServer *grpc.Server) Option {
 func ServerListener(listener net.Listener) Option {
 	return func(c *Service) {
 		c.listener = listener
+	}
+}
+
+// CorsPolicy Option to specify the cors policy to utilize on the client
+func CorsPolicy(cors string) Option {
+	return func(c *Service) {
+		c.corsPolicy = cors
 	}
 }
 

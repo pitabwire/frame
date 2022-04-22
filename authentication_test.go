@@ -23,7 +23,7 @@ func TestAuthenticationFromContext(t *testing.T) {
 	if claims == nil {
 		t.Errorf("A context with claims should produce one")
 	}
-	}
+}
 
 func TestSimpleAuthenticate(t *testing.T) {
 
@@ -49,7 +49,6 @@ func TestSimpleAuthenticate(t *testing.T) {
 }
 
 func TestSimpleAuthenticateWithAudience(t *testing.T) {
-
 	ctx := context.Background()
 
 	err := os.Setenv(envOauth2WellKnownJwk, sampleWellKnownJwk)
@@ -73,7 +72,6 @@ func TestSimpleAuthenticateWithAudience(t *testing.T) {
 }
 
 func TestSimpleAuthenticateWithIssuer(t *testing.T) {
-
 	ctx := context.Background()
 
 	err := os.Setenv(envOauth2WellKnownJwk, sampleWellKnownJwk)
@@ -92,7 +90,7 @@ func TestSimpleAuthenticateWithIssuer(t *testing.T) {
 	claims := ClaimsFromContext(ctx2)
 
 	if claims == nil {
-		t.Errorf( "supplied context should contain authentication claims")
+		t.Errorf("supplied context should contain authentication claims")
 	}
 
 }

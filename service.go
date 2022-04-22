@@ -36,6 +36,7 @@ type Service struct {
 	serverOptions  *server.Options
 	grpcServer     *grpc.Server
 	listener       net.Listener
+	corsPolicy     string
 	client         *http.Client
 	queue          *queue
 	queuePath      string
@@ -52,7 +53,6 @@ type Option func(service *Service)
 // NewService creates a new instance of Service with the name and supplied options
 // It is used together with the Init option to setup components of a service that is not yet running.
 func NewService(name string, opts ...Option) *Service {
-
 	q, _ := newQueue()
 
 	service := &Service{
@@ -94,13 +94,13 @@ func (s *Service) Name() string {
 
 // Init evaluates the options provided as arguments and supplies them to the service object
 func (s *Service) Init(opts ...Option) {
-
 	for _, opt := range opts {
 		opt(s)
 	}
 }
 
-// AddPreStartMethod Adds user defined functions that can be run just before the service starts receiving requests but is fully initialized.
+// AddPreStartMethod Adds user defined functions that can be run just before
+// the service starts receiving requests but is fully initialized.
 func (s *Service) AddPreStartMethod(f func(s *Service)) {
 	if s.startup == nil {
 		s.startup = f
@@ -124,7 +124,8 @@ func (s *Service) AddCleanupMethod(f func()) {
 }
 
 // AddHealthCheck Adds health checks that are run periodically to ascertain the system is ok
-// The arguments are implementations of the checker interface and should work with just about any system that is given to them.
+// The arguments are implementations of the checker interface and should work with just about
+// any system that is given to them.
 func (s *Service) AddHealthCheck(checker health.Checker) {
 	if s.healthCheckers != nil {
 		s.healthCheckers = []health.Checker{}
@@ -143,7 +144,6 @@ func (s *Service) Run(ctx context.Context, address string) error {
 
 	// Whenever the registry is not empty the events queue is automatically initiated
 	if s.eventRegistry != nil && len(s.eventRegistry) > 0 {
-
 		eventsQueueHandler := eventQueueHandler{
 			service: s,
 		}
@@ -168,7 +168,13 @@ func (s *Service) Run(ctx context.Context, address string) error {
 	}
 
 	if s.serverOptions.RequestLogger == nil {
-		s.serverOptions.RequestLogger = requestlog.NewNCSALogger(os.Stdout, func(e error) { fmt.Println(e) })
+		s.serverOptions.RequestLogger = requestlog.NewNCSALogger(
+			os.Stdout,
+			func(e error) { s.logger.Error(e.Error()) })
+	}
+
+	if s.corsPolicy == "" {
+		s.corsPolicy = "*"
 	}
 
 	if s.queuePath == "" {
@@ -198,6 +204,7 @@ func (s *Service) Run(ctx context.Context, address string) error {
 	// If grpc server is setup we should use the correct driver
 	if s.grpcServer != nil {
 		s.serverOptions.Driver = &grpcDriver{
+			corsPolicy: s.corsPolicy,
 			grpcServer: s.grpcServer,
 			wrappedGrpcServer: grpcweb.WrapServer(
 				s.grpcServer,
@@ -223,8 +230,8 @@ func (s *Service) Run(ctx context.Context, address string) error {
 	return err
 }
 
-// Stop Used to gracefully run clean up methods.
-//Ensuring all requests that were being handled are completed well without interuptions.
+// Stop Used to gracefully run clean up methods ensuring all requests that
+// were being handled are completed well without interuptions.
 func (s *Service) Stop() {
 	if s.cleanup != nil {
 		s.cleanup()

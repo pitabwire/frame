@@ -37,12 +37,13 @@ func (s *Service) registerForJwt(ctx context.Context) error {
 	}
 
 	payload := map[string]interface{}{
-		"client_id":     s.name,
-		"client_name":   s.name,
-		"client_secret": clientSecret,
-		"grant_types":   []string{"client_credentials"},
-		"metadata":      map[string]string{"cc_bot": "true"},
-		"audience":      audienceList,
+		"client_id":                  s.name,
+		"client_name":                s.name,
+		"client_secret":              clientSecret,
+		"grant_types":                []string{"client_credentials"},
+		"metadata":                   map[string]string{"cc_bot": "true"},
+		"audience":                   audienceList,
+		"token_endpoint_auth_method": "client_secret_post",
 	}
 
 	status, result, err := s.InvokeRestService(ctx, http.MethodPost, oauth2AdminURI, payload, nil)

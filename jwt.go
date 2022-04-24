@@ -24,8 +24,8 @@ func (s *Service) registerForJwt(ctx context.Context) error {
 
 	audienceList := strings.Split(GetEnv(envOauth2Audience, ""), ",")
 
-	oauth2AdminUri := fmt.Sprintf("%s%s", host, "/clients")
-	oauth2AdminIDUri := fmt.Sprintf("%s/%s", oauth2AdminUri, s.name)
+	oauth2AdminURI := fmt.Sprintf("%s%s", host, "/clients")
+	oauth2AdminIDUri := fmt.Sprintf("%s/%s", oauth2AdminURI, s.name)
 
 	status, _, err := s.InvokeRestService(ctx, http.MethodGet, oauth2AdminIDUri, make(map[string]interface{}), nil)
 	if err != nil {
@@ -42,10 +42,10 @@ func (s *Service) registerForJwt(ctx context.Context) error {
 		"client_secret": clientSecret,
 		"grant_types":   []string{"client_credentials"},
 		"metadata":      map[string]string{"cc_bot": "true"},
-		"aud":           audienceList,
+		"audience":      audienceList,
 	}
 
-	status, result, err := s.InvokeRestService(ctx, http.MethodPost, oauth2AdminUri, payload, nil)
+	status, result, err := s.InvokeRestService(ctx, http.MethodPost, oauth2AdminURI, payload, nil)
 	if err != nil {
 		return err
 	}

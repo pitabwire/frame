@@ -4,13 +4,13 @@ services:
 
   postgresd:
     container_name: frame_postgres
-    image: postgres:14
+    image: postgres:14.5
     environment:
       - POSTGRES_USER=frame
       - POSTGRES_PASSWORD=secret
       - POSTGRES_DB=framedatabase
     ports:
-      - 5423:5432
+      - 5431:5432
 
   keto-migrate:
     container_name: frame_keto_migration

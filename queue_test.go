@@ -40,7 +40,7 @@ func TestService_RegisterPublisher(t *testing.T) {
 	ctx := context.Background()
 
 	opt := frame.RegisterPublisher("test", "mem://topicA")
-	srv := frame.NewService("Test Srv", opt)
+	srv := frame.NewService("Test Srv", opt, frame.NoopDriver())
 
 	err := srv.Run(ctx, "")
 	if err != nil {
@@ -127,7 +127,6 @@ func TestService_RegisterSubscriber(t *testing.T) {
 		if err != nil {
 			t.Errorf("We could not publish to topic that was registered %+v", err)
 		}
-
 	}
 
 	err = srv.Publish(ctx, "test", []byte("throw error"))
@@ -156,7 +155,6 @@ func TestService_RegisterSubscriberWithError(t *testing.T) {
 	if err != nil {
 		t.Errorf("We could not publish to topic that was registered %+v", err)
 	}
-	srv.Stop()
 }
 
 func TestService_RegisterSubscriberInvalid(t *testing.T) {
@@ -168,8 +166,7 @@ func TestService_RegisterSubscriberInvalid(t *testing.T) {
 
 	srv := frame.NewService("Test Srv", opt, frame.NoopDriver())
 
-	err := srv.Run(ctx, "")
-	if err == nil {
+	if err := srv.Run(ctx, ""); err == nil {
 		t.Errorf("We somehow instantiated an invalid subscription ")
 	}
 }
@@ -184,8 +181,7 @@ func TestService_RegisterSubscriberContextCancelWorks(t *testing.T) {
 
 	srv := frame.NewService("Test Srv", opt, optTopic, noopDriver)
 
-	err := srv.Run(ctx, "")
-	if err != nil {
+	if err := srv.Run(ctx, ""); err != nil {
 		t.Errorf("We somehow fail to instantiate subscription ")
 	}
 
@@ -195,7 +191,6 @@ func TestService_RegisterSubscriberContextCancelWorks(t *testing.T) {
 
 	cancel()
 	time.Sleep(3 * time.Second)
-
 	if srv.SubscriptionIsInitiated("test") {
 		t.Errorf("Subscription is valid yet it should not be ok")
 	}

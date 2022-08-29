@@ -97,7 +97,6 @@ func (s *Service) Publish(ctx context.Context, reference string, payload interfa
 
 	pub, err := s.queue.getPublisherByReference(reference)
 	if err != nil {
-
 		if err.Error() != "reference does not exist" {
 			return err
 		}
@@ -112,11 +111,8 @@ func (s *Service) Publish(ctx context.Context, reference string, payload interfa
 		if err != nil {
 			return err
 		}
-
 		s.queue.publishQueueMap[reference] = pub
-
 	}
-
 	var message []byte
 	msg, ok := payload.([]byte)
 	if !ok {
@@ -133,7 +129,6 @@ func (s *Service) Publish(ctx context.Context, reference string, payload interfa
 		Body:     message,
 		Metadata: metadata,
 	})
-
 }
 
 func (s *Service) initPublisher(ctx context.Context, publisher *publisher) error {
@@ -145,7 +140,7 @@ func (s *Service) initPublisher(ctx context.Context, publisher *publisher) error
 	s.AddCleanupMethod(func() {
 		err := topic.Shutdown(ctx)
 		if err != nil {
-			log.Printf("initPubsub -- publish topic %s could not be closed : %v", publisher.reference, err)
+			s.L().WithError(err).WithField("reference", publisher.reference).Info("publish topic could not be closed")
 		}
 	})
 
@@ -153,7 +148,31 @@ func (s *Service) initPublisher(ctx context.Context, publisher *publisher) error
 	publisher.isInit = true
 	return nil
 }
-func (s *Service) initPubsub(ctx context.Context) error { // Whenever the registry is not empty the events queue is automatically initiated
+
+func (s *Service) initSubscriber(ctx context.Context, sub *subscriber) error {
+
+	if !strings.HasPrefix(sub.url, "http") {
+		subs, err := pubsub.OpenSubscription(ctx, sub.url)
+		if err != nil {
+			return fmt.Errorf("could not open topic subscription: %+v", err)
+		}
+
+		s.AddCleanupMethod(func() {
+			err = subs.Shutdown(ctx)
+			if err != nil {
+				s.L().WithError(err).WithField("reference", sub.url).Info("subscription could not be stopped")
+
+			}
+		})
+
+		sub.subscription = subs
+	}
+	sub.isInit = true
+	return nil
+}
+
+func (s *Service) initPubsub(ctx context.Context) error {
+	// Whenever the registry is not empty the events queue is automatically initiated
 	if s.eventRegistry != nil && len(s.eventRegistry) > 0 {
 		eventsQueueHandler := eventQueueHandler{
 			service: s,
@@ -176,23 +195,11 @@ func (s *Service) initPubsub(ctx context.Context) error { // Whenever the regist
 		}
 	}
 
-	for ref, subscriber := range s.queue.subscriptionQueueMap {
-		if !strings.HasPrefix(subscriber.url, "http") {
-			subs, err := pubsub.OpenSubscription(ctx, subscriber.url)
-			if err != nil {
-				return fmt.Errorf("could not open topic subscription: %+v", err)
-			}
-
-			s.AddCleanupMethod(func() {
-				err := subs.Shutdown(ctx)
-				if err != nil {
-					log.Printf("Subscribe -- subscription %s could not be stopped well : %v", ref, err)
-				}
-			})
-
-			subscriber.subscription = subs
+	for _, sub := range s.queue.subscriptionQueueMap {
+		err := s.initSubscriber(ctx, sub)
+		if err != nil {
+			return err
 		}
-		subscriber.isInit = true
 	}
 
 	if len(s.queue.subscriptionQueueMap) > 0 {

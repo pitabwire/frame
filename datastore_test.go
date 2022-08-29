@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-const testDatastoreConnection = "postgres://frame:secret@localhost:5423/framedatabase?sslmode=disable"
+const testDatastoreConnection = "postgres://frame:secret@localhost:5431/framedatabase?sslmode=disable"
 
 func TestService_Datastore(t *testing.T) {
 	ctx := context.Background()
@@ -53,12 +53,10 @@ func TestService_DatastoreRead(t *testing.T) {
 		return
 	}
 
-	wd, _ := w.DB()
 	rd, _ := r.DB()
-	if wd == rd {
+	if wd, _ := w.DB(); wd == rd {
 		t.Errorf("Read and write db services are same but we set different")
 	}
-
 }
 
 func TestService_DatastoreNotSet(t *testing.T) {

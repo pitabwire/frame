@@ -13,7 +13,7 @@ import (
 func authorizationControlListWrite(ctx context.Context, action string, subject string) error {
 	authClaims := frame.ClaimsFromContext(ctx)
 	service := frame.FromContext(ctx)
-	config, ok := service.Config().(*frame.DefaultConfiguration)
+	config, ok := service.Config().(frame.DefaultConfiguration)
 	if !ok {
 		return errors.New("could not cast setting to authorization config")
 	}

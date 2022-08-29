@@ -153,7 +153,7 @@ type JSONWebKeys struct {
 }
 
 func (s *Service) getPemCert(token *jwt.Token) (interface{}, error) {
-	config, ok := s.Config().(*DefaultConfiguration)
+	config, ok := s.Config().(DefaultConfiguration)
 	if !ok {
 		return nil, errors.New("could not cast config for oauth2 settings")
 	}

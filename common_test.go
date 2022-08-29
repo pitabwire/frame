@@ -98,3 +98,23 @@ func Test_Config_Process(t *testing.T) {
 		t.Errorf("inherited Database URL config not processed")
 	}
 }
+
+func Test_ConfigCastingIssues(t *testing.T) {
+
+	os.Setenv("PORT", "testingp")
+	os.Setenv("DATABASE_URL", "testingu")
+
+	var conf frame.DefaultConfiguration
+	err := frame.ConfigProcess("", &conf)
+	if err != nil {
+		t.Errorf(" could not load config from env : %v", err)
+	}
+
+	srv := frame.NewService("Test Srv", frame.Config(conf))
+
+	_, ok := srv.Config().(frame.DefaultConfiguration)
+	if !ok {
+		t.Errorf("could not cast config to default settings")
+	}
+
+}

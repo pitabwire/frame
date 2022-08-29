@@ -14,7 +14,7 @@ func AuthHasAccess(ctx context.Context, action string, subject string) (bool, er
 	authClaims := ClaimsFromContext(ctx)
 	service := FromContext(ctx)
 
-	config, ok := service.Config().(*DefaultConfiguration)
+	config, ok := service.Config().(DefaultConfiguration)
 	if !ok {
 		return false, errors.New("could not cast setting to authorization config")
 	}

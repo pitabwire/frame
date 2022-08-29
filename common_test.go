@@ -80,9 +80,21 @@ type name struct {
 }
 
 func Test_Config_Process(t *testing.T) {
+
+	os.Setenv("PORT", "testingp")
+	os.Setenv("DATABASE_URL", "testingu")
+
 	var conf name
-	err := frame.ConfigProcess("", conf)
+	err := frame.ConfigProcess("", &conf)
 	if err != nil {
 		t.Errorf(" could not load config from env : %v", err)
+	}
+
+	if conf.ServerPort != "testingp" {
+		t.Errorf("inherited PORT config not processed")
+	}
+
+	if conf.DatabaseURL != "testingu" {
+		t.Errorf("inherited Database URL config not processed")
 	}
 }

@@ -27,8 +27,8 @@ type OAUTH2Configuration struct {
 }
 
 type DatabaseConfiguration struct {
-	DatabaseURL        string `envconfig:"DATABASE_URL"`
+	DatabaseURL        string `required:"true" envconfig:"DATABASE_URL"`
 	ReplicaDatabaseURL string `envconfig:"REPLICA_DATABASE_URL"`
-	Migrate            string `envconfig:"DO_MIGRATION"`
-	MigrationPath      string `envconfig:"MIGRATION_PATH"`
+	Migrate            string `default:"false" envconfig:"DO_MIGRATION"`
+	MigrationPath      string `default:"./migrations/0001" envconfig:"MIGRATION_PATH"`
 }

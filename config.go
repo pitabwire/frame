@@ -13,17 +13,42 @@ func (s *Service) Config() interface{} {
 
 type DefaultConfiguration struct {
 	ServerPort string `envconfig:"PORT"`
-}
 
-type OAUTH2Configuration struct {
-	Oauth2WellKnownJwk           string `envconfig:"OAUTH2_WELL_KNOWN_JWK"`
+	Oauth2WellKnownJwk        string `envconfig:"OAUTH2_WELL_KNOWN_JWK"`
+	Oauth2JwtVerifyAudience   string `envconfig:"OAUTH2_JWT_VERIFY_AUDIENCE"`
+	Oauth2JwtVerifyIssuer     string `envconfig:"OAUTH2_JWT_VERIFY_ISSUER"`
+	Oauth2ServiceURI          string `envconfig:"OAUTH2_SERVICE_URI"`
+	Oauth2ServiceClientSecret string `envconfig:"OAUTH2_SERVICE_CLIENT_SECRET"`
+	Oauth2ServiceAudience     string `envconfig:"OAUTH2_SERVICE_AUDIENCE"`
+
 	AuthorizationServiceReadURI  string `envconfig:"AUTHORIZATION_SERVICE_READ_URI"`
 	AuthorizationServiceWriteURI string `envconfig:"AUTHORIZATION_SERVICE_WRITE_URI"`
-	Oauth2JwtVerifyAudience      string `envconfig:"OAUTH2_JWT_VERIFY_AUDIENCE"`
-	Oauth2JwtVerifyIssuer        string `envconfig:"OAUTH2_JWT_VERIFY_ISSUER"`
-	Oauth2ServiceURI             string `envconfig:"OAUTH2_SERVICE_URI"`
-	Oauth2ServiceClientSecret    string `envconfig:"OAUTH2_SERVICE_CLIENT_SECRET"`
-	Oauth2ServiceAudience        string `envconfig:"OAUTH2_SERVICE_AUDIENCE"`
+}
+
+func (d DefaultConfiguration) GetOauthWellKnownJwk() string {
+	return d.Oauth2WellKnownJwk
+}
+
+func (d DefaultConfiguration) GetOauth2ServiceURI() string {
+	return d.Oauth2ServiceURI
+}
+
+func (d DefaultConfiguration) GetAuthorizationServiceReadURI() string {
+	return d.AuthorizationServiceReadURI
+}
+
+func (d DefaultConfiguration) GetAuthorizationServiceWriteURI() string {
+	return d.AuthorizationServiceWriteURI
+}
+
+type OAUTH2Configuration interface {
+	GetOauthWellKnownJwk() string
+	GetOauth2ServiceURI() string
+}
+
+type AuthorizationConfiguration interface {
+	GetAuthorizationServiceReadURI() string
+	GetAuthorizationServiceWriteURI() string
 }
 
 type DatabaseConfiguration struct {

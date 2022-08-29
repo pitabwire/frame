@@ -13,7 +13,10 @@ import (
 func authorizationControlListWrite(ctx context.Context, action string, subject string) error {
 	authClaims := frame.ClaimsFromContext(ctx)
 	service := frame.FromContext(ctx)
-	config := service.Config().(frame.OAUTH2Configuration)
+	config, ok := service.Config().(frame.AuthorizationConfiguration)
+	if !ok {
+		return errors.New("could not cast setting to authorization config")
+	}
 
 	if authClaims == nil {
 		return errors.New("only authenticated requsts should be used to check authorization")
@@ -26,7 +29,8 @@ func authorizationControlListWrite(ctx context.Context, action string, subject s
 		"subject_id": subject,
 	}
 
-	status, result, err := service.InvokeRestService(ctx, http.MethodPut, config.AuthorizationServiceWriteURI, payload, nil)
+	status, result, err := service.InvokeRestService(ctx,
+		http.MethodPut, config.GetAuthorizationServiceWriteURI(), payload, nil)
 
 	if err != nil {
 		return err
@@ -48,7 +52,7 @@ func authorizationControlListWrite(ctx context.Context, action string, subject s
 func TestAuthorizationControlListWrite(t *testing.T) {
 
 	ctx := context.Background()
-	srv := frame.NewService("Test Srv", frame.Config(frame.OAUTH2Configuration{
+	srv := frame.NewService("Test Srv", frame.Config(frame.DefaultConfiguration{
 		AuthorizationServiceWriteURI: "http://localhost:4467/relation-tuples",
 	}))
 	ctx = frame.ToContext(ctx, srv)
@@ -72,7 +76,7 @@ func TestAuthorizationControlListWrite(t *testing.T) {
 func TestAuthHasAccess(t *testing.T) {
 	ctx := context.Background()
 	srv := frame.NewService("Test Srv", frame.Config(
-		frame.OAUTH2Configuration{
+		frame.DefaultConfiguration{
 			AuthorizationServiceReadURI:  "http://localhost:4466/check",
 			AuthorizationServiceWriteURI: "http://localhost:4467/relation-tuples",
 		}))

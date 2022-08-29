@@ -14,7 +14,10 @@ func AuthHasAccess(ctx context.Context, action string, subject string) (bool, er
 	authClaims := ClaimsFromContext(ctx)
 	service := FromContext(ctx)
 
-	authorizationUrl := service.Config().(OAUTH2Configuration).AuthorizationServiceReadURI
+	config, ok := service.Config().(AuthorizationConfiguration)
+	if !ok {
+		return false, errors.New("could not cast setting to authorization config")
+	}
 
 	if authClaims == nil {
 		return false, errors.New("only authenticated requsts should be used to check authorization")
@@ -27,7 +30,8 @@ func AuthHasAccess(ctx context.Context, action string, subject string) (bool, er
 		"subject_id": subject,
 	}
 
-	status, result, err := service.InvokeRestService(ctx, http.MethodPost, authorizationUrl, payload, nil)
+	status, result, err := service.InvokeRestService(ctx, http.MethodPost,
+		config.GetAuthorizationServiceReadURI(), payload, nil)
 	if err != nil {
 		return false, err
 	}

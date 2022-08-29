@@ -48,7 +48,7 @@ type Service struct {
 	livelinessPath string
 	readinessPath  string
 	startup        func(s *Service)
-	cleanup        func()
+	cleanups       []func(ctx context.Context)
 	eventRegistry  map[string]EventI
 	configuration  interface{}
 	once           sync.Once
@@ -129,14 +129,8 @@ func (s *Service) AddPreStartMethod(f func(s *Service)) {
 
 // AddCleanupMethod Adds user defined functions to be run just before completely stopping the service.
 // These are responsible for properly and gracefully stopping active components.
-func (s *Service) AddCleanupMethod(f func()) {
-	if s.cleanup == nil {
-		s.cleanup = f
-		return
-	}
-
-	old := s.cleanup
-	s.cleanup = func() { old(); f() }
+func (s *Service) AddCleanupMethod(f func(ctx context.Context)) {
+	s.cleanups = append(s.cleanups, f)
 }
 
 // AddHealthCheck Adds health checks that are run periodically to ascertain the system is ok
@@ -242,8 +236,17 @@ func (s *Service) initServer(ctx context.Context, address string) error {
 
 // Stop Used to gracefully run clean up methods ensuring all requests that
 // were being handled are completed well without interuptions.
-func (s *Service) Stop() {
-	if s.cleanup != nil {
-		s.cleanup()
+func (s *Service) Stop(ctx context.Context) {
+	for {
+		var cleanup func(ctx context.Context)
+		if len(s.cleanups) > 0 {
+			last := len(s.cleanups) - 1
+			cleanup = s.cleanups[last]
+			s.cleanups = s.cleanups[:last]
+		}
+		if cleanup == nil {
+			return
+		}
+		cleanup(ctx)
 	}
 }

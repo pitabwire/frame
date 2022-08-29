@@ -49,23 +49,24 @@ func TestFromContext(t *testing.T) {
 
 func TestService_AddCleanupMethod(t *testing.T) {
 
+	ctx := context.Background()
 	srv := frame.NewService("Test Srv")
 
 	a := 30
 
-	srv.AddCleanupMethod(func() {
-		a += 1
+	srv.AddCleanupMethod(func(ctx context.Context) {
+		a++
 	})
 
-	srv.AddCleanupMethod(func() {
-		a += 1
+	srv.AddCleanupMethod(func(ctx context.Context) {
+		a++
 	})
 
 	if a != 30 {
 		t.Errorf("Clean up method is running prematurely")
 	}
 
-	srv.Stop()
+	srv.Stop(ctx)
 
 	if a != 32 {
 		t.Errorf("Clean up method is not running at shutdown")

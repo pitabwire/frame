@@ -20,11 +20,6 @@ func (q queue) getPublisherByReference(reference string) (*publisher, error) {
 	if p == nil {
 		return nil, fmt.Errorf("reference does not exist")
 	}
-
-	if !p.isInit {
-		return nil, fmt.Errorf("getPublisherByReference -- can't publish on uninitialized queue %v ", reference)
-	}
-
 	return p, nil
 }
 
@@ -41,8 +36,7 @@ func newQueue() (*queue, error) {
 type publisher struct {
 	reference string
 	url       string
-	pubTopic  *pubsub.Topic
-	isInit    bool
+	topic     *pubsub.Topic
 }
 
 type SubscribeWorker interface {
@@ -50,6 +44,7 @@ type SubscribeWorker interface {
 }
 
 type subscriber struct {
+	reference    string
 	url          string
 	concurrency  int
 	handler      SubscribeWorker
@@ -63,17 +58,17 @@ func RegisterPublisher(reference string, queueURL string) Option {
 		s.queue.publishQueueMap[reference] = &publisher{
 			reference: reference,
 			url:       queueURL,
-			isInit:    false,
 		}
 	}
 }
 
 // RegisterSubscriber Option to register a new subscription handler
-func RegisterSubscriber(reference string, queueUrl string, concurrency int,
+func RegisterSubscriber(reference string, queueURL string, concurrency int,
 	handler SubscribeWorker) Option {
 	return func(s *Service) {
 		s.queue.subscriptionQueueMap[reference] = &subscriber{
-			url:         queueUrl,
+			reference:   reference,
+			url:         queueURL,
 			concurrency: concurrency,
 			handler:     handler,
 		}
@@ -101,11 +96,13 @@ func (s *Service) Publish(ctx context.Context, reference string, payload interfa
 			return err
 		}
 
+		if !strings.Contains(reference, "://") {
+			return err
+		}
+
 		pub = &publisher{
 			reference: reference,
 			url:       reference,
-			pubTopic:  nil,
-			isInit:    false,
 		}
 		err = s.initPublisher(ctx, pub)
 		if err != nil {
@@ -113,6 +110,7 @@ func (s *Service) Publish(ctx context.Context, reference string, payload interfa
 		}
 		s.queue.publishQueueMap[reference] = pub
 	}
+
 	var message []byte
 	msg, ok := payload.([]byte)
 	if !ok {
@@ -125,47 +123,42 @@ func (s *Service) Publish(ctx context.Context, reference string, payload interfa
 		message = msg
 	}
 
-	return pub.pubTopic.Send(ctx, &pubsub.Message{
+	return pub.topic.Send(ctx, &pubsub.Message{
 		Body:     message,
 		Metadata: metadata,
 	})
+
 }
 
-func (s *Service) initPublisher(ctx context.Context, publisher *publisher) error {
-	topic, err := pubsub.OpenTopic(ctx, publisher.url)
+func (s *Service) initPublisher(ctx context.Context, pub *publisher) error {
+	topic, err := pubsub.OpenTopic(ctx, pub.url)
 	if err != nil {
 		return err
 	}
-
-	s.AddCleanupMethod(func() {
-		err := topic.Shutdown(ctx)
+	s.AddCleanupMethod(func(ctx context.Context) {
+		err = topic.Shutdown(ctx)
 		if err != nil {
-			s.L().WithError(err).WithField("reference", publisher.reference).Info("publish topic could not be closed")
+			s.L().WithError(err).WithField("reference", pub.reference).Warn("topic could not be closed")
 		}
 	})
-
-	publisher.pubTopic = topic
-	publisher.isInit = true
+	pub.topic = topic
 	return nil
 }
-
 func (s *Service) initSubscriber(ctx context.Context, sub *subscriber) error {
-
 	if !strings.HasPrefix(sub.url, "http") {
-		subs, err := pubsub.OpenSubscription(ctx, sub.url)
+		subsc, err := pubsub.OpenSubscription(ctx, sub.url)
 		if err != nil {
 			return fmt.Errorf("could not open topic subscription: %+v", err)
 		}
 
-		s.AddCleanupMethod(func() {
-			err = subs.Shutdown(ctx)
+		s.AddCleanupMethod(func(ctx context.Context) {
+			err = subsc.Shutdown(ctx)
 			if err != nil {
-				s.L().WithError(err).WithField("reference", sub.url).Info("subscription could not be stopped")
-
+				s.L().WithError(err).WithField("reference", sub.reference).Warn("subscription could not be stopped")
 			}
 		})
 
-		sub.subscription = subs
+		sub.subscription = subsc
 	}
 	sub.isInit = true
 	return nil
@@ -207,12 +200,10 @@ func (s *Service) initPubsub(ctx context.Context) error {
 	}
 
 	return nil
-
 }
 
 func (s *Service) subscribe(ctx context.Context) {
-
-	for _, subsc := range s.queue.subscriptionQueueMap { // cloud event subscriptions are not held as long running processes
+	for _, subsc := range s.queue.subscriptionQueueMap {
 		if strings.HasPrefix(subsc.url, "http") {
 			continue
 		}
@@ -266,9 +257,7 @@ func (s *Service) subscribe(ctx context.Context) {
 			for n := 0; n < localSub.concurrency; n++ {
 				sem <- struct{}{}
 			}
-
 			localSub.isInit = false
-
 		}(subsc)
 	}
 }

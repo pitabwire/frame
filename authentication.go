@@ -12,7 +12,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"io/ioutil"
+	"io"
 	"log"
 	"math/big"
 	"net/http"
@@ -170,7 +170,7 @@ func (s *Service) getPemCert(token *jwt.Token) (interface{}, error) {
 			return nil, err
 		}
 		defer resp.Body.Close()
-		jwkKeyBytes, err = ioutil.ReadAll(resp.Body)
+		jwkKeyBytes, err = io.ReadAll(resp.Body)
 		if err != nil {
 			return nil, err
 		}

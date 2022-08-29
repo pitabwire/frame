@@ -70,7 +70,7 @@ func TestServiceGrpcServer(t *testing.T) {
 
 	// it is here to properly stop the server
 	defer func() { time.Sleep(100 * time.Millisecond) }()
-	defer srv.Stop()
+	defer srv.Stop(ctx)
 
 	go func() {
 		err := srv.Run(ctx, "")
@@ -126,14 +126,13 @@ func TestService_Run(t *testing.T) {
 	}()
 
 	time.Sleep(500 * time.Millisecond)
-	srv.Stop()
+	srv.Stop(ctx)
 
 	srv = NewService("Testing", NoopDriver())
 
-	err := srv.Run(ctx, ":")
-	if err != nil {
+	if err := srv.Run(ctx, ":"); err != nil {
 		t.Errorf("Could not run Server : %+v", err)
 	}
 
-	srv.Stop()
+	srv.Stop(ctx)
 }

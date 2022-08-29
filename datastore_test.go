@@ -13,6 +13,7 @@ func TestService_Datastore(t *testing.T) {
 	mainDb := frame.Datastore(ctx, testDatastoreConnection, false)
 
 	srv := frame.NewService("Test Srv", mainDb)
+	defer srv.Stop(ctx)
 
 	if srv.Name() != "Test Srv" {
 		t.Errorf("s")
@@ -30,21 +31,18 @@ func TestService_Datastore(t *testing.T) {
 		return
 	}
 
-	wd, _ := w.DB()
 	rd, _ := r.DB()
-	if wd != rd {
+	if wd, _ := w.DB(); wd != rd {
 		t.Errorf("Read and write db services should not be different ")
 	}
-
-	srv.Stop()
 }
 
 func TestService_DatastoreRead(t *testing.T) {
 	ctx := context.Background()
-	mainDb := frame.Datastore(ctx, testDatastoreConnection, false)
-	readDb := frame.Datastore(ctx, testDatastoreConnection, true)
+	mainDB := frame.Datastore(ctx, testDatastoreConnection, false)
+	readDB := frame.Datastore(ctx, testDatastoreConnection, true)
 
-	srv := frame.NewService("Test Srv", mainDb, readDb)
+	srv := frame.NewService("Test Srv", mainDB, readDB)
 
 	w := srv.DB(ctx, false)
 	r := srv.DB(ctx, true)
@@ -68,5 +66,4 @@ func TestService_DatastoreNotSet(t *testing.T) {
 	if w != nil {
 		t.Errorf("When no connection is set no db is expected")
 	}
-
 }

@@ -5,8 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"gorm.io/gorm"
-	"io/ioutil"
 	"log"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -29,11 +29,10 @@ func (m *migrator) scanForNewMigrations(ctx context.Context, migrationsDirPath s
 	}
 
 	for _, file := range files {
-
 		filename := filepath.Base(file)
 		filename = strings.Replace(filename, ".sql", "", 1)
 
-		migrationPatch, err := ioutil.ReadFile(file)
+		migrationPatch, err := os.ReadFile(file)
 
 		if err != nil {
 			log.Printf("scanForNewMigrations -- Problem reading migration file content : %+v", err)

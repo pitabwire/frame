@@ -105,7 +105,6 @@ func (gd *grpcDriver) ListenAndServe(addr string, h http.Handler) error {
 	}()
 
 	return m.Serve()
-
 }
 
 func (gd *grpcDriver) ListenAndServeTLS(addr, certFile, keyFile string, h http.Handler) error {

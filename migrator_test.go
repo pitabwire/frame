@@ -3,17 +3,16 @@ package frame
 import (
 	"context"
 	"gorm.io/gorm"
-	"io/ioutil"
+	"os"
 	"testing"
 )
 
 const testDatastoreConnection = "postgres://frame:secret@localhost:5431/framedatabase?sslmode=disable"
 
 func TestSaveNewMigrations(t *testing.T) {
-
 	ctx := context.Background()
-	mainDb := Datastore(ctx, testDatastoreConnection, false)
-	srv := NewService("Test Migrations Srv", mainDb)
+	mainDB := Datastore(ctx, testDatastoreConnection, false)
+	srv := NewService("Test Migrations Srv", mainDB)
 
 	srv.DB(ctx, false).Session(&gorm.Session{AllowGlobalUpdate: true}).Unscoped().Delete(&Migration{})
 
@@ -31,7 +30,7 @@ func TestSaveNewMigrations(t *testing.T) {
 		return
 	}
 
-	migrationContent, err := ioutil.ReadFile(migrationPath)
+	migrationContent, err := os.ReadFile(migrationPath)
 	if err != nil {
 		t.Errorf("Could not read scanned migration %+v", err)
 		return
@@ -52,8 +51,8 @@ func TestSaveNewMigrations(t *testing.T) {
 		return
 	}
 
-	updateSql := "SELECT 2;"
-	err = migrator.saveNewMigrations(ctx, migrationPath, updateSql)
+	updateSQL := "SELECT 2;"
+	err = migrator.saveNewMigrations(ctx, migrationPath, updateSQL)
 	if err != nil {
 		t.Errorf("Could not update unapplied migration %+v", err)
 		return
@@ -71,18 +70,16 @@ func TestSaveNewMigrations(t *testing.T) {
 		return
 	}
 
-	if updatedMigration.Patch != updateSql {
-		t.Errorf("Migration was not updated successfully %s to %s", updatedMigration.Patch, updateSql)
+	if updatedMigration.Patch != updateSQL {
+		t.Errorf("Migration was not updated successfully %s to %s", updatedMigration.Patch, updateSQL)
 		return
 	}
-
 }
 
 func TestApplyMigrations(t *testing.T) {
-
 	ctx := context.Background()
-	mainDb := Datastore(ctx, testDatastoreConnection, false)
-	srv := NewService("Test Migrations Srv", mainDb)
+	mainDB := Datastore(ctx, testDatastoreConnection, false)
+	srv := NewService("Test Migrations Srv", mainDB)
 
 	srv.DB(ctx, false).Session(&gorm.Session{AllowGlobalUpdate: true}).Unscoped().Delete(&Migration{})
 
@@ -100,7 +97,7 @@ func TestApplyMigrations(t *testing.T) {
 		return
 	}
 
-	migrationContent, err := ioutil.ReadFile(migrationPath)
+	migrationContent, err := os.ReadFile(migrationPath)
 	if err != nil {
 		t.Errorf("Could not read scanned migration %+v", err)
 		return

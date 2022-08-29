@@ -152,7 +152,7 @@ func Datastore(ctx context.Context, postgresqlConnection string, readOnly bool) 
 				SkipDefaultTransaction: true,
 			})
 
-			s.AddCleanupMethod(func() {
+			s.AddCleanupMethod(func(ctx context.Context) {
 				_ = db.Close()
 			})
 
@@ -171,7 +171,7 @@ func Datastore(ctx context.Context, postgresqlConnection string, readOnly bool) 
 func addSqlHealthChecker(s *Service, db *sql.DB) {
 	dbCheck := sqlhealth.New(db)
 	s.AddHealthCheck(dbCheck)
-	s.AddCleanupMethod(func() {
+	s.AddCleanupMethod(func(ctx context.Context) {
 		dbCheck.Stop()
 	})
 }

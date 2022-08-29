@@ -4,9 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/sirupsen/logrus"
 	"gocloud.dev/pubsub"
 	_ "gocloud.dev/pubsub/mempubsub"
-	"log"
 	"strings"
 )
 
@@ -23,14 +23,13 @@ func (q queue) getPublisherByReference(reference string) (*publisher, error) {
 	return p, nil
 }
 
-func newQueue() (*queue, error) {
-
+func newQueue() *queue {
 	q := &queue{
 		publishQueueMap:      make(map[string]*publisher),
 		subscriptionQueueMap: make(map[string]*subscriber),
 	}
 
-	return q, nil
+	return q
 }
 
 type publisher struct {
@@ -204,22 +203,16 @@ func (s *Service) initPubsub(ctx context.Context) error {
 
 func (s *Service) subscribe(ctx context.Context) {
 	for _, subsc := range s.queue.subscriptionQueueMap {
+		logger := s.L().WithField("subscriber", subsc.reference).WithField("url", subsc.url)
+
 		if strings.HasPrefix(subsc.url, "http") {
 			continue
 		}
 
-		go func(localSub *subscriber) {
+		go func(logger *logrus.Entry, localSub *subscriber) {
 			sem := make(chan struct{}, localSub.concurrency)
 		recvLoop:
 			for {
-				msg, err := localSub.subscription.Receive(ctx)
-				if err != nil {
-					// Errors from Receive indicate that Receive will no longer succeed.
-					log.Printf(" subscribe -- Could not pull message because : %+v", err)
-					localSub.isInit = false
-					return
-				}
-
 				// Wait if there are too many active handle goroutines and acquire the
 				// semaphore. If the context is canceled, stop waiting and start shutting
 				// down.
@@ -229,7 +222,14 @@ func (s *Service) subscribe(ctx context.Context) {
 					break recvLoop
 				}
 
-				go func() {
+				msg, err := localSub.subscription.Receive(ctx)
+				if err != nil {
+					logger.WithError(err).Error(" could not pull message")
+					localSub.isInit = false
+					continue
+				}
+
+				go func(logger *logrus.Entry) {
 					defer func() { <-sem }() // Release the semaphore.
 
 					authClaim := ClaimsFromMap(msg.Metadata)
@@ -242,14 +242,13 @@ func (s *Service) subscribe(ctx context.Context) {
 
 					err := localSub.handler.Handle(ctx, msg.Body)
 					if err != nil {
-						log.Printf(" subscribe -- Unable to process message %v : %v",
-							localSub.url, err)
+						logger.WithError(err).Error("unable to process message")
 						msg.Nack()
 						return
 					}
 
 					msg.Ack()
-				}()
+				}(logger)
 			}
 
 			// We're no longer receiving messages. Wait to finish handling any
@@ -258,6 +257,6 @@ func (s *Service) subscribe(ctx context.Context) {
 				sem <- struct{}{}
 			}
 			localSub.isInit = false
-		}(subsc)
+		}(logger, subsc)
 	}
 }

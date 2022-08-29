@@ -59,7 +59,7 @@ type Option func(service *Service)
 // NewService creates a new instance of Service with the name and supplied options
 // It is used together with the Init option to setup components of a service that is not yet running.
 func NewService(name string, opts ...Option) *Service {
-	q, _ := newQueue()
+	q := newQueue()
 
 	service := &Service{
 		name: name,

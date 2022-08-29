@@ -34,7 +34,7 @@ func (model *BaseModel) GetID() string {
 	return model.ID
 }
 
-//GenID creates a new id for model if its not existent
+// GenID creates a new id for model if its not existent
 func (model *BaseModel) GenID(ctx context.Context) {
 
 	if model.ID != "" {

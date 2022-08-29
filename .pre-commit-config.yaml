@@ -5,6 +5,13 @@ repos:
     - id: go-fmt
     - id: go-vet
     - id: golangci-lint
-    - id: go-unit-tests
     - id: go-build
     - id: go-mod-tidy
+- repo: local
+  hooks:
+    - id: local-build
+      name: Locally build
+      description: A local make file to always build and test locally
+      entry: make build
+      language: system
+      types: [bash]

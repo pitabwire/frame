@@ -16,7 +16,7 @@ type eventPayload struct {
 }
 
 // EventI an interface to represent a system event. All logic of an event is handled in the execute task
-//and can also emit other events into the system or if they don't emit an event the process is deemed complete.
+// and can also emit other events into the system or if they don't emit an event the process is deemed complete.
 type EventI interface {
 	// Name represents the unique human readable id of the event that is used to pick it from the registry
 	//or route follow up processing for system to process using this particular event
@@ -33,7 +33,7 @@ type EventI interface {
 }
 
 // RegisterEvents Option to write an event or list of events into the service registry for future use.
-//All events are unique and shouldn't share a name otherwise the last one registered will take presedence
+// All events are unique and shouldn't share a name otherwise the last one registered will take presedence
 func RegisterEvents(events ...EventI) Option {
 	return func(s *Service) {
 

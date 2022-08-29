@@ -72,5 +72,17 @@ func TestGetIp(t *testing.T) {
 	if ip != "testamento" {
 		t.Errorf("Somehow we found the ip %v yet testamento is expected", ip)
 	}
+}
 
+type name struct {
+	frame.DefaultConfiguration
+	frame.DatabaseConfiguration
+}
+
+func Test_Config_Process(t *testing.T) {
+	var conf name
+	err := frame.ConfigProcess("", conf)
+	if err != nil {
+		t.Errorf(" could not load config from env : %v", err)
+	}
 }

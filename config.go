@@ -1,7 +1,5 @@
 package frame
 
-import "github.com/kelseyhightower/envconfig"
-
 // Config Option that helps to specify or override the configuration object of our service
 func Config(config interface{}) Option {
 	return func(s *Service) {
@@ -11,10 +9,6 @@ func Config(config interface{}) Option {
 
 func (s *Service) Config() interface{} {
 	return s.configuration
-}
-
-func (s *Service) ProcessConfig(prefix string, config interface{}) error {
-	return envconfig.Process(prefix, config)
 }
 
 type DefaultConfiguration struct {
@@ -33,8 +27,8 @@ type OAUTH2Configuration struct {
 }
 
 type DatabaseConfiguration struct {
-	EnvDatabaseURL        string `envconfig:"DATABASE_URL"`
-	EnvReplicaDatabaseURL string `envconfig:"REPLICA_DATABASE_URL"`
-	EnvMigrate            string `envconfig:"DO_MIGRATION"`
-	EnvMigrationPath      string `envconfig:"MIGRATION_PATH"`
+	DatabaseURL        string `envconfig:"DATABASE_URL"`
+	ReplicaDatabaseURL string `envconfig:"REPLICA_DATABASE_URL"`
+	Migrate            string `envconfig:"DO_MIGRATION"`
+	MigrationPath      string `envconfig:"MIGRATION_PATH"`
 }

@@ -154,7 +154,10 @@ type JSONWebKeys struct {
 }
 
 func (s *Service) getPemCert(token *jwt.Token) (interface{}, error) {
-	config := s.Config().(Configuration)
+	config, ok := s.Config().(Configuration)
+	if !ok {
+		return nil, errors.New("configure the token srv with required environments like : OAUTH2_WELL_KNOWN_JWK")
+	}
 
 	var jwkKeyBytes []byte
 	if config.Oauth2WellKnownJwk == "" {
@@ -163,8 +166,8 @@ func (s *Service) getPemCert(token *jwt.Token) (interface{}, error) {
 
 	wellKnownJWK := config.Oauth2WellKnownJwk
 
-	if strings.HasPrefix(config.Oauth2WellKnownJwk, "http") {
-		resp, err := http.Get(config.Oauth2WellKnownJwk)
+	if strings.HasPrefix(wellKnownJWK, "http") {
+		resp, err := http.Get(wellKnownJWK)
 
 		if err != nil {
 			return nil, err

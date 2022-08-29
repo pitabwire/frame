@@ -126,7 +126,6 @@ func (s *Service) DB(ctx context.Context, readOnly bool) *gorm.DB {
 // Datastore Option method to store a connection that will be utilized when connecting to the database
 func Datastore(ctx context.Context, postgresqlConnection string, readOnly bool) Option {
 	return func(s *Service) {
-
 		if s.dataStore == nil {
 			s.dataStore = &store{
 				writeDatabase: []*gorm.DB{},

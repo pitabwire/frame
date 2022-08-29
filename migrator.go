@@ -8,6 +8,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 )
@@ -27,6 +28,8 @@ func (m *migrator) scanForNewMigrations(ctx context.Context, migrationsDirPath s
 	if err != nil {
 		return err
 	}
+
+	sort.Strings(files)
 
 	for _, file := range files {
 		filename := filepath.Base(file)
@@ -114,7 +117,6 @@ func (m *migrator) applyNewMigrations(ctx context.Context) error {
 
 // MigrateDatastore finds missing migrations and records them in the database
 func (s *Service) MigrateDatastore(ctx context.Context, migrationsDirPath string, migrations ...interface{}) error {
-
 	if migrationsDirPath == "" {
 		migrationsDirPath = "./migrations/0001"
 	}

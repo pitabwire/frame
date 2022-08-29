@@ -9,15 +9,15 @@ import (
 )
 
 // AuthHasAccess binary check to confirm if subject can perform action specified
-func AuthHasAccess(ctx context.Context, action string, subject string) (error, bool) {
+func AuthHasAccess(ctx context.Context, action string, subject string) (bool, error) {
 
 	authClaims := ClaimsFromContext(ctx)
 	service := FromContext(ctx)
 
-	authorizationUrl := service.Config().(Configuration).AuthorizationServiceReadURI
+	authorizationUrl := service.Config().(OAUTH2Configuration).AuthorizationServiceReadURI
 
 	if authClaims == nil {
-		return errors.New("only authenticated requsts should be used to check authorization"), false
+		return false, errors.New("only authenticated requsts should be used to check authorization")
 	}
 
 	payload := map[string]interface{}{
@@ -29,21 +29,21 @@ func AuthHasAccess(ctx context.Context, action string, subject string) (error, b
 
 	status, result, err := service.InvokeRestService(ctx, http.MethodPost, authorizationUrl, payload, nil)
 	if err != nil {
-		return err, false
+		return false, err
 	}
 
 	if status > 299 || status < 200 {
-		return fmt.Errorf(" invalid response status %d had message %s", status, string(result)), false
+		return false, fmt.Errorf(" invalid response status %d had message %s", status, string(result))
 	}
 
 	var response map[string]interface{}
 	err = json.Unmarshal(result, &response)
 	if err != nil {
-		return err, false
+		return false, err
 	}
 
 	if val, ok := response["allowed"]; ok && val.(bool) {
-		return nil, true
+		return true, nil
 	}
-	return nil, false
+	return false, nil
 }

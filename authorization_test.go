@@ -13,7 +13,7 @@ import (
 func authorizationControlListWrite(ctx context.Context, action string, subject string) error {
 	authClaims := frame.ClaimsFromContext(ctx)
 	service := frame.FromContext(ctx)
-	config := service.Config().(frame.Configuration)
+	config := service.Config().(frame.OAUTH2Configuration)
 
 	if authClaims == nil {
 		return errors.New("only authenticated requsts should be used to check authorization")
@@ -48,7 +48,7 @@ func authorizationControlListWrite(ctx context.Context, action string, subject s
 func TestAuthorizationControlListWrite(t *testing.T) {
 
 	ctx := context.Background()
-	srv := frame.NewService("Test Srv", frame.Config(frame.Configuration{
+	srv := frame.NewService("Test Srv", frame.Config(frame.OAUTH2Configuration{
 		AuthorizationServiceWriteURI: "http://localhost:4467/relation-tuples",
 	}))
 	ctx = frame.ToContext(ctx, srv)
@@ -72,7 +72,7 @@ func TestAuthorizationControlListWrite(t *testing.T) {
 func TestAuthHasAccess(t *testing.T) {
 	ctx := context.Background()
 	srv := frame.NewService("Test Srv", frame.Config(
-		frame.Configuration{
+		frame.OAUTH2Configuration{
 			AuthorizationServiceReadURI:  "http://localhost:4466/check",
 			AuthorizationServiceWriteURI: "http://localhost:4467/relation-tuples",
 		}))
@@ -92,7 +92,7 @@ func TestAuthHasAccess(t *testing.T) {
 		return
 	}
 
-	err, access := frame.AuthHasAccess(ctx, "read", "reader")
+	access, err := frame.AuthHasAccess(ctx, "read", "reader")
 	if err != nil {
 		t.Errorf("Authorization check was not possible see %+v", err)
 	} else if !access {
@@ -100,7 +100,7 @@ func TestAuthHasAccess(t *testing.T) {
 		return
 	}
 
-	err, access = frame.AuthHasAccess(ctx, "read", "read-master")
+	access, err = frame.AuthHasAccess(ctx, "read", "read-master")
 	if err == nil || access {
 		t.Errorf("Authorization check was not forbidden yet shouldn't exist")
 		return

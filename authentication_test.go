@@ -27,7 +27,7 @@ func TestAuthenticationFromContext(t *testing.T) {
 func TestSimpleAuthenticate(t *testing.T) {
 	ctx := context.Background()
 	srv := NewService("Test Srv", Config(
-		Configuration{Oauth2WellKnownJwk: sampleWellKnownJwk}))
+		OAUTH2Configuration{Oauth2WellKnownJwk: sampleWellKnownJwk}))
 	ctx = ToContext(ctx, srv)
 
 	ctx2, err := authenticate(ctx, sampleAccessKey, "", "")
@@ -45,7 +45,7 @@ func TestSimpleAuthenticate(t *testing.T) {
 func TestSimpleAuthenticateWithAudience(t *testing.T) {
 	ctx := context.Background()
 	srv := NewService("Test Srv", Config(
-		Configuration{Oauth2WellKnownJwk: sampleWellKnownJwk}))
+		OAUTH2Configuration{Oauth2WellKnownJwk: sampleWellKnownJwk}))
 	ctx = ToContext(ctx, srv)
 
 	ctx2, err := authenticate(ctx, sampleAccessKey, "c2f4j7au6s7f91uqnokg", "")
@@ -64,7 +64,7 @@ func TestSimpleAuthenticateWithAudience(t *testing.T) {
 func TestSimpleAuthenticateWithIssuer(t *testing.T) {
 	ctx := context.Background()
 	srv := NewService("Test Srv", Config(
-		Configuration{Oauth2WellKnownJwk: sampleWellKnownJwk}))
+		OAUTH2Configuration{Oauth2WellKnownJwk: sampleWellKnownJwk}))
 	ctx = ToContext(ctx, srv)
 
 	ctx2, err := authenticate(ctx, sampleAccessKey, "", "http://127.0.0.1:4444/")

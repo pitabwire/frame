@@ -13,5 +13,5 @@ repos:
       name: Locally build
       description: A local make file to always build and test locally
       entry: make build
-      language: system
-      types: [non-executable, file, text]
+      files: '\.go$'
+      language: 'system'

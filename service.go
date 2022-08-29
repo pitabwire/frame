@@ -3,7 +3,6 @@ package frame
 import (
 	"context"
 	"github.com/improbable-eng/grpc-web/go/grpcweb"
-	"github.com/kelseyhightower/envconfig"
 	"github.com/nicksnyder/go-i18n/v2/i18n"
 	"github.com/pitabwire/frame/internal"
 	"github.com/sirupsen/logrus"
@@ -162,15 +161,6 @@ func (s *Service) Run(ctx context.Context, address string) error {
 
 	if s.corsPolicy == "" {
 		s.corsPolicy = "*"
-	}
-
-	if s.configuration == nil {
-		s.configuration = &Configuration{}
-	}
-
-	err = envconfig.Process("", s.configuration)
-	if err != nil {
-		return err
 	}
 
 	return s.initServer(ctx, address)

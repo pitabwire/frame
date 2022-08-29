@@ -20,7 +20,6 @@ func TestService_RegisterPublisherNotSet(t *testing.T) {
 	if err == nil {
 		t.Errorf("We shouldn't be able to publish when no topic was registered")
 	}
-
 }
 
 func TestService_RegisterPublisherNotInitialized(t *testing.T) {

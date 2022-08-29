@@ -14,4 +14,4 @@ repos:
       description: A local make file to always build and test locally
       entry: make build
       language: system
-      types: [bash]
+      types: [non-executable, file, text]

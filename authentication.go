@@ -109,9 +109,8 @@ func ClaimsFromMap(m map[string]string) *AuthenticationClaims {
 	return nil
 }
 
-func authenticate(ctx context.Context, jwtToken string, audience string, issuer string) (context.Context, error) {
+func (s *Service) authenticate(ctx context.Context, jwtToken string, audience string, issuer string) (context.Context, error) {
 	claims := &AuthenticationClaims{}
-	s := FromContext(ctx)
 
 	token, err := jwt.ParseWithClaims(jwtToken, claims, s.getPemCert)
 	if err != nil {
@@ -220,7 +219,7 @@ func (s *Service) getPemCert(token *jwt.Token) (interface{}, error) {
 
 // AuthenticationMiddleware Simple http middleware function
 // to verify and extract authentication data supplied in a jwt as authorization bearer token
-func AuthenticationMiddleware(next http.Handler, audience string, issuer string) http.Handler {
+func (s *Service) AuthenticationMiddleware(next http.Handler, audience string, issuer string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		authorizationHeader := r.Header.Get("Authorization")
 
@@ -239,7 +238,7 @@ func AuthenticationMiddleware(next http.Handler, audience string, issuer string)
 		jwtToken := strings.TrimSpace(extractedJwtToken[1])
 
 		ctx := r.Context()
-		ctx, err := authenticate(ctx, jwtToken, audience, issuer)
+		ctx, err := s.authenticate(ctx, jwtToken, audience, issuer)
 
 		if err != nil {
 			log.Printf(" AuthenticationMiddleware -- could not authenticate token : [%s]  due to error : %+v", jwtToken, err)
@@ -280,17 +279,15 @@ func grpcJwtTokenExtractor(ctx context.Context) (string, error) {
 }
 
 // UnaryAuthInterceptor Simple grpc interceptor to extract the jwt supplied via authorization bearer token and verify the authentication claims in the token
-func UnaryAuthInterceptor(audience string, issuer string) grpc.UnaryServerInterceptor {
-
+func (s *Service) UnaryAuthInterceptor(audience string, issuer string) grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req interface{},
 		info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
-
 		jwtToken, err := grpcJwtTokenExtractor(ctx)
 		if err != nil {
 			return nil, err
 		}
 
-		ctx, err = authenticate(ctx, jwtToken, audience, issuer)
+		ctx, err = s.authenticate(ctx, jwtToken, audience, issuer)
 		if err != nil {
 			log.Printf(" UnaryAuthInterceptor -- could not authenticate token : [%s]  due to error : %+v", jwtToken, err)
 			return nil, status.Error(codes.Unauthenticated, err.Error())
@@ -312,19 +309,19 @@ func (s *serverStreamWrapper) Context() context.Context {
 }
 
 // StreamAuthInterceptor An authentication claims extractor that will always verify the information flowing in the streams as true jwt claims
-func StreamAuthInterceptor(audience string, issuer string) grpc.StreamServerInterceptor {
+func (s *Service) StreamAuthInterceptor(audience string, issuer string) grpc.StreamServerInterceptor {
 	return func(srv interface{}, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
-
 		localServerStream := ss
 		authClaim := ClaimsFromContext(localServerStream.Context())
 		if authClaim == nil {
 			ctx := ss.Context()
+
 			jwtToken, err := grpcJwtTokenExtractor(ctx)
 			if err != nil {
 				return err
 			}
 
-			ctx, err = authenticate(ctx, jwtToken, audience, issuer)
+			ctx, err = s.authenticate(ctx, jwtToken, audience, issuer)
 			if err != nil {
 				log.Printf(" StreamAuthInterceptor -- could not authenticate token : [%s]  due to error : %+v", jwtToken, err)
 				return status.Error(codes.Unauthenticated, err.Error())

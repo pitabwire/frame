@@ -30,7 +30,7 @@ func TestSimpleAuthenticate(t *testing.T) {
 		OAUTH2Configuration{Oauth2WellKnownJwk: sampleWellKnownJwk}))
 	ctx = ToContext(ctx, srv)
 
-	ctx2, err := authenticate(ctx, sampleAccessKey, "", "")
+	ctx2, err := srv.authenticate(ctx, sampleAccessKey, "", "")
 	if err != nil {
 		t.Errorf("There was an error authenticating access key, %+v", err)
 		return
@@ -48,7 +48,7 @@ func TestSimpleAuthenticateWithAudience(t *testing.T) {
 		OAUTH2Configuration{Oauth2WellKnownJwk: sampleWellKnownJwk}))
 	ctx = ToContext(ctx, srv)
 
-	ctx2, err := authenticate(ctx, sampleAccessKey, "c2f4j7au6s7f91uqnokg", "")
+	ctx2, err := srv.authenticate(ctx, sampleAccessKey, "c2f4j7au6s7f91uqnokg", "")
 	if err != nil {
 		t.Errorf("There was an error authenticating access key due to audience, %+v", err)
 		return
@@ -67,7 +67,7 @@ func TestSimpleAuthenticateWithIssuer(t *testing.T) {
 		OAUTH2Configuration{Oauth2WellKnownJwk: sampleWellKnownJwk}))
 	ctx = ToContext(ctx, srv)
 
-	ctx2, err := authenticate(ctx, sampleAccessKey, "", "http://127.0.0.1:4444/")
+	ctx2, err := srv.authenticate(ctx, sampleAccessKey, "", "http://127.0.0.1:4444/")
 	if err != nil {
 		t.Errorf("There was an error authenticating access key due to issuer, %+v", err)
 		return

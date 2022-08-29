@@ -75,7 +75,7 @@ func TestServiceGrpcServer(t *testing.T) {
 	go func() {
 		err := srv.Run(ctx, "")
 		if err != nil {
-			srv.L().Error(" failed to run server : %v", err)
+			srv.L().WithError(err).Error(" failed to run server ")
 		}
 	}()
 

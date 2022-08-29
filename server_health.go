@@ -49,7 +49,10 @@ func writeUnhealthy(w http.ResponseWriter) {
 
 	writeHeaders(statusLen, w)
 	w.WriteHeader(http.StatusInternalServerError)
-	io.WriteString(w, status)
+	_, err := io.WriteString(w, status)
+	if err != nil {
+		return
+	}
 }
 
 // HandleLive is an http.HandlerFunc that handles liveness checks by

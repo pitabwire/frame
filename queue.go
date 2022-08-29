@@ -28,14 +28,6 @@ func (q queue) getPublisherByReference(reference string) (*publisher, error) {
 	return p, nil
 }
 
-func (q queue) getSubscriberByReference(reference string) (*subscriber, error) {
-	s := q.subscriptionQueueMap[reference]
-	if s == nil {
-		return nil, fmt.Errorf("getSubscriberByReference -- you need to register a queue : [%v] first before publishing ", reference)
-	}
-	return s, nil
-}
-
 func newQueue() (*queue, error) {
 
 	q := &queue{
@@ -44,7 +36,6 @@ func newQueue() (*queue, error) {
 	}
 
 	return q, nil
-
 }
 
 type publisher struct {
@@ -162,9 +153,7 @@ func (s *Service) initPublisher(ctx context.Context, publisher *publisher) error
 	publisher.isInit = true
 	return nil
 }
-func (s *Service) initPubsub(ctx context.Context) error {
-
-	// Whenever the registry is not empty the events queue is automatically initiated
+func (s *Service) initPubsub(ctx context.Context) error { // Whenever the registry is not empty the events queue is automatically initiated
 	if s.eventRegistry != nil && len(s.eventRegistry) > 0 {
 		eventsQueueHandler := eventQueueHandler{
 			service: s,
@@ -204,7 +193,6 @@ func (s *Service) initPubsub(ctx context.Context) error {
 			subscriber.subscription = subs
 		}
 		subscriber.isInit = true
-
 	}
 
 	if len(s.queue.subscriptionQueueMap) > 0 {

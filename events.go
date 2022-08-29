@@ -83,7 +83,7 @@ func (eq *eventQueueHandler) Handle(ctx context.Context, payload []byte) error {
 
 	eventHandler, ok := eq.service.eventRegistry[evtPyl.Name]
 	if !ok {
-		eq.service.L().Error("Could not get event %s from registry", evtPyl.Name)
+		eq.service.L().WithField("event", evtPyl.Name).Error("Could not get event from registry")
 	}
 
 	payLType := eventHandler.PayloadType()

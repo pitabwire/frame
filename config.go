@@ -25,32 +25,6 @@ type DefaultConfiguration struct {
 	AuthorizationServiceWriteURI string `envconfig:"AUTHORIZATION_SERVICE_WRITE_URI"`
 }
 
-func (d DefaultConfiguration) GetOauthWellKnownJwk() string {
-	return d.Oauth2WellKnownJwk
-}
-
-func (d DefaultConfiguration) GetOauth2ServiceURI() string {
-	return d.Oauth2ServiceURI
-}
-
-func (d DefaultConfiguration) GetAuthorizationServiceReadURI() string {
-	return d.AuthorizationServiceReadURI
-}
-
-func (d DefaultConfiguration) GetAuthorizationServiceWriteURI() string {
-	return d.AuthorizationServiceWriteURI
-}
-
-type OAUTH2Configuration interface {
-	GetOauthWellKnownJwk() string
-	GetOauth2ServiceURI() string
-}
-
-type AuthorizationConfiguration interface {
-	GetAuthorizationServiceReadURI() string
-	GetAuthorizationServiceWriteURI() string
-}
-
 type DatabaseConfiguration struct {
 	DatabaseURL        string `required:"true" envconfig:"DATABASE_URL"`
 	ReplicaDatabaseURL string `envconfig:"REPLICA_DATABASE_URL"`

@@ -14,7 +14,7 @@ func AuthHasAccess(ctx context.Context, action string, subject string) (bool, er
 	authClaims := ClaimsFromContext(ctx)
 	service := FromContext(ctx)
 
-	config, ok := service.Config().(AuthorizationConfiguration)
+	config, ok := service.Config().(*DefaultConfiguration)
 	if !ok {
 		return false, errors.New("could not cast setting to authorization config")
 	}
@@ -31,7 +31,7 @@ func AuthHasAccess(ctx context.Context, action string, subject string) (bool, er
 	}
 
 	status, result, err := service.InvokeRestService(ctx, http.MethodPost,
-		config.GetAuthorizationServiceReadURI(), payload, nil)
+		config.AuthorizationServiceReadURI, payload, nil)
 	if err != nil {
 		return false, err
 	}

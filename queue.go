@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	cloudevents "github.com/cloudevents/sdk-go/v2"
 	"gocloud.dev/pubsub"
 	_ "gocloud.dev/pubsub/mempubsub"
 	"log"
@@ -12,8 +11,6 @@ import (
 )
 
 type queue struct {
-	ceClient cloudevents.Client
-
 	publishQueueMap      map[string]*publisher
 	subscriptionQueueMap map[string]*subscriber
 }
@@ -21,7 +18,7 @@ type queue struct {
 func (q queue) getPublisherByReference(reference string) (*publisher, error) {
 	p := q.publishQueueMap[reference]
 	if p == nil {
-		return nil, fmt.Errorf("getPublisherByReference -- you need to register a queue : [%v] first before publishing ", reference)
+		return nil, fmt.Errorf("reference does not exist")
 	}
 
 	if !p.isInit {
@@ -41,12 +38,7 @@ func (q queue) getSubscriberByReference(reference string) (*subscriber, error) {
 
 func newQueue() (*queue, error) {
 
-	cl, err := cloudevents.NewClientHTTP()
-	if err != nil {
-		return nil, err
-	}
 	q := &queue{
-		ceClient:             cl,
 		publishQueueMap:      make(map[string]*publisher),
 		subscriptionQueueMap: make(map[string]*subscriber),
 	}
@@ -62,11 +54,6 @@ type publisher struct {
 	isInit    bool
 }
 
-func (p publisher) isCloudEvent() bool {
-	return strings.HasPrefix(strings.ToLower(p.url), "http")
-
-}
-
 type SubscribeWorker interface {
 	Handle(ctx context.Context, message []byte) error
 }
@@ -80,12 +67,11 @@ type subscriber struct {
 }
 
 // RegisterPublisher Option to register publishing path referenced within the system
-func RegisterPublisher(reference string, queueUrl string) Option {
+func RegisterPublisher(reference string, queueURL string) Option {
 	return func(s *Service) {
-
 		s.queue.publishQueueMap[reference] = &publisher{
 			reference: reference,
-			url:       queueUrl,
+			url:       queueURL,
 			isInit:    false,
 		}
 	}
@@ -95,7 +81,6 @@ func RegisterPublisher(reference string, queueUrl string) Option {
 func RegisterSubscriber(reference string, queueUrl string, concurrency int,
 	handler SubscribeWorker) Option {
 	return func(s *Service) {
-
 		s.queue.subscriptionQueueMap[reference] = &subscriber{
 			url:         queueUrl,
 			concurrency: concurrency,
@@ -104,16 +89,12 @@ func RegisterSubscriber(reference string, queueUrl string, concurrency int,
 	}
 }
 
-// QueuePath Option that helps to specify or override the default /queue path to handle cloud events
-func QueuePath(path string) Option {
-	return func(s *Service) {
-		s.queuePath = path
-	}
+func (s *Service) SubscriptionIsInitiated(path string) bool {
+	return s.queue.subscriptionQueueMap[path].isInit
 }
 
 // Publish Queue method to write a new message into the queue pre initialized with the supplied reference
-func (s Service) Publish(ctx context.Context, reference string, payload interface{}) error {
-
+func (s *Service) Publish(ctx context.Context, reference string, payload interface{}) error {
 	var metadata map[string]string
 
 	authClaim := ClaimsFromContext(ctx)
@@ -123,28 +104,26 @@ func (s Service) Publish(ctx context.Context, reference string, payload interfac
 		metadata = make(map[string]string)
 	}
 
-	publisher, err := s.queue.getPublisherByReference(reference)
+	pub, err := s.queue.getPublisherByReference(reference)
 	if err != nil {
-		return err
-	}
 
-	if publisher.isCloudEvent() {
+		if err.Error() != "reference does not exist" {
+			return err
+		}
 
-		event := cloudevents.NewEvent()
-		event.SetSource(fmt.Sprintf("%s/%s", s.Name(), publisher.reference))
-		event.SetType(fmt.Sprintf("%s.%T", s.Name(), payload))
-		err := event.SetData(cloudevents.ApplicationJSON, payload)
+		pub = &publisher{
+			reference: reference,
+			url:       reference,
+			pubTopic:  nil,
+			isInit:    false,
+		}
+		err = s.initPublisher(ctx, pub)
 		if err != nil {
 			return err
 		}
-		ctx := cloudevents.ContextWithTarget(ctx, publisher.url)
 
-		result := s.queue.ceClient.Send(ctx, event)
-		if cloudevents.IsUndelivered(result) {
-			return result
-		}
+		s.queue.publishQueueMap[reference] = pub
 
-		return nil
 	}
 
 	var message []byte
@@ -159,41 +138,57 @@ func (s Service) Publish(ctx context.Context, reference string, payload interfac
 		message = msg
 	}
 
-	return publisher.pubTopic.Send(ctx, &pubsub.Message{
+	return pub.pubTopic.Send(ctx, &pubsub.Message{
 		Body:     message,
 		Metadata: metadata,
 	})
 
 }
 
-func (s Service) initPubsub(ctx context.Context) error {
+func (s *Service) initPublisher(ctx context.Context, publisher *publisher) error {
+	topic, err := pubsub.OpenTopic(ctx, publisher.url)
+	if err != nil {
+		return err
+	}
+
+	s.AddCleanupMethod(func() {
+		err := topic.Shutdown(ctx)
+		if err != nil {
+			log.Printf("initPubsub -- publish topic %s could not be closed : %v", publisher.reference, err)
+		}
+	})
+
+	publisher.pubTopic = topic
+	publisher.isInit = true
+	return nil
+}
+func (s *Service) initPubsub(ctx context.Context) error {
+
+	// Whenever the registry is not empty the events queue is automatically initiated
+	if s.eventRegistry != nil && len(s.eventRegistry) > 0 {
+		eventsQueueHandler := eventQueueHandler{
+			service: s,
+		}
+		eventsQueueURL := GetEnv(envEventsQueueUrl, fmt.Sprintf("mem://%s", eventsQueueName))
+		eventsQueue := RegisterSubscriber(eventsQueueName, eventsQueueURL, 10, &eventsQueueHandler)
+		eventsQueue(s)
+		eventsQueueP := RegisterPublisher(eventsQueueName, eventsQueueURL)
+		eventsQueueP(s)
+	}
 
 	if s.queue == nil {
 		return nil
 	}
 
-	for ref, publisher := range s.queue.publishQueueMap {
-
-		topic, err := pubsub.OpenTopic(ctx, publisher.url)
+	for _, pub := range s.queue.publishQueueMap {
+		err := s.initPublisher(ctx, pub)
 		if err != nil {
 			return err
 		}
-
-		s.AddCleanupMethod(func() {
-			err := topic.Shutdown(ctx)
-			if err != nil {
-				log.Printf("initPubsub -- publish topic %s could not be closed : %v", ref, err)
-			}
-		})
-
-		publisher.pubTopic = topic
-		publisher.isInit = true
 	}
 
 	for ref, subscriber := range s.queue.subscriptionQueueMap {
-
 		if !strings.HasPrefix(subscriber.url, "http") {
-
 			subs, err := pubsub.OpenSubscription(ctx, subscriber.url)
 			if err != nil {
 				return fmt.Errorf("could not open topic subscription: %+v", err)
@@ -220,17 +215,14 @@ func (s Service) initPubsub(ctx context.Context) error {
 
 }
 
-func (s Service) subscribe(ctx context.Context) {
+func (s *Service) subscribe(ctx context.Context) {
 
-	for _, subsc := range s.queue.subscriptionQueueMap {
-
-		// cloud event subscriptions are not held as long running processes
+	for _, subsc := range s.queue.subscriptionQueueMap { // cloud event subscriptions are not held as long running processes
 		if strings.HasPrefix(subsc.url, "http") {
 			continue
 		}
 
 		go func(localSub *subscriber) {
-
 			sem := make(chan struct{}, localSub.concurrency)
 		recvLoop:
 			for {
@@ -260,7 +252,7 @@ func (s Service) subscribe(ctx context.Context) {
 						ctx = authClaim.ClaimsToContext(ctx)
 					}
 
-					ctx = ToContext(ctx, &s)
+					ctx = ToContext(ctx, s)
 
 					err := localSub.handler.Handle(ctx, msg.Body)
 					if err != nil {
@@ -271,7 +263,6 @@ func (s Service) subscribe(ctx context.Context) {
 					}
 
 					msg.Ack()
-
 				}()
 			}
 
@@ -284,30 +275,5 @@ func (s Service) subscribe(ctx context.Context) {
 			localSub.isInit = false
 
 		}(subsc)
-
 	}
-
-}
-
-func receiveCloudEvents(ctx context.Context, event cloudevents.Event) cloudevents.Result {
-
-	sourceUrl := cloudevents.TargetFromContext(ctx)
-	sourcePathList := strings.Split(sourceUrl.Path, "/")
-
-	subscriptionReference := sourcePathList[len(sourcePathList)-1]
-
-	service := FromContext(ctx)
-	sub, err := service.queue.getSubscriberByReference(subscriptionReference)
-	if err != nil {
-		return cloudevents.NewHTTPResult(404, "failed to match subscription due to : %s", err)
-	}
-
-	err = sub.handler.Handle(ctx, event.Data())
-	if err != nil {
-		log.Printf(" receiveCloudEvents -- Unable to process message to %v because : %v", sourceUrl, err)
-		return cloudevents.NewHTTPResult(400, "failed to handle inbound request due to : %s", err)
-	}
-
-	return nil
-
 }

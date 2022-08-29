@@ -12,7 +12,6 @@ const envOauth2ServiceAdminUri = "OAUTH2_SERVICE_ADMIN_URI"
 const envOauth2Audience = "OAUTH2_SERVICE_AUDIENCE"
 
 func (s *Service) registerForJwt(ctx context.Context) error {
-
 	host := GetEnv(envOauth2ServiceAdminUri, "")
 	if host == "" {
 		return nil

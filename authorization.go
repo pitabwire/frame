@@ -8,25 +8,23 @@ import (
 	"net/http"
 )
 
-const envAuthorizationServiceUri = "AUTHORIZATION_SERVICE_URI"
-
 // AuthHasAccess binary check to confirm if subject can perform action specified
 func AuthHasAccess(ctx context.Context, action string, subject string) (error, bool) {
 
-	authorizationUrl := fmt.Sprintf("%s%s", GetEnv(envAuthorizationServiceUri, ""), "/check")
-
 	authClaims := ClaimsFromContext(ctx)
 	service := FromContext(ctx)
+
+	authorizationUrl := service.Config().(Configuration).AuthorizationServiceReadURI
 
 	if authClaims == nil {
 		return errors.New("only authenticated requsts should be used to check authorization"), false
 	}
 
 	payload := map[string]interface{}{
-		"namespace": authClaims.TenantID,
-		"object":    authClaims.PartitionID,
-		"relation":  action,
-		"subject":   subject,
+		"namespace":  authClaims.TenantID,
+		"object":     authClaims.PartitionID,
+		"relation":   action,
+		"subject_id": subject,
 	}
 
 	status, result, err := service.InvokeRestService(ctx, http.MethodPost, authorizationUrl, payload, nil)

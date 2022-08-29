@@ -1,7 +1,8 @@
-package frame
+package frame_test
 
 import (
 	"context"
+	"github.com/pitabwire/frame"
 	"testing"
 )
 
@@ -9,11 +10,11 @@ const testDatastoreConnection = "postgres://frame:secret@localhost:5423/framedat
 
 func TestService_Datastore(t *testing.T) {
 	ctx := context.Background()
-	mainDb := Datastore(ctx, testDatastoreConnection, false)
+	mainDb := frame.Datastore(ctx, testDatastoreConnection, false)
 
-	srv := NewService("Test Srv", mainDb)
+	srv := frame.NewService("Test Srv", mainDb)
 
-	if srv.name != "Test Srv" {
+	if srv.Name() != "Test Srv" {
 		t.Errorf("s")
 	}
 
@@ -40,10 +41,10 @@ func TestService_Datastore(t *testing.T) {
 
 func TestService_DatastoreRead(t *testing.T) {
 	ctx := context.Background()
-	mainDb := Datastore(ctx, testDatastoreConnection, false)
-	readDb := Datastore(ctx, testDatastoreConnection, true)
+	mainDb := frame.Datastore(ctx, testDatastoreConnection, false)
+	readDb := frame.Datastore(ctx, testDatastoreConnection, true)
 
-	srv := NewService("Test Srv", mainDb, readDb)
+	srv := frame.NewService("Test Srv", mainDb, readDb)
 
 	w := srv.DB(ctx, false)
 	r := srv.DB(ctx, true)
@@ -63,7 +64,7 @@ func TestService_DatastoreRead(t *testing.T) {
 func TestService_DatastoreNotSet(t *testing.T) {
 	ctx := context.Background()
 
-	srv := NewService("Test Srv")
+	srv := frame.NewService("Test Srv")
 
 	w := srv.DB(ctx, false)
 	if w != nil {

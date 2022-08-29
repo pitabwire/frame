@@ -1,26 +1,27 @@
-package frame
+package frame_test
 
 import (
 	"context"
+	"github.com/pitabwire/frame"
 	"testing"
 )
 
 func TestDefaultService(t *testing.T) {
 
-	srv := NewService("Test Srv")
+	srv := frame.NewService("Test Srv")
 	if srv == nil {
 		t.Errorf("No default service could be instaniated")
 		return
 	}
 
-	if srv.name != "Test Srv" {
+	if srv.Name() != "Test Srv" {
 		t.Errorf("s")
 	}
 }
 
 func TestService(t *testing.T) {
 
-	srv := NewService("Test")
+	srv := frame.NewService("Test")
 	if srv == nil {
 		t.Errorf("No default service could be instaniated")
 	}
@@ -30,16 +31,16 @@ func TestFromContext(t *testing.T) {
 
 	ctx := context.Background()
 
-	srv := NewService("Test Srv")
+	srv := frame.NewService("Test Srv")
 
-	nullSrv := FromContext(ctx)
+	nullSrv := frame.FromContext(ctx)
 	if nullSrv != nil {
 		t.Errorf("Service was found in context yet it was not set")
 	}
 
-	ctx = ToContext(ctx, srv)
+	ctx = frame.ToContext(ctx, srv)
 
-	valueSrv := FromContext(ctx)
+	valueSrv := frame.FromContext(ctx)
 	if valueSrv == nil {
 		t.Errorf("No default service was found in context")
 	}
@@ -48,7 +49,7 @@ func TestFromContext(t *testing.T) {
 
 func TestService_AddCleanupMethod(t *testing.T) {
 
-	srv := NewService("Test Srv")
+	srv := frame.NewService("Test Srv")
 
 	a := 30
 
@@ -80,17 +81,17 @@ func (h *testHC) CheckHealth() error {
 
 func TestService_AddHealthCheck(t *testing.T) {
 
-	srv := NewService("Test Srv")
+	srv := frame.NewService("Test Srv")
 
 	healthChecker := new(testHC)
 
-	if srv.healthCheckers != nil {
+	if srv.HealthCheckers() != nil {
 		t.Errorf("Health checkers are not supposed to be added by default")
 	}
 
 	srv.AddHealthCheck(healthChecker)
 
-	if len(srv.healthCheckers) == 0 {
+	if len(srv.HealthCheckers()) == 0 {
 		t.Errorf("Health checkers are not being added to list")
 	}
 }

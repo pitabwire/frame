@@ -1,14 +1,15 @@
-package frame
+package frame_test
 
 import (
 	"github.com/nicksnyder/go-i18n/v2/i18n"
+	"github.com/pitabwire/frame"
 	"testing"
 )
 
 func TestTranslations(t *testing.T) {
 
-	translations := Translations("tests_runner/localization", "en", "sw")
-	srv := NewService("Test Localization Srv", translations)
+	translations := frame.Translations("tests_runner/localization", "en", "sw")
+	srv := frame.NewService("Test Localization Srv", translations)
 
 	bundle := srv.Bundle()
 
@@ -56,8 +57,8 @@ func TestTranslations(t *testing.T) {
 
 func TestTranslationsHelpers(t *testing.T) {
 
-	translations := Translations("tests_runner/localization", "en", "sw")
-	srv := NewService("Test Localization Srv", translations)
+	translations := frame.Translations("tests_runner/localization", "en", "sw")
+	srv := frame.NewService("Test Localization Srv", translations)
 
 	englishVersion := srv.Translate("en", "Example")
 	if englishVersion != "<no value> has nothing" {

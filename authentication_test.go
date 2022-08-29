@@ -2,7 +2,6 @@ package frame
 
 import (
 	"context"
-	"os"
 	"testing"
 )
 
@@ -18,23 +17,18 @@ func TestAuthenticationFromContext(t *testing.T) {
 	}
 
 	claims = &AuthenticationClaims{}
-	_ = context.WithValue(ctx, ctxKeyAuthentication, claims)
+	ctx = claims.ClaimsToContext(ctx)
 
-	if claims == nil {
+	if ClaimsFromContext(ctx) == nil {
 		t.Errorf("A context with claims should produce one")
 	}
 }
 
 func TestSimpleAuthenticate(t *testing.T) {
-
 	ctx := context.Background()
-
-	err := os.Setenv(envOauth2WellKnownJwk, sampleWellKnownJwk)
-
-	if err != nil {
-		t.Errorf("well known JWK uri was not setable %+v", err)
-		return
-	}
+	srv := NewService("Test Srv", Config(
+		Configuration{Oauth2WellKnownJwk: sampleWellKnownJwk}))
+	ctx = ToContext(ctx, srv)
 
 	ctx2, err := authenticate(ctx, sampleAccessKey, "", "")
 	if err != nil {
@@ -50,13 +44,9 @@ func TestSimpleAuthenticate(t *testing.T) {
 
 func TestSimpleAuthenticateWithAudience(t *testing.T) {
 	ctx := context.Background()
-
-	err := os.Setenv(envOauth2WellKnownJwk, sampleWellKnownJwk)
-
-	if err != nil {
-		t.Errorf("well known JWK uri was not setable %+v", err)
-		return
-	}
+	srv := NewService("Test Srv", Config(
+		Configuration{Oauth2WellKnownJwk: sampleWellKnownJwk}))
+	ctx = ToContext(ctx, srv)
 
 	ctx2, err := authenticate(ctx, sampleAccessKey, "c2f4j7au6s7f91uqnokg", "")
 	if err != nil {
@@ -73,13 +63,9 @@ func TestSimpleAuthenticateWithAudience(t *testing.T) {
 
 func TestSimpleAuthenticateWithIssuer(t *testing.T) {
 	ctx := context.Background()
-
-	err := os.Setenv(envOauth2WellKnownJwk, sampleWellKnownJwk)
-
-	if err != nil {
-		t.Errorf("well known JWK uri was not setable %+v", err)
-		return
-	}
+	srv := NewService("Test Srv", Config(
+		Configuration{Oauth2WellKnownJwk: sampleWellKnownJwk}))
+	ctx = ToContext(ctx, srv)
 
 	ctx2, err := authenticate(ctx, sampleAccessKey, "", "http://127.0.0.1:4444/")
 	if err != nil {

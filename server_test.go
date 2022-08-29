@@ -58,7 +58,6 @@ func TestRawGrpcServer(t *testing.T) {
 }
 
 func TestServiceGrpcServer(t *testing.T) {
-
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -74,14 +73,16 @@ func TestServiceGrpcServer(t *testing.T) {
 	defer srv.Stop()
 
 	go func() {
-		_ = srv.Run(ctx, "")
+		err := srv.Run(ctx, "")
+		if err != nil {
+			srv.L().Error(" failed to run server : %v", err)
+		}
 	}()
 
 	err := clientInvokeGrpc(listener)
 	if err != nil {
 		t.Fatalf("failed to dial: %+v", err)
 	}
-
 }
 
 func clientInvokeGrpc(listener *bufconn.Listener) error {
@@ -110,7 +111,6 @@ func clientInvokeGrpc(listener *bufconn.Listener) error {
 		return errors.New("The response message should contain the word frame ")
 	}
 	return conn.Close()
-
 }
 
 func TestService_Run(t *testing.T) {
@@ -128,7 +128,7 @@ func TestService_Run(t *testing.T) {
 	time.Sleep(500 * time.Millisecond)
 	srv.Stop()
 
-	srv = NewService("Testing", NoopHttpOptions())
+	srv = NewService("Testing", NoopDriver())
 
 	err := srv.Run(ctx, ":")
 	if err != nil {

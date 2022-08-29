@@ -90,13 +90,11 @@ func DBErrorIsRecordNotFound(err error) bool {
 }
 
 // DB obtains an already instantiated db connection with the option
-//to specify if you want write or read only db connection
+// to specify if you want write or read only db connection
 func (s *Service) DB(ctx context.Context, readOnly bool) *gorm.DB {
-
 	var db *gorm.DB
 
 	if readOnly {
-
 		replicaCount := len(s.dataStore.readDatabase)
 		if replicaCount > 0 {
 			randomIndex := 0

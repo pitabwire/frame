@@ -4,7 +4,6 @@ import (
 	"context"
 	"github.com/improbable-eng/grpc-web/go/grpcweb"
 	"github.com/soheilhy/cmux"
-	"gocloud.dev/server"
 	"google.golang.org/grpc"
 	"log"
 	"net"
@@ -22,6 +21,28 @@ func (t *noopDriver) Shutdown(ctx context.Context) error {
 	return nil
 }
 
+type defaultDriver struct {
+	httpServer *http.Server
+}
+
+// ListenAndServe sets the address and handler on DefaultDriver's http.Server,
+// then calls ListenAndServe on it.
+func (dd *defaultDriver) ListenAndServe(addr string, h http.Handler) error {
+	dd.httpServer.Addr = addr
+	dd.httpServer.Handler = h
+	return dd.httpServer.ListenAndServe()
+}
+
+func (dd *defaultDriver) ListenAndServeTLS(addr, certFile, keyFile string, h http.Handler) error {
+	dd.httpServer.Addr = addr
+	dd.httpServer.Handler = h
+	return dd.httpServer.ListenAndServeTLS(certFile, keyFile)
+}
+
+func (dd *defaultDriver) Shutdown(ctx context.Context) error {
+	return dd.httpServer.Shutdown(ctx)
+}
+
 type grpcDriver struct {
 	corsPolicy        string
 	httpServer        *http.Server
@@ -37,7 +58,6 @@ func (gd *grpcDriver) ListenAndServe(addr string, h http.Handler) error {
 	gd.httpServer.Addr = addr
 
 	gd.httpServer.Handler = http.HandlerFunc(func(resp http.ResponseWriter, req *http.Request) {
-
 		resp.Header().Set("Access-Control-Allow-Origin", gd.corsPolicy)
 
 		if gd.wrappedGrpcServer.IsGrpcWebRequest(req) ||
@@ -136,7 +156,6 @@ func (gd *grpcDriver) ListenAndServeTLS(addr, certFile, keyFile string, h http.H
 }
 
 func (gd *grpcDriver) Shutdown(ctx context.Context) error {
-
 	if gd.grpcServer != nil {
 		gd.grpcServer.Stop()
 	}
@@ -148,7 +167,7 @@ func (gd *grpcDriver) Shutdown(ctx context.Context) error {
 }
 
 // GrpcServer Option to specify an instantiated grpc server
-//with an implementation that can be utilized to handle incoming requests.
+// with an implementation that can be utilized to handle incoming requests.
 func GrpcServer(grpcServer *grpc.Server) Option {
 	return func(c *Service) {
 		c.grpcServer = grpcServer
@@ -176,21 +195,10 @@ func HttpHandler(h http.Handler) Option {
 	}
 }
 
-// HttpOptions Option to customize the default http server further to utilize enhanced features
-func HttpOptions(httpOpts *server.Options) Option {
-	return func(c *Service) {
-		c.serverOptions = httpOpts
-	}
-}
-
-// NoopHttpOptions Option to force the underlying http driver to not listen on a port.
+// NoopDriver Option to force the underlying http driver to not listen on a port.
 // This is mostly useful when writing tests especially against the frame service
-func NoopHttpOptions() Option {
+func NoopDriver() Option {
 	return func(c *Service) {
-		nopOptions := &server.Options{
-			Driver: &noopDriver{},
-		}
-
-		c.serverOptions = nopOptions
+		c.driver = &noopDriver{}
 	}
 }

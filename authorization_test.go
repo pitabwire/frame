@@ -1,33 +1,32 @@
-package frame
+package frame_test
 
 import (
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/pitabwire/frame"
 	"net/http"
-	"os"
 	"testing"
 )
 
 func authorizationControlListWrite(ctx context.Context, action string, subject string) error {
-
-	authorizationUrl := fmt.Sprintf("%s%s", GetEnv("KETO_SERVICE_ADMIN_URI", ""), "/relation-tuples")
-	authClaims := ClaimsFromContext(ctx)
-	service := FromContext(ctx)
+	authClaims := frame.ClaimsFromContext(ctx)
+	service := frame.FromContext(ctx)
+	config := service.Config().(frame.Configuration)
 
 	if authClaims == nil {
 		return errors.New("only authenticated requsts should be used to check authorization")
 	}
 
 	payload := map[string]interface{}{
-		"namespace": authClaims.TenantID,
-		"object":    authClaims.PartitionID,
-		"relation":  action,
-		"subject":   subject,
+		"namespace":  authClaims.TenantID,
+		"object":     authClaims.PartitionID,
+		"relation":   action,
+		"subject_id": subject,
 	}
 
-	status, result, err := service.InvokeRestService(ctx, http.MethodPut, authorizationUrl, payload, nil)
+	status, result, err := service.InvokeRestService(ctx, http.MethodPut, config.AuthorizationServiceWriteURI, payload, nil)
 
 	if err != nil {
 		return err
@@ -48,17 +47,13 @@ func authorizationControlListWrite(ctx context.Context, action string, subject s
 
 func TestAuthorizationControlListWrite(t *testing.T) {
 
-	err := os.Setenv("KETO_SERVICE_ADMIN_URI", "http://localhost:4467")
-	if err != nil {
-		t.Errorf("Authorization write url was not setable %+v", err)
-		return
-	}
-
 	ctx := context.Background()
-	srv := NewService("Test Srv")
-	ctx = ToContext(ctx, srv)
+	srv := frame.NewService("Test Srv", frame.Config(frame.Configuration{
+		AuthorizationServiceWriteURI: "http://localhost:4467/relation-tuples",
+	}))
+	ctx = frame.ToContext(ctx, srv)
 
-	authClaim := AuthenticationClaims{
+	authClaim := frame.AuthenticationClaims{
 		TenantID:    "default",
 		PartitionID: "partition",
 		ProfileID:   "profile",
@@ -66,7 +61,7 @@ func TestAuthorizationControlListWrite(t *testing.T) {
 	}
 	ctx = authClaim.ClaimsToContext(ctx)
 
-	err = authorizationControlListWrite(ctx, "read", "tested")
+	err := authorizationControlListWrite(ctx, "read", "tested")
 	if err != nil {
 		t.Errorf("Authorization write was not possible see %+v", err)
 		return
@@ -75,18 +70,15 @@ func TestAuthorizationControlListWrite(t *testing.T) {
 }
 
 func TestAuthHasAccess(t *testing.T) {
-
-	err := os.Setenv(envAuthorizationServiceUri, "http://localhost:4466")
-	if err != nil {
-		t.Errorf("Authorization read url was not setable %+v", err)
-		return
-	}
-
 	ctx := context.Background()
-	srv := NewService("Test Srv")
-	ctx = ToContext(ctx, srv)
+	srv := frame.NewService("Test Srv", frame.Config(
+		frame.Configuration{
+			AuthorizationServiceReadURI:  "http://localhost:4466/check",
+			AuthorizationServiceWriteURI: "http://localhost:4467/relation-tuples",
+		}))
+	ctx = frame.ToContext(ctx, srv)
 
-	authClaim := AuthenticationClaims{
+	authClaim := frame.AuthenticationClaims{
 		TenantID:    "default",
 		PartitionID: "partition",
 		ProfileID:   "profile",
@@ -94,13 +86,13 @@ func TestAuthHasAccess(t *testing.T) {
 	}
 	ctx = authClaim.ClaimsToContext(ctx)
 
-	err = authorizationControlListWrite(ctx, "read", "reader")
+	err := authorizationControlListWrite(ctx, "read", "reader")
 	if err != nil {
 		t.Errorf("Authorization write was not possible see %+v", err)
 		return
 	}
 
-	err, access := AuthHasAccess(ctx, "read", "reader")
+	err, access := frame.AuthHasAccess(ctx, "read", "reader")
 	if err != nil {
 		t.Errorf("Authorization check was not possible see %+v", err)
 	} else if !access {
@@ -108,7 +100,7 @@ func TestAuthHasAccess(t *testing.T) {
 		return
 	}
 
-	err, access = AuthHasAccess(ctx, "read", "read-master")
+	err, access = frame.AuthHasAccess(ctx, "read", "read-master")
 	if err == nil || access {
 		t.Errorf("Authorization check was not forbidden yet shouldn't exist")
 		return

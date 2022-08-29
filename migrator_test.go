@@ -7,6 +7,8 @@ import (
 	"testing"
 )
 
+const testDatastoreConnection = "postgres://frame:secret@localhost:5423/framedatabase?sslmode=disable"
+
 func TestSaveNewMigrations(t *testing.T) {
 
 	ctx := context.Background()

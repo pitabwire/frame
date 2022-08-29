@@ -1,7 +1,8 @@
-package frame
+package frame_test
 
 import (
 	"bytes"
+	"github.com/pitabwire/frame"
 	"net/http"
 	"os"
 	"strings"
@@ -10,7 +11,7 @@ import (
 
 func TestGetLocalIP(t *testing.T) {
 
-	localIp := GetLocalIP()
+	localIp := frame.GetLocalIP()
 
 	if localIp == "" {
 		t.Error("Could not get a local ip even localhost")
@@ -22,7 +23,7 @@ func TestGetLocalIP(t *testing.T) {
 
 func TestGetMacAddress(t *testing.T) {
 
-	macAddress := GetMacAddress()
+	macAddress := frame.GetMacAddress()
 
 	if macAddress == "" {
 		t.Error("Could not get a mac address for this machine")
@@ -31,7 +32,7 @@ func TestGetMacAddress(t *testing.T) {
 
 func TestGetEnv(t *testing.T) {
 
-	env := GetEnv("RANDOM_MISSING_TEST_VALUE", "fallback")
+	env := frame.GetEnv("RANDOM_MISSING_TEST_VALUE", "fallback")
 
 	if env != "fallback" {
 		t.Errorf("The environment variable value is expected to be blank but found %v", env)
@@ -42,7 +43,7 @@ func TestGetEnv(t *testing.T) {
 		t.Error(err)
 	}
 
-	env = GetEnv("RANDOM_EXISTING_TEST_VALUE", "")
+	env = frame.GetEnv("RANDOM_EXISTING_TEST_VALUE", "")
 
 	if env != "1" {
 		t.Errorf("The environment variable value is expected to be 1 but found %v", env)
@@ -54,20 +55,20 @@ func TestGetIp(t *testing.T) {
 
 	req, _ := http.NewRequest(http.MethodGet, "", bytes.NewReader([]byte("")))
 
-	ip := GetIp(req)
+	ip := frame.GetIp(req)
 
 	if ip != "" {
 		t.Errorf("Somehow we found the ip %v yet not expected", ip)
 	}
 
 	req.RemoteAddr = "testamentor:80"
-	ip = GetIp(req)
+	ip = frame.GetIp(req)
 	if ip != "testamentor" {
 		t.Errorf("Somehow we found the ip %v yet testamentor is expected", ip)
 	}
 
 	req.Header.Add("X-FORWARDED-FOR", "testamento")
-	ip = GetIp(req)
+	ip = frame.GetIp(req)
 	if ip != "testamento" {
 		t.Errorf("Somehow we found the ip %v yet testamento is expected", ip)
 	}

@@ -1,12 +1,10 @@
-package frame
+package frame_test
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
-	cloudevents "github.com/cloudevents/sdk-go/v2"
-	"google.golang.org/grpc/test/bufconn"
+	"github.com/pitabwire/frame"
 	"log"
 	"testing"
 	"time"
@@ -15,7 +13,7 @@ import (
 func TestService_RegisterPublisherNotSet(t *testing.T) {
 	ctx := context.Background()
 
-	srv := NewService("Test Srv")
+	srv := frame.NewService("Test Srv")
 
 	err := srv.Publish(ctx, "random", []byte(""))
 
@@ -27,8 +25,8 @@ func TestService_RegisterPublisherNotSet(t *testing.T) {
 
 func TestService_RegisterPublisherNotInitialized(t *testing.T) {
 	ctx := context.Background()
-	opt := RegisterPublisher("test", "mem://topicA")
-	srv := NewService("Test Srv", opt)
+	opt := frame.RegisterPublisher("test", "mem://topicA")
+	srv := frame.NewService("Test Srv", opt)
 
 	err := srv.Publish(ctx, "random", []byte(""))
 
@@ -41,10 +39,10 @@ func TestService_RegisterPublisherNotInitialized(t *testing.T) {
 func TestService_RegisterPublisher(t *testing.T) {
 	ctx := context.Background()
 
-	opt := RegisterPublisher("test", "mem://topicA")
-	srv := NewService("Test Srv", opt)
+	opt := frame.RegisterPublisher("test", "mem://topicA")
+	srv := frame.NewService("Test Srv", opt)
 
-	err := srv.initPubsub(ctx)
+	err := srv.Run(ctx, "")
 	if err != nil {
 		t.Errorf("We couldn't instantiate queue  %+v", err)
 		return
@@ -62,11 +60,11 @@ func TestService_RegisterPublisher(t *testing.T) {
 func TestService_RegisterPublisherMultiple(t *testing.T) {
 	ctx := context.Background()
 
-	opt := RegisterPublisher("test", "mem://topicA")
-	opt1 := RegisterPublisher("test-2", "mem://topicB")
-	srv := NewService("Test Srv", opt, opt1)
+	opt := frame.RegisterPublisher("test", "mem://topicA")
+	opt1 := frame.RegisterPublisher("test-2", "mem://topicB")
+	srv := frame.NewService("Test Srv", opt, opt1, frame.NoopDriver())
 
-	err := srv.initPubsub(ctx)
+	err := srv.Run(ctx, "")
 	if err != nil {
 		t.Errorf("We couldn't instantiate queue  %+v", err)
 		return
@@ -112,13 +110,13 @@ func TestService_RegisterSubscriber(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	optTopic := RegisterPublisher("test", "mem://topicA")
-	opt := RegisterSubscriber("test", "mem://topicA",
+	optTopic := frame.RegisterPublisher("test", "mem://topicA")
+	opt := frame.RegisterSubscriber("test", "mem://topicA",
 		5, &messageHandler{})
 
-	srv := NewService("Test Srv", optTopic, opt)
+	srv := frame.NewService("Test Srv", optTopic, opt, frame.NoopDriver())
 
-	err := srv.initPubsub(ctx)
+	err := srv.Run(ctx, "")
 	if err != nil {
 		t.Errorf("We couldn't instantiate queue  %+v", err)
 		return
@@ -143,12 +141,12 @@ func TestService_RegisterSubscriberWithError(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	optTopic := RegisterPublisher("test", "mem://topicA")
-	opt := RegisterSubscriber("test", "mem://topicA", 1, &handlerWithError{})
+	optTopic := frame.RegisterPublisher("test", "mem://topicA")
+	opt := frame.RegisterSubscriber("test", "mem://topicA", 1, &handlerWithError{})
 
-	srv := NewService("Test Srv", optTopic, opt)
+	srv := frame.NewService("Test Srv", optTopic, opt, frame.NoopDriver())
 
-	err := srv.initPubsub(ctx)
+	err := srv.Run(ctx, "")
 	if err != nil {
 		t.Errorf("We couldn't instantiate queue  %+v", err)
 		return
@@ -165,12 +163,12 @@ func TestService_RegisterSubscriberInvalid(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	opt := RegisterSubscriber("test", "memt+://topicA",
+	opt := frame.RegisterSubscriber("test", "memt+://topicA",
 		5, &messageHandler{})
 
-	srv := NewService("Test Srv", opt)
+	srv := frame.NewService("Test Srv", opt, frame.NoopDriver())
 
-	err := srv.initPubsub(ctx)
+	err := srv.Run(ctx, "")
 	if err == nil {
 		t.Errorf("We somehow instantiated an invalid subscription ")
 	}
@@ -179,83 +177,27 @@ func TestService_RegisterSubscriberInvalid(t *testing.T) {
 func TestService_RegisterSubscriberContextCancelWorks(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 
-	optTopic := RegisterPublisher("test", "mem://topicA")
-	opt := RegisterSubscriber("test", "mem://topicA",
+	noopDriver := frame.NoopDriver()
+	optTopic := frame.RegisterPublisher("test", "mem://topicA")
+	opt := frame.RegisterSubscriber("test", "mem://topicA",
 		5, &messageHandler{})
 
-	srv := NewService("Test Srv", opt, optTopic)
+	srv := frame.NewService("Test Srv", opt, optTopic, noopDriver)
 
-	err := srv.initPubsub(ctx)
+	err := srv.Run(ctx, "")
 	if err != nil {
 		t.Errorf("We somehow fail to instantiate subscription ")
 	}
 
-	if !srv.queue.subscriptionQueueMap["test"].isInit {
+	if !srv.SubscriptionIsInitiated("test") {
 		t.Errorf("Subscription is invalid yet it should be ok")
 	}
 
 	cancel()
 	time.Sleep(3 * time.Second)
 
-	if srv.queue.subscriptionQueueMap["test"].isInit {
+	if srv.SubscriptionIsInitiated("test") {
 		t.Errorf("Subscription is valid yet it should not be ok")
 	}
-
-}
-
-func TestPublishCloudEvent(t *testing.T) {
-
-}
-
-func TestReceiveCloudEvents(t *testing.T) {
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	bufferSize := 1024 * 1024
-	listener := bufconn.Listen(bufferSize)
-
-	opt := RegisterSubscriber("test", "http://0.0.0.0/queue/topicA",
-		5, &messageHandler{})
-
-	srv := NewService("Test Srv", opt, ServerListener(listener))
-
-	err := srv.initPubsub(ctx)
-	if err != nil {
-		t.Errorf("We somehow fail to instantiate subscription ")
-	}
-
-	// it is here to properly stop the server
-	defer func() { time.Sleep(100 * time.Millisecond) }()
-	defer srv.Stop()
-
-	go func() {
-		_ = srv.Run(ctx, "")
-	}()
-
-	err = clientInvokeWithCloudEventPayload(listener)
-	if err != nil {
-		t.Fatalf("failed to dial: %+v", err)
-	}
-}
-
-func clientInvokeWithCloudEventPayload(listener *bufconn.Listener) error {
-
-	e := cloudevents.NewEvent()
-	e.SetType("com.cloudevents.test.sent")
-	e.SetSource("https://frame/sender/queue")
-	_ = e.SetData(cloudevents.ApplicationJSON, map[string]interface{}{
-		"id":      "testing test",
-		"message": "Hello, World!",
-	})
-
-	_, err := json.Marshal(e)
-	if err != nil {
-		return err
-	}
-
-	//TODO test that the queue will pickup cloudevents
-
-	return nil
 
 }

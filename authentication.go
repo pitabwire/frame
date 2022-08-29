@@ -22,7 +22,6 @@ import (
 )
 
 const ctxKeyAuthentication = contextKey("authenticationKey")
-const envOauth2WellKnownJwk = "OAUTH2_WELL_KNOWN_JWK"
 
 // AuthenticationClaims Create a struct that will be encoded to a JWT.
 // We add jwt.StandardClaims as an embedded type, to provide fields like expiry time
@@ -111,10 +110,10 @@ func ClaimsFromMap(m map[string]string) *AuthenticationClaims {
 }
 
 func authenticate(ctx context.Context, jwtToken string, audience string, issuer string) (context.Context, error) {
-
 	claims := &AuthenticationClaims{}
+	s := FromContext(ctx)
 
-	token, err := jwt.ParseWithClaims(jwtToken, claims, getPemCert)
+	token, err := jwt.ParseWithClaims(jwtToken, claims, s.getPemCert)
 	if err != nil {
 		return ctx, err
 	}
@@ -154,14 +153,18 @@ type JSONWebKeys struct {
 	X5c []string `json:"x5c"`
 }
 
-func getPemCert(token *jwt.Token) (interface{}, error) {
-
-	wellKnownJWK := GetEnv(envOauth2WellKnownJwk, "")
+func (s *Service) getPemCert(token *jwt.Token) (interface{}, error) {
+	config := s.Config().(Configuration)
 
 	var jwkKeyBytes []byte
-	if strings.HasPrefix(wellKnownJWK, "http") {
+	if config.Oauth2WellKnownJwk == "" {
+		return nil, errors.New("web key URL is invalid")
+	}
 
-		resp, err := http.Get(wellKnownJWK)
+	wellKnownJWK := config.Oauth2WellKnownJwk
+
+	if strings.HasPrefix(config.Oauth2WellKnownJwk, "http") {
+		resp, err := http.Get(config.Oauth2WellKnownJwk)
 
 		if err != nil {
 			return nil, err
@@ -174,20 +177,14 @@ func getPemCert(token *jwt.Token) (interface{}, error) {
 		wellKnownJWK = string(jwkKeyBytes)
 	}
 
-	if wellKnownJWK == "" {
-		return nil, errors.New("web key is missing data")
-	}
-
 	var jwks = Jwks{}
 	err := json.NewDecoder(strings.NewReader(wellKnownJWK)).Decode(&jwks)
-
 	if err != nil {
 		return nil, err
 	}
 
 	for k, val := range jwks.Keys {
 		if token.Header["kid"] == jwks.Keys[k].Kid {
-
 			var exponent []byte
 			if exponent, err = base64.RawURLEncoding.DecodeString(val.E); err != nil {
 				return nil, err

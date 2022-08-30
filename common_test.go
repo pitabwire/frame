@@ -75,7 +75,7 @@ func TestGetIp(t *testing.T) {
 }
 
 type name struct {
-	frame.DefaultConfiguration
+	frame.ConfigurationDefault
 	frame.DatabaseConfiguration
 }
 
@@ -104,15 +104,15 @@ func Test_ConfigCastingIssues(t *testing.T) {
 	os.Setenv("PORT", "testingp")
 	os.Setenv("DATABASE_URL", "testingu")
 
-	var conf frame.DefaultConfiguration
+	var conf name
 	err := frame.ConfigProcess("", &conf)
 	if err != nil {
 		t.Errorf(" could not load config from env : %v", err)
 	}
 
-	srv := frame.NewService("Test Srv", frame.Config(conf))
+	srv := frame.NewService("Test Srv", frame.Config(&conf))
 
-	_, ok := srv.Config().(frame.DefaultConfiguration)
+	_, ok := srv.Config().(frame.ConfigurationOAUTH2)
 	if !ok {
 		t.Errorf("could not cast config to default settings")
 	}

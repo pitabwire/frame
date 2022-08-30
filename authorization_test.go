@@ -13,7 +13,7 @@ import (
 func authorizationControlListWrite(ctx context.Context, action string, subject string) error {
 	authClaims := frame.ClaimsFromContext(ctx)
 	service := frame.FromContext(ctx)
-	config, ok := service.Config().(frame.DefaultConfiguration)
+	config, ok := service.Config().(frame.ConfigurationAuthorization)
 	if !ok {
 		return errors.New("could not cast setting to authorization config")
 	}
@@ -30,7 +30,7 @@ func authorizationControlListWrite(ctx context.Context, action string, subject s
 	}
 
 	status, result, err := service.InvokeRestService(ctx,
-		http.MethodPut, config.AuthorizationServiceWriteURI, payload, nil)
+		http.MethodPut, config.GetAuthorizationServiceWriteURI(), payload, nil)
 
 	if err != nil {
 		return err
@@ -52,7 +52,7 @@ func authorizationControlListWrite(ctx context.Context, action string, subject s
 func TestAuthorizationControlListWrite(t *testing.T) {
 
 	ctx := context.Background()
-	srv := frame.NewService("Test Srv", frame.Config(frame.DefaultConfiguration{
+	srv := frame.NewService("Test Srv", frame.Config(frame.ConfigurationDefault{
 		AuthorizationServiceWriteURI: "http://localhost:4467/relation-tuples",
 	}))
 	ctx = frame.ToContext(ctx, srv)
@@ -76,7 +76,7 @@ func TestAuthorizationControlListWrite(t *testing.T) {
 func TestAuthHasAccess(t *testing.T) {
 	ctx := context.Background()
 	srv := frame.NewService("Test Srv", frame.Config(
-		frame.DefaultConfiguration{
+		frame.ConfigurationDefault{
 			AuthorizationServiceReadURI:  "http://localhost:4466/check",
 			AuthorizationServiceWriteURI: "http://localhost:4467/relation-tuples",
 		}))

@@ -11,8 +11,8 @@ func (s *Service) Config() interface{} {
 	return s.configuration
 }
 
-type DefaultConfiguration struct {
-	ServerPort string `envconfig:"PORT"`
+type ConfigurationDefault struct {
+	ServerPort string `default:"7000" envconfig:"PORT"`
 
 	Oauth2WellKnownJwk        string `envconfig:"OAUTH2_WELL_KNOWN_JWK"`
 	Oauth2JwtVerifyAudience   string `envconfig:"OAUTH2_JWT_VERIFY_AUDIENCE"`
@@ -23,6 +23,32 @@ type DefaultConfiguration struct {
 
 	AuthorizationServiceReadURI  string `envconfig:"AUTHORIZATION_SERVICE_READ_URI"`
 	AuthorizationServiceWriteURI string `envconfig:"AUTHORIZATION_SERVICE_WRITE_URI"`
+}
+
+func (c *ConfigurationDefault) GetOauthWellKnownJwk() string {
+	return c.Oauth2WellKnownJwk
+}
+
+func (c *ConfigurationDefault) GetOauth2ServiceURI() string {
+	return c.Oauth2ServiceURI
+}
+
+func (c *ConfigurationDefault) GetAuthorizationServiceReadURI() string {
+	return c.AuthorizationServiceReadURI
+}
+
+func (c *ConfigurationDefault) GetAuthorizationServiceWriteURI() string {
+	return c.AuthorizationServiceWriteURI
+}
+
+type ConfigurationOAUTH2 interface {
+	GetOauthWellKnownJwk() string
+	GetOauth2ServiceURI() string
+}
+
+type ConfigurationAuthorization interface {
+	GetAuthorizationServiceReadURI() string
+	GetAuthorizationServiceWriteURI() string
 }
 
 type DatabaseConfiguration struct {

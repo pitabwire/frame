@@ -10,7 +10,7 @@ func TestService_Datastore(t *testing.T) {
 	ctx := context.Background()
 
 	testDBURL := frame.GetEnv("TEST_DATABASE_URL", "postgres://frame:secret@localhost:5431/framedatabase?sslmode=disable")
-	mainDB := frame.Datastore(ctx, testDBURL, false)
+	mainDB := frame.DatastoreCon(ctx, testDBURL, false)
 
 	srv := frame.NewService("Test Srv", mainDB)
 	defer srv.Stop(ctx)
@@ -40,8 +40,8 @@ func TestService_Datastore(t *testing.T) {
 func TestService_DatastoreRead(t *testing.T) {
 	ctx := context.Background()
 	testDBURL := frame.GetEnv("TEST_DATABASE_URL", "postgres://frame:secret@localhost:5431/framedatabase?sslmode=disable")
-	mainDB := frame.Datastore(ctx, testDBURL, false)
-	readDB := frame.Datastore(ctx, testDBURL, true)
+	mainDB := frame.DatastoreCon(ctx, testDBURL, false)
+	readDB := frame.DatastoreCon(ctx, testDBURL, true)
 
 	srv := frame.NewService("Test Srv", mainDB, readDB)
 

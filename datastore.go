@@ -29,7 +29,6 @@ func tenantPartition(ctx context.Context) func(db *gorm.DB) *gorm.DB {
 			return db.Where("tenant_id = ? AND partition_id = ?", authClaim.TenantID, authClaim.PartitionID)
 		}
 		return db
-
 	}
 }
 
@@ -55,7 +54,6 @@ func DBPropertiesToMap(props datatypes.JSONMap) map[string]string {
 			continue
 		}
 		payload[k] = string(marVal)
-
 	}
 
 	return payload
@@ -106,7 +104,6 @@ func (s *Service) DB(ctx context.Context, readOnly bool) *gorm.DB {
 	}
 
 	if db == nil {
-
 		writeCount := len(s.dataStore.writeDatabase)
 		if writeCount == 0 {
 			log.Printf("DB -- attempting use a database when none is setup")
@@ -123,8 +120,8 @@ func (s *Service) DB(ctx context.Context, readOnly bool) *gorm.DB {
 	return db.WithContext(ctx).Scopes(tenantPartition(ctx))
 }
 
-// Datastore Option method to store a connection that will be utilized when connecting to the database
-func Datastore(ctx context.Context, postgresqlConnection string, readOnly bool) Option {
+// DatastoreCon Option method to store a connection that will be utilized when connecting to the database
+func DatastoreCon(ctx context.Context, postgresqlConnection string, readOnly bool) Option {
 	return func(s *Service) {
 		if s.dataStore == nil {
 			s.dataStore = &store{
@@ -163,6 +160,26 @@ func Datastore(ctx context.Context, postgresqlConnection string, readOnly bool) 
 
 			addSqlHealthChecker(s, db)
 		}
+	}
+}
+
+func Datastore(ctx context.Context) Option {
+	return func(s *Service) {
+
+		config, ok := s.Config().(ConfigurationDatabase)
+		if !ok {
+			s.L().Warn("configuration object not of type : ConfigurationDatabase")
+			return
+		}
+
+		primaryDatabase := DatastoreCon(ctx, config.GetDatabasePrimaryHostUrl(), false)
+		primaryDatabase(s)
+		replicaUrl := config.GetDatabaseReplicaHostUrl()
+		if replicaUrl == "" {
+			replicaUrl = config.GetDatabasePrimaryHostUrl()
+		}
+		replicaDatabase := DatastoreCon(ctx, replicaUrl, true)
+		replicaDatabase(s)
 	}
 }
 

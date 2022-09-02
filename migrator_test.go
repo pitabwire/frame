@@ -10,7 +10,7 @@ import (
 func TestSaveNewMigrations(t *testing.T) {
 	ctx := context.Background()
 	testDBURL := GetEnv("TEST_DATABASE_URL", "postgres://frame:secret@localhost:5431/framedatabase?sslmode=disable")
-	mainDB := Datastore(ctx, testDBURL, false)
+	mainDB := DatastoreCon(ctx, testDBURL, false)
 	srv := NewService("Test Migrations Srv", mainDB)
 
 	srv.DB(ctx, false).Session(&gorm.Session{AllowGlobalUpdate: true}).Unscoped().Delete(&Migration{})
@@ -78,7 +78,7 @@ func TestSaveNewMigrations(t *testing.T) {
 func TestApplyMigrations(t *testing.T) {
 	ctx := context.Background()
 	testDBURL := GetEnv("TEST_DATABASE_URL", "postgres://frame:secret@localhost:5431/framedatabase?sslmode=disable")
-	mainDB := Datastore(ctx, testDBURL, false)
+	mainDB := DatastoreCon(ctx, testDBURL, false)
 	srv := NewService("Test Migrations Srv", mainDB)
 
 	srv.DB(ctx, false).Session(&gorm.Session{AllowGlobalUpdate: true}).Unscoped().Delete(&Migration{})
@@ -135,7 +135,7 @@ func TestApplyMigrations(t *testing.T) {
 func TestService_MigrateDatastore(t *testing.T) {
 	ctx := context.Background()
 	testDBURL := GetEnv("TEST_DATABASE_URL", "postgres://frame:secret@localhost:5431/framedatabase?sslmode=disable")
-	mainDB := Datastore(ctx, testDBURL, false)
+	mainDB := DatastoreCon(ctx, testDBURL, false)
 
 	srv := NewService("Test Migrations Srv", mainDB)
 	srv.DB(ctx, false).Session(&gorm.Session{AllowGlobalUpdate: true}).Unscoped().Delete(&Migration{})

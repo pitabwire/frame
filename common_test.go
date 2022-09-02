@@ -76,7 +76,6 @@ func TestGetIp(t *testing.T) {
 
 type name struct {
 	frame.ConfigurationDefault
-	frame.DatabaseConfiguration
 }
 
 func Test_Config_Process(t *testing.T) {
@@ -94,7 +93,7 @@ func Test_Config_Process(t *testing.T) {
 		t.Errorf("inherited PORT config not processed")
 	}
 
-	if conf.DatabaseURL != "testingu" {
+	if conf.GetDatabasePrimaryHostUrl() != "testingu" {
 		t.Errorf("inherited Database URL config not processed")
 	}
 }

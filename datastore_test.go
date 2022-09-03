@@ -55,11 +55,6 @@ func TestService_DatastoreSet(t *testing.T) {
 		t.Errorf("Read and write services setup but one couldn't be found")
 		return
 	}
-
-	rd, _ := r.DB()
-	if wd, _ := w.DB(); wd == rd {
-		t.Errorf("Read and write db services should be same but are different")
-	}
 }
 
 func TestService_DatastoreRead(t *testing.T) {

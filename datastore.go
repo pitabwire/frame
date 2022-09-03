@@ -8,7 +8,7 @@ import (
 	"gocloud.dev/postgres"
 	"gocloud.dev/server/health/sqlhealth"
 	"gorm.io/datatypes"
-	gormPostgres "gorm.io/driver/postgres"
+	gormPg "gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"log"
 	"math/rand"
@@ -33,7 +33,7 @@ func tenantPartition(ctx context.Context) func(db *gorm.DB) *gorm.DB {
 }
 
 // DBPropertiesToMap converts the supplied db json content into a golang map
-func DBPropertiesToMap(props datatypes.JSONMap) map[string]string {
+func DBPropertiesToMap(props json.Marshaler) map[string]string {
 
 	payload := make(map[string]string)
 
@@ -57,12 +57,10 @@ func DBPropertiesToMap(props datatypes.JSONMap) map[string]string {
 	}
 
 	return payload
-
 }
 
 // DBPropertiesFromMap converts a map into a JSONMap object
 func DBPropertiesFromMap(propsMap map[string]string) datatypes.JSONMap {
-
 	jsonMap := make(datatypes.JSONMap)
 
 	if propsMap == nil {
@@ -79,7 +77,6 @@ func DBPropertiesFromMap(propsMap map[string]string) datatypes.JSONMap {
 	}
 
 	return jsonMap
-
 }
 
 // DBErrorIsRecordNotFound validate if supplied error is because of record missing in DB
@@ -143,8 +140,7 @@ func DatastoreCon(ctx context.Context, postgresqlConnection string, readOnly boo
 		}
 
 		if db != nil {
-
-			gormDb, _ := gorm.Open(gormPostgres.New(gormPostgres.Config{Conn: db}), &gorm.Config{
+			gormDb, _ := gorm.Open(gormPg.New(gormPg.Config{Conn: db}), &gorm.Config{
 				SkipDefaultTransaction: true,
 			})
 
@@ -158,14 +154,13 @@ func DatastoreCon(ctx context.Context, postgresqlConnection string, readOnly boo
 				s.dataStore.writeDatabase = append(s.dataStore.writeDatabase, gormDb)
 			}
 
-			addSqlHealthChecker(s, db)
+			addSQLHealthChecker(s, db)
 		}
 	}
 }
 
 func Datastore(ctx context.Context) Option {
 	return func(s *Service) {
-
 		config, ok := s.Config().(ConfigurationDatabase)
 		if !ok {
 			s.L().Warn("configuration object not of type : ConfigurationDatabase")
@@ -174,17 +169,17 @@ func Datastore(ctx context.Context) Option {
 
 		primaryDatabase := DatastoreCon(ctx, config.GetDatabasePrimaryHostUrl(), false)
 		primaryDatabase(s)
-		replicaUrl := config.GetDatabaseReplicaHostUrl()
-		if replicaUrl == "" {
-			replicaUrl = config.GetDatabasePrimaryHostUrl()
+		replicaURL := config.GetDatabaseReplicaHostUrl()
+		if replicaURL == "" {
+			replicaURL = config.GetDatabasePrimaryHostUrl()
 		}
-		replicaDatabase := DatastoreCon(ctx, replicaUrl, true)
+		replicaDatabase := DatastoreCon(ctx, replicaURL, true)
 		replicaDatabase(s)
 	}
 }
 
 // addSqlHealthChecker returns a health check for the database.
-func addSqlHealthChecker(s *Service, db *sql.DB) {
+func addSQLHealthChecker(s *Service, db *sql.DB) {
 	dbCheck := sqlhealth.New(db)
 	s.AddHealthCheck(dbCheck)
 	s.AddCleanupMethod(func(ctx context.Context) {

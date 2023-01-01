@@ -8,16 +8,23 @@ import (
 )
 
 const envOauth2ServiceClientSecret = "OAUTH2_SERVICE_CLIENT_SECRET"
-const envOauth2ServiceAdminUri = "OAUTH2_SERVICE_ADMIN_URI"
+const envOauth2ServiceAdminURI = "OAUTH2_SERVICE_ADMIN_URI"
 const envOauth2Audience = "OAUTH2_SERVICE_AUDIENCE"
 
 func (s *Service) registerForJwt(ctx context.Context) error {
-	host := GetEnv(envOauth2ServiceAdminUri, "")
-	if host == "" {
-		return nil
-	}
 	clientSecret := GetEnv(envOauth2ServiceClientSecret, "")
 	if clientSecret == "" {
+		return nil
+	}
+
+	return s.RegisterForJwtWithParams(ctx, s.name, s.name, clientSecret)
+}
+
+// RegisterForJwtWithParams registers the supplied details for ability to generate access tokens.
+// This is useful for situations where one may need to register external applications for access token generation
+func (s *Service) RegisterForJwtWithParams(ctx context.Context, clientName string, clientID string, clientSecret string) error {
+	host := GetEnv(envOauth2ServiceAdminURI, "")
+	if host == "" {
 		return nil
 	}
 
@@ -36,8 +43,8 @@ func (s *Service) registerForJwt(ctx context.Context) error {
 	}
 
 	payload := map[string]interface{}{
-		"client_id":                  s.name,
-		"client_name":                s.name,
+		"client_id":                  clientID,
+		"client_name":                clientName,
 		"client_secret":              clientSecret,
 		"grant_types":                []string{"client_credentials"},
 		"metadata":                   map[string]string{"cc_bot": "true"},

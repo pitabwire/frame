@@ -109,7 +109,8 @@ func ClaimsFromMap(m map[string]string) *AuthenticationClaims {
 	return nil
 }
 
-func (s *Service) authenticate(ctx context.Context, jwtToken string, audience string, issuer string) (context.Context, error) {
+func (s *Service) authenticate(ctx context.Context,
+	jwtToken string, audience string, issuer string) (context.Context, error) {
 	claims := &AuthenticationClaims{}
 
 	token, err := jwt.ParseWithClaims(jwtToken, claims, s.getPemCert)

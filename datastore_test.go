@@ -73,7 +73,8 @@ func TestService_DatastoreRead(t *testing.T) {
 	}
 
 	rd, _ := r.DB()
-	if wd, _ := w.DB(); wd == rd {
+	wd, _ := w.DB()
+	if wd == rd {
 		t.Errorf("Read and write db services are same but we set different")
 	}
 }

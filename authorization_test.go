@@ -52,7 +52,7 @@ func authorizationControlListWrite(ctx context.Context, action string, subject s
 func TestAuthorizationControlListWrite(t *testing.T) {
 
 	ctx := context.Background()
-	srv := frame.NewService("Test Srv", frame.Config(frame.ConfigurationDefault{
+	srv := frame.NewService("Test Srv", frame.Config(&frame.ConfigurationDefault{
 		AuthorizationServiceWriteURI: "http://localhost:4467/relation-tuples",
 	}))
 	ctx = frame.ToContext(ctx, srv)
@@ -70,13 +70,12 @@ func TestAuthorizationControlListWrite(t *testing.T) {
 		t.Errorf("Authorization write was not possible see %+v", err)
 		return
 	}
-
 }
 
 func TestAuthHasAccess(t *testing.T) {
 	ctx := context.Background()
 	srv := frame.NewService("Test Srv", frame.Config(
-		frame.ConfigurationDefault{
+		&frame.ConfigurationDefault{
 			AuthorizationServiceReadURI:  "http://localhost:4466/check",
 			AuthorizationServiceWriteURI: "http://localhost:4467/relation-tuples",
 		}))

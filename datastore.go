@@ -5,11 +5,13 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
-	"gocloud.dev/postgres"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/stdlib"
 	"gocloud.dev/server/health/sqlhealth"
 	"gorm.io/datatypes"
-	gormPg "gorm.io/driver/postgres"
+	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
+	"gorm.io/plugin/opentelemetry/tracing"
 	"log"
 	"math/rand"
 )
@@ -134,28 +136,31 @@ func DatastoreCon(ctx context.Context, postgresqlConnection string, readOnly boo
 		if s.dataStore.readDatabase == nil {
 			s.dataStore.readDatabase = []*gorm.DB{}
 		}
-		db, err := postgres.Open(ctx, postgresqlConnection)
+
+		config, err := pgx.ParseConfig(postgresqlConnection)
 		if err != nil {
-			log.Printf("Datastore -- problem instantiating database : %+v", err)
+			log.Printf("Datastore -- problem parsing database connection : %+v", err)
 		}
 
-		if db != nil {
-			gormDb, _ := gorm.Open(gormPg.New(gormPg.Config{Conn: db}), &gorm.Config{
-				SkipDefaultTransaction: true,
-			})
+		db := stdlib.OpenDB(*config)
+		gormDB, _ := gorm.Open(
+			postgres.New(postgres.Config{Conn: db}),
+			&gorm.Config{SkipDefaultTransaction: true},
+		)
 
-			s.AddCleanupMethod(func(ctx context.Context) {
-				_ = db.Close()
-			})
+		_ = gormDB.Use(tracing.NewPlugin())
 
-			if readOnly {
-				s.dataStore.readDatabase = append(s.dataStore.readDatabase, gormDb)
-			} else {
-				s.dataStore.writeDatabase = append(s.dataStore.writeDatabase, gormDb)
-			}
-
-			addSQLHealthChecker(s, db)
+		s.AddCleanupMethod(func(ctx context.Context) {
+			_ = db.Close()
+		})
+		if readOnly {
+			s.dataStore.readDatabase = append(s.dataStore.readDatabase, gormDB)
+		} else {
+			s.dataStore.writeDatabase = append(s.dataStore.writeDatabase, gormDB)
 		}
+
+		addSQLHealthChecker(s, db)
+
 	}
 }
 

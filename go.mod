@@ -1,11 +1,12 @@
 module github.com/pitabwire/frame
 
-go 1.17
+go 1.19
 
 require (
 	github.com/BurntSushi/toml v1.2.1
 	github.com/golang-jwt/jwt/v4 v4.4.3
 	github.com/improbable-eng/grpc-web v0.15.0
+	github.com/jackc/pgx/v5 v5.2.0
 	github.com/kelseyhightower/envconfig v1.4.0
 	github.com/nicksnyder/go-i18n/v2 v2.2.1
 	github.com/rs/xid v1.4.0
@@ -20,10 +21,11 @@ require (
 	gorm.io/datatypes v1.1.0
 	gorm.io/driver/postgres v1.4.6
 	gorm.io/gorm v1.24.3
+	gorm.io/plugin/opentelemetry v0.1.0
+
 )
 
 require (
-	contrib.go.opencensus.io/integrations/ocsql v0.1.7 // indirect
 	github.com/cenkalti/backoff/v4 v4.2.0 // indirect
 	github.com/desertbit/timer v0.0.0-20180107155436-c41aec40b27f // indirect
 	github.com/go-logr/logr v1.2.3 // indirect
@@ -34,13 +36,12 @@ require (
 	github.com/googleapis/gax-go/v2 v2.7.0 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20221227161230-091c0ba34f0a // indirect
-	github.com/jackc/pgx/v5 v5.2.0 // indirect
 	github.com/jinzhu/inflection v1.0.0 // indirect
 	github.com/jinzhu/now v1.1.5 // indirect
 	github.com/klauspost/compress v1.15.14 // indirect
-	github.com/lib/pq v1.10.7 // indirect
 	github.com/rs/cors v1.8.3 // indirect
 	go.opencensus.io v0.24.0 // indirect
+	go.opentelemetry.io/otel/metric v0.31.0 // indirect
 	go.opentelemetry.io/otel/trace v1.11.2 // indirect
 	golang.org/x/crypto v0.5.0 // indirect
 	golang.org/x/net v0.5.0 // indirect

@@ -25,6 +25,7 @@ type ConfigurationDefault struct {
 	Oauth2ServiceURI          string `envconfig:"OAUTH2_SERVICE_URI"`
 	Oauth2ServiceClientSecret string `envconfig:"OAUTH2_SERVICE_CLIENT_SECRET"`
 	Oauth2ServiceAudience     string `envconfig:"OAUTH2_SERVICE_AUDIENCE"`
+	Oauth2ServiceAdminURI     string `envconfig:"OAUTH2_SERVICE_ADMIN_URI"`
 
 	AuthorizationServiceReadURI  string `envconfig:"AUTHORIZATION_SERVICE_READ_URI"`
 	AuthorizationServiceWriteURI string `envconfig:"AUTHORIZATION_SERVICE_WRITE_URI"`
@@ -43,6 +44,16 @@ func (c *ConfigurationDefault) GetOauth2ServiceURI() string {
 	return c.Oauth2ServiceURI
 }
 
+func (c *ConfigurationDefault) GetOauth2ServiceClientSecret() string {
+	return c.Oauth2ServiceClientSecret
+}
+func (c *ConfigurationDefault) GetOauth2ServiceAudience() string {
+	return c.Oauth2ServiceAudience
+}
+func (c *ConfigurationDefault) GetOauth2ServiceAdminURI() string {
+	return c.Oauth2ServiceAdminURI
+}
+
 func (c *ConfigurationDefault) GetAuthorizationServiceReadURI() string {
 	return c.AuthorizationServiceReadURI
 }
@@ -51,16 +62,15 @@ func (c *ConfigurationDefault) GetAuthorizationServiceWriteURI() string {
 	return c.AuthorizationServiceWriteURI
 }
 
-func (c *ConfigurationDefault) GetDatabasePrimaryHostUrl() string {
+func (c *ConfigurationDefault) GetDatabasePrimaryHostURL() string {
 	return c.DatabasePrimaryURL
 }
 
-func (c *ConfigurationDefault) GetDatabaseReplicaHostUrl() string {
+func (c *ConfigurationDefault) GetDatabaseReplicaHostURL() string {
 	return c.DatabasePrimaryURL
 }
 
 func (c *ConfigurationDefault) DoDatabaseMigrate() bool {
-
 	isMigration, err := strconv.ParseBool(c.DatabaseMigrate)
 	if err != nil {
 		isMigration = false
@@ -77,6 +87,9 @@ func (c *ConfigurationDefault) GetDatabaseMigrationPath() string {
 type ConfigurationOAUTH2 interface {
 	GetOauthWellKnownJwk() string
 	GetOauth2ServiceURI() string
+	GetOauth2ServiceClientSecret() string
+	GetOauth2ServiceAudience() string
+	GetOauth2ServiceAdminURI() string
 }
 
 type ConfigurationAuthorization interface {
@@ -85,8 +98,8 @@ type ConfigurationAuthorization interface {
 }
 
 type ConfigurationDatabase interface {
-	GetDatabasePrimaryHostUrl() string
-	GetDatabaseReplicaHostUrl() string
+	GetDatabasePrimaryHostURL() string
+	GetDatabaseReplicaHostURL() string
 	DoDatabaseMigrate() bool
 	GetDatabaseMigrationPath() string
 }

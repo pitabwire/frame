@@ -68,6 +68,7 @@ func NewService(name string, opts ...Option) *Service {
 		},
 		client: &http.Client{},
 		queue:  q,
+		logger: logrus.New(),
 	}
 
 	opts = append(opts, Logger())

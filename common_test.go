@@ -93,7 +93,7 @@ func Test_Config_Process(t *testing.T) {
 		t.Errorf("inherited PORT config not processed")
 	}
 
-	if conf.GetDatabasePrimaryHostUrl() != "testingu" {
+	if conf.GetDatabasePrimaryHostURL() != "testingu" {
 		t.Errorf("inherited Database URL config not processed")
 	}
 }

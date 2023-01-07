@@ -7,17 +7,19 @@ import (
 	"strings"
 )
 
-const envOauth2ServiceClientSecret = "OAUTH2_SERVICE_CLIENT_SECRET"
-const envOauth2ServiceAdminURI = "OAUTH2_SERVICE_ADMIN_URI"
-const envOauth2Audience = "OAUTH2_SERVICE_AUDIENCE"
-
 func (s *Service) registerForJwt(ctx context.Context) error {
-	clientSecret := GetEnv(envOauth2ServiceClientSecret, "")
+
+	oauth2Config, ok := s.Config().(ConfigurationOAUTH2)
+	if !ok {
+		return nil
+	}
+
+	clientSecret := oauth2Config.GetOauth2ServiceClientSecret()
 	if clientSecret == "" {
 		return nil
 	}
 
-	audienceList := strings.Split(GetEnv(envOauth2Audience, ""), ",")
+	audienceList := strings.Split(oauth2Config.GetOauth2ServiceAudience(), ",")
 
 	return s.RegisterForJwtWithParams(ctx, s.name, s.name, clientSecret, "", audienceList, map[string]string{})
 }
@@ -27,7 +29,10 @@ func (s *Service) registerForJwt(ctx context.Context) error {
 func (s *Service) RegisterForJwtWithParams(ctx context.Context,
 	clientName string, clientID string, clientSecret string,
 	scope string, audienceList []string, metadata map[string]string) error {
-	host := GetEnv(envOauth2ServiceAdminURI, "")
+
+	oauth2Config := s.Config().(ConfigurationOAUTH2)
+
+	host := oauth2Config.GetOauth2ServiceAdminURI()
 	if host == "" {
 		return nil
 	}

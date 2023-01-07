@@ -3,6 +3,7 @@ package frame
 import (
 	"context"
 	"errors"
+	"github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	grpchello "google.golang.org/grpc/examples/helloworld/helloworld"
@@ -66,7 +67,13 @@ func TestServiceGrpcServer(t *testing.T) {
 	gsrv := grpc.NewServer()
 	grpchello.RegisterGreeterServer(gsrv, &grpcServer{})
 
-	srv := NewService("Testing Service Grpc", GrpcServer(gsrv), ServerListener(listener))
+	var defConf ConfigurationDefault
+	err := ConfigProcess("", &defConf)
+	if err != nil {
+		t.Errorf("Could not process test configurations %v", err)
+		return
+	}
+	srv := NewService("Testing Service Grpc", GrpcServer(gsrv), ServerListener(listener), Config(&defConf))
 
 	// it is here to properly stop the server
 	defer func() { time.Sleep(100 * time.Millisecond) }()
@@ -79,7 +86,7 @@ func TestServiceGrpcServer(t *testing.T) {
 		}
 	}()
 
-	err := clientInvokeGrpc(listener)
+	err = clientInvokeGrpc(listener)
 	if err != nil {
 		t.Fatalf("failed to dial: %+v", err)
 	}
@@ -115,7 +122,10 @@ func clientInvokeGrpc(listener *bufconn.Listener) error {
 
 func TestService_Run(t *testing.T) {
 	ctx := context.Background()
-	srv := &Service{}
+
+	srv := &Service{
+		logger: logrus.New(),
+	}
 
 	go func() {
 		err := srv.Run(ctx, ":")

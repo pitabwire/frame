@@ -172,11 +172,11 @@ func Datastore(ctx context.Context) Option {
 			return
 		}
 
-		primaryDatabase := DatastoreCon(ctx, config.GetDatabasePrimaryHostUrl(), false)
+		primaryDatabase := DatastoreCon(ctx, config.GetDatabasePrimaryHostURL(), false)
 		primaryDatabase(s)
-		replicaURL := config.GetDatabaseReplicaHostUrl()
+		replicaURL := config.GetDatabaseReplicaHostURL()
 		if replicaURL == "" {
-			replicaURL = config.GetDatabasePrimaryHostUrl()
+			replicaURL = config.GetDatabasePrimaryHostURL()
 		}
 		replicaDatabase := DatastoreCon(ctx, replicaURL, true)
 		replicaDatabase(s)

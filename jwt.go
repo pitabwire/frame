@@ -5,30 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"strings"
 )
-
-func (s *Service) registerForJwt(ctx context.Context) error {
-	oauth2Config, ok := s.Config().(ConfigurationOAUTH2)
-	if !ok {
-		return nil
-	}
-
-	oauth2ServiceAdminHost := oauth2Config.GetOauth2ServiceAdminURI()
-	if oauth2ServiceAdminHost == "" {
-		return nil
-	}
-
-	clientSecret := oauth2Config.GetOauth2ServiceClientSecret()
-	if clientSecret == "" {
-		return nil
-	}
-
-	audienceList := strings.Split(oauth2Config.GetOauth2ServiceAudience(), ",")
-
-	return s.RegisterForJwtWithParams(ctx, oauth2ServiceAdminHost, s.name, s.name, clientSecret,
-		"", audienceList, map[string]string{})
-}
 
 // RegisterForJwtWithParams registers the supplied details for ability to generate access tokens.
 // This is useful for situations where one may need to register external applications for access token generation

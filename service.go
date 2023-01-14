@@ -7,6 +7,7 @@ import (
 	"github.com/pitabwire/frame/internal"
 	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/otel/sdk/trace"
+	"strings"
 
 	"google.golang.org/grpc"
 	"gorm.io/gorm"
@@ -146,12 +147,32 @@ func (s *Service) AddHealthCheck(checker Checker) {
 // Run is used to actually instantiate the initialised components and
 // keep them useful by handling incoming requests
 func (s *Service) Run(ctx context.Context, address string) error {
-	err := s.registerForJwt(ctx)
-	if err != nil {
-		return err
+	oauth2Config, ok := s.Config().(ConfigurationOAUTH2)
+	if ok {
+		oauth2ServiceAdminHost := oauth2Config.GetOauth2ServiceAdminURI()
+
+		clientSecret := oauth2Config.GetOauth2ServiceClientSecret()
+
+		oauth2Audience := oauth2Config.GetOauth2ServiceAudience()
+
+		s.L().WithField("admin url", oauth2ServiceAdminHost).
+			WithField("secret", clientSecret).
+			WithField("audience", oauth2Audience).
+			Info("configuration picked for oauth2")
+
+		if oauth2ServiceAdminHost != "" && clientSecret != "" {
+
+			audienceList := strings.Split(oauth2Audience, ",")
+
+			err := s.RegisterForJwtWithParams(ctx, oauth2ServiceAdminHost, s.name, s.name, clientSecret,
+				"", audienceList, map[string]string{})
+			if err != nil {
+				return err
+			}
+		}
 	}
 
-	err = s.initPubsub(ctx)
+	err := s.initPubsub(ctx)
 	if err != nil {
 		return err
 	}

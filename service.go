@@ -155,13 +155,7 @@ func (s *Service) Run(ctx context.Context, address string) error {
 
 		oauth2Audience := oauth2Config.GetOauth2ServiceAudience()
 
-		s.L().WithField("admin url", oauth2ServiceAdminHost).
-			WithField("secret", clientSecret).
-			WithField("audience", oauth2Audience).
-			Info("configuration picked for oauth2")
-
 		if oauth2ServiceAdminHost != "" && clientSecret != "" {
-
 			audienceList := strings.Split(oauth2Audience, ",")
 
 			err := s.RegisterForJwtWithParams(ctx, oauth2ServiceAdminHost, s.name, s.name, clientSecret,

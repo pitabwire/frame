@@ -12,7 +12,7 @@ import (
 func (s *Service) RegisterForJwtWithParams(ctx context.Context,
 	oauth2ServiceAdminHost string, clientName string, clientID string, clientSecret string,
 	scope string, audienceList []string, metadata map[string]string) error {
-	oauth2AdminURI := fmt.Sprintf("%s%s", oauth2ServiceAdminHost, "/clients")
+	oauth2AdminURI := fmt.Sprintf("%s%s", oauth2ServiceAdminHost, "/admin/clients")
 	oauth2AdminIDUri := fmt.Sprintf("%s/%s", oauth2AdminURI, s.name)
 
 	status, _, err := s.InvokeRestService(ctx, http.MethodGet, oauth2AdminIDUri, make(map[string]interface{}), nil)

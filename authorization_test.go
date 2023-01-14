@@ -10,13 +10,9 @@ import (
 	"testing"
 )
 
-func authorizationControlListWrite(ctx context.Context, action string, subject string) error {
+func authorizationControlListWrite(ctx context.Context, writeServerUrl string, action string, subject string) error {
 	authClaims := frame.ClaimsFromContext(ctx)
 	service := frame.FromContext(ctx)
-	config, ok := service.Config().(frame.ConfigurationAuthorization)
-	if !ok {
-		return errors.New("could not cast setting to authorization config")
-	}
 
 	if authClaims == nil {
 		return errors.New("only authenticated requsts should be used to check authorization")
@@ -30,7 +26,7 @@ func authorizationControlListWrite(ctx context.Context, action string, subject s
 	}
 
 	status, result, err := service.InvokeRestService(ctx,
-		http.MethodPut, config.GetAuthorizationServiceWriteURI(), payload, nil)
+		http.MethodPut, writeServerUrl, payload, nil)
 
 	if err != nil {
 		return err
@@ -51,9 +47,10 @@ func authorizationControlListWrite(ctx context.Context, action string, subject s
 
 func TestAuthorizationControlListWrite(t *testing.T) {
 
+	authorizationServerUrl := "http://localhost:4467/admin/relation-tuples"
 	ctx := context.Background()
 	srv := frame.NewService("Test Srv", frame.Config(&frame.ConfigurationDefault{
-		AuthorizationServiceWriteURI: "http://localhost:4467/relation-tuples",
+		AuthorizationServiceWriteURI: authorizationServerUrl,
 	}))
 	ctx = frame.ToContext(ctx, srv)
 
@@ -65,7 +62,7 @@ func TestAuthorizationControlListWrite(t *testing.T) {
 	}
 	ctx = authClaim.ClaimsToContext(ctx)
 
-	err := authorizationControlListWrite(ctx, "read", "tested")
+	err := authorizationControlListWrite(ctx, authorizationServerUrl, "read", "tested")
 	if err != nil {
 		t.Errorf("Authorization write was not possible see %+v", err)
 		return
@@ -73,11 +70,12 @@ func TestAuthorizationControlListWrite(t *testing.T) {
 }
 
 func TestAuthHasAccess(t *testing.T) {
+	authorizationServerUrl := "http://localhost:4467/admin/relation-tuples"
 	ctx := context.Background()
 	srv := frame.NewService("Test Srv", frame.Config(
 		&frame.ConfigurationDefault{
-			AuthorizationServiceReadURI:  "http://localhost:4466/check",
-			AuthorizationServiceWriteURI: "http://localhost:4467/relation-tuples",
+			AuthorizationServiceReadURI:  "http://localhost:4466/relation-tuples/check",
+			AuthorizationServiceWriteURI: authorizationServerUrl,
 		}))
 	ctx = frame.ToContext(ctx, srv)
 
@@ -89,7 +87,7 @@ func TestAuthHasAccess(t *testing.T) {
 	}
 	ctx = authClaim.ClaimsToContext(ctx)
 
-	err := authorizationControlListWrite(ctx, "read", "reader")
+	err := authorizationControlListWrite(ctx, authorizationServerUrl, "read", "reader")
 	if err != nil {
 		t.Errorf("Authorization write was not possible see %+v", err)
 		return

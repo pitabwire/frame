@@ -2,15 +2,20 @@ package frame
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
 )
 
 func (s *Service) registerForJwt(ctx context.Context) error {
-
 	oauth2Config, ok := s.Config().(ConfigurationOAUTH2)
 	if !ok {
+		return nil
+	}
+
+	oauth2ServiceAdminHost := oauth2Config.GetOauth2ServiceAdminURI()
+	if oauth2ServiceAdminHost == "" {
 		return nil
 	}
 
@@ -21,23 +26,16 @@ func (s *Service) registerForJwt(ctx context.Context) error {
 
 	audienceList := strings.Split(oauth2Config.GetOauth2ServiceAudience(), ",")
 
-	return s.RegisterForJwtWithParams(ctx, s.name, s.name, clientSecret, "", audienceList, map[string]string{})
+	return s.RegisterForJwtWithParams(ctx, oauth2ServiceAdminHost, s.name, s.name, clientSecret,
+		"", audienceList, map[string]string{})
 }
 
 // RegisterForJwtWithParams registers the supplied details for ability to generate access tokens.
 // This is useful for situations where one may need to register external applications for access token generation
 func (s *Service) RegisterForJwtWithParams(ctx context.Context,
-	clientName string, clientID string, clientSecret string,
+	oauth2ServiceAdminHost string, clientName string, clientID string, clientSecret string,
 	scope string, audienceList []string, metadata map[string]string) error {
-
-	oauth2Config := s.Config().(ConfigurationOAUTH2)
-
-	host := oauth2Config.GetOauth2ServiceAdminURI()
-	if host == "" {
-		return nil
-	}
-
-	oauth2AdminURI := fmt.Sprintf("%s%s", host, "/clients")
+	oauth2AdminURI := fmt.Sprintf("%s%s", oauth2ServiceAdminHost, "/clients")
 	oauth2AdminIDUri := fmt.Sprintf("%s/%s", oauth2AdminURI, s.name)
 
 	status, _, err := s.InvokeRestService(ctx, http.MethodGet, oauth2AdminIDUri, make(map[string]interface{}), nil)
@@ -71,7 +69,13 @@ func (s *Service) RegisterForJwtWithParams(ctx context.Context,
 	}
 
 	if status > 299 || status < 200 {
-		return fmt.Errorf(" invalid response status %d had message %s", status, string(result))
+		s.L().WithContext(ctx).
+			WithError(err).
+			WithField("status", status).
+			WithField("result", result).
+			Error(" invalid response from server")
+
+		return errors.New("invalid registration response")
 	}
 	return nil
 }

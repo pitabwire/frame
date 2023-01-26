@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 )
 
 // RegisterForJwtWithParams registers the supplied details for ability to generate access tokens.
@@ -13,27 +14,36 @@ func (s *Service) RegisterForJwtWithParams(ctx context.Context,
 	oauth2ServiceAdminHost string, clientName string, clientSecret string,
 	scope string, audienceList []string, metadata map[string]string) (string, error) {
 	oauth2AdminURI := fmt.Sprintf("%s%s", oauth2ServiceAdminHost, "/admin/clients")
-	oauth2AdminIDUri := fmt.Sprintf("%s?client_name=%s", oauth2AdminURI, clientName)
+	oauth2AdminIDUri := fmt.Sprintf("%s?client_name=%s", oauth2AdminURI, url.QueryEscape(clientName))
 
-	_, response, err := s.InvokeRestService(ctx, http.MethodGet, oauth2AdminIDUri, make(map[string]interface{}), nil)
+	status, response, err := s.InvokeRestService(ctx, http.MethodGet, oauth2AdminIDUri, nil, nil)
 	if err != nil {
+		s.L().WithError(err).Error("could not get existing clients")
 		return "", err
+	}
+
+	if status > 299 || status < 200 {
+		s.L().WithContext(ctx).
+			WithField("status", status).
+			WithField("result", string(response)).
+			Error(" invalid response from oauth2 server")
+
+		return "", fmt.Errorf("invalid existing clients check response : %s", response)
 	}
 
 	var existingClients []map[string]interface{}
 	err = json.Unmarshal(response, &existingClients)
 	if err != nil {
+		s.L().WithError(err).WithField("payload", string(response)).
+			Error("could not unmarshal existing clients")
 		return "", err
 	}
 
 	if len(existingClients) > 0 {
-
 		return existingClients[0]["client_id"].(string), nil
-
 	}
 
 	metadata["cc_bot"] = "true"
-
 	payload := map[string]interface{}{
 		"client_name":                clientName,
 		"client_secret":              clientSecret,
@@ -47,24 +57,25 @@ func (s *Service) RegisterForJwtWithParams(ctx context.Context,
 		payload["scope"] = scope
 	}
 
-	status, response, err := s.InvokeRestService(ctx, http.MethodPost, oauth2AdminURI, payload, nil)
+	status, response, err = s.InvokeRestService(ctx, http.MethodPost, oauth2AdminURI, payload, nil)
 	if err != nil {
+		s.L().WithError(err).Error("could not create a new client")
 		return "", err
 	}
 
 	if status > 299 || status < 200 {
 		s.L().WithContext(ctx).
-			WithError(err).
 			WithField("status", status).
 			WithField("result", string(response)).
 			Error(" invalid response from server")
 
-		return "", fmt.Errorf("invalid registration response : %s", err)
+		return "", fmt.Errorf("invalid registration response : %s", response)
 	}
 
 	var newClient map[string]interface{}
 	err = json.Unmarshal(response, &newClient)
 	if err != nil {
+		s.L().WithError(err).Error("could not un marshal new client")
 		return "", err
 	}
 

@@ -30,6 +30,7 @@ const ctxKeyService = contextKey("serviceKey")
 // It is pushed and pulled from contexts to make it easy to pass around.
 type Service struct {
 	name           string
+	jwtClientId    string
 	version        string
 	environment    string
 	logger         *logrus.Logger
@@ -158,11 +159,13 @@ func (s *Service) Run(ctx context.Context, address string) error {
 		if oauth2ServiceAdminHost != "" && clientSecret != "" {
 			audienceList := strings.Split(oauth2Audience, ",")
 
-			err := s.RegisterForJwtWithParams(ctx, oauth2ServiceAdminHost, s.name, s.name, clientSecret,
+			clientID, err := s.RegisterForJwtWithParams(ctx, oauth2ServiceAdminHost, s.name, clientSecret,
 				"", audienceList, map[string]string{})
 			if err != nil {
 				return err
 			}
+
+			s.jwtClientId = clientID
 		}
 	}
 

@@ -2,7 +2,7 @@ package frame
 
 import (
 	"context"
-	"errors"
+	"encoding/json"
 	"fmt"
 	"net/http"
 )
@@ -10,18 +10,26 @@ import (
 // RegisterForJwtWithParams registers the supplied details for ability to generate access tokens.
 // This is useful for situations where one may need to register external applications for access token generation
 func (s *Service) RegisterForJwtWithParams(ctx context.Context,
-	oauth2ServiceAdminHost string, clientName string, clientID string, clientSecret string,
-	scope string, audienceList []string, metadata map[string]string) error {
+	oauth2ServiceAdminHost string, clientName string, clientSecret string,
+	scope string, audienceList []string, metadata map[string]string) (string, error) {
 	oauth2AdminURI := fmt.Sprintf("%s%s", oauth2ServiceAdminHost, "/admin/clients")
-	oauth2AdminIDUri := fmt.Sprintf("%s/%s", oauth2AdminURI, clientID)
+	oauth2AdminIDUri := fmt.Sprintf("%s?client_name=%s", oauth2AdminURI, clientName)
 
-	status, _, err := s.InvokeRestService(ctx, http.MethodGet, oauth2AdminIDUri, make(map[string]interface{}), nil)
+	_, response, err := s.InvokeRestService(ctx, http.MethodGet, oauth2AdminIDUri, make(map[string]interface{}), nil)
 	if err != nil {
-		return err
+		return "", err
 	}
 
-	if status == 200 {
-		return nil
+	var existingClients []map[string]interface{}
+	err = json.Unmarshal(response, &existingClients)
+	if err != nil {
+		return "", err
+	}
+
+	if len(existingClients) > 0 {
+
+		return existingClients[0]["client_id"].(string), nil
+
 	}
 
 	metadata["cc_bot"] = "true"
@@ -39,21 +47,28 @@ func (s *Service) RegisterForJwtWithParams(ctx context.Context,
 		payload["scope"] = scope
 	}
 
-	status, result, err := s.InvokeRestService(ctx, http.MethodPost, oauth2AdminURI, payload, nil)
+	status, response, err := s.InvokeRestService(ctx, http.MethodPost, oauth2AdminURI, payload, nil)
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	if status > 299 || status < 200 {
 		s.L().WithContext(ctx).
 			WithError(err).
 			WithField("status", status).
-			WithField("result", result).
+			WithField("result", string(response)).
 			Error(" invalid response from server")
 
-		return errors.New("invalid registration response")
+		return "", fmt.Errorf("invalid registration response : %s", err)
 	}
-	return nil
+
+	var newClient map[string]interface{}
+	err = json.Unmarshal(response, &newClient)
+	if err != nil {
+		return "", err
+	}
+
+	return newClient["client_id"].(string), nil
 }
 
 // UnRegisterForJwt utilizing client id we de register external applications for access token generation

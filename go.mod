@@ -20,7 +20,7 @@ require (
 	google.golang.org/grpc/examples v0.0.0-20211009000955-b99d1040b71c
 	gorm.io/datatypes v1.1.0
 	gorm.io/driver/postgres v1.4.6
-	gorm.io/gorm v1.24.3
+	gorm.io/gorm v1.24.6
 	gorm.io/plugin/opentelemetry v0.1.0
 
 )

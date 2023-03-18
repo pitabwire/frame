@@ -18,9 +18,9 @@ require (
 	golang.org/x/text v0.6.0
 	google.golang.org/grpc v1.51.0
 	google.golang.org/grpc/examples v0.0.0-20211009000955-b99d1040b71c
-	gorm.io/datatypes v1.1.0
+	gorm.io/datatypes v1.1.1
 	gorm.io/driver/postgres v1.4.6
-	gorm.io/gorm v1.24.3
+	gorm.io/gorm v1.24.6
 	gorm.io/plugin/opentelemetry v0.1.0
 
 )
@@ -51,6 +51,6 @@ require (
 	google.golang.org/api v0.106.0 // indirect
 	google.golang.org/genproto v0.0.0-20230106154932-a12b697841d9 // indirect
 	google.golang.org/protobuf v1.28.1 // indirect
-	gorm.io/driver/mysql v1.4.5 // indirect
+	gorm.io/driver/mysql v1.4.7 // indirect
 	nhooyr.io/websocket v1.8.7 // indirect
 )

@@ -40,7 +40,7 @@ func (s *Service) InvokeRestService(ctx context.Context,
 
 	reqDump, _ := httputil.DumpRequestOut(req, true)
 
-	s.L().WithField("request", string(reqDump)).Info("request out")
+	s.L().WithField("request", string(reqDump)).Debug("request out")
 
 	resp, err := s.client.Do(req)
 	if err != nil {
@@ -48,7 +48,7 @@ func (s *Service) InvokeRestService(ctx context.Context,
 	}
 
 	respDump, _ := httputil.DumpResponse(resp, true)
-	s.L().WithField("response", string(respDump)).Info("response in")
+	s.L().WithField("response", string(respDump)).Debug("response in")
 
 	defer resp.Body.Close()
 

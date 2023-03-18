@@ -148,3 +148,28 @@ func TestService_MigrateDatastore(t *testing.T) {
 	}
 
 }
+
+func TestService_MigrateDatastoreIdempotency(t *testing.T) {
+	ctx := context.Background()
+	testDBURL := GetEnv("TEST_DATABASE_URL", "postgres://frame:secret@localhost:5431/framedatabase?sslmode=disable")
+	mainDB := DatastoreCon(ctx, testDBURL, false)
+
+	srv := NewService("Test Migrations Srv", mainDB)
+	srv.DB(ctx, false).Session(&gorm.Session{AllowGlobalUpdate: true}).Unscoped().Delete(&Migration{})
+
+	migrationPath := "./migrations/default"
+
+	err := srv.MigrateDatastore(ctx, migrationPath)
+	if err != nil {
+		t.Errorf("Could not migrate successfully because : %+v", err)
+	}
+	err = srv.MigrateDatastore(ctx, migrationPath)
+	if err != nil {
+		t.Errorf("Could not migrate successfully second time because : %+v", err)
+	}
+	err = srv.MigrateDatastore(ctx, migrationPath)
+	if err != nil {
+		t.Errorf("Could not migrate successfully third time because : %+v", err)
+	}
+
+}

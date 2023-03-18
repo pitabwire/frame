@@ -97,7 +97,7 @@ func (model *BaseModel) BeforeUpdate(db *gorm.DB) error {
 type Migration struct {
 	BaseModel
 
-	Name      string `gorm:"type:varchar(50);uniqueIndex:idx_migration_name"`
+	Name      string `gorm:"type:varchar(50);uniqueIndex:idx_migrations_name"`
 	Patch     string `gorm:"type:text"`
 	AppliedAt sql.NullTime
 }

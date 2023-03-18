@@ -12,16 +12,16 @@ require (
 	github.com/rs/xid v1.4.0
 	github.com/sirupsen/logrus v1.9.0
 	github.com/soheilhy/cmux v0.1.5
-	go.opentelemetry.io/otel v1.11.2
-	go.opentelemetry.io/otel/sdk v1.11.2
+	go.opentelemetry.io/otel v1.13.0
+	go.opentelemetry.io/otel/sdk v1.13.0
 	gocloud.dev v0.27.0
 	golang.org/x/text v0.6.0
-	google.golang.org/grpc v1.51.0
+	google.golang.org/grpc v1.52.3
 	google.golang.org/grpc/examples v0.0.0-20211009000955-b99d1040b71c
 	gorm.io/datatypes v1.1.1
 	gorm.io/driver/postgres v1.4.6
 	gorm.io/gorm v1.24.6
-	gorm.io/plugin/opentelemetry v0.1.0
+	gorm.io/plugin/opentelemetry v0.1.1
 
 )
 
@@ -41,8 +41,8 @@ require (
 	github.com/klauspost/compress v1.15.14 // indirect
 	github.com/rs/cors v1.8.3 // indirect
 	go.opencensus.io v0.24.0 // indirect
-	go.opentelemetry.io/otel/metric v0.31.0 // indirect
-	go.opentelemetry.io/otel/trace v1.11.2 // indirect
+	go.opentelemetry.io/otel/metric v0.36.0 // indirect
+	go.opentelemetry.io/otel/trace v1.13.0 // indirect
 	golang.org/x/crypto v0.5.0 // indirect
 	golang.org/x/net v0.5.0 // indirect
 	golang.org/x/sync v0.1.0 // indirect

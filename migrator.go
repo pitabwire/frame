@@ -121,23 +121,22 @@ func (s *Service) MigrateDatastore(ctx context.Context, migrationsDirPath string
 		migrationsDirPath = "./migrations/0001"
 	}
 
-	migrations = append(migrations, &Migration{})
-
+	migrations = append([]interface{}{&Migration{}}, migrations...)
 	// Migrate the schema
 	err := s.DB(ctx, false).AutoMigrate(migrations...)
 	if err != nil {
+		s.L().WithError(err).Error("MigrateDatastore -- couldn't automigrate")
+		return err
+	}
+
+	migrationExecutor := migrator{service: s}
+
+	if err := migrationExecutor.scanForNewMigrations(ctx, migrationsDirPath); err != nil {
 		log.Printf("MigrateDatastore -- Error scanning for new migrations : %+v ", err)
 		return err
 	}
 
-	migrator := migrator{service: s}
-
-	if err := migrator.scanForNewMigrations(ctx, migrationsDirPath); err != nil {
-		log.Printf("MigrateDatastore -- Error scanning for new migrations : %+v ", err)
-		return err
-	}
-
-	if err := migrator.applyNewMigrations(ctx); err != nil {
+	if err := migrationExecutor.applyNewMigrations(ctx); err != nil {
 		log.Printf("MigrateDatastore -- There was an error applying migrations : %+v ", err)
 		return err
 	}

@@ -121,10 +121,10 @@ func (s *subscriber) listen() error {
 	return err
 }
 
-// DequeueClient Option to register a background processing function that is initialized before running servers
+// BackGroundConsumer Option to register a background processing function that is initialized before running servers
 // this function is maintained alive using the same error group as the servers so that if any exit earlier due to error
 // all stop functioning
-func DequeueClient(deque func() error) Option {
+func BackGroundConsumer(deque func() error) Option {
 	return func(s *Service) {
 		s.backGroundClient = deque
 	}

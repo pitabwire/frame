@@ -8,7 +8,7 @@ import (
 
 func TestDefaultService(t *testing.T) {
 
-	srv := frame.NewService("Test Srv")
+	_, srv := frame.NewService("Test Srv")
 	if srv == nil {
 		t.Errorf("No default service could be instaniated")
 		return
@@ -21,7 +21,7 @@ func TestDefaultService(t *testing.T) {
 
 func TestService(t *testing.T) {
 
-	srv := frame.NewService("Test")
+	_, srv := frame.NewService("Test")
 	if srv == nil {
 		t.Errorf("No default service could be instaniated")
 	}
@@ -31,7 +31,7 @@ func TestFromContext(t *testing.T) {
 
 	ctx := context.Background()
 
-	srv := frame.NewService("Test Srv")
+	_, srv := frame.NewService("Test Srv")
 
 	nullSrv := frame.FromContext(ctx)
 	if nullSrv != nil {
@@ -49,8 +49,7 @@ func TestFromContext(t *testing.T) {
 
 func TestService_AddCleanupMethod(t *testing.T) {
 
-	ctx := context.Background()
-	srv := frame.NewService("Test Srv")
+	ctx, srv := frame.NewService("Test Srv")
 
 	a := 30
 
@@ -82,7 +81,7 @@ func (h *testHC) CheckHealth() error {
 
 func TestService_AddHealthCheck(t *testing.T) {
 
-	srv := frame.NewService("Test Srv")
+	_, srv := frame.NewService("Test Srv")
 
 	healthChecker := new(testHC)
 

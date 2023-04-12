@@ -1,19 +1,17 @@
 package frame_test
 
 import (
-	"context"
 	"github.com/pitabwire/frame"
 	"os"
 	"testing"
 )
 
 func TestService_Datastore(t *testing.T) {
-	ctx := context.Background()
 
 	testDBURL := frame.GetEnv("TEST_DATABASE_URL", "postgres://frame:secret@localhost:5431/framedatabase?sslmode=disable")
-	mainDB := frame.DatastoreCon(ctx, testDBURL, false)
+	mainDB := frame.DatastoreCon(testDBURL, false)
 
-	srv := frame.NewService("Test Srv", mainDB)
+	ctx, srv := frame.NewService("Test Srv", mainDB)
 	defer srv.Stop(ctx)
 
 	if srv.Name() != "Test Srv" {
@@ -39,7 +37,6 @@ func TestService_Datastore(t *testing.T) {
 }
 
 func TestService_DatastoreSet(t *testing.T) {
-	ctx := context.Background()
 	os.Setenv("DATABASE_URL", "postgres://frame:secret@localhost:5431/framedatabase?sslmode=disable")
 	var defConf frame.ConfigurationDefault
 	err := frame.ConfigProcess("", &defConf)
@@ -47,7 +44,8 @@ func TestService_DatastoreSet(t *testing.T) {
 		t.Errorf("Could not process test configurations %v", err)
 		return
 	}
-	srv := frame.NewService("Test Srv", frame.Config(&defConf), frame.Datastore(ctx))
+	ctx, srv := frame.NewService("Test Srv", frame.Config(&defConf))
+	srv.Init(frame.Datastore(ctx))
 
 	w := srv.DB(ctx, false)
 	r := srv.DB(ctx, true)
@@ -58,12 +56,11 @@ func TestService_DatastoreSet(t *testing.T) {
 }
 
 func TestService_DatastoreRead(t *testing.T) {
-	ctx := context.Background()
 	testDBURL := frame.GetEnv("TEST_DATABASE_URL", "postgres://frame:secret@localhost:5431/framedatabase?sslmode=disable")
-	mainDB := frame.DatastoreCon(ctx, testDBURL, false)
-	readDB := frame.DatastoreCon(ctx, testDBURL, true)
+	mainDB := frame.DatastoreCon(testDBURL, false)
+	readDB := frame.DatastoreCon(testDBURL, true)
 
-	srv := frame.NewService("Test Srv", mainDB, readDB)
+	ctx, srv := frame.NewService("Test Srv", mainDB, readDB)
 
 	w := srv.DB(ctx, false)
 	r := srv.DB(ctx, true)
@@ -80,9 +77,8 @@ func TestService_DatastoreRead(t *testing.T) {
 }
 
 func TestService_DatastoreNotSet(t *testing.T) {
-	ctx := context.Background()
 
-	srv := frame.NewService("Test Srv")
+	ctx, srv := frame.NewService("Test Srv")
 
 	if w := srv.DB(ctx, false); w != nil {
 		t.Errorf("When no connection is set no db is expected")

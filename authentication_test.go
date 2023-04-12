@@ -1,7 +1,8 @@
-package frame
+package frame_test
 
 import (
 	"context"
+	"github.com/pitabwire/frame"
 	"testing"
 )
 
@@ -10,51 +11,47 @@ const sampleWellKnownJwk = "{\"keys\":[{\"use\":\"sig\",\"kty\":\"RSA\",\"kid\":
 
 func TestAuthenticationFromContext(t *testing.T) {
 	ctx := context.Background()
-	claims := ClaimsFromContext(ctx)
+	claims := frame.ClaimsFromContext(ctx)
 
 	if claims != nil {
 		t.Errorf("A context without claims should not produce one")
 	}
 
-	claims = &AuthenticationClaims{}
+	claims = &frame.AuthenticationClaims{}
 	ctx = claims.ClaimsToContext(ctx)
 
-	if ClaimsFromContext(ctx) == nil {
+	if frame.ClaimsFromContext(ctx) == nil {
 		t.Errorf("A context with claims should produce one")
 	}
 }
 
 func TestSimpleAuthenticate(t *testing.T) {
-	ctx := context.Background()
-	srv := NewService("Test Srv", Config(
-		&ConfigurationDefault{Oauth2WellKnownJwk: sampleWellKnownJwk}))
-	ctx = ToContext(ctx, srv)
+	ctx, srv := frame.NewService("Test Srv", frame.Config(
+		&frame.ConfigurationDefault{Oauth2WellKnownJwk: sampleWellKnownJwk}))
 
-	ctx2, err := srv.authenticate(ctx, sampleAccessKey, "", "")
+	ctx2, err := srv.Authenticate(ctx, sampleAccessKey, "", "")
 	if err != nil {
 		t.Errorf("There was an error authenticating access key, %+v", err)
 		return
 	}
 
-	claims := ClaimsFromContext(ctx2)
+	claims := frame.ClaimsFromContext(ctx2)
 	if claims == nil {
 		t.Errorf("supplied context should contain authentication claims")
 	}
 }
 
 func TestSimpleAuthenticateWithAudience(t *testing.T) {
-	ctx := context.Background()
-	srv := NewService("Test Srv", Config(
-		&ConfigurationDefault{Oauth2WellKnownJwk: sampleWellKnownJwk}))
-	ctx = ToContext(ctx, srv)
+	ctx, srv := frame.NewService("Test Srv", frame.Config(
+		&frame.ConfigurationDefault{Oauth2WellKnownJwk: sampleWellKnownJwk}))
 
-	ctx2, err := srv.authenticate(ctx, sampleAccessKey, "c2f4j7au6s7f91uqnokg", "")
+	ctx2, err := srv.Authenticate(ctx, sampleAccessKey, "c2f4j7au6s7f91uqnokg", "")
 	if err != nil {
 		t.Errorf("There was an error authenticating access key due to audience, %+v", err)
 		return
 	}
 
-	claims := ClaimsFromContext(ctx2)
+	claims := frame.ClaimsFromContext(ctx2)
 	if claims == nil {
 		t.Errorf("supplied context should contain authentication claims")
 	}
@@ -62,18 +59,16 @@ func TestSimpleAuthenticateWithAudience(t *testing.T) {
 }
 
 func TestSimpleAuthenticateWithIssuer(t *testing.T) {
-	ctx := context.Background()
-	srv := NewService("Test Srv", Config(
-		&ConfigurationDefault{Oauth2WellKnownJwk: sampleWellKnownJwk}))
-	ctx = ToContext(ctx, srv)
+	ctx, srv := frame.NewService("Test Srv", frame.Config(
+		&frame.ConfigurationDefault{Oauth2WellKnownJwk: sampleWellKnownJwk}))
 
-	ctx2, err := srv.authenticate(ctx, sampleAccessKey, "", "http://127.0.0.1:4444/")
+	ctx2, err := srv.Authenticate(ctx, sampleAccessKey, "", "http://127.0.0.1:4444/")
 	if err != nil {
 		t.Errorf("There was an error authenticating access key due to issuer, %+v", err)
 		return
 	}
 
-	claims := ClaimsFromContext(ctx2)
+	claims := frame.ClaimsFromContext(ctx2)
 
 	if claims == nil {
 		t.Errorf("supplied context should contain authentication claims")

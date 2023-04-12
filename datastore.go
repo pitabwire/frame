@@ -120,7 +120,7 @@ func (s *Service) DB(ctx context.Context, readOnly bool) *gorm.DB {
 }
 
 // DatastoreCon Option method to store a connection that will be utilized when connecting to the database
-func DatastoreCon(ctx context.Context, postgresqlConnection string, readOnly bool) Option {
+func DatastoreCon(postgresqlConnection string, readOnly bool) Option {
 	return func(s *Service) {
 		if s.dataStore == nil {
 			s.dataStore = &store{
@@ -172,13 +172,13 @@ func Datastore(ctx context.Context) Option {
 			return
 		}
 
-		primaryDatabase := DatastoreCon(ctx, config.GetDatabasePrimaryHostURL(), false)
+		primaryDatabase := DatastoreCon(config.GetDatabasePrimaryHostURL(), false)
 		primaryDatabase(s)
 		replicaURL := config.GetDatabaseReplicaHostURL()
 		if replicaURL == "" {
 			replicaURL = config.GetDatabasePrimaryHostURL()
 		}
-		replicaDatabase := DatastoreCon(ctx, replicaURL, true)
+		replicaDatabase := DatastoreCon(replicaURL, true)
 		replicaDatabase(s)
 	}
 }

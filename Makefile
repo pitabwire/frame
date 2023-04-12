@@ -1,3 +1,8 @@
+SHELL := /bin/bash
+
+.PHONY: help clean build
+
+.DEFAULT_GOAL := help
 
 ENV_LOCAL_TEST=\
   TEST_DATABASE_URL=postgres://frame:secret@localhost:5431/framedatabase?sslmode=disable \
@@ -11,10 +16,6 @@ VERSION		?= $(shell git describe --tags --always --dirty --match=v* 2> /dev/null
 PACKAGE		?= $(shell go list)
 PACKAGES	?= $(shell go list ./...)
 FILES		?= $(shell find . -type f -name '*.go' -not -path "./vendor/*")
-
-
-
-default: help
 
 help:   ## show this help
 	@echo 'usage: make [target] ...'
@@ -47,13 +48,14 @@ docker-stop: ## stops all docker containers
 # if it's not specified it will run all tests
 tests: ## runs all system tests
 	$(ENV_LOCAL_TEST) \
-	FILES=$(go list ./...  | grep -v /vendor/) \
-  	go test ./... -v -run=$(INTEGRATION_TEST_SUITE_PATH);
-  	RETURNCODE=$?;
-	@if["$RETURNCODE" != "0"]; then\
-		echo "unit tests failed" && exit 1;\
-	fi;
+	FILES=$(go list ./...  | grep -v /vendor/);\
+	go test ./... -v -run=$(INTEGRATION_TEST_SUITE_PATH) -race -coverprofile=coverage.out;\
+	RETURNCODE=$$?;\
+	if [ "$$RETURNCODE" -ne 0 ]; then\
+		echo "unit tests failed with error code: $$RETURNCODE" >&2;\
+		exit 1;\
+	fi;\
+	go tool cover -html=coverage.out -o coverage.html
 
 
 build: clean fmt vet docker-setup tests docker-stop ## run all preliminary steps and tests the setup
-

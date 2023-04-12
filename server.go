@@ -4,8 +4,8 @@ import (
 	"context"
 	"github.com/improbable-eng/grpc-web/go/grpcweb"
 	"github.com/soheilhy/cmux"
+	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
-	"log"
 	"net"
 	"net/http"
 )
@@ -22,6 +22,7 @@ func (t *noopDriver) Shutdown(ctx context.Context) error {
 }
 
 type defaultDriver struct {
+	errorGroup *errgroup.Group
 	httpServer *http.Server
 }
 
@@ -30,13 +31,19 @@ type defaultDriver struct {
 func (dd *defaultDriver) ListenAndServe(addr string, h http.Handler) error {
 	dd.httpServer.Addr = addr
 	dd.httpServer.Handler = h
-	return dd.httpServer.ListenAndServe()
+
+	dd.errorGroup.Go(dd.httpServer.ListenAndServe)
+	return dd.errorGroup.Wait()
 }
 
 func (dd *defaultDriver) ListenAndServeTLS(addr, certFile, keyFile string, h http.Handler) error {
 	dd.httpServer.Addr = addr
 	dd.httpServer.Handler = h
-	return dd.httpServer.ListenAndServeTLS(certFile, keyFile)
+
+	dd.errorGroup.Go(func() error {
+		return dd.httpServer.ListenAndServeTLS(certFile, keyFile)
+	})
+	return dd.errorGroup.Wait()
 }
 
 func (dd *defaultDriver) Shutdown(ctx context.Context) error {
@@ -45,6 +52,7 @@ func (dd *defaultDriver) Shutdown(ctx context.Context) error {
 
 type grpcDriver struct {
 	corsPolicy        string
+	errorGroup        *errgroup.Group
 	httpServer        *http.Server
 	grpcServer        *grpc.Server
 	wrappedGrpcServer *grpcweb.WrappedGrpcServer
@@ -90,21 +98,16 @@ func (gd *grpcDriver) ListenAndServe(addr string, h http.Handler) error {
 	grpcL = m.MatchWithWriters(grpcMatcher)
 	anyL := m.Match(cmux.Any())
 
-	go func() {
-		err := gd.grpcServer.Serve(grpcL)
-		if err != nil {
-			log.Printf(" ListenAndServe -- stopping grpc server because : %+v", err)
-		}
-	}()
+	gd.errorGroup.Go(func() error {
+		return gd.grpcServer.Serve(grpcL)
+	})
 
-	go func() {
-		err := gd.httpServer.Serve(anyL)
-		if err != nil {
-			log.Printf(" ListenAndServe -- stopping http server because : %+v", err)
-		}
-	}()
+	gd.errorGroup.Go(func() error {
+		return gd.httpServer.Serve(anyL)
+	})
 
-	return m.Serve()
+	gd.errorGroup.Go(m.Serve)
+	return gd.errorGroup.Wait()
 }
 
 func (gd *grpcDriver) ListenAndServeTLS(addr, certFile, keyFile string, h http.Handler) error {
@@ -137,21 +140,16 @@ func (gd *grpcDriver) ListenAndServeTLS(addr, certFile, keyFile string, h http.H
 	grpcL = m.Match(grpcMatcher)
 	anyL := m.Match(cmux.Any())
 
-	go func() {
-		err := gd.grpcServer.Serve(grpcL)
-		if err != nil {
-			log.Printf(" ListenAndServeTLS -- stopping grpc server because : %+v", err)
-		}
-	}()
+	gd.errorGroup.Go(func() error {
+		return gd.grpcServer.Serve(grpcL)
+	})
 
-	go func() {
-		err := gd.httpServer.ServeTLS(anyL, certFile, keyFile)
-		if err != nil {
-			log.Printf(" ListenAndServeTLS -- stopping http server because : %+v", err)
-		}
-	}()
+	gd.errorGroup.Go(func() error {
+		return gd.httpServer.ServeTLS(anyL, certFile, keyFile)
+	})
 
-	return m.Serve()
+	gd.errorGroup.Go(m.Serve)
+	return gd.errorGroup.Wait()
 }
 
 func (gd *grpcDriver) Shutdown(ctx context.Context) error {

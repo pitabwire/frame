@@ -11,9 +11,7 @@ import (
 )
 
 func TestService_RegisterPublisherNotSet(t *testing.T) {
-	ctx := context.Background()
-
-	srv := frame.NewService("Test Srv")
+	ctx, srv := frame.NewService("Test Srv")
 
 	err := srv.Publish(ctx, "random", []byte(""))
 
@@ -23,9 +21,8 @@ func TestService_RegisterPublisherNotSet(t *testing.T) {
 }
 
 func TestService_RegisterPublisherNotInitialized(t *testing.T) {
-	ctx := context.Background()
 	opt := frame.RegisterPublisher("test", "mem://topicA")
-	srv := frame.NewService("Test Srv", opt)
+	ctx, srv := frame.NewService("Test Srv", opt)
 
 	err := srv.Publish(ctx, "random", []byte(""))
 
@@ -36,10 +33,9 @@ func TestService_RegisterPublisherNotInitialized(t *testing.T) {
 }
 
 func TestService_RegisterPublisher(t *testing.T) {
-	ctx := context.Background()
 
 	opt := frame.RegisterPublisher("test", "mem://topicA")
-	srv := frame.NewService("Test Srv", opt, frame.NoopDriver())
+	ctx, srv := frame.NewService("Test Srv", opt, frame.NoopDriver())
 
 	err := srv.Run(ctx, "")
 	if err != nil {
@@ -54,14 +50,13 @@ func TestService_RegisterPublisher(t *testing.T) {
 }
 
 func TestService_RegisterPublisherMultiple(t *testing.T) {
-	ctx := context.Background()
 
 	topicRef := "test-multiple-publisher"
 	topicRef2 := "test-multiple-publisher-2"
 
 	opt := frame.RegisterPublisher(topicRef, "mem://topicA")
 	opt1 := frame.RegisterPublisher(topicRef2, "mem://topicB")
-	srv := frame.NewService("Test Srv", opt, opt1, frame.NoopDriver())
+	ctx, srv := frame.NewService("Test Srv", opt, opt1, frame.NoopDriver())
 
 	err := srv.Run(ctx, "")
 	if err != nil {
@@ -106,15 +101,16 @@ func (m *handlerWithError) Handle(ctx context.Context, message []byte) error {
 }
 
 func TestService_RegisterSubscriber(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 	regSubTopic := "test-reg-sub-topic"
 
 	optTopic := frame.RegisterPublisher(regSubTopic, "mem://topicA")
 	opt := frame.RegisterSubscriber(regSubTopic, "mem://topicA",
 		5, &messageHandler{})
 
-	srv := frame.NewService("Test Srv", optTopic, opt, frame.NoopDriver())
+	ctx0, srv := frame.NewService("Test Srv", optTopic, opt, frame.NoopDriver())
+	ctx, cancel := context.WithCancel(ctx0)
+	defer cancel()
+
 	defer srv.Stop(ctx)
 
 	err := srv.Run(ctx, "")
@@ -140,13 +136,12 @@ func TestService_RegisterSubscriber(t *testing.T) {
 }
 
 func TestService_RegisterSubscriberWithError(t *testing.T) {
-	ctx := context.Background()
 
 	regSubT := "reg_s_wit-error"
 	opt := frame.RegisterSubscriber(regSubT, "mem://topicErrors", 1, &handlerWithError{})
 	optTopic := frame.RegisterPublisher(regSubT, "mem://topicErrors")
 
-	srv := frame.NewService("Test Srv", opt, optTopic, frame.NoopDriver())
+	ctx, srv := frame.NewService("Test Srv", opt, optTopic, frame.NoopDriver())
 	defer srv.Stop(ctx)
 
 	err := srv.Run(ctx, "")
@@ -163,13 +158,14 @@ func TestService_RegisterSubscriberWithError(t *testing.T) {
 }
 
 func TestService_RegisterSubscriberInvalid(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 
 	opt := frame.RegisterSubscriber("test", "memt+://topicA",
 		5, &messageHandler{})
 
-	srv := frame.NewService("Test Srv", opt, frame.NoopDriver())
+	ctx0, srv := frame.NewService("Test Srv", opt, frame.NoopDriver())
+	ctx, cancel := context.WithCancel(ctx0)
+	defer cancel()
+
 	defer srv.Stop(ctx)
 
 	if err := srv.Run(ctx, ""); err == nil {
@@ -178,14 +174,14 @@ func TestService_RegisterSubscriberInvalid(t *testing.T) {
 }
 
 func TestService_RegisterSubscriberContextCancelWorks(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
 
 	noopDriver := frame.NoopDriver()
 	optTopic := frame.RegisterPublisher("test", "mem://topicA")
 	opt := frame.RegisterSubscriber("test", "mem://topicA",
 		5, &messageHandler{})
 
-	srv := frame.NewService("Test Srv", opt, optTopic, noopDriver)
+	ctx0, srv := frame.NewService("Test Srv", opt, optTopic, noopDriver)
+	ctx, cancel := context.WithCancel(ctx0)
 
 	if err := srv.Run(ctx, ""); err != nil {
 		t.Errorf("We somehow fail to instantiate subscription ")

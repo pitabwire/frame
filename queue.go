@@ -7,26 +7,29 @@ import (
 	"github.com/sirupsen/logrus"
 	"gocloud.dev/pubsub"
 	_ "gocloud.dev/pubsub/mempubsub"
+	"golang.org/x/sync/errgroup"
 	"strings"
+	"sync"
+	"sync/atomic"
 )
 
 type queue struct {
-	publishQueueMap      map[string]*publisher
-	subscriptionQueueMap map[string]*subscriber
+	publishQueueMap      *sync.Map
+	subscriptionQueueMap *sync.Map
 }
 
 func (q queue) getPublisherByReference(reference string) (*publisher, error) {
-	p := q.publishQueueMap[reference]
-	if p == nil {
+	p, ok := q.publishQueueMap.Load(reference)
+	if !ok {
 		return nil, fmt.Errorf("reference does not exist")
 	}
-	return p, nil
+	return p.(*publisher), nil
 }
 
 func newQueue() *queue {
 	q := &queue{
-		publishQueueMap:      make(map[string]*publisher),
-		subscriptionQueueMap: make(map[string]*subscriber),
+		publishQueueMap:      &sync.Map{},
+		subscriptionQueueMap: &sync.Map{},
 	}
 
 	return q
@@ -43,21 +46,97 @@ type SubscribeWorker interface {
 }
 
 type subscriber struct {
+	ctx          context.Context
+	logger       *logrus.Entry
 	reference    string
 	url          string
 	concurrency  int
 	handler      SubscribeWorker
 	subscription *pubsub.Subscription
-	isInit       bool
+	isInit       atomic.Bool
+}
+
+func (s *subscriber) listen() error {
+
+	egrp, ctx1 := errgroup.WithContext(s.ctx)
+	msgChan := make(chan *pubsub.Message)
+
+	egrp.Go(func() error {
+		defer close(msgChan)
+
+		for {
+
+			select {
+			case <-ctx1.Done():
+				return ctx1.Err()
+			default:
+			}
+
+			msg, err := s.subscription.Receive(ctx1)
+			if err != nil {
+				s.logger.WithError(err).Error(" could not pull message")
+				s.isInit.Store(false)
+				return err
+			}
+
+			msgChan <- msg
+		}
+	})
+
+	for i := 0; i < s.concurrency; i++ {
+		workerIndex := i
+
+		egrp.Go(func() error {
+			for msg := range msgChan {
+				logger := s.logger.WithFields(logrus.Fields{
+					"worker": workerIndex,
+				})
+
+				authClaim := ClaimsFromMap(msg.Metadata)
+
+				var ctx2 context.Context
+				if nil != authClaim {
+					ctx2 = authClaim.ClaimsToContext(ctx1)
+				} else {
+					ctx2 = ctx1
+				}
+
+				err := s.handler.Handle(ctx2, msg.Body)
+				if err != nil {
+					logger.WithError(err).Error("unable to process message")
+					msg.Nack()
+					return err
+				} else {
+					msg.Ack()
+				}
+			}
+			return nil
+		})
+
+	}
+
+	err := egrp.Wait()
+
+	s.isInit.Store(false)
+	return err
+}
+
+// DequeueClient Option to register a background processing function that is initialized before running servers
+// this function is maintained alive using the same error group as the servers so that if any exit earlier due to error
+// all stop functioning
+func DequeueClient(deque func() error) Option {
+	return func(s *Service) {
+		s.backGroundClient = deque
+	}
 }
 
 // RegisterPublisher Option to register publishing path referenced within the system
 func RegisterPublisher(reference string, queueURL string) Option {
 	return func(s *Service) {
-		s.queue.publishQueueMap[reference] = &publisher{
+		s.queue.publishQueueMap.Store(reference, &publisher{
 			reference: reference,
 			url:       queueURL,
-		}
+		})
 	}
 }
 
@@ -65,17 +144,21 @@ func RegisterPublisher(reference string, queueURL string) Option {
 func RegisterSubscriber(reference string, queueURL string, concurrency int,
 	handler SubscribeWorker) Option {
 	return func(s *Service) {
-		s.queue.subscriptionQueueMap[reference] = &subscriber{
+		s.queue.subscriptionQueueMap.Store(reference, &subscriber{
 			reference:   reference,
 			url:         queueURL,
 			concurrency: concurrency,
 			handler:     handler,
-		}
+		})
 	}
 }
 
 func (s *Service) SubscriptionIsInitiated(path string) bool {
-	return s.queue.subscriptionQueueMap[path].isInit
+	sub, ok := s.queue.subscriptionQueueMap.Load(path)
+	if !ok {
+		return false
+	}
+	return sub.(*subscriber).isInit.Load()
 }
 
 // Publish Queue method to write a new message into the queue pre initialized with the supplied reference
@@ -107,7 +190,7 @@ func (s *Service) Publish(ctx context.Context, reference string, payload interfa
 		if err != nil {
 			return err
 		}
-		s.queue.publishQueueMap[reference] = pub
+		s.queue.publishQueueMap.Store(reference, pub)
 	}
 
 	var message []byte
@@ -159,7 +242,7 @@ func (s *Service) initSubscriber(ctx context.Context, sub *subscriber) error {
 
 		sub.subscription = subsc
 	}
-	sub.isInit = true
+	sub.isInit.Store(true)
 	return nil
 }
 
@@ -180,21 +263,35 @@ func (s *Service) initPubsub(ctx context.Context) error {
 		return nil
 	}
 
-	for _, pub := range s.queue.publishQueueMap {
+	var publishQSlice []*publisher
+	s.queue.publishQueueMap.Range(func(key, value any) bool {
+		pub := value.(*publisher)
+		publishQSlice = append(publishQSlice, pub)
+		return true
+	})
+
+	for _, pub := range publishQSlice {
 		err := s.initPublisher(ctx, pub)
 		if err != nil {
 			return err
 		}
 	}
 
-	for _, sub := range s.queue.subscriptionQueueMap {
+	var subscribeQSlice []*subscriber
+	s.queue.subscriptionQueueMap.Range(func(key, value any) bool {
+		sub := value.(*subscriber)
+		subscribeQSlice = append(subscribeQSlice, sub)
+		return true
+	})
+
+	for _, sub := range subscribeQSlice {
 		err := s.initSubscriber(ctx, sub)
 		if err != nil {
 			return err
 		}
 	}
 
-	if len(s.queue.subscriptionQueueMap) > 0 {
+	if len(subscribeQSlice) > 0 {
 		s.subscribe(ctx)
 	}
 
@@ -202,61 +299,18 @@ func (s *Service) initPubsub(ctx context.Context) error {
 }
 
 func (s *Service) subscribe(ctx context.Context) {
-	for _, subsc := range s.queue.subscriptionQueueMap {
+
+	s.queue.subscriptionQueueMap.Range(func(key, value any) bool {
+
+		subsc := value.(*subscriber)
 		logger := s.L().WithField("subscriber", subsc.reference).WithField("url", subsc.url)
 
 		if strings.HasPrefix(subsc.url, "http") {
-			continue
+			return true
 		}
-
-		go func(logger *logrus.Entry, localSub *subscriber) {
-			sem := make(chan struct{}, localSub.concurrency)
-		recvLoop:
-			for {
-				// Wait if there are too many active handle goroutines and acquire the
-				// semaphore. If the context is canceled, stop waiting and start shutting
-				// down.
-				select {
-				case sem <- struct{}{}:
-				case <-ctx.Done():
-					break recvLoop
-				}
-
-				msg, err := localSub.subscription.Receive(ctx)
-				if err != nil {
-					logger.WithError(err).Error(" could not pull message")
-					localSub.isInit = false
-					continue
-				}
-
-				go func(logger *logrus.Entry) {
-					defer func() { <-sem }() // Release the semaphore.
-
-					authClaim := ClaimsFromMap(msg.Metadata)
-
-					if nil != authClaim {
-						ctx = authClaim.ClaimsToContext(ctx)
-					}
-
-					ctx = ToContext(ctx, s)
-
-					err := localSub.handler.Handle(ctx, msg.Body)
-					if err != nil {
-						logger.WithError(err).Error("unable to process message")
-						msg.Nack()
-						return
-					}
-
-					msg.Ack()
-				}(logger)
-			}
-
-			// We're no longer receiving messages. Wait to finish handling any
-			// unacknowledged messages by totally acquiring the semaphore.
-			for n := 0; n < localSub.concurrency; n++ {
-				sem <- struct{}{}
-			}
-			localSub.isInit = false
-		}(logger, subsc)
-	}
+		subsc.ctx = ctx
+		subsc.logger = logger
+		s.errorGroup.Go(subsc.listen)
+		return true
+	})
 }

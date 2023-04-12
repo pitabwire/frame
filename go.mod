@@ -18,7 +18,7 @@ require (
 	golang.org/x/sync v0.1.0
 	golang.org/x/text v0.8.0
 	google.golang.org/grpc v1.54.0
-	google.golang.org/grpc/examples v0.0.0-20211009000955-b99d1040b71c
+	google.golang.org/grpc/examples v1.54.0
 	gorm.io/datatypes v1.2.0
 	gorm.io/driver/postgres v1.5.0
 	gorm.io/gorm v1.25.0

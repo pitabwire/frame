@@ -1,7 +1,6 @@
 package frame
 
 import (
-	"context"
 	"testing"
 )
 
@@ -9,13 +8,11 @@ func TestService_RegisterForJwtWithParams(t *testing.T) {
 
 	t.Skip("Only run this test manually by uncommenting line")
 
-	ctx := context.Background()
-
 	oauthServiceURL := "http://localhost:4447"
 	clientName := "Testing CLI"
 	clientSecret := "topS3cret"
 
-	srv := NewService("Test Srv", Config(&ConfigurationDefault{
+	ctx, srv := NewService("Test Srv", Config(&ConfigurationDefault{
 		Oauth2ServiceAdminURI: oauthServiceURL,
 	}))
 

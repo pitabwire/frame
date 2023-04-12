@@ -109,7 +109,7 @@ func ClaimsFromMap(m map[string]string) *AuthenticationClaims {
 	return nil
 }
 
-func (s *Service) authenticate(ctx context.Context,
+func (s *Service) Authenticate(ctx context.Context,
 	jwtToken string, audience string, issuer string) (context.Context, error) {
 	claims := &AuthenticationClaims{}
 
@@ -239,7 +239,7 @@ func (s *Service) AuthenticationMiddleware(next http.Handler, audience string, i
 		jwtToken := strings.TrimSpace(extractedJwtToken[1])
 
 		ctx := r.Context()
-		ctx, err := s.authenticate(ctx, jwtToken, audience, issuer)
+		ctx, err := s.Authenticate(ctx, jwtToken, audience, issuer)
 
 		if err != nil {
 			log.Printf(" AuthenticationMiddleware -- could not authenticate token : [%s]  due to error : %+v", jwtToken, err)
@@ -288,7 +288,7 @@ func (s *Service) UnaryAuthInterceptor(audience string, issuer string) grpc.Unar
 			return nil, err
 		}
 
-		ctx, err = s.authenticate(ctx, jwtToken, audience, issuer)
+		ctx, err = s.Authenticate(ctx, jwtToken, audience, issuer)
 		if err != nil {
 			log.Printf(" UnaryAuthInterceptor -- could not authenticate token : [%s]  due to error : %+v", jwtToken, err)
 			return nil, status.Error(codes.Unauthenticated, err.Error())
@@ -322,7 +322,7 @@ func (s *Service) StreamAuthInterceptor(audience string, issuer string) grpc.Str
 				return err
 			}
 
-			ctx, err = s.authenticate(ctx, jwtToken, audience, issuer)
+			ctx, err = s.Authenticate(ctx, jwtToken, audience, issuer)
 			if err != nil {
 				log.Printf(" StreamAuthInterceptor -- could not authenticate token : [%s]  due to error : %+v", jwtToken, err)
 				return status.Error(codes.Unauthenticated, err.Error())

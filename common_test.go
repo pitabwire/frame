@@ -109,7 +109,7 @@ func Test_ConfigCastingIssues(t *testing.T) {
 		t.Errorf(" could not load config from env : %v", err)
 	}
 
-	srv := frame.NewService("Test Srv", frame.Config(&conf))
+	_, srv := frame.NewService("Test Srv", frame.Config(&conf))
 
 	_, ok := srv.Config().(frame.ConfigurationOAUTH2)
 	if !ok {

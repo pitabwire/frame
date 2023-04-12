@@ -59,8 +59,6 @@ func TestRawGrpcServer(t *testing.T) {
 }
 
 func TestServiceGrpcServer(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 
 	bufferSize := 1024 * 1024
 	listener := bufconn.Listen(bufferSize)
@@ -73,7 +71,9 @@ func TestServiceGrpcServer(t *testing.T) {
 		t.Errorf("Could not process test configurations %v", err)
 		return
 	}
-	srv := NewService("Testing Service Grpc", GrpcServer(gsrv), ServerListener(listener), Config(&defConf))
+	ctx0, srv := NewService("Testing Service Grpc", GrpcServer(gsrv), ServerListener(listener), Config(&defConf))
+	ctx, cancel := context.WithCancel(ctx0)
+	defer cancel()
 
 	// it is here to properly stop the server
 	defer func() { time.Sleep(100 * time.Millisecond) }()
@@ -138,11 +138,11 @@ func TestService_Run(t *testing.T) {
 	time.Sleep(500 * time.Millisecond)
 	srv.Stop(ctx)
 
-	srv = NewService("Testing", NoopDriver())
+	ctx2, srv2 := NewService("Testing", NoopDriver())
 
-	if err := srv.Run(ctx, ":"); err != nil {
+	if err := srv2.Run(ctx2, ":"); err != nil {
 		t.Errorf("Could not run Server : %+v", err)
 	}
 
-	srv.Stop(ctx)
+	srv2.Stop(ctx2)
 }

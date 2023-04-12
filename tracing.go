@@ -1,6 +1,7 @@
 package frame
 
 import (
+	"context"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/propagation"
@@ -9,7 +10,7 @@ import (
 	semconv "go.opentelemetry.io/otel/semconv/v1.10.0"
 )
 
-func (s *Service) initTracer() error {
+func (s *Service) initTracer(ctx context.Context) error {
 	if s.traceExporter != nil {
 		res, err := resource.Merge(
 			resource.Default(),

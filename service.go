@@ -7,6 +7,7 @@ import (
 	"github.com/pitabwire/frame/internal"
 	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/otel/sdk/trace"
+	"golang.org/x/sync/errgroup"
 	"strings"
 
 	"google.golang.org/grpc"
@@ -29,37 +30,42 @@ const ctxKeyService = contextKey("serviceKey")
 // An instance of this type scoped to stay for the lifetime of the application.
 // It is pushed and pulled from contexts to make it easy to pass around.
 type Service struct {
-	name           string
-	jwtClientId    string
-	version        string
-	environment    string
-	logger         *logrus.Logger
-	traceExporter  trace.SpanExporter
-	traceSampler   trace.Sampler
-	handler        http.Handler
-	driver         internal.Server
-	grpcServer     *grpc.Server
-	listener       net.Listener
-	corsPolicy     string
-	client         *http.Client
-	queue          *queue
-	dataStore      *store
-	bundle         *i18n.Bundle
-	healthCheckers []Checker
-	livelinessPath string
-	readinessPath  string
-	startup        func(s *Service)
-	cleanups       []func(ctx context.Context)
-	eventRegistry  map[string]EventI
-	configuration  interface{}
-	once           sync.Once
+	name             string
+	jwtClientId      string
+	version          string
+	environment      string
+	logger           *logrus.Logger
+	traceExporter    trace.SpanExporter
+	traceSampler     trace.Sampler
+	handler          http.Handler
+	driver           internal.Server
+	grpcServer       *grpc.Server
+	listener         net.Listener
+	corsPolicy       string
+	client           *http.Client
+	queue            *queue
+	dataStore        *store
+	bundle           *i18n.Bundle
+	healthCheckers   []Checker
+	livelinessPath   string
+	readinessPath    string
+	startup          func(s *Service)
+	cleanups         []func(ctx context.Context)
+	errorGroup       *errgroup.Group
+	backGroundClient func() error
+	eventRegistry    map[string]EventI
+	configuration    interface{}
+	once             sync.Once
 }
 
 type Option func(service *Service)
 
 // NewService creates a new instance of Service with the name and supplied options
 // It is used together with the Init option to setup components of a service that is not yet running.
-func NewService(name string, opts ...Option) *Service {
+func NewService(name string, opts ...Option) (context.Context, *Service) {
+
+	ctx0, _ := initContext()
+
 	q := newQueue()
 
 	service := &Service{
@@ -76,8 +82,8 @@ func NewService(name string, opts ...Option) *Service {
 	opts = append(opts, Logger())
 
 	service.Init(opts...)
-
-	return service
+	ctx := ToContext(ctx0, service)
+	return ctx, service
 }
 
 // ToContext pushes a service instance into the supplied context for easier propagation.
@@ -147,7 +153,12 @@ func (s *Service) AddHealthCheck(checker Checker) {
 
 // Run is used to actually instantiate the initialised components and
 // keep them useful by handling incoming requests
-func (s *Service) Run(ctx context.Context, address string) error {
+func (s *Service) Run(ctx0 context.Context, address string) error {
+
+	//
+	var ctx context.Context
+	s.errorGroup, ctx = errgroup.WithContext(ctx0)
+
 	oauth2Config, ok := s.Config().(ConfigurationOAUTH2)
 	if ok {
 		oauth2ServiceAdminHost := oauth2Config.GetOauth2ServiceAdminURI()
@@ -174,6 +185,12 @@ func (s *Service) Run(ctx context.Context, address string) error {
 		return err
 	}
 
+	//connect the background processor
+	if s.backGroundClient != nil {
+		s.errorGroup.Go(s.backGroundClient)
+	}
+
+	// connect the server handlers
 	if s.handler == nil {
 		s.handler = http.DefaultServeMux
 	}
@@ -186,7 +203,7 @@ func (s *Service) Run(ctx context.Context, address string) error {
 }
 
 func (s *Service) initServer(ctx context.Context, address string) error {
-	err := s.initTracer()
+	err := s.initTracer(ctx)
 	if err != nil {
 		return err
 	}
@@ -210,7 +227,9 @@ func (s *Service) initServer(ctx context.Context, address string) error {
 		// If grpc server is setup we should use the correct driver
 		if s.grpcServer != nil {
 			s.driver = &grpcDriver{
+
 				corsPolicy: s.corsPolicy,
+				errorGroup: s.errorGroup,
 				grpcServer: s.grpcServer,
 				wrappedGrpcServer: grpcweb.WrapServer(
 					s.grpcServer,
@@ -226,6 +245,7 @@ func (s *Service) initServer(ctx context.Context, address string) error {
 		}
 		if s.driver == nil {
 			s.driver = &defaultDriver{
+				errorGroup: s.errorGroup,
 				httpServer: &http.Server{
 					ReadTimeout:  30 * time.Second,
 					WriteTimeout: 30 * time.Second,

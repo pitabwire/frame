@@ -3,6 +3,7 @@ package frame
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/sirupsen/logrus"
 	"gocloud.dev/pubsub"
@@ -104,10 +105,17 @@ func (s *subscriber) listen() error {
 		default:
 		}
 
-		msg, err := s.subscription.Receive(s.ctx)
+		ctx := context.TODO()
+
+		msg, err := s.subscription.Receive(ctx)
 		if err != nil {
+			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+				continue
+			}
+
 			s.logger.WithError(err).Error(" could not pull message")
 			s.isInit.Store(false)
+
 			return err
 		}
 
@@ -246,10 +254,16 @@ func (s *Service) initPubsub(ctx context.Context) error {
 		eventsQueueHandler := eventQueueHandler{
 			service: s,
 		}
-		eventsQueueURL := GetEnv(envEventsQueueUrl, fmt.Sprintf("mem://%s", eventsQueueName))
-		eventsQueue := RegisterSubscriber(eventsQueueName, eventsQueueURL, 10, &eventsQueueHandler)
+
+		config, ok := s.Config().(ConfigurationEvents)
+		if !ok {
+			s.L().Warn("configuration object not of type : ConfigurationDefault")
+			return errors.New("could not cast config to ConfigurationEvents")
+		}
+
+		eventsQueue := RegisterSubscriber(config.GetEventsQueueName(), config.GetEventsQueueUrl(), 10, &eventsQueueHandler)
 		eventsQueue(s)
-		eventsQueueP := RegisterPublisher(eventsQueueName, eventsQueueURL)
+		eventsQueueP := RegisterPublisher(config.GetEventsQueueName(), config.GetEventsQueueUrl())
 		eventsQueueP(s)
 	}
 

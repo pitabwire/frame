@@ -34,6 +34,9 @@ type ConfigurationDefault struct {
 	DatabaseReplicaURL    string `envconfig:"REPLICA_DATABASE_URL"`
 	DatabaseMigrate       string `default:"false" envconfig:"DO_MIGRATION"`
 	DatabaseMigrationPath string `default:"./migrations/0001" envconfig:"MIGRATION_PATH"`
+
+	EventsQueueName string `default:"frame.events.internal_._queue" envconfig:"EVENTS_QUEUE_NAME"`
+	EventsQueueUrl  string `default:"mem://frame.events.internal_._queue" envconfig:"EVENTS_QUEUE_URL"`
 }
 
 func (c *ConfigurationDefault) GetOauthWellKnownJwk() string {
@@ -84,6 +87,14 @@ func (c *ConfigurationDefault) GetDatabaseMigrationPath() string {
 	return c.DatabaseMigrationPath
 }
 
+func (c *ConfigurationDefault) GetEventsQueueName() string {
+	return c.EventsQueueName
+}
+
+func (c *ConfigurationDefault) GetEventsQueueUrl() string {
+	return c.EventsQueueUrl
+}
+
 type ConfigurationOAUTH2 interface {
 	GetOauthWellKnownJwk() string
 	GetOauth2ServiceURI() string
@@ -102,4 +113,9 @@ type ConfigurationDatabase interface {
 	GetDatabaseReplicaHostURL() string
 	DoDatabaseMigrate() bool
 	GetDatabaseMigrationPath() string
+}
+
+type ConfigurationEvents interface {
+	GetEventsQueueName() string
+	GetEventsQueueUrl() string
 }

@@ -3,11 +3,8 @@ package frame
 import (
 	"context"
 	"encoding/json"
-	"log"
+	"errors"
 )
-
-const eventsQueueName = "frame.events.internal_._queue"
-const envEventsQueueUrl = "EVENTS_QUEUE_URL"
 
 type eventPayload struct {
 	ID      string `json:",omitempty"`
@@ -59,10 +56,16 @@ func (s *Service) Emit(ctx context.Context, name string, payload interface{}) er
 
 	e := eventPayload{Name: name, Payload: string(payloadBytes)}
 
+	config, ok := s.Config().(ConfigurationEvents)
+	if !ok {
+		s.L().Warn("configuration object not of type : ConfigurationDefault")
+		return errors.New("could not cast config to ConfigurationEvents")
+	}
+
 	// Queue event message for further processing
-	err = s.Publish(ctx, eventsQueueName, e)
+	err = s.Publish(ctx, config.GetEventsQueueName(), e)
 	if err != nil {
-		log.Printf("Could not emit event %s : -> %+v", name, err)
+		s.L().WithError(err).WithField("name", name).Error("Could not emit event")
 		return err
 	}
 

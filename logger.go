@@ -4,7 +4,6 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/sirupsen/logrus/hooks/writer"
 	"io"
-	"log"
 	"os"
 )
 
@@ -16,7 +15,7 @@ func Logger() Option {
 			FullTimestamp: true,
 		})
 		logger.SetReportCaller(true)
-		log.SetOutput(io.Discard)
+		logger.SetOutput(io.Discard)
 		logger.AddHook(&writer.Hook{
 			Writer: os.Stderr,
 			LogLevels: []logrus.Level{

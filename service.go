@@ -116,6 +116,11 @@ func (s *Service) Environment() string {
 	return s.environment
 }
 
+// ErrorGroup obtains the system error group
+func (s *Service) ErrorGroup() *errgroup.Group {
+	return s.errorGroup
+}
+
 // Init evaluates the options provided as arguments and supplies them to the service object
 func (s *Service) Init(opts ...Option) {
 	for _, opt := range opts {

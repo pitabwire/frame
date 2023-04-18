@@ -46,8 +46,10 @@ type SubscribeWorker interface {
 }
 
 type subscriber struct {
-	ctx          context.Context
-	logger       *logrus.Entry
+	ctx    context.Context
+	errgrp *errgroup.Group
+	logger *logrus.Entry
+
 	reference    string
 	url          string
 	concurrency  int
@@ -58,35 +60,13 @@ type subscriber struct {
 
 func (s *subscriber) listen() error {
 
-	egrp, ctx1 := errgroup.WithContext(s.ctx)
 	msgChan := make(chan *pubsub.Message)
-
-	egrp.Go(func() error {
-		defer close(msgChan)
-
-		for {
-
-			select {
-			case <-ctx1.Done():
-				return ctx1.Err()
-			default:
-			}
-
-			msg, err := s.subscription.Receive(ctx1)
-			if err != nil {
-				s.logger.WithError(err).Error(" could not pull message")
-				s.isInit.Store(false)
-				return err
-			}
-
-			msgChan <- msg
-		}
-	})
+	defer close(msgChan)
 
 	for i := 0; i < s.concurrency; i++ {
 		workerIndex := i
 
-		egrp.Go(func() error {
+		s.errgrp.Go(func() error {
 			for msg := range msgChan {
 				logger := s.logger.WithFields(logrus.Fields{
 					"worker": workerIndex,
@@ -96,9 +76,9 @@ func (s *subscriber) listen() error {
 
 				var ctx2 context.Context
 				if nil != authClaim {
-					ctx2 = authClaim.ClaimsToContext(ctx1)
+					ctx2 = authClaim.ClaimsToContext(s.ctx)
 				} else {
-					ctx2 = ctx1
+					ctx2 = s.ctx
 				}
 
 				err := s.handler.Handle(ctx2, msg.Body)
@@ -115,10 +95,24 @@ func (s *subscriber) listen() error {
 
 	}
 
-	err := egrp.Wait()
+	for {
 
-	s.isInit.Store(false)
-	return err
+		select {
+		case <-s.ctx.Done():
+			s.isInit.Store(false)
+			return s.ctx.Err()
+		default:
+		}
+
+		msg, err := s.subscription.Receive(s.ctx)
+		if err != nil {
+			s.logger.WithError(err).Error(" could not pull message")
+			s.isInit.Store(false)
+			return err
+		}
+
+		msgChan <- msg
+	}
 }
 
 // BackGroundConsumer Option to register a background processing function that is initialized before running servers
@@ -309,8 +303,9 @@ func (s *Service) subscribe(ctx context.Context) {
 			return true
 		}
 		subsc.ctx = ctx
+		subsc.errgrp = s.ErrorGroup()
 		subsc.logger = logger
-		s.errorGroup.Go(subsc.listen)
+		s.ErrorGroup().Go(subsc.listen)
 		return true
 	})
 }

@@ -103,23 +103,23 @@ func (s *subscriber) listen() error {
 			s.isInit.Store(false)
 			return s.ctx.Err()
 		default:
-		}
 
-		ctx := context.TODO()
+			ctx := context.TODO()
 
-		msg, err := s.subscription.Receive(ctx)
-		if err != nil {
-			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-				continue
+			msg, err := s.subscription.Receive(ctx)
+			if err != nil {
+				if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+					continue
+				}
+
+				s.logger.WithError(err).Error(" could not pull message")
+				s.isInit.Store(false)
+
+				return err
 			}
 
-			s.logger.WithError(err).Error(" could not pull message")
-			s.isInit.Store(false)
-
-			return err
+			msgChan <- msg
 		}
-
-		msgChan <- msg
 	}
 }
 

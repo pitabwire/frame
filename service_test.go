@@ -2,6 +2,7 @@ package frame_test
 
 import (
 	"context"
+	"errors"
 	"github.com/pitabwire/frame"
 	"testing"
 )
@@ -94,4 +95,26 @@ func TestService_AddHealthCheck(t *testing.T) {
 	if len(srv.HealthCheckers()) == 0 {
 		t.Errorf("Health checkers are not being added to list")
 	}
+}
+
+func TestBackGroundConsumer(t *testing.T) {
+
+	ctx, srv := frame.NewService("Test Srv", frame.NoopDriver(), frame.BackGroundConsumer(func() error {
+		return nil
+	}))
+
+	err := srv.Run(ctx, "")
+	if err != nil {
+		t.Errorf("could not start a background consumer peacefully : %v", err)
+	}
+
+	ctx, srv = frame.NewService("Test Srv", frame.BackGroundConsumer(func() error {
+		return errors.New("background errors in the system")
+	}))
+
+	err = srv.Run(ctx, "9845")
+	if err == nil {
+		t.Errorf("could not propagate background consumer error correctly")
+	}
+
 }

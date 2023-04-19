@@ -50,6 +50,7 @@ type Service struct {
 	livelinessPath   string
 	readinessPath    string
 	startup          func(s *Service)
+	cancelFunc       context.CancelFunc
 	cleanups         []func(ctx context.Context)
 	errorGroup       *errgroup.Group
 	backGroundClient func() error
@@ -64,12 +65,13 @@ type Option func(service *Service)
 // It is used together with the Init option to setup components of a service that is not yet running.
 func NewService(name string, opts ...Option) (context.Context, *Service) {
 
-	ctx0, _ := initContext()
+	ctx0, cancel := initContext()
 
 	q := newQueue()
 
 	service := &Service{
-		name: name,
+		name:       name,
+		cancelFunc: cancel,
 		dataStore: &store{
 			readDatabase:  []*gorm.DB{},
 			writeDatabase: []*gorm.DB{},
@@ -160,7 +162,6 @@ func (s *Service) AddHealthCheck(checker Checker) {
 // keep them useful by handling incoming requests
 func (s *Service) Run(ctx0 context.Context, address string) error {
 
-	//
 	var ctx context.Context
 	s.errorGroup, ctx = errgroup.WithContext(ctx0)
 
@@ -271,16 +272,17 @@ func (s *Service) initServer(ctx context.Context, address string) error {
 // Stop Used to gracefully run clean up methods ensuring all requests that
 // were being handled are completed well without interuptions.
 func (s *Service) Stop(ctx context.Context) {
-	for {
+	for len(s.cleanups) > 0 {
 		var cleanup func(ctx context.Context)
-		if len(s.cleanups) > 0 {
-			last := len(s.cleanups) - 1
-			cleanup = s.cleanups[last]
-			s.cleanups = s.cleanups[:last]
-		}
-		if cleanup == nil {
-			return
-		}
+
+		last := len(s.cleanups) - 1
+		cleanup = s.cleanups[last]
+		s.cleanups = s.cleanups[:last]
 		cleanup(ctx)
+	}
+
+	//cancel our service operations
+	if s.cancelFunc != nil {
+		s.cancelFunc()
 	}
 }

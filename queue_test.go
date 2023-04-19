@@ -47,6 +47,7 @@ func TestService_RegisterPublisher(t *testing.T) {
 	if err != nil {
 		t.Errorf("We could not publish to topic that was registered %+v", err)
 	}
+
 }
 
 func TestService_RegisterPublisherMultiple(t *testing.T) {

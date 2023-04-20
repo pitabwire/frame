@@ -242,8 +242,8 @@ func (s *Service) initServer(ctx context.Context, address string) error {
 					grpcweb.WithOriginFunc(func(origin string) bool { return true }),
 				),
 				httpServer: &http.Server{
-					ReadTimeout:  30 * time.Second,
-					WriteTimeout: 30 * time.Second,
+					ReadTimeout:  5 * time.Second,
+					WriteTimeout: 10 * time.Second,
 					IdleTimeout:  120 * time.Second,
 				},
 				listener: s.listener,
@@ -253,12 +253,24 @@ func (s *Service) initServer(ctx context.Context, address string) error {
 			s.driver = &defaultDriver{
 				errorGroup: s.errorGroup,
 				httpServer: &http.Server{
-					ReadTimeout:  30 * time.Second,
-					WriteTimeout: 30 * time.Second,
+					BaseContext: func(listener net.Listener) context.Context {
+						return ctx
+					},
+					ReadTimeout:  5 * time.Second,
+					WriteTimeout: 10 * time.Second,
 					IdleTimeout:  120 * time.Second,
 				},
 			}
 		}
+
+		//Monitor context cancellation to stop driver
+		s.ErrorGroup().Go(func() error {
+			if <-ctx.Done(); true {
+				return s.driver.Shutdown(ctx)
+			}
+			return nil
+		})
+
 	})
 
 	if s.startup != nil {

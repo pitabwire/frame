@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"github.com/pitabwire/frame"
+	"google.golang.org/grpc/test/bufconn"
 	"testing"
 )
 
@@ -99,20 +100,24 @@ func TestService_AddHealthCheck(t *testing.T) {
 
 func TestBackGroundConsumer(t *testing.T) {
 
-	ctx, srv := frame.NewService("Test Srv", frame.NoopDriver(), frame.BackGroundConsumer(func() error {
-		return nil
-	}))
+	listener := bufconn.Listen(1024 * 1024)
 
-	err := srv.Run(ctx, "")
+	ctx, srv := frame.NewService("Test Srv",
+		frame.ServerListener(listener),
+		frame.BackGroundConsumer(func(ctx context.Context) error {
+			return nil
+		}))
+
+	err := srv.Run(ctx, ":")
 	if err != nil {
 		t.Errorf("could not start a background consumer peacefully : %v", err)
 	}
 
-	ctx, srv = frame.NewService("Test Srv", frame.BackGroundConsumer(func() error {
+	ctx, srv = frame.NewService("Test Srv", frame.BackGroundConsumer(func(ctx context.Context) error {
 		return errors.New("background errors in the system")
 	}))
 
-	err = srv.Run(ctx, "9845")
+	err = srv.Run(ctx, ":")
 	if err == nil {
 		t.Errorf("could not propagate background consumer error correctly")
 	}

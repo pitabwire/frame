@@ -3,7 +3,6 @@ package frame
 import (
 	"context"
 	"errors"
-	"github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	grpchello "google.golang.org/grpc/examples/helloworld/helloworld"
@@ -33,7 +32,7 @@ func startGRPCServer() (*grpc.Server, *bufconn.Listener) {
 
 	go func() {
 		if err := srv.Serve(listener); err != nil {
-			log.Fatalf("failed to start grpc server: %+v", err)
+			log.Fatalf("failed to start grpc server: %s", err)
 		}
 	}()
 	return srv, listener
@@ -54,7 +53,7 @@ func TestRawGrpcServer(t *testing.T) {
 
 	err := clientInvokeGrpc(listener)
 	if err != nil {
-		t.Fatalf("failed to dial: %+v", err)
+		t.Fatalf("failed to dial: %s", err)
 	}
 }
 
@@ -71,16 +70,10 @@ func TestServiceGrpcServer(t *testing.T) {
 		t.Errorf("Could not process test configurations %v", err)
 		return
 	}
-	ctx0, srv := NewService("Testing Service Grpc", GrpcServer(gsrv), ServerListener(listener), Config(&defConf))
-	ctx, cancel := context.WithCancel(ctx0)
-	defer cancel()
-
-	// it is here to properly stop the server
-	defer func() { time.Sleep(100 * time.Millisecond) }()
-	defer srv.Stop(ctx)
+	ctx, srv := NewService("Testing Service Grpc", GrpcServer(gsrv), ServerListener(listener), Config(&defConf))
 
 	go func() {
-		err := srv.Run(ctx, "")
+		err = srv.Run(ctx, "")
 		if err != nil {
 			srv.L().WithError(err).Error(" failed to run server ")
 		}
@@ -88,8 +81,11 @@ func TestServiceGrpcServer(t *testing.T) {
 
 	err = clientInvokeGrpc(listener)
 	if err != nil {
-		t.Fatalf("failed to dial: %+v", err)
+		t.Fatalf("failed to dial: %s", err)
 	}
+
+	time.Sleep(2 * time.Second)
+	srv.Stop(ctx)
 }
 
 func clientInvokeGrpc(listener *bufconn.Listener) error {
@@ -121,28 +117,19 @@ func clientInvokeGrpc(listener *bufconn.Listener) error {
 }
 
 func TestService_Run(t *testing.T) {
-	ctx := context.Background()
 
-	srv := &Service{
-		logger: logrus.New(),
-	}
+	listener := bufconn.Listen(1024 * 1024)
+	ctx2, srv2 := NewService("Testing", ServerListener(listener))
 
 	go func() {
-		err := srv.Run(ctx, ":")
-
-		if err != nil {
-			t.Errorf("Service can not be started successfully without a server")
+		if err := srv2.Run(ctx2, ":"); err != nil {
+			if !errors.Is(context.Canceled, err) {
+				t.Errorf("Could not run Server : %s", err)
+			}
 		}
 	}()
 
-	time.Sleep(500 * time.Millisecond)
-	srv.Stop(ctx)
-
-	ctx2, srv2 := NewService("Testing", NoopDriver())
-
-	if err := srv2.Run(ctx2, ":"); err != nil {
-		t.Errorf("Could not run Server : %+v", err)
-	}
-
+	time.Sleep(1 * time.Second)
 	srv2.Stop(ctx2)
+	time.Sleep(1 * time.Second)
 }

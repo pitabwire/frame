@@ -60,7 +60,7 @@ func (s *Service) TranslateWithMapAndCount(request interface{}, messageId string
 	})
 
 	if err != nil {
-		log.Printf(" TranslateWithMapAndCount -- translation problem %+v", err)
+		log.Printf(" TranslateWithMapAndCount -- translation problem %s", err)
 	}
 
 	return transVersion

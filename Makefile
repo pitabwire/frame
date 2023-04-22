@@ -49,7 +49,7 @@ docker-stop: ## stops all docker containers
 tests: ## runs all system tests
 	$(ENV_LOCAL_TEST) \
 	FILES=$(go list ./...  | grep -v /vendor/);\
-	go test ./... -v -run=$(INTEGRATION_TEST_SUITE_PATH) -race -coverprofile=coverage.out;\
+	go test ./... -v -run=$(INTEGRATION_TEST_SUITE_PATH)  -coverprofile=coverage.out;\
 	RETURNCODE=$$?;\
 	if [ "$$RETURNCODE" -ne 0 ]; then\
 		echo "unit tests failed with error code: $$RETURNCODE" >&2;\

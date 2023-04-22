@@ -7,8 +7,10 @@ import (
 	"github.com/pitabwire/frame/internal"
 	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/otel/sdk/trace"
-	"golang.org/x/sync/errgroup"
+	"os/signal"
+	"runtime"
 	"strings"
+	"syscall"
 
 	"google.golang.org/grpc"
 	"gorm.io/gorm"
@@ -31,13 +33,19 @@ const ctxKeyService = contextKey("serviceKey")
 // It is pushed and pulled from contexts to make it easy to pass around.
 type Service struct {
 	name             string
-	jwtClientId      string
+	JwtClientId      string
 	version          string
 	environment      string
 	logger           *logrus.Logger
+	logLevel         *logrus.Level
 	traceExporter    trace.SpanExporter
 	traceSampler     trace.Sampler
 	handler          http.Handler
+	cancelFunc       context.CancelFunc
+	errorChannel     chan error
+	backGroundClient func(ctx context.Context) error
+	workerCount      int
+	pool             *pool
 	driver           internal.Server
 	grpcServer       *grpc.Server
 	listener         net.Listener
@@ -50,13 +58,12 @@ type Service struct {
 	livelinessPath   string
 	readinessPath    string
 	startup          func(s *Service)
-	cancelFunc       context.CancelFunc
-	cleanups         []func(ctx context.Context)
-	errorGroup       *errgroup.Group
-	backGroundClient func() error
+	cleanup          func(ctx context.Context)
 	eventRegistry    map[string]EventI
 	configuration    interface{}
-	once             sync.Once
+	startOnce        sync.Once
+	closeOnce        sync.Once
+	mu               sync.Mutex
 }
 
 type Option func(service *Service)
@@ -65,27 +72,39 @@ type Option func(service *Service)
 // It is used together with the Init option to setup components of a service that is not yet running.
 func NewService(name string, opts ...Option) (context.Context, *Service) {
 
-	ctx0, cancel := initContext()
+	ctx0, cancel := context.WithCancel(context.Background())
 
-	q := newQueue()
+	concurrency := runtime.NumCPU() + 1
+
+	q := newQueue(ctx0)
 
 	service := &Service{
-		name:       name,
-		cancelFunc: cancel,
+		name:         name,
+		cancelFunc:   cancel,
+		errorChannel: make(chan error, 1),
 		dataStore: &store{
 			readDatabase:  []*gorm.DB{},
 			writeDatabase: []*gorm.DB{},
 		},
-		client: &http.Client{},
-		queue:  q,
-		logger: logrus.New(),
+		client:      &http.Client{},
+		queue:       q,
+		logger:      logrus.New(),
+		workerCount: concurrency,
 	}
+
+	service.pool = newPool(service.L(), concurrency)
+
+	signal.NotifyContext(ctx0,
+		syscall.SIGHUP,
+		syscall.SIGINT,
+		syscall.SIGTERM,
+		syscall.SIGQUIT)
 
 	opts = append(opts, Logger())
 
 	service.Init(opts...)
-	ctx := ToContext(ctx0, service)
-	return ctx, service
+	ctx1 := ToContext(ctx0, service)
+	return ctx1, service
 }
 
 // ToContext pushes a service instance into the supplied context for easier propagation.
@@ -118,9 +137,9 @@ func (s *Service) Environment() string {
 	return s.environment
 }
 
-// ErrorGroup obtains the system error group
-func (s *Service) ErrorGroup() *errgroup.Group {
-	return s.errorGroup
+// LogLevel gets the loglevel of the service as set at startup
+func (s *Service) LogLevel() *logrus.Level {
+	return s.logLevel
 }
 
 // Init evaluates the options provided as arguments and supplies them to the service object
@@ -133,6 +152,8 @@ func (s *Service) Init(opts ...Option) {
 // AddPreStartMethod Adds user defined functions that can be run just before
 // the service starts receiving requests but is fully initialized.
 func (s *Service) AddPreStartMethod(f func(s *Service)) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if s.startup == nil {
 		s.startup = f
 		return
@@ -145,7 +166,16 @@ func (s *Service) AddPreStartMethod(f func(s *Service)) {
 // AddCleanupMethod Adds user defined functions to be run just before completely stopping the service.
 // These are responsible for properly and gracefully stopping active components.
 func (s *Service) AddCleanupMethod(f func(ctx context.Context)) {
-	s.cleanups = append(s.cleanups, f)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.cleanup == nil {
+		s.cleanup = f
+		return
+	}
+
+	old := s.cleanup
+	s.cleanup = func(ctx context.Context) { f(ctx); old(ctx) }
 }
 
 // AddHealthCheck Adds health checks that are run periodically to ascertain the system is ok
@@ -160,10 +190,9 @@ func (s *Service) AddHealthCheck(checker Checker) {
 
 // Run is used to actually instantiate the initialised components and
 // keep them useful by handling incoming requests
-func (s *Service) Run(ctx0 context.Context, address string) error {
+func (s *Service) Run(ctx context.Context, address string) error {
 
-	var ctx context.Context
-	s.errorGroup, ctx = errgroup.WithContext(ctx0)
+	logger := s.L()
 
 	oauth2Config, ok := s.Config().(ConfigurationOAUTH2)
 	if ok {
@@ -176,13 +205,13 @@ func (s *Service) Run(ctx0 context.Context, address string) error {
 		if oauth2ServiceAdminHost != "" && clientSecret != "" {
 			audienceList := strings.Split(oauth2Audience, ",")
 
-			clientID, err := s.RegisterForJwtWithParams(ctx, oauth2ServiceAdminHost, s.name, clientSecret,
+			clientID, err := s.RegisterForJwtWithParams(ctx, oauth2ServiceAdminHost, s.Name(), clientSecret,
 				"", audienceList, map[string]string{})
 			if err != nil {
 				return err
 			}
 
-			s.jwtClientId = clientID
+			s.JwtClientId = clientID
 		}
 	}
 
@@ -193,9 +222,17 @@ func (s *Service) Run(ctx0 context.Context, address string) error {
 
 	//connect the background processor
 	if s.backGroundClient != nil {
-		s.errorGroup.Go(s.backGroundClient)
+		go func() {
+			err = s.backGroundClient(ctx)
+			s.errorChannel <- err
+
+		}()
+
 	}
 
+	if s.pool != nil {
+		s.pool.Start(ctx)
+	}
 	// connect the server handlers
 	if s.handler == nil {
 		s.handler = http.DefaultServeMux
@@ -205,7 +242,31 @@ func (s *Service) Run(ctx0 context.Context, address string) error {
 		s.corsPolicy = "*"
 	}
 
-	return s.initServer(ctx, address)
+	go func() {
+		err = s.initServer(ctx, address)
+		if err != nil {
+			s.errorChannel <- err
+		} else {
+			if s.backGroundClient == nil {
+				s.errorChannel <- nil
+			}
+
+		}
+
+	}()
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case err0 := <-s.errorChannel:
+		if err0 != nil {
+			logger.WithError(err0).Info("system exit in error")
+		} else {
+			logger.Info("system exit without fuss")
+		}
+		return err0
+	}
+
 }
 
 func (s *Service) initServer(ctx context.Context, address string) error {
@@ -222,7 +283,7 @@ func (s *Service) initServer(ctx context.Context, address string) error {
 		s.readinessPath = "/healthz/readiness"
 	}
 
-	s.once.Do(func() {
+	s.startOnce.Do(func() {
 		mux := http.NewServeMux()
 		mux.HandleFunc(s.livelinessPath, HandleLive)
 		mux.Handle(s.readinessPath, s)
@@ -235,13 +296,15 @@ func (s *Service) initServer(ctx context.Context, address string) error {
 			s.driver = &grpcDriver{
 
 				corsPolicy: s.corsPolicy,
-				errorGroup: s.errorGroup,
 				grpcServer: s.grpcServer,
 				wrappedGrpcServer: grpcweb.WrapServer(
 					s.grpcServer,
 					grpcweb.WithOriginFunc(func(origin string) bool { return true }),
 				),
 				httpServer: &http.Server{
+					BaseContext: func(listener net.Listener) context.Context {
+						return ctx
+					},
 					ReadTimeout:  5 * time.Second,
 					WriteTimeout: 10 * time.Second,
 					IdleTimeout:  120 * time.Second,
@@ -251,7 +314,6 @@ func (s *Service) initServer(ctx context.Context, address string) error {
 		}
 		if s.driver == nil {
 			s.driver = &defaultDriver{
-				errorGroup: s.errorGroup,
 				httpServer: &http.Server{
 					BaseContext: func(listener net.Listener) context.Context {
 						return ctx
@@ -262,39 +324,39 @@ func (s *Service) initServer(ctx context.Context, address string) error {
 				},
 			}
 		}
-
-		//Monitor context cancellation to stop driver
-		s.ErrorGroup().Go(func() error {
-			if <-ctx.Done(); true {
-				return s.driver.Shutdown(ctx)
-			}
-			return nil
-		})
-
 	})
 
 	if s.startup != nil {
 		s.startup(s)
 	}
 
-	err = s.driver.ListenAndServe(address, s.handler)
-	return err
+	return s.driver.ListenAndServe(address, s.handler)
 }
 
 // Stop Used to gracefully run clean up methods ensuring all requests that
 // were being handled are completed well without interuptions.
 func (s *Service) Stop(ctx context.Context) {
-	for len(s.cleanups) > 0 {
-		var cleanup func(ctx context.Context)
 
-		last := len(s.cleanups) - 1
-		cleanup = s.cleanups[last]
-		s.cleanups = s.cleanups[:last]
-		cleanup(ctx)
-	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
-	//cancel our service operations
-	if s.cancelFunc != nil {
-		s.cancelFunc()
-	}
+	s.closeOnce.Do(func() {
+		if s.cleanup != nil {
+			s.cleanup(ctx)
+		}
+
+		if s.pool != nil {
+			err := s.pool.Close()
+			if err != nil {
+				s.L().WithError(err).Error("could not stop pool")
+			}
+		}
+
+		if s.cancelFunc != nil {
+			s.cancelFunc()
+		}
+
+		close(s.errorChannel)
+
+	})
 }

@@ -62,7 +62,7 @@ func TestAuthorizationControlListWrite(t *testing.T) {
 
 	err := authorizationControlListWrite(ctx, authorizationServerURL, "read", "tested")
 	if err != nil {
-		t.Errorf("Authorization write was not possible see %+v", err)
+		t.Errorf("Authorization write was not possible see %s", err)
 		return
 	}
 }
@@ -86,13 +86,13 @@ func TestAuthHasAccess(t *testing.T) {
 
 	err := authorizationControlListWrite(ctx, authorizationServerURL, "read", "reader")
 	if err != nil {
-		t.Errorf("Authorization write was not possible see %+v", err)
+		t.Errorf("Authorization write was not possible see %s", err)
 		return
 	}
 
 	access, err := frame.AuthHasAccess(ctx, "read", "reader")
 	if err != nil {
-		t.Errorf("Authorization check was not possible see %+v", err)
+		t.Errorf("Authorization check was not possible see %s", err)
 	} else if !access {
 		t.Errorf("Authorization check was forbidden")
 		return

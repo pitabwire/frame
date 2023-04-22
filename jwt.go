@@ -45,8 +45,8 @@ func (s *Service) RegisterForJwtWithParams(ctx context.Context,
 
 	metadata["cc_bot"] = "true"
 	payload := map[string]interface{}{
-		"client_name":                clientName,
-		"client_secret":              clientSecret,
+		"client_name":                url.QueryEscape(clientName),
+		"client_secret":              url.QueryEscape(clientSecret),
 		"grant_types":                []string{"client_credentials"},
 		"metadata":                   metadata,
 		"audience":                   audienceList,

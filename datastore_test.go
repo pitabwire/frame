@@ -11,8 +11,7 @@ func TestService_Datastore(t *testing.T) {
 	testDBURL := frame.GetEnv("TEST_DATABASE_URL", "postgres://frame:secret@localhost:5431/framedatabase?sslmode=disable")
 	mainDB := frame.DatastoreCon(testDBURL, false)
 
-	ctx, srv := frame.NewService("Test Srv", mainDB)
-	defer srv.Stop(ctx)
+	ctx, srv := frame.NewService("Test Srv", mainDB, frame.NoopDriver())
 
 	if srv.Name() != "Test Srv" {
 		t.Errorf("s")
@@ -34,6 +33,9 @@ func TestService_Datastore(t *testing.T) {
 	if wd, _ := w.DB(); wd != rd {
 		t.Errorf("Read and write db services should not be different ")
 	}
+
+	srv.Stop(ctx)
+
 }
 
 func TestService_DatastoreSet(t *testing.T) {

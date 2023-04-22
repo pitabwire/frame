@@ -242,7 +242,7 @@ func (s *Service) AuthenticationMiddleware(next http.Handler, audience string, i
 		ctx, err := s.Authenticate(ctx, jwtToken, audience, issuer)
 
 		if err != nil {
-			log.Printf(" AuthenticationMiddleware -- could not authenticate token : [%s]  due to error : %+v", jwtToken, err)
+			log.Printf(" AuthenticationMiddleware -- could not authenticate token : [%s]  due to error : %s", jwtToken, err)
 			http.Error(w, "Authorization header is invalid", http.StatusUnauthorized)
 			return
 		}
@@ -290,7 +290,7 @@ func (s *Service) UnaryAuthInterceptor(audience string, issuer string) grpc.Unar
 
 		ctx, err = s.Authenticate(ctx, jwtToken, audience, issuer)
 		if err != nil {
-			log.Printf(" UnaryAuthInterceptor -- could not authenticate token : [%s]  due to error : %+v", jwtToken, err)
+			log.Printf(" UnaryAuthInterceptor -- could not authenticate token : [%s]  due to error : %s", jwtToken, err)
 			return nil, status.Error(codes.Unauthenticated, err.Error())
 		}
 		return handler(ctx, req)
@@ -324,7 +324,7 @@ func (s *Service) StreamAuthInterceptor(audience string, issuer string) grpc.Str
 
 			ctx, err = s.Authenticate(ctx, jwtToken, audience, issuer)
 			if err != nil {
-				log.Printf(" StreamAuthInterceptor -- could not authenticate token : [%s]  due to error : %+v", jwtToken, err)
+				log.Printf(" StreamAuthInterceptor -- could not authenticate token : [%s]  due to error : %s", jwtToken, err)
 				return status.Error(codes.Unauthenticated, err.Error())
 			}
 

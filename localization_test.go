@@ -24,7 +24,7 @@ func TestTranslations(t *testing.T) {
 		PluralCount: 1,
 	})
 	if err != nil {
-		t.Errorf(" There was an error parsing the translations %+v", err)
+		t.Errorf(" There was an error parsing the translations %s", err)
 		return
 	}
 
@@ -44,7 +44,7 @@ func TestTranslations(t *testing.T) {
 		PluralCount: 1,
 	})
 	if err != nil {
-		t.Errorf(" There was an error parsing the translations %+v", err)
+		t.Errorf(" There was an error parsing the translations %s", err)
 		return
 	}
 

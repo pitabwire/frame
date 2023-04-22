@@ -31,7 +31,7 @@ func TestSimpleAuthenticate(t *testing.T) {
 
 	ctx2, err := srv.Authenticate(ctx, sampleAccessKey, "", "")
 	if err != nil {
-		t.Errorf("There was an error authenticating access key, %+v", err)
+		t.Errorf("There was an error authenticating access key, %s", err)
 		return
 	}
 
@@ -47,7 +47,7 @@ func TestSimpleAuthenticateWithAudience(t *testing.T) {
 
 	ctx2, err := srv.Authenticate(ctx, sampleAccessKey, "c2f4j7au6s7f91uqnokg", "")
 	if err != nil {
-		t.Errorf("There was an error authenticating access key due to audience, %+v", err)
+		t.Errorf("There was an error authenticating access key due to audience, %s", err)
 		return
 	}
 
@@ -64,7 +64,7 @@ func TestSimpleAuthenticateWithIssuer(t *testing.T) {
 
 	ctx2, err := srv.Authenticate(ctx, sampleAccessKey, "", "http://127.0.0.1:4444/")
 	if err != nil {
-		t.Errorf("There was an error authenticating access key due to issuer, %+v", err)
+		t.Errorf("There was an error authenticating access key due to issuer, %s", err)
 		return
 	}
 

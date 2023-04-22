@@ -38,13 +38,13 @@ func (m *migrator) scanForNewMigrations(ctx context.Context, migrationsDirPath s
 		migrationPatch, err := os.ReadFile(file)
 
 		if err != nil {
-			log.Printf("scanForNewMigrations -- Problem reading migration file content : %+v", err)
+			log.Printf("scanForNewMigrations -- Problem reading migration file content : %s", err)
 			continue
 		}
 
 		err = m.saveNewMigrations(ctx, filename, string(migrationPatch))
 		if err != nil {
-			log.Printf("scanForNewMigrations -- new migration :%s could not be processed because: %+v", file, err)
+			log.Printf("scanForNewMigrations -- new migration :%s could not be processed because: %s", file, err)
 			return err
 		}
 
@@ -132,12 +132,12 @@ func (s *Service) MigrateDatastore(ctx context.Context, migrationsDirPath string
 	migrationExecutor := migrator{service: s}
 
 	if err := migrationExecutor.scanForNewMigrations(ctx, migrationsDirPath); err != nil {
-		log.Printf("MigrateDatastore -- Error scanning for new migrations : %+v ", err)
+		log.Printf("MigrateDatastore -- Error scanning for new migrations : %s ", err)
 		return err
 	}
 
 	if err := migrationExecutor.applyNewMigrations(ctx); err != nil {
-		log.Printf("MigrateDatastore -- There was an error applying migrations : %+v ", err)
+		log.Printf("MigrateDatastore -- There was an error applying migrations : %s ", err)
 		return err
 	}
 	return nil

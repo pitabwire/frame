@@ -139,7 +139,7 @@ func DatastoreCon(postgresqlConnection string, readOnly bool) Option {
 
 		config, err := pgx.ParseConfig(postgresqlConnection)
 		if err != nil {
-			log.Printf("Datastore -- problem parsing database connection : %+v", err)
+			log.Printf("Datastore -- problem parsing database connection : %s", err)
 		}
 
 		db := stdlib.OpenDB(*config)

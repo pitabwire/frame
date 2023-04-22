@@ -8,7 +8,6 @@ import (
 	"github.com/sirupsen/logrus"
 	"gocloud.dev/pubsub"
 	_ "gocloud.dev/pubsub/mempubsub"
-	"golang.org/x/sync/errgroup"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -27,7 +26,7 @@ func (q queue) getPublisherByReference(reference string) (*publisher, error) {
 	return p.(*publisher), nil
 }
 
-func newQueue() *queue {
+func newQueue(_ context.Context) *queue {
 	q := &queue{
 		publishQueueMap:      &sync.Map{},
 		subscriptionQueueMap: &sync.Map{},
@@ -47,8 +46,6 @@ type SubscribeWorker interface {
 }
 
 type subscriber struct {
-	ctx    context.Context
-	errgrp *errgroup.Group
 	logger *logrus.Entry
 
 	reference    string
@@ -59,52 +56,46 @@ type subscriber struct {
 	isInit       atomic.Bool
 }
 
-func (s *subscriber) listen() error {
+type subscriptionMessage struct {
+	JobImpl
+	msg       *pubsub.Message
+	subWorker SubscribeWorker
+}
 
-	msgChan := make(chan *pubsub.Message)
-	defer close(msgChan)
+func (sm *subscriptionMessage) Process(ctx context.Context) error {
 
-	for i := 0; i < s.concurrency; i++ {
-		workerIndex := i
+	msg := sm.msg
 
-		s.errgrp.Go(func() error {
-			for msg := range msgChan {
-				logger := s.logger.WithFields(logrus.Fields{
-					"worker": workerIndex,
-				})
+	authClaim := ClaimsFromMap(msg.Metadata)
 
-				authClaim := ClaimsFromMap(msg.Metadata)
-
-				var ctx2 context.Context
-				if nil != authClaim {
-					ctx2 = authClaim.ClaimsToContext(s.ctx)
-				} else {
-					ctx2 = s.ctx
-				}
-
-				err := s.handler.Handle(ctx2, msg.Body)
-				if err != nil {
-					logger.WithError(err).Error("unable to process message")
-					msg.Nack()
-					return err
-				} else {
-					msg.Ack()
-				}
-			}
-			return nil
-		})
-
+	var ctx2 context.Context
+	if nil != authClaim {
+		ctx2 = authClaim.ClaimsToContext(ctx)
+	} else {
+		ctx2 = ctx
 	}
+
+	err := sm.subWorker.Handle(ctx2, msg.Body)
+	if err != nil {
+		msg.Nack()
+		return err
+	} else {
+		msg.Ack()
+	}
+	return nil
+}
+
+func (s *subscriber) listen(ctx context.Context) error {
+
+	service := FromContext(ctx)
 
 	for {
 
 		select {
-		case <-s.ctx.Done():
+		case <-ctx.Done():
 			s.isInit.Store(false)
-			return s.ctx.Err()
+			return ctx.Err()
 		default:
-
-			ctx := context.TODO()
 
 			msg, err := s.subscription.Receive(ctx)
 			if err != nil {
@@ -118,17 +109,19 @@ func (s *subscriber) listen() error {
 				return err
 			}
 
-			msgChan <- msg
-		}
-	}
-}
+			subMsg := subscriptionMessage{
+				JobImpl: JobImpl{
+					Retries: 3,
+				},
+				msg:       msg,
+				subWorker: s.handler,
+			}
 
-// BackGroundConsumer Option to register a background processing function that is initialized before running servers
-// this function is maintained alive using the same error group as the servers so that if any exit earlier due to error
-// all stop functioning
-func BackGroundConsumer(deque func() error) Option {
-	return func(s *Service) {
-		s.backGroundClient = deque
+			err = service.SubmitJob(ctx, &subMsg)
+			if err != nil {
+				return err
+			}
+		}
 	}
 }
 
@@ -198,16 +191,18 @@ func (s *Service) Publish(ctx context.Context, reference string, payload interfa
 	var message []byte
 	msg, ok := payload.([]byte)
 	if !ok {
-		msg, err := json.Marshal(payload)
-		if err != nil {
+		msg0, err0 := json.Marshal(payload)
+		if err0 != nil {
 			return err
 		}
-		message = msg
+		message = msg0
 	} else {
 		message = msg
 	}
 
-	return pub.topic.Send(ctx, &pubsub.Message{
+	topic := pub.topic
+
+	return topic.Send(ctx, &pubsub.Message{
 		Body:     message,
 		Metadata: metadata,
 	})
@@ -219,29 +214,17 @@ func (s *Service) initPublisher(ctx context.Context, pub *publisher) error {
 	if err != nil {
 		return err
 	}
-	s.AddCleanupMethod(func(ctx context.Context) {
-		err = topic.Shutdown(ctx)
-		if err != nil {
-			s.L().WithError(err).WithField("reference", pub.reference).Warn("topic could not be closed")
-		}
-	})
+
 	pub.topic = topic
+
 	return nil
 }
 func (s *Service) initSubscriber(ctx context.Context, sub *subscriber) error {
 	if !strings.HasPrefix(sub.url, "http") {
 		subsc, err := pubsub.OpenSubscription(ctx, sub.url)
 		if err != nil {
-			return fmt.Errorf("could not open topic subscription: %+v", err)
+			return fmt.Errorf("could not open topic subscription: %s", err)
 		}
-
-		s.AddCleanupMethod(func(ctx context.Context) {
-			err = subsc.Shutdown(ctx)
-			if err != nil {
-				s.L().WithError(err).WithField("reference", sub.reference).Warn("subscription could not be stopped")
-			}
-		})
-
 		sub.subscription = subsc
 	}
 	sub.isInit.Store(true)
@@ -271,33 +254,24 @@ func (s *Service) initPubsub(ctx context.Context) error {
 		return nil
 	}
 
-	var publishQSlice []*publisher
 	s.queue.publishQueueMap.Range(func(key, value any) bool {
 		pub := value.(*publisher)
-		publishQSlice = append(publishQSlice, pub)
-		return true
-	})
-
-	for _, pub := range publishQSlice {
 		err := s.initPublisher(ctx, pub)
 		if err != nil {
-			return err
+			s.errorChannel <- err
 		}
-	}
+		return true
+	})
 
 	var subscribeQSlice []*subscriber
 	s.queue.subscriptionQueueMap.Range(func(key, value any) bool {
 		sub := value.(*subscriber)
-		subscribeQSlice = append(subscribeQSlice, sub)
-		return true
-	})
-
-	for _, sub := range subscribeQSlice {
 		err := s.initSubscriber(ctx, sub)
 		if err != nil {
-			return err
+			s.errorChannel <- err
 		}
-	}
+		return true
+	})
 
 	if len(subscribeQSlice) > 0 {
 		s.subscribe(ctx)
@@ -316,10 +290,16 @@ func (s *Service) subscribe(ctx context.Context) {
 		if strings.HasPrefix(subsc.url, "http") {
 			return true
 		}
-		subsc.ctx = ctx
-		subsc.errgrp = s.ErrorGroup()
 		subsc.logger = logger
-		s.ErrorGroup().Go(subsc.listen)
+
+		go func() {
+			err := subsc.listen(ctx)
+			if err != nil {
+				logger.WithError(err).Error("subscription was not possible")
+				s.errorChannel <- err
+			}
+		}()
+
 		return true
 	})
 }

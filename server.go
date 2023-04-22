@@ -4,7 +4,6 @@ import (
 	"context"
 	"github.com/improbable-eng/grpc-web/go/grpcweb"
 	"github.com/soheilhy/cmux"
-	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 	"net"
 	"net/http"
@@ -22,28 +21,55 @@ func (t *noopDriver) Shutdown(ctx context.Context) error {
 }
 
 type defaultDriver struct {
-	errorGroup *errgroup.Group
 	httpServer *http.Server
+	listener   net.Listener
 }
 
 // ListenAndServe sets the address and handler on DefaultDriver's http.Server,
 // then calls ListenAndServe on it.
 func (dd *defaultDriver) ListenAndServe(addr string, h http.Handler) error {
+	var ln net.Listener
+	var err error
+
 	dd.httpServer.Addr = addr
 	dd.httpServer.Handler = h
 
-	dd.errorGroup.Go(dd.httpServer.ListenAndServe)
-	return dd.errorGroup.Wait()
+	if addr == "" {
+		addr = ":http"
+	}
+
+	if dd.listener != nil {
+		ln = dd.listener
+	} else {
+		ln, err = net.Listen("tcp", addr)
+		if err != nil {
+			return err
+		}
+	}
+	return dd.httpServer.Serve(ln)
 }
 
 func (dd *defaultDriver) ListenAndServeTLS(addr, certFile, keyFile string, h http.Handler) error {
+	var ln net.Listener
+	var err error
+
 	dd.httpServer.Addr = addr
 	dd.httpServer.Handler = h
 
-	dd.errorGroup.Go(func() error {
-		return dd.httpServer.ListenAndServeTLS(certFile, keyFile)
-	})
-	return dd.errorGroup.Wait()
+	if addr == "" {
+		addr = ":https"
+	}
+
+	if dd.listener != nil {
+		ln = dd.listener
+	} else {
+		ln, err = net.Listen("tcp", addr)
+		if err != nil {
+			return err
+		}
+	}
+	return dd.httpServer.ServeTLS(ln, certFile, keyFile)
+
 }
 
 func (dd *defaultDriver) Shutdown(ctx context.Context) error {
@@ -52,7 +78,7 @@ func (dd *defaultDriver) Shutdown(ctx context.Context) error {
 
 type grpcDriver struct {
 	corsPolicy        string
-	errorGroup        *errgroup.Group
+	errorChannel      chan error
 	httpServer        *http.Server
 	grpcServer        *grpc.Server
 	wrappedGrpcServer *grpcweb.WrappedGrpcServer
@@ -98,16 +124,23 @@ func (gd *grpcDriver) ListenAndServe(addr string, h http.Handler) error {
 	grpcL = m.MatchWithWriters(grpcMatcher)
 	anyL := m.Match(cmux.Any())
 
-	gd.errorGroup.Go(func() error {
-		return gd.grpcServer.Serve(grpcL)
-	})
+	go func() {
+		err = gd.grpcServer.Serve(grpcL)
+		if err != nil {
+			gd.errorChannel <- err
+			return
+		}
+	}()
 
-	gd.errorGroup.Go(func() error {
-		return gd.httpServer.Serve(anyL)
-	})
+	go func() {
+		err := gd.httpServer.Serve(anyL)
+		if err != nil {
+			gd.errorChannel <- err
+			return
+		}
+	}()
 
-	gd.errorGroup.Go(m.Serve)
-	return gd.errorGroup.Wait()
+	return m.Serve()
 }
 
 func (gd *grpcDriver) ListenAndServeTLS(addr, certFile, keyFile string, h http.Handler) error {
@@ -140,16 +173,21 @@ func (gd *grpcDriver) ListenAndServeTLS(addr, certFile, keyFile string, h http.H
 	grpcL = m.Match(grpcMatcher)
 	anyL := m.Match(cmux.Any())
 
-	gd.errorGroup.Go(func() error {
-		return gd.grpcServer.Serve(grpcL)
-	})
+	go func() {
+		err = gd.grpcServer.Serve(grpcL)
+		if err != nil {
+			return
+		}
+	}()
 
-	gd.errorGroup.Go(func() error {
-		return gd.httpServer.ServeTLS(anyL, certFile, keyFile)
-	})
+	go func() {
+		err = gd.httpServer.ServeTLS(anyL, certFile, keyFile)
+		if err != nil {
+			return
+		}
+	}()
 
-	gd.errorGroup.Go(m.Serve)
-	return gd.errorGroup.Wait()
+	return m.Serve()
 }
 
 func (gd *grpcDriver) Shutdown(ctx context.Context) error {

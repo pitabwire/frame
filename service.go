@@ -248,7 +248,14 @@ func (s *Service) Run(ctx context.Context, address string) error {
 			s.errorChannel <- err
 		} else {
 			if s.backGroundClient == nil {
-				s.errorChannel <- nil
+				select {
+				case <-s.errorChannel:
+					// channel is already closed hence avoid
+					return
+				default:
+					s.errorChannel <- nil
+				}
+
 			}
 
 		}
@@ -357,6 +364,5 @@ func (s *Service) Stop(ctx context.Context) {
 		}
 
 		close(s.errorChannel)
-
 	})
 }

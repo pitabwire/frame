@@ -210,6 +210,14 @@ func (s *Service) Publish(ctx context.Context, reference string, payload interfa
 }
 
 func (s *Service) initPublisher(ctx context.Context, pub *publisher) error {
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if pub.topic != nil {
+		return nil
+	}
+
 	topic, err := pubsub.OpenTopic(ctx, pub.url)
 	if err != nil {
 		return err
@@ -220,6 +228,14 @@ func (s *Service) initPublisher(ctx context.Context, pub *publisher) error {
 	return nil
 }
 func (s *Service) initSubscriber(ctx context.Context, sub *subscriber) error {
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if sub.isInit.Load() && sub.subscription != nil {
+		return nil
+	}
+
 	if !strings.HasPrefix(sub.url, "http") {
 		subsc, err := pubsub.OpenSubscription(ctx, sub.url)
 		if err != nil {

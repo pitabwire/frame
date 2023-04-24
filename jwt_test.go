@@ -24,9 +24,11 @@ func TestService_RegisterForJwtWithParams(t *testing.T) {
 		return
 	}
 
+	srv.jwtClient = response
+
 	srv.L().WithField("client id", response).Info("successfully registered for Jwt")
 
-	err = srv.UnRegisterForJwt(ctx, oauthServiceURL, response)
+	err = srv.UnRegisterForJwt(ctx, oauthServiceURL, srv.JwtClientID())
 	if err != nil {
 		t.Errorf("couldn't un register for jwt %s", err)
 		return

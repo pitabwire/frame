@@ -33,7 +33,7 @@ const ctxKeyService = contextKey("serviceKey")
 // It is pushed and pulled from contexts to make it easy to pass around.
 type Service struct {
 	name             string
-	JwtClientId      string
+	jwtClient        map[string]interface{}
 	version          string
 	environment      string
 	logger           *logrus.Logger
@@ -142,6 +142,16 @@ func (s *Service) LogLevel() *logrus.Level {
 	return s.logLevel
 }
 
+// JwtClient gets the authenticated jwt client if configured at startup
+func (s *Service) JwtClient() map[string]interface{} {
+	return s.jwtClient
+}
+
+// JwtClientID gets the authenticated jwt client if configured at startup
+func (s *Service) JwtClientID() string {
+	return s.jwtClient["client_id"].(string)
+}
+
 // Init evaluates the options provided as arguments and supplies them to the service object
 func (s *Service) Init(opts ...Option) {
 	for _, opt := range opts {
@@ -205,13 +215,13 @@ func (s *Service) Run(ctx context.Context, address string) error {
 		if oauth2ServiceAdminHost != "" && clientSecret != "" {
 			audienceList := strings.Split(oauth2Audience, ",")
 
-			clientID, err := s.RegisterForJwtWithParams(ctx, oauth2ServiceAdminHost, s.Name(), clientSecret,
+			jwtClient, err := s.RegisterForJwtWithParams(ctx, oauth2ServiceAdminHost, s.Name(), clientSecret,
 				"", audienceList, map[string]string{})
 			if err != nil {
 				return err
 			}
 
-			s.JwtClientId = clientID
+			s.jwtClient = jwtClient
 		}
 	}
 

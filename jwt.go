@@ -12,14 +12,14 @@ import (
 // This is useful for situations where one may need to register external applications for access token generation
 func (s *Service) RegisterForJwtWithParams(ctx context.Context,
 	oauth2ServiceAdminHost string, clientName string, clientSecret string,
-	scope string, audienceList []string, metadata map[string]string) (string, error) {
+	scope string, audienceList []string, metadata map[string]string) (map[string]interface{}, error) {
 	oauth2AdminURI := fmt.Sprintf("%s%s", oauth2ServiceAdminHost, "/admin/clients")
 	oauth2AdminIDUri := fmt.Sprintf("%s?client_name=%s", oauth2AdminURI, url.QueryEscape(clientName))
 
 	status, response, err := s.InvokeRestService(ctx, http.MethodGet, oauth2AdminIDUri, nil, nil)
 	if err != nil {
 		s.L().WithError(err).Error("could not get existing clients")
-		return "", err
+		return nil, err
 	}
 
 	if status > 299 || status < 200 {
@@ -28,7 +28,7 @@ func (s *Service) RegisterForJwtWithParams(ctx context.Context,
 			WithField("result", string(response)).
 			Error(" invalid response from oauth2 server")
 
-		return "", fmt.Errorf("invalid existing clients check response : %s", response)
+		return nil, fmt.Errorf("invalid existing clients check response : %s", response)
 	}
 
 	var existingClients []map[string]interface{}
@@ -36,11 +36,11 @@ func (s *Service) RegisterForJwtWithParams(ctx context.Context,
 	if err != nil {
 		s.L().WithError(err).WithField("payload", string(response)).
 			Error("could not unmarshal existing clients")
-		return "", err
+		return nil, err
 	}
 
 	if len(existingClients) > 0 {
-		return existingClients[0]["client_id"].(string), nil
+		return existingClients[0], nil
 	}
 
 	metadata["cc_bot"] = "true"
@@ -60,7 +60,7 @@ func (s *Service) RegisterForJwtWithParams(ctx context.Context,
 	status, response, err = s.InvokeRestService(ctx, http.MethodPost, oauth2AdminURI, payload, nil)
 	if err != nil {
 		s.L().WithError(err).Error("could not create a new client")
-		return "", err
+		return nil, err
 	}
 
 	if status > 299 || status < 200 {
@@ -69,17 +69,17 @@ func (s *Service) RegisterForJwtWithParams(ctx context.Context,
 			WithField("result", string(response)).
 			Error(" invalid response from server")
 
-		return "", fmt.Errorf("invalid registration response : %s", response)
+		return nil, fmt.Errorf("invalid registration response : %s", response)
 	}
 
 	var newClient map[string]interface{}
 	err = json.Unmarshal(response, &newClient)
 	if err != nil {
 		s.L().WithError(err).Error("could not un marshal new client")
-		return "", err
+		return nil, err
 	}
 
-	return newClient["client_id"].(string), nil
+	return newClient, nil
 }
 
 // UnRegisterForJwt utilizing client id we de register external applications for access token generation

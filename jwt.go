@@ -11,8 +11,6 @@ import (
 
 // RegisterForJwt function hooks in jwt client registration to make sure service is authenticated
 func (s *Service) RegisterForJwt(ctx context.Context) error {
-	//Incase application needs to register for jwt we do the registration at this point to be able to reuse
-	// The jwt credentials when instantiating the clients attached to this service
 
 	oauth2Config, ok := s.Config().(ConfigurationOAUTH2)
 	if ok {

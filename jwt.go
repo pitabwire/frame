@@ -6,7 +6,36 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strings"
 )
+
+// RegisterForJwt function hooks in jwt client registration to make sure service is authenticated
+func (s *Service) RegisterForJwt(ctx context.Context) error {
+	//Incase application needs to register for jwt we do the registration at this point to be able to reuse
+	// The jwt credentials when instantiating the clients attached to this service
+
+	oauth2Config, ok := s.Config().(ConfigurationOAUTH2)
+	if ok {
+		oauth2ServiceAdminHost := oauth2Config.GetOauth2ServiceAdminURI()
+
+		clientSecret := oauth2Config.GetOauth2ServiceClientSecret()
+
+		oauth2Audience := oauth2Config.GetOauth2ServiceAudience()
+
+		if oauth2ServiceAdminHost != "" && clientSecret != "" {
+			audienceList := strings.Split(oauth2Audience, ",")
+
+			jwtClient, err := s.RegisterForJwtWithParams(ctx, oauth2ServiceAdminHost, s.Name(), clientSecret,
+				"", audienceList, map[string]string{})
+			if err != nil {
+				return err
+			}
+
+			s.jwtClient = jwtClient
+		}
+	}
+	return nil
+}
 
 // RegisterForJwtWithParams registers the supplied details for ability to generate access tokens.
 // This is useful for situations where one may need to register external applications for access token generation

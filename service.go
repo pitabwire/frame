@@ -9,7 +9,6 @@ import (
 	"go.opentelemetry.io/otel/sdk/trace"
 	"os/signal"
 	"runtime"
-	"strings"
 	"syscall"
 
 	"google.golang.org/grpc"
@@ -103,6 +102,7 @@ func NewService(name string, opts ...Option) (context.Context, *Service) {
 	opts = append(opts, Logger())
 
 	service.Init(opts...)
+
 	ctx1 := ToContext(ctx0, service)
 	return ctx1, service
 }
@@ -150,6 +150,11 @@ func (s *Service) JwtClient() map[string]interface{} {
 // JwtClientID gets the authenticated jwt client if configured at startup
 func (s *Service) JwtClientID() string {
 	return s.jwtClient["client_id"].(string)
+}
+
+// JwtClientSecret gets the authenticated jwt client if configured at startup
+func (s *Service) JwtClientSecret() string {
+	return s.jwtClient["client_secret"].(string)
 }
 
 // Init evaluates the options provided as arguments and supplies them to the service object
@@ -203,27 +208,6 @@ func (s *Service) AddHealthCheck(checker Checker) {
 func (s *Service) Run(ctx context.Context, address string) error {
 
 	logger := s.L()
-
-	oauth2Config, ok := s.Config().(ConfigurationOAUTH2)
-	if ok {
-		oauth2ServiceAdminHost := oauth2Config.GetOauth2ServiceAdminURI()
-
-		clientSecret := oauth2Config.GetOauth2ServiceClientSecret()
-
-		oauth2Audience := oauth2Config.GetOauth2ServiceAudience()
-
-		if oauth2ServiceAdminHost != "" && clientSecret != "" {
-			audienceList := strings.Split(oauth2Audience, ",")
-
-			jwtClient, err := s.RegisterForJwtWithParams(ctx, oauth2ServiceAdminHost, s.Name(), clientSecret,
-				"", audienceList, map[string]string{})
-			if err != nil {
-				return err
-			}
-
-			s.jwtClient = jwtClient
-		}
-	}
 
 	err := s.initPubsub(ctx)
 	if err != nil {

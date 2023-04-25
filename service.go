@@ -33,6 +33,7 @@ const ctxKeyService = contextKey("serviceKey")
 type Service struct {
 	name             string
 	jwtClient        map[string]interface{}
+	jwtClientSecret  string
 	version          string
 	environment      string
 	logger           *logrus.Logger
@@ -154,7 +155,7 @@ func (s *Service) JwtClientID() string {
 
 // JwtClientSecret gets the authenticated jwt client if configured at startup
 func (s *Service) JwtClientSecret() string {
-	return s.jwtClient["client_secret"].(string)
+	return s.jwtClientSecret
 }
 
 // Init evaluates the options provided as arguments and supplies them to the service object

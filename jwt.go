@@ -30,6 +30,7 @@ func (s *Service) RegisterForJwt(ctx context.Context) error {
 			}
 
 			s.jwtClient = jwtClient
+			s.jwtClientSecret = clientSecret
 		}
 	}
 	return nil

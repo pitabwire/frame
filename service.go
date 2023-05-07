@@ -2,20 +2,20 @@ package frame
 
 import (
 	"context"
+	"github.com/alitto/pond"
 	"github.com/improbable-eng/grpc-web/go/grpcweb"
 	"github.com/nicksnyder/go-i18n/v2/i18n"
 	"github.com/pitabwire/frame/internal"
 	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/otel/sdk/trace"
-	"os/signal"
-	"runtime"
-	"syscall"
-
 	"google.golang.org/grpc"
 	"gorm.io/gorm"
 	"net"
 	"net/http"
+	"os/signal"
+	"runtime"
 	"sync"
+	"syscall"
 	"time"
 )
 
@@ -44,8 +44,9 @@ type Service struct {
 	cancelFunc       context.CancelFunc
 	errorChannel     chan error
 	backGroundClient func(ctx context.Context) error
-	workerCount      int
-	pool             *pool
+	poolWorkerCount  int
+	poolCapacity     int
+	pool             *pond.WorkerPool
 	driver           internal.Server
 	grpcServer       *grpc.Server
 	listener         net.Listener
@@ -74,7 +75,7 @@ func NewService(name string, opts ...Option) (context.Context, *Service) {
 
 	ctx0, cancel := context.WithCancel(context.Background())
 
-	concurrency := runtime.NumCPU() + 1
+	concurrency := runtime.NumCPU() * 10
 
 	q := newQueue(ctx0)
 
@@ -86,13 +87,14 @@ func NewService(name string, opts ...Option) (context.Context, *Service) {
 			readDatabase:  []*gorm.DB{},
 			writeDatabase: []*gorm.DB{},
 		},
-		client:      &http.Client{},
-		queue:       q,
-		logger:      logrus.New(),
-		workerCount: concurrency,
+		client:          &http.Client{},
+		queue:           q,
+		logger:          logrus.New(),
+		poolWorkerCount: concurrency,
+		poolCapacity:    100,
 	}
 
-	service.pool = newPool(service.L(), concurrency)
+	service.pool = pond.New(service.poolWorkerCount, service.poolCapacity, pond.Strategy(pond.Lazy()))
 
 	signal.NotifyContext(ctx0,
 		syscall.SIGHUP,
@@ -225,9 +227,6 @@ func (s *Service) Run(ctx context.Context, address string) error {
 
 	}
 
-	if s.pool != nil {
-		s.pool.Start(ctx)
-	}
 	// connect the server handlers
 	if s.handler == nil {
 		s.handler = http.DefaultServeMux
@@ -348,10 +347,7 @@ func (s *Service) Stop(ctx context.Context) {
 		}
 
 		if s.pool != nil {
-			err := s.pool.Close()
-			if err != nil {
-				s.L().WithError(err).Error("could not stop pool")
-			}
+			s.pool.Stop()
 		}
 
 		if s.cancelFunc != nil {

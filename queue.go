@@ -56,45 +56,18 @@ type subscriber struct {
 	isInit       atomic.Bool
 }
 
-type subscriptionMessage struct {
-	JobImpl
-	msg       *pubsub.Message
-	subWorker SubscribeWorker
-}
-
-func (sm *subscriptionMessage) Process(ctx context.Context) error {
-
-	msg := sm.msg
-
-	authClaim := ClaimsFromMap(msg.Metadata)
-
-	var ctx2 context.Context
-	if nil != authClaim {
-		ctx2 = authClaim.ClaimsToContext(ctx)
-	} else {
-		ctx2 = ctx
-	}
-
-	err := sm.subWorker.Handle(ctx2, msg.Body)
-	if err != nil {
-		msg.Nack()
-		return err
-	} else {
-		msg.Ack()
-	}
-	return nil
-}
-
-func (s *subscriber) listen(ctx context.Context) error {
+func (s *subscriber) listen(ctx context.Context) {
 
 	service := FromContext(ctx)
-
+	logger := service.L().WithField("name", s.reference).WithField("function", "subscription").WithField("url", s.url)
+	logger.Debug("starting to listen for messages")
 	for {
 
 		select {
 		case <-ctx.Done():
 			s.isInit.Store(false)
-			return ctx.Err()
+			logger.Debug("exiting due to canceled context")
+			return
 		default:
 
 			msg, err := s.subscription.Receive(ctx)
@@ -103,24 +76,37 @@ func (s *subscriber) listen(ctx context.Context) error {
 					continue
 				}
 
-				s.logger.WithError(err).Error(" could not pull message")
+				logger.WithError(err).Error(" could not pull message")
 				s.isInit.Store(false)
-
-				return err
+				service.errorChannel <- err
+				return
 			}
 
-			subMsg := subscriptionMessage{
-				JobImpl: JobImpl{
-					Retries: 3,
-				},
-				msg:       msg,
-				subWorker: s.handler,
-			}
+			job := service.NewJob(func(ctx context.Context) error {
+				authClaim := ClaimsFromMap(msg.Metadata)
 
-			err = service.SubmitJob(ctx, &subMsg)
+				var ctx2 context.Context
+				if nil != authClaim {
+					ctx2 = authClaim.ClaimsToContext(ctx)
+				} else {
+					ctx2 = ctx
+				}
+
+				err0 := s.handler.Handle(ctx2, msg.Body)
+				if err != nil {
+					logger.WithError(err).Warn(" could not handle message")
+					return err0
+				}
+				msg.Ack()
+				return nil
+			}, 0)
+
+			err = service.SubmitJob(ctx, job)
 			if err != nil {
-				return err
+				logger.WithError(err).Warn(" ignoring handle error message")
+				continue
 			}
+
 		}
 	}
 }
@@ -279,7 +265,6 @@ func (s *Service) initPubsub(ctx context.Context) error {
 		return true
 	})
 
-	var subscribeQSlice []*subscriber
 	s.queue.subscriptionQueueMap.Range(func(key, value any) bool {
 		sub := value.(*subscriber)
 		err := s.initSubscriber(ctx, sub)
@@ -289,9 +274,7 @@ func (s *Service) initPubsub(ctx context.Context) error {
 		return true
 	})
 
-	if len(subscribeQSlice) > 0 {
-		s.subscribe(ctx)
-	}
+	s.subscribe(ctx)
 
 	return nil
 }
@@ -308,13 +291,7 @@ func (s *Service) subscribe(ctx context.Context) {
 		}
 		subsc.logger = logger
 
-		go func() {
-			err := subsc.listen(ctx)
-			if err != nil {
-				logger.WithError(err).Error("subscription was not possible")
-				s.errorChannel <- err
-			}
-		}()
+		go subsc.listen(ctx)
 
 		return true
 	})

@@ -11,11 +11,13 @@ type Job interface {
 	ID() string
 	CanRetry() bool
 	DecreaseRetries() int
+	Async() bool
 }
 
 type JobImpl struct {
 	Id      string
 	Retries int
+	IsAsync bool
 	process func(ctx context.Context) error
 }
 
@@ -32,6 +34,9 @@ func (ji *JobImpl) Process(ctx context.Context) error {
 func (ji *JobImpl) CanRetry() bool {
 	return ji.Retries > 0
 }
+func (ji *JobImpl) Async() bool {
+	return ji.IsAsync
+}
 func (ji *JobImpl) DecreaseRetries() int {
 	ji.Retries = ji.Retries - 1
 	return ji.Retries
@@ -42,6 +47,16 @@ func (s *Service) NewJob(process func(ctx context.Context) error, retries int) J
 		Id:      xid.New().String(),
 		Retries: retries,
 		process: process,
+		IsAsync: true,
+	}
+}
+
+func (s *Service) NewSyncJob(process func(ctx context.Context) error) Job {
+	return &JobImpl{
+		Id:      xid.New().String(),
+		Retries: 0,
+		process: process,
+		IsAsync: false,
 	}
 }
 
@@ -80,29 +95,48 @@ func (s *Service) SubmitJob(ctx context.Context, job Job) error {
 	case <-ctx.Done():
 		return errors.New("pool is closed")
 	default:
-		p.Submit(
-			func() {
 
-				err := job.Process(ctx)
-				if err != nil {
-					logger := s.L().WithError(err).WithField("job", job.ID())
-					logger.Error("could not process job")
+		if job.Async() {
+			// Process job asynchronously and retry if need be
 
-					if job.CanRetry() {
-						job.DecreaseRetries()
-						err = s.SubmitJob(ctx, job)
-						if err != nil {
-							logger.Error("could not resubmit job for retry")
-						} else {
-							logger.Info("job resubmitted for retry")
+			p.Submit(
+				func() {
+
+					err := job.Process(ctx)
+					if err != nil {
+						logger := s.L().WithError(err).WithField("job", job.ID())
+						logger.Error("could not process job")
+
+						if job.CanRetry() {
+							job.DecreaseRetries()
+							err = s.SubmitJob(ctx, job)
+							if err != nil {
+								logger.Error("could not resubmit job for retry")
+							} else {
+								logger.Info("job resubmitted for retry")
+							}
 						}
+						return
 					}
+				},
+			)
+		} else {
 
-					return
-				}
+			// Job is syncronous so we return result directly
+			var err error
+			p.SubmitAndWait(
+				func() {
+					err = job.Process(ctx)
+					if err != nil {
+						logger := s.L().WithError(err).WithField("job", job.ID())
+						logger.Error("could not process job")
+					}
+				},
+			)
+			return err
 
-			},
-		)
+		}
+
 		return nil
 	}
 }

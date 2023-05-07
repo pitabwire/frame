@@ -93,8 +93,8 @@ func (s *subscriber) listen(ctx context.Context) {
 				}
 
 				err0 := s.handler.Handle(ctx2, msg.Body)
-				if err != nil {
-					logger.WithError(err).Warn(" could not handle message")
+				if err0 != nil {
+					logger.WithError(err0).Warn(" could not handle message")
 					return err0
 				}
 				msg.Ack()

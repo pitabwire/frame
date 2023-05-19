@@ -20,7 +20,7 @@ require (
 	google.golang.org/grpc v1.55.0
 	google.golang.org/grpc/examples v0.0.0-20230411215613-5a50b970ccad
 	gorm.io/datatypes v1.2.0
-	gorm.io/driver/postgres v1.5.0
+	gorm.io/driver/postgres v1.5.2
 	gorm.io/gorm v1.25.1
 	gorm.io/plugin/opentelemetry v0.1.2
 
@@ -44,7 +44,7 @@ require (
 	go.opencensus.io v0.24.0 // indirect
 	go.opentelemetry.io/otel/metric v0.38.1 // indirect
 	go.opentelemetry.io/otel/trace v1.15.1 // indirect
-	golang.org/x/crypto v0.6.0 // indirect
+	golang.org/x/crypto v0.8.0 // indirect
 	golang.org/x/net v0.9.0 // indirect
 	golang.org/x/sync v0.1.0 // indirect
 	golang.org/x/sys v0.7.0 // indirect

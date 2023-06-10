@@ -257,23 +257,35 @@ func (s *Service) initPubsub(ctx context.Context) error {
 		return nil
 	}
 
+	var publishers []*publisher
+
 	s.queue.publishQueueMap.Range(func(key, value any) bool {
 		pub := value.(*publisher)
-		err := s.initPublisher(ctx, pub)
-		if err != nil {
-			s.errorChannel <- err
-		}
+		publishers = append(publishers, pub)
 		return true
 	})
 
+	for _, pub := range publishers {
+		err := s.initPublisher(ctx, pub)
+		if err != nil {
+			return err
+		}
+	}
+
+	var subscribers []*subscriber
+
 	s.queue.subscriptionQueueMap.Range(func(key, value any) bool {
 		sub := value.(*subscriber)
-		err := s.initSubscriber(ctx, sub)
-		if err != nil {
-			s.errorChannel <- err
-		}
+		subscribers = append(subscribers, sub)
 		return true
 	})
+
+	for _, sub := range subscribers {
+		err := s.initSubscriber(ctx, sub)
+		if err != nil {
+			return err
+		}
+	}
 
 	s.subscribe(ctx)
 

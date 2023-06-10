@@ -3,12 +3,10 @@ package frame
 import (
 	"context"
 	"crypto/rsa"
-	"crypto/subtle"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
-	"fmt"
-	"github.com/golang-jwt/jwt/v4"
+	"github.com/golang-jwt/jwt/v5"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -51,19 +49,6 @@ func (a *AuthenticationClaims) AsMetadata() map[string]string {
 	m["access_id"] = a.AccessID
 	m["roles"] = strings.Join(a.Roles, ",")
 	return m
-}
-
-// VerifyIssuer compares the iss claim against cmp.
-// If required is false, this method will return true if the value matches or is unset
-func (a *AuthenticationClaims) VerifyIssuer(cmp string, req bool) bool {
-	if a.Issuer == "" {
-		return !req
-	}
-	if subtle.ConstantTimeCompare([]byte(a.Issuer), []byte(cmp)) != 0 {
-		return true
-	} else {
-		return false
-	}
 }
 
 // ClaimsToContext adds authentication claims to the current supplied context
@@ -113,25 +98,23 @@ func (s *Service) Authenticate(ctx context.Context,
 	jwtToken string, audience string, issuer string) (context.Context, error) {
 	claims := &AuthenticationClaims{}
 
-	token, err := jwt.ParseWithClaims(jwtToken, claims, s.getPemCert)
+	var options []jwt.ParserOption
+
+	if audience != "" {
+		options = append(options, jwt.WithAudience(audience))
+	}
+
+	if issuer != "" {
+		options = append(options, jwt.WithIssuer(issuer))
+	}
+
+	token, err := jwt.ParseWithClaims(jwtToken, claims, s.getPemCert, options...)
 	if err != nil {
 		return ctx, err
 	}
 
 	if !token.Valid {
 		return ctx, errors.New("supplied token was invalid")
-	}
-
-	if audience != "" {
-		if !claims.VerifyAudience(audience, true) {
-			return ctx, fmt.Errorf("token audience does not match %v :-> %s", claims.Audience, audience)
-		}
-	}
-
-	if issuer != "" {
-		if !claims.VerifyIssuer(issuer, true) {
-			return ctx, fmt.Errorf("token issuer does not match %s :-> %s", claims.Issuer, issuer)
-		}
 	}
 
 	ctx = claims.ClaimsToContext(ctx)

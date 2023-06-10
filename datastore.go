@@ -11,7 +11,6 @@ import (
 	"gorm.io/datatypes"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
-	"gorm.io/plugin/opentelemetry/tracing"
 	"log"
 	"math/rand"
 )
@@ -148,7 +147,7 @@ func DatastoreCon(postgresqlConnection string, readOnly bool) Option {
 			&gorm.Config{SkipDefaultTransaction: true},
 		)
 
-		_ = gormDB.Use(tracing.NewPlugin())
+		//_ = gormDB.Use(tracing.NewPlugin())
 
 		s.AddCleanupMethod(func(ctx context.Context) {
 			_ = db.Close()

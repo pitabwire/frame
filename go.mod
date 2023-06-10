@@ -3,7 +3,7 @@ module github.com/pitabwire/frame
 go 1.20
 
 require (
-	github.com/BurntSushi/toml v1.3.1
+	github.com/BurntSushi/toml v1.3.2
 	github.com/alitto/pond v1.8.3
 	github.com/golang-jwt/jwt/v4 v4.5.0
 	github.com/improbable-eng/grpc-web v0.15.0
@@ -11,7 +11,7 @@ require (
 	github.com/kelseyhightower/envconfig v1.4.0
 	github.com/nicksnyder/go-i18n/v2 v2.2.1
 	github.com/rs/xid v1.5.0
-	github.com/sirupsen/logrus v1.9.2
+	github.com/sirupsen/logrus v1.9.3
 	github.com/soheilhy/cmux v0.1.5
 	go.opentelemetry.io/otel v1.16.0
 	go.opentelemetry.io/otel/sdk v1.16.0

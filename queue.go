@@ -223,6 +223,7 @@ func (s *Service) initSubscriber(ctx context.Context, sub *subscriber) error {
 	}
 
 	if !strings.HasPrefix(sub.url, "http") {
+
 		subsc, err := pubsub.OpenSubscription(ctx, sub.url)
 		if err != nil {
 			return fmt.Errorf("could not open topic subscription: %s", err)

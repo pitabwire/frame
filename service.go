@@ -152,7 +152,11 @@ func (s *Service) JwtClient() map[string]interface{} {
 
 // JwtClientID gets the authenticated jwt client if configured at startup
 func (s *Service) JwtClientID() string {
-	return s.jwtClient["client_id"].(string)
+	clientId, ok := s.jwtClient["client_id"].(string)
+	if !ok {
+		return ""
+	}
+	return clientId
 }
 
 // JwtClientSecret gets the authenticated jwt client if configured at startup

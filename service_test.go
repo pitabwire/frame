@@ -155,6 +155,9 @@ func TestHealthCheckEndpoints(t *testing.T) {
 		statusCode int
 	}{
 
+		{name: "Empty Happy path", healthPath: "", path: "/healthz", statusCode: 200},
+		{name: "Empty Default Happy path", healthPath: "", path: "/", statusCode: 200},
+		{name: "Empty Unknown Path", healthPath: "", path: "/any/path", statusCode: 404},
 		{name: "Happy path", healthPath: "/healthz", path: "/healthz", statusCode: 200},
 		{name: "Default Happy path", healthPath: "/", path: "/", statusCode: 200},
 		{name: "Unknown Path", healthPath: "/any/path", path: "/any/path", statusCode: 200},
@@ -168,7 +171,7 @@ func TestHealthCheckEndpoints(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 
-			opts := []frame.Option{frame.NoopDriver(), frame.LivelinessPath(test.healthPath)}
+			opts := []frame.Option{frame.NoopDriver(), frame.HealthCheckPath(test.healthPath)}
 
 			if test.handler != nil {
 				opts = append(opts, frame.HttpHandler(test.handler))

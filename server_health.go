@@ -35,6 +35,16 @@ func (s *Service) HandleHealth(w http.ResponseWriter, _ *http.Request) {
 	writeHealthy(w)
 }
 
+// HandleHealthByDefault returns 200 if it is healthy, 500 when there is an err or 404 otherwise.
+func (s *Service) HandleHealthByDefault(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path == "" || r.URL.Path == "/" {
+		s.HandleHealth(w, r)
+		return
+	}
+
+	http.NotFound(w, r)
+}
+
 func writeHeaders(statusLen string, w http.ResponseWriter) {
 	w.Header().Set("Content-Length", statusLen)
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
@@ -69,10 +79,10 @@ func writeHealthy(w http.ResponseWriter) {
 	}
 }
 
-// LivelinessPath Option checks that the system is up and running
-func LivelinessPath(path string) Option {
+// HealthCheckPath Option checks that the system is up and running
+func HealthCheckPath(path string) Option {
 	return func(s *Service) {
-		s.livelinessPath = path
+		s.healthCheckPath = path
 	}
 }
 

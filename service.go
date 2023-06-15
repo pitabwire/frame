@@ -56,7 +56,7 @@ type Service struct {
 	dataStore        *store
 	bundle           *i18n.Bundle
 	healthCheckers   []Checker
-	livelinessPath   string
+	healthCheckPath  string
 	startup          func(s *Service)
 	cleanup          func(ctx context.Context)
 	eventRegistry    map[string]EventI
@@ -278,23 +278,23 @@ func (s *Service) initServer(ctx context.Context, address string) error {
 		return err
 	}
 
-	if s.livelinessPath == "" {
-		s.livelinessPath = "/healthz"
+	if s.healthCheckPath == "" {
+		s.healthCheckPath = "/healthz"
 	}
 
 	s.startOnce.Do(func() {
 
 		mux := http.NewServeMux()
-		if s.livelinessPath == "/" && s.handler != nil {
-			s.livelinessPath = "/healthz"
+		if s.healthCheckPath == "/" && s.handler != nil {
+			s.healthCheckPath = "/healthz"
 		}
 
-		mux.HandleFunc(s.livelinessPath, s.HandleHealth)
+		mux.HandleFunc(s.healthCheckPath, s.HandleHealth)
 
 		if s.handler != nil {
 			mux.Handle("/", s.handler)
-		} else if s.livelinessPath != "/" {
-			mux.HandleFunc("/", s.HandleHealth)
+		} else if s.healthCheckPath != "/" {
+			mux.HandleFunc("/", s.HandleHealthByDefault)
 		}
 
 		s.handler = mux

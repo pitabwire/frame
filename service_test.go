@@ -3,8 +3,14 @@ package frame_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"github.com/pitabwire/frame"
 	"google.golang.org/grpc/test/bufconn"
+	"io"
+	"log"
+	"net/http"
+	"net/http/httptest"
+	"strconv"
 	"testing"
 )
 
@@ -122,4 +128,77 @@ func TestBackGroundConsumer(t *testing.T) {
 		t.Errorf("could not propagate background consumer error correctly")
 	}
 
+}
+
+func getTestHealthHandler() http.Handler {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, request *http.Request) {
+		w.Header().Set("Content-Length", strconv.Itoa(4))
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.WriteHeader(http.StatusAccepted)
+		_, err := io.WriteString(w, "tsto")
+		if err != nil {
+			return
+		}
+
+	})
+	return mux
+}
+
+func TestHealthCheckEndpoints(t *testing.T) {
+	tests := []struct {
+		name       string
+		healthPath string
+		path       string
+		handler    http.Handler
+		statusCode int
+	}{
+
+		{name: "Happy path", healthPath: "/healthz", path: "/healthz", statusCode: 200},
+		{name: "Default Happy path", healthPath: "/", path: "/", statusCode: 200},
+		{name: "Unknown Path", healthPath: "/any/path", path: "/any/path", statusCode: 200},
+		{name: "Default Path with handler", healthPath: "", path: "/", statusCode: 202, handler: getTestHealthHandler()},
+		{name: "Health Path with handler", healthPath: "", path: "/healthz", statusCode: 200, handler: getTestHealthHandler()},
+		{name: "Random Path with handler", healthPath: "", path: "/any/path", statusCode: 202, handler: getTestHealthHandler()},
+		{name: "Unknown Path with handler", healthPath: "/", path: "/", statusCode: 202, handler: getTestHealthHandler()},
+		{name: "Unknown Path with handler", healthPath: "/", path: "/healthz", statusCode: 200, handler: getTestHealthHandler()},
+		{name: "Unknown Path with handler", healthPath: "/", path: "/any/path", statusCode: 202, handler: getTestHealthHandler()},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+
+			opts := []frame.Option{frame.NoopDriver(), frame.LivelinessPath(test.healthPath)}
+
+			if test.handler != nil {
+				opts = append(opts, frame.HttpHandler(test.handler))
+			}
+
+			ctx, srv := frame.NewService("Test Srv", opts...)
+			defer srv.Stop(ctx)
+
+			err := srv.Run(ctx, ":41576")
+			if err != nil {
+				t.Errorf("could not start a background consumer peacefully : %v", err)
+			}
+
+			ts := httptest.NewServer(srv.H())
+			defer ts.Close()
+
+			resp, err := http.Get(fmt.Sprintf("%s%s", ts.URL, test.path))
+			if err != nil {
+				t.Errorf("could not invoke server %v", err)
+				log.Fatal(err)
+			}
+
+			body, _ := io.ReadAll(resp.Body)
+
+			if resp.StatusCode != test.statusCode {
+				t.Errorf("expected status code %v is not %v", test.statusCode, resp.StatusCode)
+			}
+
+			fmt.Println(string(body))
+
+		})
+	}
 }

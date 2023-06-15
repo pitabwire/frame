@@ -24,8 +24,8 @@ func (s *Service) HealthCheckers() []Checker {
 	return s.healthCheckers
 }
 
-// ServeHTTP returns 200 if it is healthy, 500 otherwise.
-func (s *Service) ServeHTTP(w http.ResponseWriter, _ *http.Request) {
+// HandleHealth returns 200 if it is healthy, 500 otherwise.
+func (s *Service) HandleHealth(w http.ResponseWriter, _ *http.Request) {
 	for _, c := range s.healthCheckers {
 		if err := c.CheckHealth(); err != nil {
 			writeUnhealthy(w)
@@ -53,12 +53,6 @@ func writeUnhealthy(w http.ResponseWriter) {
 	if err != nil {
 		return
 	}
-}
-
-// HandleLive is an http.HandlerFunc that handles liveness checks by
-// immediately responding with an HTTP 200 status.
-func HandleLive(w http.ResponseWriter, _ *http.Request) {
-	writeHealthy(w)
 }
 
 func writeHealthy(w http.ResponseWriter) {

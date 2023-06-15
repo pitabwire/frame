@@ -163,6 +163,10 @@ func (s *Service) JwtClientSecret() string {
 	return s.jwtClientSecret
 }
 
+func (s *Service) H() http.Handler {
+	return s.handler
+}
+
 // Init evaluates the options provided as arguments and supplies them to the service object
 func (s *Service) Init(opts ...Option) {
 	for _, opt := range opts {
@@ -275,25 +279,23 @@ func (s *Service) initServer(ctx context.Context, address string) error {
 	}
 
 	if s.livelinessPath == "" {
-		s.livelinessPath = "/"
+		s.livelinessPath = "/healthz"
 	}
 
 	s.startOnce.Do(func() {
 
-		// connect the server handlers
-		if s.handler == nil {
-			s.handler = http.DefaultServeMux
-		}
-
 		mux := http.NewServeMux()
-		if s.handler != nil {
-
-			if s.livelinessPath == "/" {
-				s.livelinessPath = "/healthz"
-			}
-			mux.Handle("/", s.handler)
+		if s.livelinessPath == "/" && s.handler != nil {
+			s.livelinessPath = "/healthz"
 		}
-		mux.HandleFunc(s.livelinessPath, HandleLive)
+
+		mux.HandleFunc(s.livelinessPath, s.HandleHealth)
+
+		if s.handler != nil {
+			mux.Handle("/", s.handler)
+		} else if s.livelinessPath != "/" {
+			mux.HandleFunc("/", s.HandleHealth)
+		}
 
 		s.handler = mux
 

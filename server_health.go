@@ -82,13 +82,6 @@ func LivelinessPath(path string) Option {
 	}
 }
 
-// ReadinessPath Option checks that the system is ready to receive requests
-func ReadinessPath(path string) Option {
-	return func(s *Service) {
-		s.readinessPath = path
-	}
-}
-
 // Checker wraps the CheckHealth method.
 //
 // CheckHealth returns nil if the resource is healthy, or a non-nil

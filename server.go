@@ -2,7 +2,6 @@ package frame
 
 import (
 	"context"
-	"crypto/tls"
 	"github.com/improbable-eng/grpc-web/go/grpcweb"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/net/http2"
@@ -24,8 +23,17 @@ func (t *noopDriver) Shutdown(ctx context.Context) error {
 
 type defaultDriver struct {
 	log        *logrus.Entry
+	port       string
 	httpServer *http.Server
 	listener   net.Listener
+}
+
+func (dd *defaultDriver) httpListener(addr string) (net.Listener, error) {
+	if dd.listener != nil {
+		return dd.listener, nil
+	}
+	return net.Listen("tcp", addr)
+
 }
 
 // ListenAndServe sets the address and handler on DefaultDriver's http.Server,
@@ -41,17 +49,9 @@ func (dd *defaultDriver) ListenAndServe(addr string, h http.Handler) error {
 		return err
 	}
 
-	if addr == "" {
-		addr = ":http"
-	}
-
-	if dd.listener != nil {
-		ln = dd.listener
-	} else {
-		ln, err = net.Listen("tcp", addr)
-		if err != nil {
-			return err
-		}
+	ln, err0 := dd.httpListener(addr)
+	if err0 != nil {
+		return err0
 	}
 
 	dd.log.Infof("http server port is : %s", addr)
@@ -60,7 +60,6 @@ func (dd *defaultDriver) ListenAndServe(addr string, h http.Handler) error {
 }
 
 func (dd *defaultDriver) ListenAndServeTLS(addr, certFile, keyFile string, h http.Handler) error {
-	var ln net.Listener
 
 	dd.httpServer.Addr = addr
 	dd.httpServer.Handler = h
@@ -70,17 +69,9 @@ func (dd *defaultDriver) ListenAndServeTLS(addr, certFile, keyFile string, h htt
 		return err
 	}
 
-	if addr == "" {
-		addr = ":https"
-	}
-
-	if dd.listener != nil {
-		ln = dd.listener
-	} else {
-		ln, err = net.Listen("tcp", addr)
-		if err != nil {
-			return err
-		}
+	ln, err0 := dd.httpListener(addr)
+	if err0 != nil {
+		return err0
 	}
 
 	dd.log.Infof("http server port is : %s", addr)
@@ -94,26 +85,16 @@ func (dd *defaultDriver) Shutdown(ctx context.Context) error {
 }
 
 type grpcDriver struct {
+	defaultDriver
 	corsPolicy string
 	grpcPort   string
 
-	log          *logrus.Entry
 	errorChannel chan error
-	httpServer   *http.Server
 
 	grpcServer        *grpc.Server
 	wrappedGrpcServer *grpcweb.WrappedGrpcServer
-	tlsConfig         *tls.Config
-	priListener       net.Listener
-	secListener       net.Listener
-}
 
-func (gd *grpcDriver) httpListener(addr string) (net.Listener, error) {
-	if gd.priListener != nil {
-		return gd.priListener, nil
-	}
-	return net.Listen("tcp", addr)
-
+	secListener net.Listener
 }
 
 func (gd *grpcDriver) grpcListener() (net.Listener, error) {

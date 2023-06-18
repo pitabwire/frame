@@ -18,7 +18,8 @@ func (s *Service) Config() interface{} {
 }
 
 type ConfigurationDefault struct {
-	ServerPort string `default:"7000" envconfig:"PORT"`
+	ServerPort     string `default:"7000" envconfig:"PORT"`
+	GrpcServerPort string `default:":50051" envconfig:"GRPC_PORT"`
 
 	TLSCertificatePath             string `envconfig:"TLS_CERTIFICATE_PATH"`
 	TLSCertificateKeyPath          string `envconfig:"TLS_CERTIFICATE_KEY_PATH"`
@@ -49,6 +50,22 @@ type ConfigurationDefault struct {
 
 	EventsQueueName string `default:"frame.events.internal_._queue" envconfig:"EVENTS_QUEUE_NAME"`
 	EventsQueueUrl  string `default:"mem://frame.events.internal_._queue" envconfig:"EVENTS_QUEUE_URL"`
+}
+
+type ConfigurationPort interface {
+	Port() string
+}
+
+func (c *ConfigurationDefault) Port() string {
+	return c.ServerPort
+}
+
+type ConfigurationGrpcPort interface {
+	GrpcPort() string
+}
+
+func (c *ConfigurationDefault) GrpcPort() string {
+	return c.GrpcServerPort
 }
 
 type ConfigurationOAUTH2 interface {

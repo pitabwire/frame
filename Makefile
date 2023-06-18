@@ -59,7 +59,7 @@ tests: ## runs all system tests
 
 
 gen_tls_certificates:
-	rm tests_runner/*.pem
+	rm -f tests_runner/*.pem
 	# Generate ca file
 
 	openssl req -x509 -newkey rsa:4096 -days 365 -nodes \

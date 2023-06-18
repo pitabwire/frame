@@ -302,48 +302,61 @@ func (s *Service) initServer(ctx context.Context, address string) error {
 		s.handler = mux
 
 		tlsConfig := s.TLSConfig()
+
+		if address == "" {
+			config, ok := s.Config().(ConfigurationPort)
+			if !ok {
+				if s.TLSEnabled() {
+					address = ":https"
+				} else {
+					address = "http"
+				}
+			} else {
+				address = config.Port()
+			}
+
+		}
+
+		defaultServer := defaultDriver{
+			log:  s.L(),
+			port: address,
+			httpServer: &http.Server{
+				BaseContext: func(listener net.Listener) context.Context {
+					return ctx
+				},
+				ReadTimeout:  5 * time.Second,
+				WriteTimeout: 10 * time.Second,
+				IdleTimeout:  120 * time.Second,
+
+				TLSConfig: tlsConfig,
+			},
+		}
+
 		// If grpc server is setup we should use the correct driver
 		if s.grpcServer != nil {
 
 			if s.grpcPort == "" {
-				s.grpcPort = ":50051"
+
+				config, ok := s.Config().(ConfigurationGrpcPort)
+				if !ok {
+					s.grpcPort = ":50051"
+				}
+
+				s.grpcPort = config.GrpcPort()
+
 			}
 
 			s.driver = &grpcDriver{
-				grpcPort:   s.grpcPort,
-				corsPolicy: s.corsPolicy,
-				log:        s.L(),
-				grpcServer: s.grpcServer,
-				httpServer: &http.Server{
-					BaseContext: func(listener net.Listener) context.Context {
-						return ctx
-					},
-					ReadTimeout:  5 * time.Second,
-					WriteTimeout: 10 * time.Second,
-					IdleTimeout:  120 * time.Second,
-
-					TLSConfig: tlsConfig,
-				},
-				tlsConfig:   tlsConfig,
-				priListener: s.priListener,
-				secListener: s.secListener,
+				defaultDriver: defaultServer,
+				grpcPort:      s.grpcPort,
+				corsPolicy:    s.corsPolicy,
+				grpcServer:    s.grpcServer,
+				secListener:   s.secListener,
 			}
 		}
 		if s.driver == nil {
 
-			s.driver = &defaultDriver{
-				log: s.L(),
-				httpServer: &http.Server{
-					BaseContext: func(listener net.Listener) context.Context {
-						return ctx
-					},
-					ReadTimeout:  5 * time.Second,
-					WriteTimeout: 10 * time.Second,
-					IdleTimeout:  120 * time.Second,
-
-					TLSConfig: tlsConfig,
-				},
-			}
+			s.driver = &defaultServer
 		}
 	})
 

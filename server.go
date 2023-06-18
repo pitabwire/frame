@@ -2,8 +2,10 @@ package frame
 
 import (
 	"context"
+	"crypto/tls"
 	"github.com/improbable-eng/grpc-web/go/grpcweb"
-	"github.com/soheilhy/cmux"
+	"github.com/sirupsen/logrus"
+	"golang.org/x/net/http2"
 	"google.golang.org/grpc"
 	"net"
 	"net/http"
@@ -21,6 +23,7 @@ func (t *noopDriver) Shutdown(ctx context.Context) error {
 }
 
 type defaultDriver struct {
+	log        *logrus.Entry
 	httpServer *http.Server
 	listener   net.Listener
 }
@@ -29,10 +32,14 @@ type defaultDriver struct {
 // then calls ListenAndServe on it.
 func (dd *defaultDriver) ListenAndServe(addr string, h http.Handler) error {
 	var ln net.Listener
-	var err error
 
 	dd.httpServer.Addr = addr
 	dd.httpServer.Handler = h
+
+	err := http2.ConfigureServer(dd.httpServer, nil)
+	if err != nil {
+		return err
+	}
 
 	if addr == "" {
 		addr = ":http"
@@ -46,15 +53,22 @@ func (dd *defaultDriver) ListenAndServe(addr string, h http.Handler) error {
 			return err
 		}
 	}
+
+	dd.log.Infof("http server port is : %s", addr)
+
 	return dd.httpServer.Serve(ln)
 }
 
 func (dd *defaultDriver) ListenAndServeTLS(addr, certFile, keyFile string, h http.Handler) error {
 	var ln net.Listener
-	var err error
 
 	dd.httpServer.Addr = addr
 	dd.httpServer.Handler = h
+
+	err := http2.ConfigureServer(dd.httpServer, nil)
+	if err != nil {
+		return err
+	}
 
 	if addr == "" {
 		addr = ":https"
@@ -68,6 +82,9 @@ func (dd *defaultDriver) ListenAndServeTLS(addr, certFile, keyFile string, h htt
 			return err
 		}
 	}
+
+	dd.log.Infof("http server port is : %s", addr)
+
 	return dd.httpServer.ServeTLS(ln, certFile, keyFile)
 
 }
@@ -77,17 +94,38 @@ func (dd *defaultDriver) Shutdown(ctx context.Context) error {
 }
 
 type grpcDriver struct {
-	corsPolicy        string
-	errorChannel      chan error
-	httpServer        *http.Server
+	corsPolicy string
+	grpcPort   string
+
+	log          *logrus.Entry
+	errorChannel chan error
+	httpServer   *http.Server
+
 	grpcServer        *grpc.Server
 	wrappedGrpcServer *grpcweb.WrappedGrpcServer
-	listener          net.Listener
+	tlsConfig         *tls.Config
+	priListener       net.Listener
+	secListener       net.Listener
+}
+
+func (gd *grpcDriver) httpListener(addr string) (net.Listener, error) {
+	if gd.priListener != nil {
+		return gd.priListener, nil
+	}
+	return net.Listen("tcp", addr)
+
+}
+
+func (gd *grpcDriver) grpcListener() (net.Listener, error) {
+
+	if gd.secListener != nil {
+		return gd.secListener, nil
+	}
+	return net.Listen("tcp", gd.grpcPort)
+
 }
 
 func (gd *grpcDriver) ListenAndServe(addr string, h http.Handler) error {
-	var ln net.Listener
-	var err error
 
 	gd.httpServer.Addr = addr
 
@@ -104,48 +142,51 @@ func (gd *grpcDriver) ListenAndServe(addr string, h http.Handler) error {
 	})
 
 	grpcweb.WrapHandler(
-		h,
-		grpcweb.WithOriginFunc(func(origin string) bool { return true }),
+		h, grpcweb.WithOriginFunc(func(origin string) bool { return true }),
 	)
 
-	if gd.listener != nil {
-		ln = gd.listener
-	} else {
-		ln, err = net.Listen("tcp", addr)
-		if err != nil {
-			return err
-		}
+	err := http2.ConfigureServer(gd.httpServer, nil)
+	if err != nil {
+		return err
 	}
 
-	m := cmux.New(ln)
-
-	var grpcL net.Listener
-	grpcMatcher := cmux.HTTP2MatchHeaderFieldSendSettings("content-type", "application/grpc")
-	grpcL = m.MatchWithWriters(grpcMatcher)
-	anyL := m.Match(cmux.Any())
-
 	go func() {
-		err = gd.grpcServer.Serve(grpcL)
-		if err != nil {
-			gd.errorChannel <- err
+
+		ln, err2 := gd.grpcListener()
+		if err2 != nil {
+			gd.errorChannel <- err2
+			return
+		}
+
+		gd.log.Infof("grpc server port is : %s", gd.grpcPort)
+
+		err2 = gd.grpcServer.Serve(ln)
+		if err2 != nil {
+			gd.errorChannel <- err2
 			return
 		}
 	}()
 
-	go func() {
-		err := gd.httpServer.Serve(anyL)
-		if err != nil {
-			gd.errorChannel <- err
+	go func(addr string) {
+
+		ln, err2 := gd.httpListener(addr)
+		if err2 != nil {
+			gd.errorChannel <- err2
 			return
 		}
-	}()
 
-	return m.Serve()
+		gd.log.Infof("http server port is : %s", addr)
+		err2 = gd.httpServer.Serve(ln)
+		if err2 != nil {
+			gd.errorChannel <- err2
+			return
+		}
+	}(addr)
+
+	return <-gd.errorChannel
 }
 
 func (gd *grpcDriver) ListenAndServeTLS(addr, certFile, keyFile string, h http.Handler) error {
-	var ln net.Listener
-	var err error
 
 	gd.httpServer.Addr = addr
 	gd.httpServer.Handler = http.HandlerFunc(func(resp http.ResponseWriter, req *http.Request) {
@@ -156,38 +197,50 @@ func (gd *grpcDriver) ListenAndServeTLS(addr, certFile, keyFile string, h http.H
 		h.ServeHTTP(resp, req)
 	})
 
-	if gd.listener != nil {
-		ln = gd.listener
-	} else {
-		ln, err = net.Listen("tcp", addr)
-		if err != nil {
-			return err
-		}
+	grpcweb.WrapHandler(
+		h, grpcweb.WithOriginFunc(func(origin string) bool { return true }),
+	)
+
+	err := http2.ConfigureServer(gd.httpServer, nil)
+	if err != nil {
+		return err
 	}
 
-	m := cmux.New(ln)
-
-	var grpcL net.Listener
-	grpcMatcher := cmux.HTTP2HeaderField("content-type", "application/grpc")
-
-	grpcL = m.Match(grpcMatcher)
-	anyL := m.Match(cmux.Any())
-
 	go func() {
-		err = gd.grpcServer.Serve(grpcL)
-		if err != nil {
+
+		ln, err2 := gd.grpcListener()
+		if err2 != nil {
+			gd.errorChannel <- err2
+			return
+		}
+
+		gd.log.Infof("grpc server port is : %s", gd.grpcPort)
+
+		err2 = gd.grpcServer.Serve(ln)
+		if err2 != nil {
+			gd.errorChannel <- err2
 			return
 		}
 	}()
 
 	go func() {
-		err = gd.httpServer.ServeTLS(anyL, certFile, keyFile)
-		if err != nil {
+
+		ln, err2 := gd.httpListener(addr)
+		if err2 != nil {
+			gd.errorChannel <- err2
+			return
+		}
+
+		gd.log.Infof("http server port is : %s", addr)
+
+		err2 = gd.httpServer.ServeTLS(ln, certFile, keyFile)
+		if err2 != nil {
+			gd.errorChannel <- err2
 			return
 		}
 	}()
 
-	return m.Serve()
+	return <-gd.errorChannel
 }
 
 func (gd *grpcDriver) Shutdown(ctx context.Context) error {
@@ -209,10 +262,25 @@ func GrpcServer(grpcServer *grpc.Server) Option {
 	}
 }
 
-// ServerListener Option to specify user preferred listener instead of the default provided one.
+// ServerListener Option to specify user preferred priListener instead of the default provided one.
 func ServerListener(listener net.Listener) Option {
 	return func(c *Service) {
-		c.listener = listener
+		c.priListener = listener
+	}
+}
+
+// GrpcServerListener Option to specify user preferred secListener instead of the default
+// provided one. This one is mostly useful when grpc is being utilised
+func GrpcServerListener(listener net.Listener) Option {
+	return func(c *Service) {
+		c.secListener = listener
+	}
+}
+
+// GrpcPort Option to specify the grpc port for server to bind to
+func GrpcPort(port string) Option {
+	return func(c *Service) {
+		c.grpcPort = port
 	}
 }
 

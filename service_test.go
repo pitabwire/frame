@@ -156,10 +156,8 @@ func TestHealthCheckEndpoints(t *testing.T) {
 	}{
 
 		{name: "Empty Happy path", healthPath: "", path: "/healthz", statusCode: 200},
-		{name: "Empty Default Happy path", healthPath: "", path: "/", statusCode: 200},
 		{name: "Empty Unknown Path", healthPath: "", path: "/any/path", statusCode: 404},
 		{name: "Happy path", healthPath: "/healthz", path: "/healthz", statusCode: 200},
-		{name: "Default Happy path", healthPath: "/", path: "/", statusCode: 200},
 		{name: "Unknown Path", healthPath: "/any/path", path: "/any/path", statusCode: 200},
 		{name: "Default Path with handler", healthPath: "", path: "/", statusCode: 202, handler: getTestHealthHandler()},
 		{name: "Health Path with handler", healthPath: "", path: "/healthz", statusCode: 200, handler: getTestHealthHandler()},

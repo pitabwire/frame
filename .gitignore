@@ -18,3 +18,4 @@ coverage.out
 
 .idea/
 vendor/
+tests_runner/*.pem

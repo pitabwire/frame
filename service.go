@@ -2,8 +2,8 @@ package frame
 
 import (
 	"context"
+	"errors"
 	"github.com/alitto/pond"
-	"github.com/improbable-eng/grpc-web/go/grpcweb"
 	"github.com/nicksnyder/go-i18n/v2/i18n"
 	"github.com/pitabwire/frame/internal"
 	"github.com/sirupsen/logrus"
@@ -41,15 +41,18 @@ type Service struct {
 	traceExporter    trace.SpanExporter
 	traceSampler     trace.Sampler
 	handler          http.Handler
+	tlsEnabled       bool
 	cancelFunc       context.CancelFunc
 	errorChannel     chan error
 	backGroundClient func(ctx context.Context) error
 	poolWorkerCount  int
 	poolCapacity     int
 	pool             *pond.WorkerPool
-	driver           internal.Server
+	driver           interface{}
 	grpcServer       *grpc.Server
-	listener         net.Listener
+	priListener      net.Listener
+	secListener      net.Listener
+	grpcPort         string
 	corsPolicy       string
 	client           *http.Client
 	queue            *queue
@@ -278,37 +281,39 @@ func (s *Service) initServer(ctx context.Context, address string) error {
 		return err
 	}
 
-	if s.healthCheckPath == "" {
+	if s.healthCheckPath == "" ||
+		s.healthCheckPath == "/" && s.handler != nil {
 		s.healthCheckPath = "/healthz"
 	}
 
 	s.startOnce.Do(func() {
 
 		mux := http.NewServeMux()
-		if s.healthCheckPath == "/" && s.handler != nil {
-			s.healthCheckPath = "/healthz"
+
+		applicationHandler := s.handler
+		if applicationHandler == nil {
+			applicationHandler = http.DefaultServeMux
 		}
 
 		mux.HandleFunc(s.healthCheckPath, s.HandleHealth)
 
-		if s.handler != nil {
-			mux.Handle("/", s.handler)
-		} else if s.healthCheckPath != "/" {
-			mux.HandleFunc("/", s.HandleHealthByDefault)
-		}
+		mux.Handle("/", applicationHandler)
 
 		s.handler = mux
 
+		tlsConfig := s.TLSConfig()
 		// If grpc server is setup we should use the correct driver
 		if s.grpcServer != nil {
-			s.driver = &grpcDriver{
 
+			if s.grpcPort == "" {
+				s.grpcPort = ":50051"
+			}
+
+			s.driver = &grpcDriver{
+				grpcPort:   s.grpcPort,
 				corsPolicy: s.corsPolicy,
+				log:        s.L(),
 				grpcServer: s.grpcServer,
-				wrappedGrpcServer: grpcweb.WrapServer(
-					s.grpcServer,
-					grpcweb.WithOriginFunc(func(origin string) bool { return true }),
-				),
 				httpServer: &http.Server{
 					BaseContext: func(listener net.Listener) context.Context {
 						return ctx
@@ -316,12 +321,18 @@ func (s *Service) initServer(ctx context.Context, address string) error {
 					ReadTimeout:  5 * time.Second,
 					WriteTimeout: 10 * time.Second,
 					IdleTimeout:  120 * time.Second,
+
+					TLSConfig: tlsConfig,
 				},
-				listener: s.listener,
+				tlsConfig:   tlsConfig,
+				priListener: s.priListener,
+				secListener: s.secListener,
 			}
 		}
 		if s.driver == nil {
+
 			s.driver = &defaultDriver{
+				log: s.L(),
 				httpServer: &http.Server{
 					BaseContext: func(listener net.Listener) context.Context {
 						return ctx
@@ -329,6 +340,8 @@ func (s *Service) initServer(ctx context.Context, address string) error {
 					ReadTimeout:  5 * time.Second,
 					WriteTimeout: 10 * time.Second,
 					IdleTimeout:  120 * time.Second,
+
+					TLSConfig: tlsConfig,
 				},
 			}
 		}
@@ -338,7 +351,20 @@ func (s *Service) initServer(ctx context.Context, address string) error {
 		s.startup(s)
 	}
 
-	return s.driver.ListenAndServe(address, s.handler)
+	if s.TLSEnabled() {
+		tlsServer, ok := s.driver.(internal.TLSServer)
+		if !ok {
+			return errors.New("tls server has to be of type internal.TLSServer")
+		}
+		return tlsServer.ListenAndServeTLS(address, "", "", s.handler)
+	}
+
+	nonTlsServer, ok := s.driver.(internal.Server)
+	if !ok {
+		return errors.New("server has to be of type internal.Server")
+	}
+	return nonTlsServer.ListenAndServe(address, s.handler)
+
 }
 
 // Stop Used to gracefully run clean up methods ensuring all requests that

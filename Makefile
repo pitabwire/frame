@@ -58,4 +58,23 @@ tests: ## runs all system tests
 	go tool cover -html=coverage.out -o coverage.html
 
 
-build: clean fmt vet docker-setup tests docker-stop ## run all preliminary steps and tests the setup
+gen_tls_certificates:
+	rm tests_runner/*.pem
+	# Generate ca file
+
+	openssl req -x509 -newkey rsa:4096 -days 365 -nodes \
+			-keyout tests_runner/ca-key.pem -out tests_runner/ca-cert.pem \
+			-subj "/C=CN/ST=Busia/L=Kisenyi B/O=Ant Investor Ltd, Inc./OU=Systems /CN=localhost"
+
+
+	# Generate csr
+	openssl req -newkey rsa:4096 -nodes -keyout tests_runner/server-key.pem -out tests_runner/server-req.pem \
+			-subj "/C=CN/ST=Busia/L=Kisenyi B/O=Ant Investor Ltd, Inc./OU=Systems /CN=localhost"
+
+
+	# Generate server certificate
+	openssl x509 -req -extfile <(printf "subjectAltName=DNS:tests.antinvestor.com,DNS:localhost")  -in tests_runner/server-req.pem -days 60 -CA tests_runner/ca-cert.pem \
+			-CAkey tests_runner/ca-key.pem -CAcreateserial -out tests_runner/server-cert.pem
+
+
+build: clean fmt vet gen_tls_certificates docker-setup tests docker-stop ## run all preliminary steps and tests the setup

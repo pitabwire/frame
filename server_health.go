@@ -16,6 +16,9 @@
 package frame
 
 import (
+	"context"
+	"google.golang.org/grpc/health"
+	"google.golang.org/grpc/health/grpc_health_v1"
 	"io"
 	"net/http"
 )
@@ -103,4 +106,24 @@ type CheckerFunc func() error
 // CheckHealth calls f().
 func (f CheckerFunc) CheckHealth() error {
 	return f()
+}
+
+type healthServer struct {
+	*health.Server
+	service *Service
+}
+
+// Check implements `service Health`.
+func (s *healthServer) Check(ctx context.Context, in *grpc_health_v1.HealthCheckRequest) (*grpc_health_v1.HealthCheckResponse, error) {
+
+	for _, c := range s.service.healthCheckers {
+		if err := c.CheckHealth(); err != nil {
+			return &grpc_health_v1.HealthCheckResponse{
+				Status: grpc_health_v1.HealthCheckResponse_NOT_SERVING,
+			}, nil
+		}
+	}
+	return &grpc_health_v1.HealthCheckResponse{
+		Status: grpc_health_v1.HealthCheckResponse_SERVING,
+	}, nil
 }

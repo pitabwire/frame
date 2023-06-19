@@ -1,8 +1,10 @@
 package frame
 
 import (
+	"fmt"
 	"os"
 	"strconv"
+	"strings"
 )
 
 // Config Option that helps to specify or override the configuration object of our service.
@@ -17,7 +19,7 @@ func (s *Service) Config() interface{} {
 }
 
 type ConfigurationDefault struct {
-	ServerPort     string `default:"7000" envconfig:"PORT"`
+	ServerPort     string `default:":8080" envconfig:"PORT"`
 	GrpcServerPort string `default:":50051" envconfig:"GRPC_PORT"`
 
 	TLSCertificatePath    string `envconfig:"TLS_CERTIFICATE_PATH"`
@@ -48,7 +50,15 @@ type ConfigurationPort interface {
 }
 
 func (c *ConfigurationDefault) Port() string {
-	return c.ServerPort
+	if i, err := strconv.Atoi(c.ServerPort); err == nil && i > 0 {
+		return fmt.Sprintf(":%s", strings.TrimSpace(c.ServerPort))
+	}
+
+	if strings.HasPrefix(":", c.ServerPort) || strings.Contains(c.ServerPort, ":") {
+		return c.ServerPort
+	}
+
+	return ":443"
 }
 
 type ConfigurationGrpcPort interface {
@@ -56,7 +66,16 @@ type ConfigurationGrpcPort interface {
 }
 
 func (c *ConfigurationDefault) GrpcPort() string {
-	return c.GrpcServerPort
+
+	if i, err := strconv.Atoi(c.GrpcServerPort); err == nil && i > 0 {
+		return fmt.Sprintf(":%s", strings.TrimSpace(c.GrpcServerPort))
+	}
+
+	if strings.HasPrefix(":", c.GrpcServerPort) || strings.Contains(c.GrpcServerPort, ":") {
+		return c.GrpcServerPort
+	}
+
+	return ":50051"
 }
 
 type ConfigurationOAUTH2 interface {

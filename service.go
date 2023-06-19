@@ -9,6 +9,8 @@ import (
 	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/otel/sdk/trace"
 	"google.golang.org/grpc"
+
+	"google.golang.org/grpc/health/grpc_health_v1"
 	"gorm.io/gorm"
 	"net"
 	"net/http"
@@ -49,6 +51,7 @@ type Service struct {
 	pool             *pond.WorkerPool
 	driver           interface{}
 	grpcServer       *grpc.Server
+	grpcHealthServer grpc_health_v1.HealthServer
 	priListener      net.Listener
 	secListener      net.Listener
 	grpcPort         string
@@ -341,6 +344,8 @@ func (s *Service) initServer(ctx context.Context, address string) error {
 
 			}
 
+			grpc_health_v1.RegisterHealthServer(s.grpcServer, s.grpcHealthServer)
+
 			s.driver = &grpcDriver{
 				defaultDriver: defaultServer,
 				grpcPort:      s.grpcPort,
@@ -386,6 +391,7 @@ func (s *Service) Stop(ctx context.Context) {
 	defer s.mu.Unlock()
 
 	s.closeOnce.Do(func() {
+
 		if s.cleanup != nil {
 			s.cleanup(ctx)
 		}

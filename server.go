@@ -7,6 +7,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"golang.org/x/net/http2"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/health"
 	"net"
 	"net/http"
 )
@@ -277,6 +278,11 @@ func (gd *grpcDriver) Shutdown(ctx context.Context) error {
 func GrpcServer(grpcServer *grpc.Server) Option {
 	return func(c *Service) {
 		c.grpcServer = grpcServer
+
+		c.grpcHealthServer = &healthServer{
+			Server:  health.NewServer(),
+			service: c,
+		}
 	}
 }
 

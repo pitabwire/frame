@@ -64,16 +64,16 @@ gen_tls_certificates:
 
 	openssl req -x509 -newkey rsa:4096 -days 365 -nodes \
 			-keyout tests_runner/ca-key.pem -out tests_runner/ca-cert.pem \
-			-subj "/C=CN/ST=Busia/L=Kisenyi B/O=Ant Investor Ltd, Inc./OU=Systems /CN=localhost"
+			-subj "/C=CN/ST=Busia/L=Kisenyi B/O=Testing Systems Ltd, Inc./OU=Systems /CN=localhost"
 
 
 	# Generate csr
 	openssl req -newkey rsa:4096 -nodes -keyout tests_runner/server-key.pem -out tests_runner/server-req.pem \
-			-subj "/C=CN/ST=Busia/L=Kisenyi B/O=Ant Investor Ltd, Inc./OU=Systems /CN=localhost"
+			-subj "/C=CN/ST=Busia/L=Kisenyi B/O=Testing Systems Ltd, Inc./OU=Systems /CN=localhost"
 
 
 	# Generate server certificate
-	openssl x509 -req -extfile <(printf "subjectAltName=DNS:tests.antinvestor.com,DNS:localhost")  -in tests_runner/server-req.pem -days 60 -CA tests_runner/ca-cert.pem \
+	openssl x509 -req -extfile <(printf "subjectAltName=DNS:localhost")  -in tests_runner/server-req.pem -days 60 -CA tests_runner/ca-cert.pem \
 			-CAkey tests_runner/ca-key.pem -CAcreateserial -out tests_runner/server-cert.pem
 
 

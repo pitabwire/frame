@@ -9,6 +9,7 @@ import (
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 	grpchello "google.golang.org/grpc/examples/helloworld/helloworld"
+	"google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/test/bufconn"
 	"log"
 	"net"
@@ -66,6 +67,44 @@ func TestRawGrpcServer(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to dial: %s", err)
 	}
+}
+
+func TestServiceGrpcHealthServer(t *testing.T) {
+
+	bufferSize := 1024 * 1024
+	listener := bufconn.Listen(bufferSize)
+	gsrv := grpc.NewServer()
+	grpchello.RegisterGreeterServer(gsrv, &grpcServer{})
+
+	var defConf ConfigurationDefault
+	err := ConfigProcess("", &defConf)
+	if err != nil {
+		t.Errorf("Could not process test configurations %v", err)
+		return
+	}
+	ctx, srv := NewService("Testing Service Grpc", GrpcServer(gsrv), GrpcServerListener(listener), Config(&defConf))
+
+	go func() {
+		err = srv.Run(ctx, "")
+		if err != nil {
+			srv.L().WithError(err).Error(" failed to run server ")
+		}
+	}()
+
+	transportCred := grpc.WithTransportCredentials(insecure.NewCredentials())
+	ctx, cancel, conn, err := getBufferedClConn(listener, transportCred)
+	if err != nil {
+		t.Errorf("unable to open a connection %s", err)
+		return
+	}
+	defer cancel()
+	err = clientInvokeGrpcHealth(ctx, conn)
+	if err != nil {
+		t.Fatalf("failed to dial: %s", err)
+	}
+
+	time.Sleep(2 * time.Second)
+	srv.Stop(ctx)
 }
 
 func TestServiceGrpcServer(t *testing.T) {
@@ -206,6 +245,25 @@ func clientInvokeGrpc(ctx context.Context, conn *grpc.ClientConn) error {
 
 	if !strings.Contains(resp.Message, "frame") {
 		return errors.New("The response message should contain the word frame ")
+	}
+	return conn.Close()
+}
+
+func clientInvokeGrpcHealth(ctx context.Context, conn *grpc.ClientConn) error {
+
+	cli := grpc_health_v1.NewHealthClient(conn)
+
+	req := grpc_health_v1.HealthCheckRequest{
+		Service: "Testing",
+	}
+
+	resp, err := cli.Check(ctx, &req)
+	if err != nil {
+		return err
+	}
+
+	if resp.GetStatus() != grpc_health_v1.HealthCheckResponse_SERVING {
+		return errors.New("The response status should be all good ")
 	}
 	return conn.Close()
 }

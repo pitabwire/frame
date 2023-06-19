@@ -17,10 +17,12 @@ package frame
 
 import (
 	"context"
-	"google.golang.org/grpc/health"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/health/grpc_health_v1"
+	"google.golang.org/grpc/status"
 	"io"
 	"net/http"
+	"time"
 )
 
 func (s *Service) HealthCheckers() []Checker {
@@ -108,22 +110,60 @@ func (f CheckerFunc) CheckHealth() error {
 	return f()
 }
 
-type healthServer struct {
-	*health.Server
+type grpcHealthServer struct {
+	grpc_health_v1.UnimplementedHealthServer
 	service *Service
 }
 
-// Check implements `service Health`.
-func (s *healthServer) Check(ctx context.Context, in *grpc_health_v1.HealthCheckRequest) (*grpc_health_v1.HealthCheckResponse, error) {
+func (ghs *grpcHealthServer) Check(_ context.Context, _ *grpc_health_v1.HealthCheckRequest) (*grpc_health_v1.HealthCheckResponse, error) {
 
-	for _, c := range s.service.healthCheckers {
+	for _, c := range ghs.service.healthCheckers {
 		if err := c.CheckHealth(); err != nil {
+
 			return &grpc_health_v1.HealthCheckResponse{
 				Status: grpc_health_v1.HealthCheckResponse_NOT_SERVING,
 			}, nil
 		}
 	}
+
 	return &grpc_health_v1.HealthCheckResponse{
 		Status: grpc_health_v1.HealthCheckResponse_SERVING,
 	}, nil
+}
+func (ghs *grpcHealthServer) Watch(_ *grpc_health_v1.HealthCheckRequest, stream grpc_health_v1.Health_WatchServer) error {
+
+	var lastSentStatus grpc_health_v1.HealthCheckResponse_ServingStatus = -1
+	for {
+		select {
+		// Status updated. Sends the up-to-date status to the client.
+		case <-time.After(5 * time.Second):
+
+			servingStatus := grpc_health_v1.HealthCheckResponse_SERVING
+			for _, c := range ghs.service.healthCheckers {
+				if err := c.CheckHealth(); err != nil {
+					servingStatus = grpc_health_v1.HealthCheckResponse_NOT_SERVING
+					break
+				}
+			}
+
+			if lastSentStatus == servingStatus {
+				continue
+			}
+			lastSentStatus = servingStatus
+			err := stream.Send(&grpc_health_v1.HealthCheckResponse{Status: servingStatus})
+			if err != nil {
+				return status.Error(codes.Canceled, "Stream has ended.")
+			}
+
+			// Context done. Removes the update channel from the updates map.
+		case <-stream.Context().Done():
+			return status.Error(codes.Canceled, "Stream has ended.")
+		}
+	}
+}
+
+func NewGrpcHealthServer(service *Service) grpc_health_v1.HealthServer {
+	return &grpcHealthServer{
+		service: service,
+	}
 }

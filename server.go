@@ -2,6 +2,7 @@ package frame
 
 import (
 	"context"
+	"crypto/tls"
 	"github.com/improbable-eng/grpc-web/go/grpcweb"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/net/http2"
@@ -28,12 +29,38 @@ type defaultDriver struct {
 	listener   net.Listener
 }
 
-func (dd *defaultDriver) httpListener(addr string) (net.Listener, error) {
+func (dd *defaultDriver) tlsConfig(certPath, certKeyPath string) (*tls.Config, error) {
+
+	if certPath == "" || certKeyPath == "" {
+		return nil, nil
+	}
+
+	cert, err := tls.LoadX509KeyPair(certPath, certKeyPath)
+	if err != nil {
+		return nil, err
+	}
+
+	return &tls.Config{
+		Certificates: []tls.Certificate{cert},
+		NextProtos:   []string{http2.NextProtoTLS, "http/1.1"},
+	}, nil
+}
+
+func (dd *defaultDriver) httpListener(address, certPath, certKeyPath string) (net.Listener, error) {
 	if dd.listener != nil {
 		return dd.listener, nil
 	}
-	return net.Listen("tcp", addr)
 
+	tlsConfig, err := dd.tlsConfig(certPath, certKeyPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if tlsConfig == nil {
+		return net.Listen("tcp", address)
+	}
+
+	return tls.Listen("tcp", address, tlsConfig)
 }
 
 // ListenAndServe sets the address and handler on DefaultDriver's http.Server,
@@ -49,7 +76,7 @@ func (dd *defaultDriver) ListenAndServe(addr string, h http.Handler) error {
 		return err
 	}
 
-	ln, err0 := dd.httpListener(addr)
+	ln, err0 := dd.httpListener(addr, "", "")
 	if err0 != nil {
 		return err0
 	}
@@ -59,7 +86,7 @@ func (dd *defaultDriver) ListenAndServe(addr string, h http.Handler) error {
 	return dd.httpServer.Serve(ln)
 }
 
-func (dd *defaultDriver) ListenAndServeTLS(addr, certFile, keyFile string, h http.Handler) error {
+func (dd *defaultDriver) ListenAndServeTLS(addr, certPath, certKeyPath string, h http.Handler) error {
 
 	dd.httpServer.Addr = addr
 	dd.httpServer.Handler = h
@@ -69,14 +96,14 @@ func (dd *defaultDriver) ListenAndServeTLS(addr, certFile, keyFile string, h htt
 		return err
 	}
 
-	ln, err0 := dd.httpListener(addr)
+	ln, err0 := dd.httpListener(addr, certPath, certKeyPath)
 	if err0 != nil {
 		return err0
 	}
 
 	dd.log.Infof("http server port is : %s", addr)
 
-	return dd.httpServer.ServeTLS(ln, certFile, keyFile)
+	return dd.httpServer.Serve(ln)
 
 }
 
@@ -97,12 +124,22 @@ type grpcDriver struct {
 	secListener net.Listener
 }
 
-func (gd *grpcDriver) grpcListener() (net.Listener, error) {
+func (gd *grpcDriver) grpcListener(address, certPath, certKeyPath string) (net.Listener, error) {
 
 	if gd.secListener != nil {
 		return gd.secListener, nil
 	}
-	return net.Listen("tcp", gd.grpcPort)
+
+	tlsConfig, err := gd.tlsConfig(certPath, certKeyPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if tlsConfig == nil {
+		return net.Listen("tcp", address)
+	}
+
+	return tls.Listen("tcp", address, tlsConfig)
 
 }
 
@@ -133,7 +170,7 @@ func (gd *grpcDriver) ListenAndServe(addr string, h http.Handler) error {
 
 	go func() {
 
-		ln, err2 := gd.grpcListener()
+		ln, err2 := gd.grpcListener(gd.grpcPort, "", "")
 		if err2 != nil {
 			gd.errorChannel <- err2
 			return
@@ -150,7 +187,7 @@ func (gd *grpcDriver) ListenAndServe(addr string, h http.Handler) error {
 
 	go func(addr string) {
 
-		ln, err2 := gd.httpListener(addr)
+		ln, err2 := gd.httpListener(addr, "", "")
 		if err2 != nil {
 			gd.errorChannel <- err2
 			return
@@ -167,7 +204,7 @@ func (gd *grpcDriver) ListenAndServe(addr string, h http.Handler) error {
 	return <-gd.errorChannel
 }
 
-func (gd *grpcDriver) ListenAndServeTLS(addr, certFile, keyFile string, h http.Handler) error {
+func (gd *grpcDriver) ListenAndServeTLS(addr, certFile, certKeyFile string, h http.Handler) error {
 
 	gd.httpServer.Addr = addr
 	gd.httpServer.Handler = http.HandlerFunc(func(resp http.ResponseWriter, req *http.Request) {
@@ -187,9 +224,9 @@ func (gd *grpcDriver) ListenAndServeTLS(addr, certFile, keyFile string, h http.H
 		return err
 	}
 
-	go func() {
+	go func(address, certPath, certKeyPath string) {
 
-		ln, err2 := gd.grpcListener()
+		ln, err2 := gd.grpcListener(address, certPath, certKeyPath)
 		if err2 != nil {
 			gd.errorChannel <- err2
 			return
@@ -202,11 +239,11 @@ func (gd *grpcDriver) ListenAndServeTLS(addr, certFile, keyFile string, h http.H
 			gd.errorChannel <- err2
 			return
 		}
-	}()
+	}(gd.grpcPort, certFile, certKeyFile)
 
-	go func() {
+	go func(address, certPath, certKeyPath string) {
 
-		ln, err2 := gd.httpListener(addr)
+		ln, err2 := gd.httpListener(addr, certFile, certKeyFile)
 		if err2 != nil {
 			gd.errorChannel <- err2
 			return
@@ -214,12 +251,12 @@ func (gd *grpcDriver) ListenAndServeTLS(addr, certFile, keyFile string, h http.H
 
 		gd.log.Infof("http server port is : %s", addr)
 
-		err2 = gd.httpServer.ServeTLS(ln, certFile, keyFile)
+		err2 = gd.httpServer.Serve(ln)
 		if err2 != nil {
 			gd.errorChannel <- err2
 			return
 		}
-	}()
+	}(addr, certFile, certKeyFile)
 
 	return <-gd.errorChannel
 }

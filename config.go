@@ -3,7 +3,6 @@ package frame
 import (
 	"os"
 	"strconv"
-	"strings"
 )
 
 // Config Option that helps to specify or override the configuration object of our service.
@@ -21,16 +20,8 @@ type ConfigurationDefault struct {
 	ServerPort     string `default:"7000" envconfig:"PORT"`
 	GrpcServerPort string `default:":50051" envconfig:"GRPC_PORT"`
 
-	TLSCertificatePath             string `envconfig:"TLS_CERTIFICATE_PATH"`
-	TLSCertificateKeyPath          string `envconfig:"TLS_CERTIFICATE_KEY_PATH"`
-	TLSCertificateDomains          string `envconfig:"TLS_CERTIFICATE_DOMAINS"`
-	TLSCertificateCommonName       string `envconfig:"TLS_CERTIFICATE_COMMON_NAME"`
-	TLSCertificateCountry          string `envconfig:"TLS_CERTIFICATE_COUNTRY"`
-	TLSCertificateOrganization     string `envconfig:"TLS_CERTIFICATE_ORGANIZATION"`
-	TLSCertificateOrganizationUnit string `default:"computing" envconfig:"TLS_CERTIFICATE_ORGANIZATION_UNIT"`
-	TLSCertificateValidYears       string `default:"0" envconfig:"TLS_CERTIFICATE_VALID_YEARS"`
-	TLSCertificateValidMonths      string `default:"1" envconfig:"TLS_CERTIFICATE_VALID_MONTHS"`
-	TLSCertificateValidDays        string `default:"0" envconfig:"TLS_CERTIFICATE_VALID_DAYS"`
+	TLSCertificatePath    string `envconfig:"TLS_CERTIFICATE_PATH"`
+	TLSCertificateKeyPath string `envconfig:"TLS_CERTIFICATE_KEY_PATH"`
 
 	Oauth2WellKnownJwk        string `envconfig:"OAUTH2_WELL_KNOWN_JWK"`
 	Oauth2JwtVerifyAudience   string `envconfig:"OAUTH2_JWT_VERIFY_AUDIENCE"`
@@ -150,21 +141,9 @@ func (c *ConfigurationDefault) GetEventsQueueUrl() string {
 }
 
 type ConfigurationTLS interface {
-	TLSCertDomains() []string
 	TLSCertPath() string
 	TLSCertKeyPath() string
-	TLSCertCommonName() string
-	TLSCertCountry() string
-	TLSCertOrganization() string
-	TLSCertOrganizationUnit() string
-	TLSCertValidYears() int
-	TLSCertValidMonths() int
-	TLSCertValidDays() int
 	SetTLSCertAndKeyPath(certificatePath, certificateKeyPath string)
-}
-
-func (c *ConfigurationDefault) TLSCertDomains() []string {
-	return strings.Split(c.TLSCertificateDomains, ",")
 }
 
 func (c *ConfigurationDefault) TLSCertKeyPath() string {
@@ -177,38 +156,4 @@ func (c *ConfigurationDefault) TLSCertPath() string {
 func (c *ConfigurationDefault) SetTLSCertAndKeyPath(certificatePath, certificateKeyPath string) {
 	c.TLSCertificatePath = certificatePath
 	c.TLSCertificateKeyPath = certificateKeyPath
-}
-
-func (c *ConfigurationDefault) TLSCertCommonName() string {
-	return c.TLSCertificateCommonName
-}
-func (c *ConfigurationDefault) TLSCertCountry() string {
-	return c.TLSCertificateCountry
-}
-func (c *ConfigurationDefault) TLSCertOrganization() string {
-	return c.TLSCertificateOrganization
-}
-func (c *ConfigurationDefault) TLSCertOrganizationUnit() string {
-	return c.TLSCertificateOrganizationUnit
-}
-func (c *ConfigurationDefault) TLSCertValidYears() int {
-	duration, err := strconv.Atoi(c.TLSCertificateValidYears)
-	if err != nil {
-		return 0
-	}
-	return duration
-}
-func (c *ConfigurationDefault) TLSCertValidMonths() int {
-	duration, err := strconv.Atoi(c.TLSCertificateValidMonths)
-	if err != nil {
-		return 0
-	}
-	return duration
-}
-func (c *ConfigurationDefault) TLSCertValidDays() int {
-	duration, err := strconv.Atoi(c.TLSCertificateValidDays)
-	if err != nil {
-		return 0
-	}
-	return duration
 }

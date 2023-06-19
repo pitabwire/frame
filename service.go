@@ -41,7 +41,6 @@ type Service struct {
 	traceExporter    trace.SpanExporter
 	traceSampler     trace.Sampler
 	handler          http.Handler
-	tlsEnabled       bool
 	cancelFunc       context.CancelFunc
 	errorChannel     chan error
 	backGroundClient func(ctx context.Context) error
@@ -301,8 +300,6 @@ func (s *Service) initServer(ctx context.Context, address string) error {
 
 		s.handler = mux
 
-		tlsConfig := s.TLSConfig()
-
 		if address == "" {
 			config, ok := s.Config().(ConfigurationPort)
 			if !ok {
@@ -327,8 +324,6 @@ func (s *Service) initServer(ctx context.Context, address string) error {
 				ReadTimeout:  5 * time.Second,
 				WriteTimeout: 10 * time.Second,
 				IdleTimeout:  120 * time.Second,
-
-				TLSConfig: tlsConfig,
 			},
 		}
 
@@ -354,8 +349,8 @@ func (s *Service) initServer(ctx context.Context, address string) error {
 				secListener:   s.secListener,
 			}
 		}
-		if s.driver == nil {
 
+		if s.driver == nil {
 			s.driver = &defaultServer
 		}
 	})
@@ -365,11 +360,14 @@ func (s *Service) initServer(ctx context.Context, address string) error {
 	}
 
 	if s.TLSEnabled() {
+
+		config, _ := s.Config().(ConfigurationTLS)
+
 		tlsServer, ok := s.driver.(internal.TLSServer)
 		if !ok {
 			return errors.New("tls server has to be of type internal.TLSServer")
 		}
-		return tlsServer.ListenAndServeTLS(address, "", "", s.handler)
+		return tlsServer.ListenAndServeTLS(address, config.TLSCertPath(), config.TLSCertKeyPath(), s.handler)
 	}
 
 	nonTlsServer, ok := s.driver.(internal.Server)

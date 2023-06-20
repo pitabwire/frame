@@ -23,10 +23,15 @@ func (t *noopDriver) Shutdown(ctx context.Context) error {
 }
 
 type defaultDriver struct {
+	ctx        context.Context
 	log        *logrus.Entry
 	port       string
 	httpServer *http.Server
 	listener   net.Listener
+}
+
+func (dd *defaultDriver) Context() context.Context {
+	return dd.ctx
 }
 
 func (dd *defaultDriver) tlsConfig(certPath, certKeyPath string) (*tls.Config, error) {
@@ -201,7 +206,7 @@ func (gd *grpcDriver) ListenAndServe(addr string, h http.Handler) error {
 		}
 	}(addr)
 
-	return <-gd.errorChannel
+	return nil
 }
 
 func (gd *grpcDriver) ListenAndServeTLS(addr, certFile, certKeyFile string, h http.Handler) error {

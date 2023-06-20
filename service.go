@@ -318,6 +318,7 @@ func (s *Service) initServer(ctx context.Context, address string) error {
 		}
 
 		defaultServer := defaultDriver{
+			ctx:  ctx,
 			log:  s.L(),
 			port: address,
 			httpServer: &http.Server{

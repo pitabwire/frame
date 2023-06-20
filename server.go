@@ -190,23 +190,14 @@ func (gd *grpcDriver) ListenAndServe(addr string, h http.Handler) error {
 		}
 	}()
 
-	go func(addr string) {
+	ln, err2 := gd.httpListener(addr, "", "")
+	if err2 != nil {
+		return err2
+	}
 
-		ln, err2 := gd.httpListener(addr, "", "")
-		if err2 != nil {
-			gd.errorChannel <- err2
-			return
-		}
+	gd.log.Infof("http server port is : %s", addr)
+	return gd.httpServer.Serve(ln)
 
-		gd.log.Infof("http server port is : %s", addr)
-		err2 = gd.httpServer.Serve(ln)
-		if err2 != nil {
-			gd.errorChannel <- err2
-			return
-		}
-	}(addr)
-
-	return nil
 }
 
 func (gd *grpcDriver) ListenAndServeTLS(addr, certFile, certKeyFile string, h http.Handler) error {
@@ -246,24 +237,15 @@ func (gd *grpcDriver) ListenAndServeTLS(addr, certFile, certKeyFile string, h ht
 		}
 	}(gd.grpcPort, certFile, certKeyFile)
 
-	go func(address, certPath, certKeyPath string) {
+	ln, err2 := gd.httpListener(addr, certFile, certKeyFile)
+	if err2 != nil {
+		return err2
+	}
 
-		ln, err2 := gd.httpListener(addr, certFile, certKeyFile)
-		if err2 != nil {
-			gd.errorChannel <- err2
-			return
-		}
+	gd.log.Infof("http server port is : %s", addr)
 
-		gd.log.Infof("http server port is : %s", addr)
+	return gd.httpServer.Serve(ln)
 
-		err2 = gd.httpServer.Serve(ln)
-		if err2 != nil {
-			gd.errorChannel <- err2
-			return
-		}
-	}(addr, certFile, certKeyFile)
-
-	return <-gd.errorChannel
 }
 
 func (gd *grpcDriver) Shutdown(ctx context.Context) error {

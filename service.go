@@ -3,6 +3,7 @@ package frame
 import (
 	"context"
 	"errors"
+	"fmt"
 	"github.com/alitto/pond"
 	"github.com/nicksnyder/go-i18n/v2/i18n"
 	"github.com/pitabwire/frame/internal"
@@ -277,7 +278,7 @@ func (s *Service) Run(ctx context.Context, address string) error {
 
 }
 
-func (s *Service) initServer(ctx context.Context, address string) error {
+func (s *Service) initServer(ctx context.Context, httpPort string) error {
 	err := s.initTracer(ctx)
 	if err != nil {
 		return err
@@ -303,16 +304,16 @@ func (s *Service) initServer(ctx context.Context, address string) error {
 
 		s.handler = mux
 
-		if address == "" {
+		if httpPort == "" {
 			config, ok := s.Config().(ConfigurationPort)
 			if !ok {
 				if s.TLSEnabled() {
-					address = ":https"
+					httpPort = ":https"
 				} else {
-					address = "http"
+					httpPort = "http"
 				}
 			} else {
-				address = config.Port()
+				httpPort = config.Port()
 			}
 
 		}
@@ -320,7 +321,7 @@ func (s *Service) initServer(ctx context.Context, address string) error {
 		defaultServer := defaultDriver{
 			ctx:  ctx,
 			log:  s.L(),
-			port: address,
+			port: httpPort,
 			httpServer: &http.Server{
 				BaseContext: func(listener net.Listener) context.Context {
 					return ctx
@@ -352,7 +353,7 @@ func (s *Service) initServer(ctx context.Context, address string) error {
 				grpcPort:      s.grpcPort,
 				corsPolicy:    s.corsPolicy,
 				grpcServer:    s.grpcServer,
-				secListener:   s.secListener,
+				grpcListener:  s.secListener,
 			}
 		}
 
@@ -360,6 +361,10 @@ func (s *Service) initServer(ctx context.Context, address string) error {
 			s.driver = &defaultServer
 		}
 	})
+
+	if httpPort == s.grpcPort {
+		return fmt.Errorf("HTTP PORT %s and GRPC PORT %s can not be same", httpPort, s.grpcPort)
+	}
 
 	if s.startup != nil {
 		s.startup(s)
@@ -373,14 +378,14 @@ func (s *Service) initServer(ctx context.Context, address string) error {
 		if !ok {
 			return errors.New("tls server has to be of type internal.TLSServer")
 		}
-		return tlsServer.ListenAndServeTLS(address, config.TLSCertPath(), config.TLSCertKeyPath(), s.handler)
+		return tlsServer.ListenAndServeTLS(httpPort, config.TLSCertPath(), config.TLSCertKeyPath(), s.handler)
 	}
 
 	nonTlsServer, ok := s.driver.(internal.Server)
 	if !ok {
 		return errors.New("server has to be of type internal.Server")
 	}
-	return nonTlsServer.ListenAndServe(address, s.handler)
+	return nonTlsServer.ListenAndServe(httpPort, s.handler)
 
 }
 

@@ -14,11 +14,11 @@ import (
 type noopDriver struct {
 }
 
-func (t *noopDriver) ListenAndServe(addr string, h http.Handler) error {
+func (t *noopDriver) ListenAndServe(_ string, _ http.Handler) error {
 	return nil
 }
 
-func (t *noopDriver) Shutdown(ctx context.Context) error {
+func (t *noopDriver) Shutdown(_ context.Context) error {
 	return nil
 }
 
@@ -51,9 +51,9 @@ func (dd *defaultDriver) tlsConfig(certPath, certKeyPath string) (*tls.Config, e
 	}, nil
 }
 
-func (dd *defaultDriver) httpListener(address, certPath, certKeyPath string) (net.Listener, error) {
-	if dd.listener != nil {
-		return dd.listener, nil
+func (dd *defaultDriver) getListener(address, certPath, certKeyPath string, listener net.Listener) (net.Listener, error) {
+	if listener != nil {
+		return listener, nil
 	}
 
 	tlsConfig, err := dd.tlsConfig(certPath, certKeyPath)
@@ -81,7 +81,7 @@ func (dd *defaultDriver) ListenAndServe(addr string, h http.Handler) error {
 		return err
 	}
 
-	ln, err0 := dd.httpListener(addr, "", "")
+	ln, err0 := dd.getListener(addr, "", "", dd.listener)
 	if err0 != nil {
 		return err0
 	}
@@ -101,7 +101,7 @@ func (dd *defaultDriver) ListenAndServeTLS(addr, certPath, certKeyPath string, h
 		return err
 	}
 
-	ln, err0 := dd.httpListener(addr, certPath, certKeyPath)
+	ln, err0 := dd.getListener(addr, certPath, certKeyPath, dd.listener)
 	if err0 != nil {
 		return err0
 	}
@@ -126,26 +126,7 @@ type grpcDriver struct {
 	grpcServer        *grpc.Server
 	wrappedGrpcServer *grpcweb.WrappedGrpcServer
 
-	secListener net.Listener
-}
-
-func (gd *grpcDriver) grpcListener(address, certPath, certKeyPath string) (net.Listener, error) {
-
-	if gd.secListener != nil {
-		return gd.secListener, nil
-	}
-
-	tlsConfig, err := gd.tlsConfig(certPath, certKeyPath)
-	if err != nil {
-		return nil, err
-	}
-
-	if tlsConfig == nil {
-		return net.Listen("tcp", address)
-	}
-
-	return tls.Listen("tcp", address, tlsConfig)
-
+	grpcListener net.Listener
 }
 
 func (gd *grpcDriver) ListenAndServe(addr string, h http.Handler) error {
@@ -173,9 +154,9 @@ func (gd *grpcDriver) ListenAndServe(addr string, h http.Handler) error {
 		return err
 	}
 
-	go func() {
+	go func(address string) {
 
-		ln, err2 := gd.grpcListener(gd.grpcPort, "", "")
+		ln, err2 := gd.getListener(address, "", "", gd.grpcListener)
 		if err2 != nil {
 			gd.errorChannel <- err2
 			return
@@ -188,16 +169,15 @@ func (gd *grpcDriver) ListenAndServe(addr string, h http.Handler) error {
 			gd.errorChannel <- err2
 			return
 		}
-	}()
+	}(gd.grpcPort)
 
-	ln, err2 := gd.httpListener(addr, "", "")
-	if err2 != nil {
-		return err2
+	httpListener, err0 := gd.getListener(addr, "", "", gd.listener)
+	if err0 != nil {
+		return err0
 	}
-
 	gd.log.Infof("http server port is : %s", addr)
-	return gd.httpServer.Serve(ln)
 
+	return gd.httpServer.Serve(httpListener)
 }
 
 func (gd *grpcDriver) ListenAndServeTLS(addr, certFile, certKeyFile string, h http.Handler) error {
@@ -222,13 +202,13 @@ func (gd *grpcDriver) ListenAndServeTLS(addr, certFile, certKeyFile string, h ht
 
 	go func(address, certPath, certKeyPath string) {
 
-		ln, err2 := gd.grpcListener(address, certPath, certKeyPath)
+		ln, err2 := gd.getListener(address, certPath, certKeyPath, gd.grpcListener)
 		if err2 != nil {
 			gd.errorChannel <- err2
 			return
 		}
 
-		gd.log.Infof("grpc server port is : %s", gd.grpcPort)
+		gd.log.Infof("grpc server port is : %s", address)
 
 		err2 = gd.grpcServer.Serve(ln)
 		if err2 != nil {
@@ -237,14 +217,14 @@ func (gd *grpcDriver) ListenAndServeTLS(addr, certFile, certKeyFile string, h ht
 		}
 	}(gd.grpcPort, certFile, certKeyFile)
 
-	ln, err2 := gd.httpListener(addr, certFile, certKeyFile)
-	if err2 != nil {
-		return err2
+	httpListener, err0 := gd.getListener(addr, certFile, certKeyFile, gd.listener)
+	if err0 != nil {
+		return err0
 	}
 
 	gd.log.Infof("http server port is : %s", addr)
 
-	return gd.httpServer.Serve(ln)
+	return gd.httpServer.Serve(httpListener)
 
 }
 
@@ -275,7 +255,7 @@ func ServerListener(listener net.Listener) Option {
 	}
 }
 
-// GrpcServerListener Option to specify user preferred secListener instead of the default
+// GrpcServerListener Option to specify user preferred grpcListener instead of the default
 // provided one. This one is mostly useful when grpc is being utilised
 func GrpcServerListener(listener net.Listener) Option {
 	return func(c *Service) {

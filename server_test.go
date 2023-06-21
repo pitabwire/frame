@@ -82,14 +82,15 @@ func TestServiceGrpcHealthServer(t *testing.T) {
 		t.Errorf("Could not process test configurations %v", err)
 		return
 	}
+	defConf.ServerPort = ":40489"
 	ctx, srv := NewService("Testing Service Grpc", GrpcServer(gsrv), GrpcServerListener(listener), Config(&defConf))
 
-	go func() {
+	go func(t *testing.T, srv *Service) {
 		err = srv.Run(ctx, "")
 		if err != nil {
 			srv.L().WithError(err).Error(" failed to run server ")
 		}
-	}()
+	}(t, srv)
 
 	transportCred := grpc.WithTransportCredentials(insecure.NewCredentials())
 	ctx, cancel, conn, err := getBufferedClConn(listener, transportCred)
@@ -156,6 +157,7 @@ func TestServiceGrpcTLSServer(t *testing.T) {
 		t.Errorf("Could not process test configurations %v", err)
 		return
 	}
+
 	defConf.SetTLSCertAndKeyPath("tests_runner/server-cert.pem", "tests_runner/server-key.pem")
 
 	ctx, srv := NewService("Testing Service Grpc", Config(&defConf), ServerListener(priListener))

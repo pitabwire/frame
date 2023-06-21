@@ -19,7 +19,7 @@ func (s *Service) Config() interface{} {
 }
 
 type ConfigurationDefault struct {
-	ServerPort     string `default:":8080" envconfig:"PORT"`
+	ServerPort     string `default:":7000" envconfig:"PORT"`
 	GrpcServerPort string `default:":50051" envconfig:"GRPC_PORT"`
 
 	TLSCertificatePath    string `envconfig:"TLS_CERTIFICATE_PATH"`

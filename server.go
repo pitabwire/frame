@@ -7,7 +7,6 @@ import (
 	"github.com/sirupsen/logrus"
 	"golang.org/x/net/http2"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/reflection"
 	"net"
 	"net/http"
 )
@@ -242,12 +241,15 @@ func (gd *grpcDriver) Shutdown(ctx context.Context) error {
 
 // GrpcServer Option to specify an instantiated grpc server
 // with an implementation that can be utilized to handle incoming requests.
-// The grpc health check service and reflection services are automatically registered here
 func GrpcServer(grpcServer *grpc.Server) Option {
 	return func(c *Service) {
 		c.grpcServer = grpcServer
-		c.grpcHealthServer = NewGrpcHealthServer(c)
-		reflection.Register(c.grpcServer)
+	}
+}
+
+func EnableGrpcServerReflection() Option {
+	return func(c *Service) {
+		c.grpcServerEnableReflection = true
 	}
 }
 

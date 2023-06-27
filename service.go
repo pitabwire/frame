@@ -10,6 +10,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/otel/sdk/trace"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/reflection"
 
 	"google.golang.org/grpc/health/grpc_health_v1"
 	"gorm.io/gorm"
@@ -34,42 +35,42 @@ const ctxKeyService = contextKey("serviceKey")
 // An instance of this type scoped to stay for the lifetime of the application.
 // It is pushed and pulled from contexts to make it easy to pass around.
 type Service struct {
-	name             string
-	jwtClient        map[string]interface{}
-	jwtClientSecret  string
-	version          string
-	environment      string
-	logger           *logrus.Logger
-	logLevel         *logrus.Level
-	traceExporter    trace.SpanExporter
-	traceSampler     trace.Sampler
-	handler          http.Handler
-	cancelFunc       context.CancelFunc
-	errorChannel     chan error
-	backGroundClient func(ctx context.Context) error
-	poolWorkerCount  int
-	poolCapacity     int
-	pool             *pond.WorkerPool
-	driver           interface{}
-	grpcServer       *grpc.Server
-	grpcHealthServer grpc_health_v1.HealthServer
-	priListener      net.Listener
-	secListener      net.Listener
-	grpcPort         string
-	corsPolicy       string
-	client           *http.Client
-	queue            *queue
-	dataStore        *store
-	bundle           *i18n.Bundle
-	healthCheckers   []Checker
-	healthCheckPath  string
-	startup          func(s *Service)
-	cleanup          func(ctx context.Context)
-	eventRegistry    map[string]EventI
-	configuration    interface{}
-	startOnce        sync.Once
-	closeOnce        sync.Once
-	mu               sync.Mutex
+	name                       string
+	jwtClient                  map[string]interface{}
+	jwtClientSecret            string
+	version                    string
+	environment                string
+	logger                     *logrus.Logger
+	logLevel                   *logrus.Level
+	traceExporter              trace.SpanExporter
+	traceSampler               trace.Sampler
+	handler                    http.Handler
+	cancelFunc                 context.CancelFunc
+	errorChannel               chan error
+	backGroundClient           func(ctx context.Context) error
+	poolWorkerCount            int
+	poolCapacity               int
+	pool                       *pond.WorkerPool
+	driver                     interface{}
+	grpcServer                 *grpc.Server
+	grpcServerEnableReflection bool
+	priListener                net.Listener
+	secListener                net.Listener
+	grpcPort                   string
+	corsPolicy                 string
+	client                     *http.Client
+	queue                      *queue
+	dataStore                  *store
+	bundle                     *i18n.Bundle
+	healthCheckers             []Checker
+	healthCheckPath            string
+	startup                    func(s *Service)
+	cleanup                    func(ctx context.Context)
+	eventRegistry              map[string]EventI
+	configuration              interface{}
+	startOnce                  sync.Once
+	closeOnce                  sync.Once
+	mu                         sync.Mutex
 }
 
 type Option func(service *Service)
@@ -346,7 +347,12 @@ func (s *Service) initServer(ctx context.Context, httpPort string) error {
 
 			}
 
-			grpc_health_v1.RegisterHealthServer(s.grpcServer, s.grpcHealthServer)
+			grpcHS := NewGrpcHealthServer(s)
+			grpc_health_v1.RegisterHealthServer(s.grpcServer, grpcHS)
+
+			if s.grpcServerEnableReflection {
+				reflection.Register(s.grpcServer)
+			}
 
 			s.driver = &grpcDriver{
 				defaultDriver: defaultServer,

@@ -290,6 +290,39 @@ func (s *Service) initServer(ctx context.Context, httpPort string) error {
 		s.healthCheckPath = "/healthz"
 	}
 
+	if httpPort == "" {
+		config, ok := s.Config().(ConfigurationPorts)
+		if !ok {
+			if s.TLSEnabled() {
+				httpPort = ":https"
+			} else {
+				httpPort = "http"
+			}
+		} else {
+			httpPort = config.HttpPort()
+		}
+
+	}
+
+	if s.grpcServer != nil {
+
+		if s.grpcPort == "" {
+
+			config, ok := s.Config().(ConfigurationPorts)
+			if !ok {
+				s.grpcPort = ":50051"
+			}
+
+			s.grpcPort = config.GrpcPort()
+
+		}
+
+		if httpPort == s.grpcPort {
+			return fmt.Errorf("HTTP PORT %s and GRPC PORT %s can not be same", httpPort, s.grpcPort)
+		}
+
+	}
+
 	s.startOnce.Do(func() {
 
 		mux := http.NewServeMux()
@@ -304,20 +337,6 @@ func (s *Service) initServer(ctx context.Context, httpPort string) error {
 		mux.Handle("/", applicationHandler)
 
 		s.handler = mux
-
-		if httpPort == "" {
-			config, ok := s.Config().(ConfigurationPorts)
-			if !ok {
-				if s.TLSEnabled() {
-					httpPort = ":https"
-				} else {
-					httpPort = "http"
-				}
-			} else {
-				httpPort = config.HttpPort()
-			}
-
-		}
 
 		defaultServer := defaultDriver{
 			ctx:  ctx,
@@ -367,10 +386,6 @@ func (s *Service) initServer(ctx context.Context, httpPort string) error {
 			s.driver = &defaultServer
 		}
 	})
-
-	if httpPort == s.grpcPort {
-		return fmt.Errorf("HTTP PORT %s and GRPC PORT %s can not be same", httpPort, s.grpcPort)
-	}
 
 	if s.startup != nil {
 		s.startup(s)

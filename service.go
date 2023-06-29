@@ -306,7 +306,7 @@ func (s *Service) initServer(ctx context.Context, httpPort string) error {
 		s.handler = mux
 
 		if httpPort == "" {
-			config, ok := s.Config().(ConfigurationPort)
+			config, ok := s.Config().(ConfigurationPorts)
 			if !ok {
 				if s.TLSEnabled() {
 					httpPort = ":https"
@@ -314,7 +314,7 @@ func (s *Service) initServer(ctx context.Context, httpPort string) error {
 					httpPort = "http"
 				}
 			} else {
-				httpPort = config.Port()
+				httpPort = config.HttpPort()
 			}
 
 		}
@@ -338,7 +338,7 @@ func (s *Service) initServer(ctx context.Context, httpPort string) error {
 
 			if s.grpcPort == "" {
 
-				config, ok := s.Config().(ConfigurationGrpcPort)
+				config, ok := s.Config().(ConfigurationPorts)
 				if !ok {
 					s.grpcPort = ":50051"
 				}

@@ -20,6 +20,7 @@ func (s *Service) Config() interface{} {
 
 type ConfigurationDefault struct {
 	ServerPort     string `default:":7000" envconfig:"PORT"`
+	HttpServerPort string `default:":8080" envconfig:"HTTP_PORT"`
 	GrpcServerPort string `default:":50051" envconfig:"GRPC_PORT"`
 
 	TLSCertificatePath    string `envconfig:"TLS_CERTIFICATE_PATH"`
@@ -45,8 +46,10 @@ type ConfigurationDefault struct {
 	EventsQueueUrl  string `default:"mem://frame.events.internal_._queue" envconfig:"EVENTS_QUEUE_URL"`
 }
 
-type ConfigurationPort interface {
+type ConfigurationPorts interface {
 	Port() string
+	HttpPort() string
+	GrpcPort() string
 }
 
 func (c *ConfigurationDefault) Port() string {
@@ -58,11 +61,20 @@ func (c *ConfigurationDefault) Port() string {
 		return c.ServerPort
 	}
 
-	return ":443"
+	return ":80"
 }
 
-type ConfigurationGrpcPort interface {
-	GrpcPort() string
+func (c *ConfigurationDefault) HttpPort() string {
+
+	if i, err := strconv.Atoi(c.HttpServerPort); err == nil && i > 0 {
+		return fmt.Sprintf(":%s", strings.TrimSpace(c.GrpcServerPort))
+	}
+
+	if strings.HasPrefix(":", c.HttpServerPort) || strings.Contains(c.HttpServerPort, ":") {
+		return c.HttpServerPort
+	}
+
+	return c.Port()
 }
 
 func (c *ConfigurationDefault) GrpcPort() string {
@@ -75,7 +87,7 @@ func (c *ConfigurationDefault) GrpcPort() string {
 		return c.GrpcServerPort
 	}
 
-	return ":50051"
+	return c.Port()
 }
 
 type ConfigurationOAUTH2 interface {

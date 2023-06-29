@@ -67,7 +67,7 @@ func (c *ConfigurationDefault) Port() string {
 func (c *ConfigurationDefault) HttpPort() string {
 
 	if i, err := strconv.Atoi(c.HttpServerPort); err == nil && i > 0 {
-		return fmt.Sprintf(":%s", strings.TrimSpace(c.GrpcServerPort))
+		return fmt.Sprintf(":%s", strings.TrimSpace(c.HttpServerPort))
 	}
 
 	if strings.HasPrefix(":", c.HttpServerPort) || strings.Contains(c.HttpServerPort, ":") {

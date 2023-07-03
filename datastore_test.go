@@ -43,7 +43,7 @@ func TestService_DatastoreSet(t *testing.T) {
 	var defConf frame.ConfigurationDefault
 	err := frame.ConfigProcess("", &defConf)
 	if err != nil {
-		t.Errorf("Could not process test configurations %v", err)
+		t.Errorf("Could not processFunc test configurations %v", err)
 		return
 	}
 	ctx, srv := frame.NewService("Test Srv", frame.Config(&defConf))

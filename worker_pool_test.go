@@ -162,7 +162,6 @@ func TestService_NewJobWithRetryAndErrorChan(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 
 			errChan := make(chan error, 1)
-			defer close(errChan)
 
 			ctx, srv := frame.NewService(tt.name,
 				frame.NoopDriver(),

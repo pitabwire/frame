@@ -79,7 +79,7 @@ func TestServiceGrpcHealthServer(t *testing.T) {
 	var defConf ConfigurationDefault
 	err := ConfigProcess("", &defConf)
 	if err != nil {
-		t.Errorf("Could not process test configurations %v", err)
+		t.Errorf("Could not processFunc test configurations %v", err)
 		return
 	}
 	defConf.ServerPort = ":40489"
@@ -118,7 +118,7 @@ func TestServiceGrpcServer(t *testing.T) {
 	var defConf ConfigurationDefault
 	err := ConfigProcess("", &defConf)
 	if err != nil {
-		t.Errorf("Could not process test configurations %v", err)
+		t.Errorf("Could not processFunc test configurations %v", err)
 		return
 	}
 	ctx, srv := NewService("Testing Service Grpc", GrpcServer(gsrv), GrpcServerListener(listener), Config(&defConf))
@@ -154,7 +154,7 @@ func TestServiceGrpcTLSServer(t *testing.T) {
 	var defConf ConfigurationDefault
 	err := ConfigProcess("", &defConf)
 	if err != nil {
-		t.Errorf("Could not process test configurations %v", err)
+		t.Errorf("Could not processFunc test configurations %v", err)
 		return
 	}
 

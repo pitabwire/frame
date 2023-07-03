@@ -8,40 +8,64 @@ import (
 )
 
 type Job interface {
+	F() func(ctx context.Context) error
 	Process(ctx context.Context) error
 	ID() string
 	CanRetry() bool
 	DecreaseRetries() int
 	ErrChan() chan error
+	PipeError(err error)
+	CloseChan()
 }
 
 type JobImpl struct {
-	Id        string
-	Retries   int
-	ErrorChan chan error
-	process   func(ctx context.Context) error
+	id        string
+	retries   int
+	errorChan chan error
+
+	processFunc func(ctx context.Context) error
 }
 
 func (ji *JobImpl) ID() string {
-	return ji.Id
+	return ji.id
+}
+
+func (ji *JobImpl) F() func(ctx context.Context) error {
+	return ji.processFunc
 }
 
 func (ji *JobImpl) Process(ctx context.Context) error {
-	if ji.process != nil {
-		return ji.process(ctx)
+	if ji.processFunc != nil {
+		return ji.processFunc(ctx)
 	}
 	return errors.New("implement this function")
 }
 func (ji *JobImpl) CanRetry() bool {
-	return ji.Retries > 0
+	return ji.retries > 0
 }
 
 func (ji *JobImpl) DecreaseRetries() int {
-	ji.Retries = ji.Retries - 1
-	return ji.Retries
+	ji.retries = ji.retries - 1
+	return ji.retries
 }
 func (ji *JobImpl) ErrChan() chan error {
-	return ji.ErrorChan
+	return ji.errorChan
+}
+func (ji *JobImpl) PipeError(err error) {
+	if ji.ErrChan() != nil {
+		select {
+		case ji.errorChan <- err:
+			break
+		default:
+		}
+
+	}
+	ji.CloseChan()
+}
+func (ji *JobImpl) CloseChan() {
+	if ji.ErrChan() != nil {
+		close(ji.errorChan)
+	}
 }
 
 func (s *Service) NewJob(process func(ctx context.Context) error) Job {
@@ -52,12 +76,12 @@ func (s *Service) NewJobWithRetry(process func(ctx context.Context) error, retri
 	return s.NewJobWithRetryAndErrorChan(process, retries, nil)
 }
 
-func (s *Service) NewJobWithRetryAndErrorChan(process func(ctx context.Context) error, retries int, errsChan chan error) Job {
+func (s *Service) NewJobWithRetryAndErrorChan(process func(ctx context.Context) error, retries int, errChan chan error) Job {
 	return &JobImpl{
-		Id:        xid.New().String(),
-		Retries:   retries,
-		process:   process,
-		ErrorChan: errsChan,
+		id:          xid.New().String(),
+		retries:     retries,
+		processFunc: process,
+		errorChan:   errChan,
 	}
 
 }
@@ -87,6 +111,12 @@ func WithPoolCapacity(capacity int) Option {
 	}
 }
 
+// SubmitJob used to submit jobs to our worker pool for processing.
+// Once a job is submitted the end user does not need to do any further tasks
+// One can ideally also wait for the results of their processing for their specific job
+// This is done by simply by listening to the jobs ErrChan. Be sure to also check for when its closed
+//
+//	err, ok := <- errChan
 func (s *Service) SubmitJob(ctx context.Context, job Job) error {
 
 	p := s.pool
@@ -104,24 +134,26 @@ func (s *Service) SubmitJob(ctx context.Context, job Job) error {
 				err := job.Process(ctx)
 				if err != nil {
 					logger := s.L().WithError(err).
-						WithField("job", job.ID()).
-						WithField("stacktrace", string(debug.Stack()))
-					logger.Error("could not process job")
+						WithField("job", job.ID())
 
 					if !job.CanRetry() {
-						if job.ErrChan() != nil {
-							job.ErrChan() <- err
-						}
+
+						logger.
+							WithField("stacktrace", string(debug.Stack())).
+							Error("could not processFunc job")
+
+						job.PipeError(err)
 						return
 					}
-					job.DecreaseRetries()
-					err1 := s.SubmitJob(ctx, job)
+					retries := job.DecreaseRetries()
+
+					retryJob := s.NewJobWithRetryAndErrorChan(job.F(), retries, job.ErrChan())
+					err1 := s.SubmitJob(ctx, retryJob)
 					if err1 != nil {
-						logger.WithError(err1).Error("could not resubmit job for retry")
-						if job.ErrChan() != nil {
-							job.ErrChan() <- err
-							return
-						}
+						logger.
+							WithField("stacktrace", string(debug.Stack())).
+							Error("could not resubmit job for retry")
+						job.PipeError(err)
 					} else {
 						logger.Info("job resubmitted for retry")
 						return
@@ -129,10 +161,8 @@ func (s *Service) SubmitJob(ctx context.Context, job Job) error {
 
 				}
 
-				// Return a nil just to make sure if a process is waiting on the channel we can have it exit
-				if job.ErrChan() != nil {
-					job.ErrChan() <- nil
-				}
+				// Return a nil just to make sure if a processFunc is waiting on the channel we can have it exit
+				job.CloseChan()
 			},
 		)
 		return nil

@@ -13,10 +13,10 @@ type eventPayload struct {
 }
 
 // EventI an interface to represent a system event. All logic of an event is handled in the execute task
-// and can also emit other events into the system or if they don't emit an event the process is deemed complete.
+// and can also emit other events into the system or if they don't emit an event the processFunc is deemed complete.
 type EventI interface {
 	// Name represents the unique human readable id of the event that is used to pick it from the registry
-	//or route follow up processing for system to process using this particular event
+	//or route follow up processing for system to processFunc using this particular event
 	Name() string
 
 	// PayloadType determines the type of payload the event uses. This is useful for decoding queue data.

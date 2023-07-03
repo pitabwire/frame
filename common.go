@@ -159,7 +159,7 @@ func GetMacAddress() string {
 	return ""
 }
 
-// ConfigProcess convenience method to process configs
+// ConfigProcess convenience method to processFunc configs
 func ConfigProcess(prefix string, config interface{}) error {
 	return envconfig.Process(prefix, config)
 }

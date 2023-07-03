@@ -43,7 +43,7 @@ func TestService_RegisterEventsWorks(t *testing.T) {
 	var cfg frame.ConfigurationDefault
 	err := frame.ConfigProcess("", &cfg)
 	if err != nil {
-		t.Errorf("could not process configs %s", err)
+		t.Errorf("could not processFunc configs %s", err)
 		return
 	}
 	events := frame.RegisterEvents(&MessageToTest{})
@@ -70,7 +70,7 @@ func TestService_EventsPublishingWorks(t *testing.T) {
 	var cfg frame.ConfigurationDefault
 	err := frame.ConfigProcess("", &cfg)
 	if err != nil {
-		t.Errorf("could not process configs %s", err)
+		t.Errorf("could not processFunc configs %s", err)
 		return
 	}
 	testEvent := &MessageToTest{Count: 50}

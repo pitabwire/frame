@@ -99,7 +99,7 @@ func (s *subscriber) listen(ctx context.Context) {
 				}
 				msg.Ack()
 				return nil
-			}, 0)
+			})
 
 			err = service.SubmitJob(ctx, job)
 			if err != nil {

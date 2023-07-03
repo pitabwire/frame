@@ -11,14 +11,14 @@ type Job interface {
 	ID() string
 	CanRetry() bool
 	DecreaseRetries() int
-	Async() bool
+	ErrChan() chan error
 }
 
 type JobImpl struct {
-	Id      string
-	Retries int
-	IsAsync bool
-	process func(ctx context.Context) error
+	Id        string
+	Retries   int
+	ErrorChan chan error
+	process   func(ctx context.Context) error
 }
 
 func (ji *JobImpl) ID() string {
@@ -34,30 +34,31 @@ func (ji *JobImpl) Process(ctx context.Context) error {
 func (ji *JobImpl) CanRetry() bool {
 	return ji.Retries > 0
 }
-func (ji *JobImpl) Async() bool {
-	return ji.IsAsync
-}
+
 func (ji *JobImpl) DecreaseRetries() int {
 	ji.Retries = ji.Retries - 1
 	return ji.Retries
 }
-
-func (s *Service) NewJob(process func(ctx context.Context) error, retries int) Job {
-	return &JobImpl{
-		Id:      xid.New().String(),
-		Retries: retries,
-		process: process,
-		IsAsync: true,
-	}
+func (ji *JobImpl) ErrChan() chan error {
+	return ji.ErrorChan
 }
 
-func (s *Service) NewSyncJob(process func(ctx context.Context) error) Job {
+func (s *Service) NewJob(process func(ctx context.Context) error) Job {
+	return s.NewJobWithRetry(process, 0)
+}
+
+func (s *Service) NewJobWithRetry(process func(ctx context.Context) error, retries int) Job {
+	return s.NewJobWithRetryAndErrorChan(process, retries, nil)
+}
+
+func (s *Service) NewJobWithRetryAndErrorChan(process func(ctx context.Context) error, retries int, errsChan chan error) Job {
 	return &JobImpl{
-		Id:      xid.New().String(),
-		Retries: 0,
-		process: process,
-		IsAsync: false,
+		Id:        xid.New().String(),
+		Retries:   retries,
+		process:   process,
+		ErrorChan: errsChan,
 	}
+
 }
 
 // BackGroundConsumer Option to register a background processing function that is initialized before running servers
@@ -96,47 +97,41 @@ func (s *Service) SubmitJob(ctx context.Context, job Job) error {
 		return errors.New("pool is closed")
 	default:
 
-		if job.Async() {
-			// Process job asynchronously and retry if need be
+		p.Submit(
+			func() {
 
-			p.Submit(
-				func() {
+				err := job.Process(ctx)
+				if err != nil {
+					logger := s.L().WithError(err).WithField("job", job.ID())
+					logger.Error("could not process job")
 
-					err := job.Process(ctx)
-					if err != nil {
-						logger := s.L().WithError(err).WithField("job", job.ID())
-						logger.Error("could not process job")
-
-						if job.CanRetry() {
-							job.DecreaseRetries()
-							err = s.SubmitJob(ctx, job)
-							if err != nil {
-								logger.Error("could not resubmit job for retry")
-							} else {
-								logger.Info("job resubmitted for retry")
-							}
+					if !job.CanRetry() {
+						if job.ErrChan() != nil {
+							job.ErrChan() <- err
 						}
 						return
 					}
-				},
-			)
-		} else {
-
-			// Job is syncronous so we return result directly
-			var err error
-			p.SubmitAndWait(
-				func() {
-					err = job.Process(ctx)
-					if err != nil {
-						logger := s.L().WithError(err).WithField("job", job.ID())
-						logger.Error("could not process job")
+					job.DecreaseRetries()
+					err1 := s.SubmitJob(ctx, job)
+					if err1 != nil {
+						logger.WithError(err1).Error("could not resubmit job for retry")
+						if job.ErrChan() != nil {
+							job.ErrChan() <- err
+							return
+						}
+					} else {
+						logger.Info("job resubmitted for retry")
+						return
 					}
-				},
-			)
-			return err
 
-		}
+				}
 
+				// Return a nil just to make sure if a process is waiting on the channel we can have it exit
+				if job.ErrChan() != nil {
+					job.ErrChan() <- nil
+				}
+			},
+		)
 		return nil
 	}
 }

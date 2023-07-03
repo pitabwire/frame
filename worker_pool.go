@@ -76,6 +76,10 @@ func (s *Service) NewJobWithRetry(process func(ctx context.Context) error, retri
 	return s.NewJobWithRetryAndErrorChan(process, retries, nil)
 }
 
+func (s *Service) NewJobWithErrorChan(process func(ctx context.Context) error) Job {
+	return s.NewJobWithRetryAndErrorChan(process, 0, make(chan error, 1))
+}
+
 func (s *Service) NewJobWithRetryAndErrorChan(process func(ctx context.Context) error, retries int, errChan chan error) Job {
 	return &JobImpl{
 		id:          xid.New().String(),
@@ -158,7 +162,6 @@ func (s *Service) SubmitJob(ctx context.Context, job Job) error {
 						logger.Info("job resubmitted for retry")
 						return
 					}
-
 				}
 
 				// Return a nil just to make sure if a processFunc is waiting on the channel we can have it exit

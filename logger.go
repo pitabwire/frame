@@ -13,6 +13,7 @@ func Logger() Option {
 		logger := logrus.New()
 		logger.SetFormatter(&logrus.TextFormatter{
 			FullTimestamp: true,
+			DisableQuote:  true,
 		})
 		logger.SetReportCaller(true)
 		logger.SetOutput(io.Discard)

@@ -11,6 +11,7 @@ import (
 	"go.opentelemetry.io/otel/sdk/trace"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
+	"runtime/debug"
 
 	"google.golang.org/grpc/health/grpc_health_v1"
 	"gorm.io/gorm"
@@ -224,8 +225,6 @@ func (s *Service) AddHealthCheck(checker Checker) {
 // keep them useful by handling incoming requests
 func (s *Service) Run(ctx context.Context, address string) error {
 
-	logger := s.L()
-
 	err := s.initPubsub(ctx)
 	if err != nil {
 		return err
@@ -270,9 +269,12 @@ func (s *Service) Run(ctx context.Context, address string) error {
 		return ctx.Err()
 	case err0 := <-s.errorChannel:
 		if err0 != nil {
-			logger.WithError(err0).Info("system exit in error")
+			s.L().
+				WithError(err0).
+				WithField("stacktrace", string(debug.Stack())).
+				Info("system exit in error")
 		} else {
-			logger.Info("system exit without fuss")
+			s.L().Info("system exit without fuss")
 		}
 		return err0
 	}

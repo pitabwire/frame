@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"github.com/rs/xid"
+	"runtime/debug"
 )
 
 type Job interface {
@@ -102,7 +103,9 @@ func (s *Service) SubmitJob(ctx context.Context, job Job) error {
 
 				err := job.Process(ctx)
 				if err != nil {
-					logger := s.L().WithError(err).WithField("job", job.ID())
+					logger := s.L().WithError(err).
+						WithField("job", job.ID()).
+						WithField("stacktrace", string(debug.Stack()))
 					logger.Error("could not process job")
 
 					if !job.CanRetry() {

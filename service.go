@@ -11,16 +11,16 @@ import (
 	"go.opentelemetry.io/otel/sdk/trace"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
+	"os/signal"
 	"runtime/debug"
+	"syscall"
 
 	"google.golang.org/grpc/health/grpc_health_v1"
 	"gorm.io/gorm"
 	"net"
 	"net/http"
-	"os/signal"
 	"runtime"
 	"sync"
-	"syscall"
 	"time"
 )
 
@@ -80,7 +80,11 @@ type Option func(service *Service)
 // It is used together with the Init option to setup components of a service that is not yet running.
 func NewService(name string, opts ...Option) (context.Context, *Service) {
 
-	ctx0, cancel := context.WithCancel(context.Background())
+	ctx0, cancel := signal.NotifyContext(context.Background(),
+		syscall.SIGHUP,
+		syscall.SIGINT,
+		syscall.SIGTERM,
+		syscall.SIGQUIT)
 
 	concurrency := runtime.NumCPU() * 10
 
@@ -102,12 +106,6 @@ func NewService(name string, opts ...Option) (context.Context, *Service) {
 	}
 
 	service.pool = pond.New(service.poolWorkerCount, service.poolCapacity, pond.Strategy(pond.Lazy()))
-
-	signal.NotifyContext(ctx0,
-		syscall.SIGHUP,
-		syscall.SIGINT,
-		syscall.SIGTERM,
-		syscall.SIGQUIT)
 
 	opts = append(opts, Logger())
 

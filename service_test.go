@@ -10,8 +10,11 @@ import (
 	"log"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strconv"
+	"syscall"
 	"testing"
+	"time"
 )
 
 func TestDefaultService(t *testing.T) {
@@ -126,6 +129,28 @@ func TestBackGroundConsumer(t *testing.T) {
 	err = srv.Run(ctx, ":")
 	if err == nil {
 		t.Errorf("could not propagate background consumer error correctly")
+	}
+
+}
+
+func TestServiceExitByOSSignal(t *testing.T) {
+
+	listener := bufconn.Listen(1024 * 1024)
+
+	ctx, srv := frame.NewService("Test Srv",
+		frame.ServerListener(listener))
+
+	go func(srv *frame.Service) {
+		err := srv.Run(ctx, ":")
+		if !errors.Is(err, context.Canceled) {
+			t.Errorf("service is not exiting correctly as the context is still not done")
+		}
+	}(srv)
+
+	time.Sleep(1 * time.Second)
+	err := syscall.Kill(os.Getpid(), syscall.SIGINT)
+	if err != nil {
+		return
 	}
 
 }

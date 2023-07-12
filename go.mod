@@ -7,7 +7,7 @@ require (
 	github.com/alitto/pond v1.8.3
 	github.com/golang-jwt/jwt/v5 v5.0.0
 	github.com/improbable-eng/grpc-web v0.15.0
-	github.com/jackc/pgx/v5 v5.4.1
+	github.com/jackc/pgx/v5 v5.4.2
 	github.com/kelseyhightower/envconfig v1.4.0
 	github.com/nicksnyder/go-i18n/v2 v2.2.1
 	github.com/rs/xid v1.5.0

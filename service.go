@@ -223,7 +223,7 @@ func (s *Service) AddHealthCheck(checker Checker) {
 // keep them useful by handling incoming requests
 func (s *Service) Run(ctx context.Context, address string) error {
 
-	err := s.initPubsub(ctx)
+	err := s.initPubsub(ctx, s.errorChannel)
 	if err != nil {
 		return err
 	}
@@ -232,7 +232,13 @@ func (s *Service) Run(ctx context.Context, address string) error {
 	if s.backGroundClient != nil {
 		go func() {
 			err = s.backGroundClient(ctx)
-			s.errorChannel <- err
+			select {
+			case <-s.errorChannel:
+				// channel is already closed hence avoid
+				return
+			default:
+				s.errorChannel <- err
+			}
 
 		}()
 
@@ -244,20 +250,15 @@ func (s *Service) Run(ctx context.Context, address string) error {
 
 	go func() {
 		err = s.initServer(ctx, address)
-		if err != nil {
-			s.errorChannel <- err
-		} else {
-			if s.backGroundClient == nil {
-				select {
-				case <-s.errorChannel:
-					// channel is already closed hence avoid
-					return
-				default:
-					s.errorChannel <- nil
-				}
+		if err != nil || s.backGroundClient == nil {
 
+			select {
+			case <-s.errorChannel:
+				// channel is already closed hence avoid
+				return
+			default:
+				s.errorChannel <- err
 			}
-
 		}
 
 	}()
@@ -430,7 +431,15 @@ func (s *Service) Stop(ctx context.Context) {
 		if s.cancelFunc != nil {
 			s.cancelFunc()
 		}
-
-		close(s.errorChannel)
 	})
+
+	select {
+	case _, ok := <-s.errorChannel:
+		if !ok {
+			return
+		}
+	default:
+
+	}
+	close(s.errorChannel)
 }

@@ -70,8 +70,7 @@ type Service struct {
 	eventRegistry              map[string]EventI
 	configuration              interface{}
 	startOnce                  sync.Once
-	closeOnce                  sync.Once
-	mu                         sync.Mutex
+	stopMutex                  sync.Mutex
 }
 
 type Option func(service *Service)
@@ -183,8 +182,8 @@ func (s *Service) Init(opts ...Option) {
 // AddPreStartMethod Adds user defined functions that can be run just before
 // the service starts receiving requests but is fully initialized.
 func (s *Service) AddPreStartMethod(f func(s *Service)) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.stopMutex.Lock()
+	defer s.stopMutex.Unlock()
 	if s.startup == nil {
 		s.startup = f
 		return
@@ -197,8 +196,8 @@ func (s *Service) AddPreStartMethod(f func(s *Service)) {
 // AddCleanupMethod Adds user defined functions to be run just before completely stopping the service.
 // These are responsible for properly and gracefully stopping active components.
 func (s *Service) AddCleanupMethod(f func(ctx context.Context)) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.stopMutex.Lock()
+	defer s.stopMutex.Unlock()
 
 	if s.cleanup == nil {
 		s.cleanup = f
@@ -415,23 +414,22 @@ func (s *Service) initServer(ctx context.Context, httpPort string) error {
 // were being handled are completed well without interuptions.
 func (s *Service) Stop(ctx context.Context) {
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	if !s.stopMutex.TryLock() {
+		return
+	}
+	defer s.stopMutex.Unlock()
 
-	s.closeOnce.Do(func() {
+	if s.cleanup != nil {
+		s.cleanup(ctx)
+	}
 
-		if s.cleanup != nil {
-			s.cleanup(ctx)
-		}
+	if s.pool != nil {
+		s.pool.Stop()
+	}
 
-		if s.pool != nil {
-			s.pool.Stop()
-		}
-
-		if s.cancelFunc != nil {
-			s.cancelFunc()
-		}
-	})
+	if s.cancelFunc != nil {
+		s.cancelFunc()
+	}
 
 	select {
 	case _, ok := <-s.errorChannel:

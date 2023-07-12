@@ -204,8 +204,8 @@ func (s *Service) Publish(ctx context.Context, reference string, payload interfa
 
 func (s *Service) initPublisher(ctx context.Context, pub *publisher) error {
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.stopMutex.Lock()
+	defer s.stopMutex.Unlock()
 
 	if pub.topic != nil {
 		return nil
@@ -222,8 +222,8 @@ func (s *Service) initPublisher(ctx context.Context, pub *publisher) error {
 }
 func (s *Service) initSubscriber(ctx context.Context, sub *subscriber) error {
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.stopMutex.Lock()
+	defer s.stopMutex.Unlock()
 
 	if sub.isInit.Load() && sub.subscription != nil {
 		return nil

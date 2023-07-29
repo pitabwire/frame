@@ -56,7 +56,7 @@ type subscriber struct {
 	isInit       atomic.Bool
 }
 
-func (s *subscriber) listen(ctx context.Context, errorChan <-chan error) {
+func (s *subscriber) listen(ctx context.Context) {
 
 	service := FromContext(ctx)
 	logger := service.L().WithField("name", s.reference).WithField("function", "subscription").WithField("url", s.url)
@@ -65,12 +65,6 @@ func (s *subscriber) listen(ctx context.Context, errorChan <-chan error) {
 
 		select {
 		case <-ctx.Done():
-			s.isInit.Store(false)
-			logger.Debug("exiting due to canceled context")
-			return
-
-		case <-errorChan:
-
 			s.isInit.Store(false)
 			logger.Debug("exiting due to canceled context")
 			return
@@ -241,7 +235,7 @@ func (s *Service) initSubscriber(ctx context.Context, sub *subscriber) error {
 	return nil
 }
 
-func (s *Service) initPubsub(ctx context.Context, errorChan <-chan error) error {
+func (s *Service) initPubsub(ctx context.Context) error {
 	// Whenever the registry is not empty the events queue is automatically initiated
 	if s.eventRegistry != nil && len(s.eventRegistry) > 0 {
 		eventsQueueHandler := eventQueueHandler{
@@ -294,12 +288,12 @@ func (s *Service) initPubsub(ctx context.Context, errorChan <-chan error) error 
 		}
 	}
 
-	s.subscribe(ctx, errorChan)
+	s.subscribe(ctx)
 
 	return nil
 }
 
-func (s *Service) subscribe(ctx context.Context, errorChan <-chan error) {
+func (s *Service) subscribe(ctx context.Context) {
 
 	s.queue.subscriptionQueueMap.Range(func(key, value any) bool {
 
@@ -311,7 +305,7 @@ func (s *Service) subscribe(ctx context.Context, errorChan <-chan error) {
 		}
 		subsc.logger = logger
 
-		go subsc.listen(ctx, errorChan)
+		go subsc.listen(ctx)
 
 		return true
 	})

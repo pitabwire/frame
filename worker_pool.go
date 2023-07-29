@@ -57,6 +57,7 @@ func (ji *JobImpl) PipeError(err error) {
 		case ji.errorChan <- err:
 			break
 		default:
+
 		}
 
 	}
@@ -144,7 +145,7 @@ func (s *Service) SubmitJob(ctx context.Context, job Job) error {
 
 						logger.
 							WithField("stacktrace", string(debug.Stack())).
-							Error("could not processFunc job")
+							Debug("could not processFunc job")
 
 						job.PipeError(err)
 						return
@@ -156,10 +157,10 @@ func (s *Service) SubmitJob(ctx context.Context, job Job) error {
 					if err1 != nil {
 						logger.
 							WithField("stacktrace", string(debug.Stack())).
-							Error("could not resubmit job for retry")
+							Debug("could not resubmit job for retry")
 						job.PipeError(err)
 					} else {
-						logger.Info("job resubmitted for retry")
+						logger.Debug("job resubmitted for retry")
 						return
 					}
 				}

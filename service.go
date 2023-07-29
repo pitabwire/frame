@@ -47,6 +47,7 @@ type Service struct {
 	traceSampler               trace.Sampler
 	handler                    http.Handler
 	cancelFunc                 context.CancelFunc
+	errorChannelMutex          sync.Mutex
 	errorChannel               chan error
 	backGroundClient           func(ctx context.Context) error
 	poolWorkerCount            int
@@ -222,7 +223,7 @@ func (s *Service) AddHealthCheck(checker Checker) {
 // keep them useful by handling incoming requests
 func (s *Service) Run(ctx context.Context, address string) error {
 
-	err := s.initPubsub(ctx, s.errorChannel)
+	err := s.initPubsub(ctx)
 	if err != nil {
 		return err
 	}
@@ -231,13 +232,7 @@ func (s *Service) Run(ctx context.Context, address string) error {
 	if s.backGroundClient != nil {
 		go func() {
 			err = s.backGroundClient(ctx)
-			select {
-			case <-s.errorChannel:
-				// channel is already closed hence avoid
-				return
-			default:
-				s.errorChannel <- err
-			}
+			s.sendStopError(ctx, err)
 
 		}()
 
@@ -250,14 +245,7 @@ func (s *Service) Run(ctx context.Context, address string) error {
 	go func() {
 		err = s.initServer(ctx, address)
 		if err != nil || s.backGroundClient == nil {
-
-			select {
-			case <-s.errorChannel:
-				// channel is already closed hence avoid
-				return
-			default:
-				s.errorChannel <- err
-			}
+			s.sendStopError(ctx, err)
 		}
 
 	}()
@@ -431,13 +419,31 @@ func (s *Service) Stop(ctx context.Context) {
 		s.cancelFunc()
 	}
 
+	s.errorChannelMutex.Lock()
 	select {
 	case _, ok := <-s.errorChannel:
 		if !ok {
 			return
 		}
 	default:
-
 	}
 	close(s.errorChannel)
+	defer s.errorChannelMutex.Unlock()
+
+}
+
+func (s *Service) sendStopError(ctx context.Context, err error) {
+
+	s.errorChannelMutex.Lock()
+	defer s.errorChannelMutex.Unlock()
+
+	select {
+	case <-ctx.Done():
+		return
+	case <-s.errorChannel:
+		// channel is already closed hence avoid
+		return
+	default:
+		s.errorChannel <- err
+	}
 }

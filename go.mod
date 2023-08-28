@@ -13,7 +13,7 @@ require (
 	github.com/rs/xid v1.5.0
 	github.com/sirupsen/logrus v1.9.3
 	go.opentelemetry.io/otel v1.17.0
-	go.opentelemetry.io/otel/sdk v1.16.0
+	go.opentelemetry.io/otel/sdk v1.17.0
 	gocloud.dev v0.34.0
 	golang.org/x/net v0.14.0
 	golang.org/x/text v0.12.0

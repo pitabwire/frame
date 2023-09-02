@@ -143,7 +143,7 @@ func DatastoreCon(postgresqlConnection string, readOnly bool) Option {
 
 		db := stdlib.OpenDB(*config)
 		gormDB, _ := gorm.Open(
-			postgres.New(postgres.Config{Conn: db}),
+			postgres.New(postgres.Config{Conn: db, PreferSimpleProtocol: true}),
 			&gorm.Config{SkipDefaultTransaction: true},
 		)
 

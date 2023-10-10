@@ -17,7 +17,7 @@ require (
 	gocloud.dev v0.34.0
 	golang.org/x/net v0.17.0
 	golang.org/x/text v0.13.0
-	google.golang.org/grpc v1.58.2
+	google.golang.org/grpc v1.58.3
 	google.golang.org/grpc/examples v0.0.0-20230828201338-8b1a67102205
 	gorm.io/datatypes v1.2.0
 	gorm.io/driver/postgres v1.5.3

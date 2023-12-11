@@ -1,3 +1,4 @@
+// nolint
 package frame_test
 
 import (

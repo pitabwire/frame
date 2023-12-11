@@ -1,4 +1,4 @@
-# frame        [![Build Status](https://travis-ci.com/pitabwire/frame.svg?branch=main)](https://travis-ci.com/pitabwire/frame)
+# frame        [![Build Status](https://github.com/pitabwire/frame/actions/workflows/run_tests.yml/badge.svg?branch=main)](https://github.com/pitabwire/frame/actions/workflows/run_tests.yml)
 
 A simple frame for quickly setting up api servers based on [gocloud](https://github.com/google/go-cloud) framework.
 

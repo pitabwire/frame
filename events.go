@@ -76,7 +76,7 @@ type eventQueueHandler struct {
 	service *Service
 }
 
-func (eq *eventQueueHandler) Handle(ctx context.Context, payload []byte) error {
+func (eq *eventQueueHandler) Handle(ctx context.Context, header map[string]string, payload []byte) error {
 
 	evtPyl := &eventPayload{}
 	err := json.Unmarshal(payload, evtPyl)

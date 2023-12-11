@@ -92,7 +92,7 @@ func TestService_RegisterPublisherMultiple(t *testing.T) {
 type messageHandler struct {
 }
 
-func (m *messageHandler) Handle(ctx context.Context, message []byte) error {
+func (m *messageHandler) Handle(ctx context.Context, metadata map[string]string, message []byte) error {
 	log.Printf(" A nice message to handle: %v", string(message))
 	return nil
 }
@@ -100,7 +100,7 @@ func (m *messageHandler) Handle(ctx context.Context, message []byte) error {
 type handlerWithError struct {
 }
 
-func (m *handlerWithError) Handle(ctx context.Context, message []byte) error {
+func (m *handlerWithError) Handle(ctx context.Context, metadata map[string]string, message []byte) error {
 	log.Printf(" A dreadful message to handle: %v", string(message))
 	return errors.New("throwing an error for tests")
 

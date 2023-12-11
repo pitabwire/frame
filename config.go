@@ -23,6 +23,8 @@ type ConfigurationDefault struct {
 	HttpServerPort string `default:":8080" envconfig:"HTTP_PORT"`
 	GrpcServerPort string `default:":50051" envconfig:"GRPC_PORT"`
 
+	AllowedOrigins string `default:"*" envconfig:"ALLOWED_ORIGINS"`
+
 	TLSCertificatePath    string `envconfig:"TLS_CERTIFICATE_PATH"`
 	TLSCertificateKeyPath string `envconfig:"TLS_CERTIFICATE_KEY_PATH"`
 

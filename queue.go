@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	_ "github.com/pitabwire/natspubsub"
 	"github.com/sirupsen/logrus"
 	"gocloud.dev/pubsub"
 	_ "gocloud.dev/pubsub/mempubsub"
@@ -42,7 +43,7 @@ type publisher struct {
 }
 
 type SubscribeWorker interface {
-	Handle(ctx context.Context, message []byte) error
+	Handle(ctx context.Context, metadata map[string]string, message []byte) error
 }
 
 type subscriber struct {
@@ -93,9 +94,12 @@ func (s *subscriber) listen(ctx context.Context) {
 					ctx2 = ctx
 				}
 
-				err0 := s.handler.Handle(ctx2, msg.Body)
+				err0 := s.handler.Handle(ctx2, msg.Metadata, msg.Body)
 				if err0 != nil {
 					logger.WithError(err0).Warn(" could not handle message")
+					if msg.Nackable() {
+						msg.Nack()
+					}
 					return err0
 				}
 				msg.Ack()
@@ -104,7 +108,7 @@ func (s *subscriber) listen(ctx context.Context) {
 
 			err = service.SubmitJob(ctx, job)
 			if err != nil {
-				logger.WithError(err).Warn(" ignoring handle error message")
+				logger.WithError(err).Warn(" Ignoring handle error message")
 				continue
 			}
 

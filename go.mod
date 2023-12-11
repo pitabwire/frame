@@ -11,7 +11,7 @@ require (
 	github.com/improbable-eng/grpc-web v0.15.0
 	github.com/jackc/pgx/v5 v5.5.1
 	github.com/kelseyhightower/envconfig v1.4.0
-	github.com/nicksnyder/go-i18n/v2 v2.2.2
+	github.com/nicksnyder/go-i18n/v2 v2.3.0
 	github.com/pitabwire/natspubsub v0.1.0
 	github.com/rs/xid v1.5.0
 	github.com/sirupsen/logrus v1.9.3

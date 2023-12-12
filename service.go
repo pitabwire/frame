@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/alitto/pond"
+	ghandler "github.com/gorilla/handlers"
 	"github.com/nicksnyder/go-i18n/v2/i18n"
 	"github.com/pitabwire/frame/internal"
 	"github.com/sirupsen/logrus"
@@ -324,7 +325,16 @@ func (s *Service) initServer(ctx context.Context, httpPort string) error {
 
 		mux.Handle("/", applicationHandler)
 
-		s.handler = mux
+		config, ok := s.Config().(ConfigurationCORS)
+		if ok && config.IsCORSEnabled() {
+			headersOpt := ghandler.AllowedHeaders(config.GetCORSAllowedHeaders())
+			originsOpt := ghandler.AllowedOrigins(config.GetCORSAllowedOrigins())
+			methodsOpt := ghandler.AllowedMethods(config.GetCORSAllowedMethods())
+
+			s.handler = ghandler.CORS(headersOpt, originsOpt, methodsOpt)(mux)
+		} else {
+			s.handler = mux
+		}
 
 		defaultServer := defaultDriver{
 			ctx:  ctx,

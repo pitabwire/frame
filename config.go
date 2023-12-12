@@ -23,7 +23,10 @@ type ConfigurationDefault struct {
 	HttpServerPort string `default:":8080" envconfig:"HTTP_PORT"`
 	GrpcServerPort string `default:":50051" envconfig:"GRPC_PORT"`
 
-	AllowedOrigins string `default:"*" envconfig:"ALLOWED_ORIGINS"`
+	CORSEnabled        bool     `default:"false" envconfig:"CORS_ENABLED"`
+	CORSAllowedHeaders []string `default:"Authorization" envconfig:"CORS_ALLOWED_HEADERS"`
+	CORSAllowedOrigins []string `default:"*" envconfig:"CORS_ALLOWED_ORIGINS"`
+	CORSAllowedMethods []string `default:"GET,HEAD,POST,PUT,OPTIONS" envconfig:"CORS_ALLOWED_METHODS"`
 
 	TLSCertificatePath    string `envconfig:"TLS_CERTIFICATE_PATH"`
 	TLSCertificateKeyPath string `envconfig:"TLS_CERTIFICATE_KEY_PATH"`
@@ -90,6 +93,27 @@ func (c *ConfigurationDefault) GrpcPort() string {
 	}
 
 	return c.Port()
+}
+
+type ConfigurationCORS interface {
+	IsCORSEnabled() bool
+	GetCORSAllowedHeaders() []string
+	GetCORSAllowedOrigins() []string
+	GetCORSAllowedMethods() []string
+}
+
+func (c *ConfigurationDefault) IsCORSEnabled() bool {
+	return c.CORSEnabled
+}
+
+func (c *ConfigurationDefault) GetCORSAllowedHeaders() []string {
+	return c.CORSAllowedHeaders
+}
+func (c *ConfigurationDefault) GetCORSAllowedOrigins() []string {
+	return c.CORSAllowedOrigins
+}
+func (c *ConfigurationDefault) GetCORSAllowedMethods() []string {
+	return c.CORSAllowedMethods
 }
 
 type ConfigurationOAUTH2 interface {

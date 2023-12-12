@@ -6,6 +6,7 @@ require (
 	github.com/BurntSushi/toml v1.3.2
 	github.com/alitto/pond v1.8.3
 	github.com/golang-jwt/jwt/v5 v5.2.0
+	github.com/gorilla/handlers v1.5.2
 	github.com/improbable-eng/grpc-web v0.15.0
 	github.com/jackc/pgx/v5 v5.5.1
 	github.com/kelseyhightower/envconfig v1.4.0
@@ -19,7 +20,7 @@ require (
 	golang.org/x/net v0.19.0
 	golang.org/x/text v0.14.0
 	google.golang.org/grpc v1.60.0
-	google.golang.org/grpc/examples v0.0.0-20230828201338-8b1a67102205
+	google.golang.org/grpc/examples v0.0.0-20231208223803-52baf161f30f
 	gorm.io/datatypes v1.2.0
 	gorm.io/driver/postgres v1.5.4
 	gorm.io/gorm v1.25.5
@@ -29,6 +30,7 @@ require (
 require (
 	github.com/cenkalti/backoff/v4 v4.2.1 // indirect
 	github.com/desertbit/timer v0.0.0-20180107155436-c41aec40b27f // indirect
+	github.com/felixge/httpsnoop v1.0.3 // indirect
 	github.com/go-logr/logr v1.3.0 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/go-sql-driver/mysql v1.7.1 // indirect

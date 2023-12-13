@@ -50,8 +50,15 @@ func DBPropertiesToMap(props json.Marshaler) map[string]string {
 	}
 
 	for k, val := range properties {
-		marVal, err := json.Marshal(val)
-		if err != nil {
+
+		stringVal, ok := val.(string)
+		if ok {
+			payload[k] = stringVal
+			continue
+		}
+
+		marVal, err1 := json.Marshal(val)
+		if err1 != nil {
 			continue
 		}
 		payload[k] = string(marVal)
@@ -69,6 +76,12 @@ func DBPropertiesFromMap(propsMap map[string]string) datatypes.JSONMap {
 	}
 
 	for k, val := range propsMap {
+
+		if !json.Valid([]byte(val)) {
+			jsonMap[k] = val
+			continue
+		}
+
 		var prop interface{}
 		err := json.Unmarshal([]byte(val), prop)
 		if err != nil {

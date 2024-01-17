@@ -11,7 +11,7 @@ require (
 	github.com/jackc/pgx/v5 v5.5.2
 	github.com/kelseyhightower/envconfig v1.4.0
 	github.com/nicksnyder/go-i18n/v2 v2.3.0
-	github.com/pitabwire/natspubsub v0.1.0
+	github.com/pitabwire/natspubsub v0.1.1
 	github.com/rs/xid v1.5.0
 	github.com/sirupsen/logrus v1.9.3
 	go.opentelemetry.io/otel v1.21.0
@@ -43,8 +43,8 @@ require (
 	github.com/jinzhu/inflection v1.0.0 // indirect
 	github.com/jinzhu/now v1.1.5 // indirect
 	github.com/klauspost/compress v1.17.4 // indirect
-	github.com/nats-io/nats.go v1.31.0 // indirect
-	github.com/nats-io/nkeys v0.4.6 // indirect
+	github.com/nats-io/nats.go v1.32.0 // indirect
+	github.com/nats-io/nkeys v0.4.7 // indirect
 	github.com/nats-io/nuid v1.0.1 // indirect
 	github.com/rs/cors v1.8.3 // indirect
 	go.opencensus.io v0.24.0 // indirect

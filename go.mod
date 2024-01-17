@@ -8,7 +8,7 @@ require (
 	github.com/golang-jwt/jwt/v5 v5.2.0
 	github.com/gorilla/handlers v1.5.2
 	github.com/improbable-eng/grpc-web v0.15.0
-	github.com/jackc/pgx/v5 v5.5.1
+	github.com/jackc/pgx/v5 v5.5.2
 	github.com/kelseyhightower/envconfig v1.4.0
 	github.com/nicksnyder/go-i18n/v2 v2.3.0
 	github.com/pitabwire/natspubsub v0.1.0
@@ -16,10 +16,10 @@ require (
 	github.com/sirupsen/logrus v1.9.3
 	go.opentelemetry.io/otel v1.21.0
 	go.opentelemetry.io/otel/sdk v1.21.0
-	gocloud.dev v0.35.0
-	golang.org/x/net v0.19.0
+	gocloud.dev v0.36.0
+	golang.org/x/net v0.20.0
 	golang.org/x/text v0.14.0
-	google.golang.org/grpc v1.60.0
+	google.golang.org/grpc v1.60.1
 	google.golang.org/grpc/examples v0.0.0-20231208223803-52baf161f30f
 	gorm.io/datatypes v1.2.0
 	gorm.io/driver/postgres v1.5.4
@@ -50,9 +50,9 @@ require (
 	go.opencensus.io v0.24.0 // indirect
 	go.opentelemetry.io/otel/metric v1.21.0 // indirect
 	go.opentelemetry.io/otel/trace v1.21.0 // indirect
-	golang.org/x/crypto v0.16.0 // indirect
+	golang.org/x/crypto v0.18.0 // indirect
 	golang.org/x/sync v0.5.0 // indirect
-	golang.org/x/sys v0.15.0 // indirect
+	golang.org/x/sys v0.16.0 // indirect
 	golang.org/x/xerrors v0.0.0-20231012003039-104605ab7028 // indirect
 	google.golang.org/api v0.151.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20231120223509-83a465c0220f // indirect

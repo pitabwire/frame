@@ -152,16 +152,23 @@ func (s *Service) IsPublisherRegistered(_ context.Context, reference string) boo
 	return ok
 }
 
-func (s *Service) AddPublisher(ctx context.Context, reference string, queueURL string) {
+func (s *Service) AddPublisher(ctx context.Context, reference string, queueURL string) error {
 
 	if s.IsPublisherRegistered(ctx, reference) {
-		return
+		return nil
 	}
 
-	s.queue.publishQueueMap.Store(reference, &publisher{
+	pub := &publisher{
 		reference: reference,
 		url:       queueURL,
-	})
+	}
+	err := s.initPublisher(ctx, pub)
+	if err != nil {
+		return err
+	}
+
+	s.queue.publishQueueMap.Store(reference, pub)
+	return nil
 }
 
 // Publish Queue method to write a new message into the queue pre initialized with the supplied reference
@@ -177,23 +184,7 @@ func (s *Service) Publish(ctx context.Context, reference string, payload interfa
 
 	pub, err := s.queue.getPublisherByReference(reference)
 	if err != nil {
-		if err.Error() != "reference does not exist" {
-			return err
-		}
-
-		if !strings.Contains(reference, "://") {
-			return err
-		}
-
-		pub = &publisher{
-			reference: reference,
-			url:       reference,
-		}
-		err = s.initPublisher(ctx, pub)
-		if err != nil {
-			return err
-		}
-		s.queue.publishQueueMap.Store(reference, pub)
+		return err
 	}
 
 	var message []byte

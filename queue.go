@@ -147,6 +147,23 @@ func (s *Service) SubscriptionIsInitiated(path string) bool {
 	return sub.(*subscriber).isInit.Load()
 }
 
+func (s *Service) IsPublisherRegistered(_ context.Context, reference string) bool {
+	_, ok := s.queue.publishQueueMap.Load(reference)
+	return ok
+}
+
+func (s *Service) AddPublisher(ctx context.Context, reference string, queueURL string) {
+
+	if s.IsPublisherRegistered(ctx, reference) {
+		return
+	}
+
+	s.queue.publishQueueMap.Store(reference, &publisher{
+		reference: reference,
+		url:       queueURL,
+	})
+}
+
 // Publish Queue method to write a new message into the queue pre initialized with the supplied reference
 func (s *Service) Publish(ctx context.Context, reference string, payload interface{}) error {
 	var metadata map[string]string

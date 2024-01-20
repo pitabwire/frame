@@ -247,16 +247,12 @@ func grpcJwtTokenExtractor(ctx context.Context) (string, error) {
 		return "", status.Error(codes.Unauthenticated, "no authorization key found in request metadata")
 	}
 
-	authorizationHeader := vv[0]
+	extractedJwtToken := strings.Split(vv[0], " ")
 
-	if authorizationHeader == "" || !strings.HasPrefix(authorizationHeader, "bearer ") {
-		return "", status.Error(codes.Unauthenticated, "an authorization header is required")
-	}
-
-	extractedJwtToken := strings.Split(authorizationHeader, "bearer ")
-
-	if len(extractedJwtToken) != 2 {
-		return "", status.Error(codes.Unauthenticated, "malformed Authorization header")
+	if len(extractedJwtToken) != 2 ||
+		strings.ToLower(extractedJwtToken[0]) != "bearer" ||
+		extractedJwtToken[1] == "" {
+		return "", status.Error(codes.Unauthenticated, "authorization header is invalid")
 	}
 
 	return strings.TrimSpace(extractedJwtToken[1]), nil

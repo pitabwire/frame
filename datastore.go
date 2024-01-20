@@ -24,10 +24,10 @@ func tenantPartition(ctx context.Context) func(db *gorm.DB) *gorm.DB {
 	return func(db *gorm.DB) *gorm.DB {
 		authClaim := ClaimsFromContext(ctx)
 		if authClaim != nil &&
-			authClaim.TenantID != "" &&
-			authClaim.PartitionID != "" &&
+			authClaim.TenantId() != "" &&
+			authClaim.PartitionId() != "" &&
 			!authClaim.isSystem() {
-			return db.Where("tenant_id = ? AND partition_id = ?", authClaim.TenantID, authClaim.PartitionID)
+			return db.Where("tenant_id = ? AND partition_id = ?", authClaim.TenantId(), authClaim.PartitionId())
 		}
 		return db
 	}

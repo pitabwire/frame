@@ -24,12 +24,73 @@ const ctxKeyAuthentication = contextKey("authenticationKey")
 // AuthenticationClaims Create a struct that will be encoded to a JWT.
 // We add jwt.StandardClaims as an embedded type, to provide fields like expiry time
 type AuthenticationClaims struct {
-	ProfileID   string   `json:"sub,omitempty"`
-	TenantID    string   `json:"tenant_id,omitempty"`
-	PartitionID string   `json:"partition_id,omitempty"`
-	AccessID    string   `json:"access_id,omitempty"`
-	Roles       []string `json:"roles,omitempty"`
+	ProfileID string                 `json:"sub,omitempty"`
+	Ext       map[string]interface{} `json:"ext,omitempty"`
 	jwt.RegisteredClaims
+}
+
+func (a *AuthenticationClaims) TenantId() string {
+
+	result := ""
+	val, ok := a.Ext["tenant_id"]
+	if !ok {
+		return ""
+	}
+
+	result, ok = val.(string)
+	if !ok {
+		return ""
+	}
+
+	return result
+}
+
+func (a *AuthenticationClaims) PartitionId() string {
+
+	result := ""
+	val, ok := a.Ext["partition_id"]
+	if !ok {
+		return ""
+	}
+
+	result, ok = val.(string)
+	if !ok {
+		return ""
+	}
+
+	return result
+}
+
+func (a *AuthenticationClaims) AccessId() string {
+
+	result := ""
+	val, ok := a.Ext["access_id"]
+	if !ok {
+		return ""
+	}
+
+	result, ok = val.(string)
+	if !ok {
+		return ""
+	}
+
+	return result
+}
+
+func (a *AuthenticationClaims) Roles() []string {
+
+	result := []string{}
+	val, ok := a.Ext["roles"]
+	if !ok {
+		return result
+	}
+
+	result, ok = val.([]string)
+	if !ok {
+		return []string{}
+	}
+
+	return result
 }
 
 func (a *AuthenticationClaims) isSystem() bool {
@@ -43,11 +104,11 @@ func (a *AuthenticationClaims) isSystem() bool {
 func (a *AuthenticationClaims) AsMetadata() map[string]string {
 
 	m := make(map[string]string)
-	m["tenant_id"] = a.TenantID
-	m["partition_id"] = a.PartitionID
+	m["tenant_id"] = a.TenantId()
+	m["partition_id"] = a.PartitionId()
 	m["profile_id"] = a.ProfileID
-	m["access_id"] = a.AccessID
-	m["roles"] = strings.Join(a.Roles, ",")
+	m["access_id"] = a.AccessId()
+	m["roles"] = strings.Join(a.Roles(), ",")
 	return m
 }
 
@@ -70,24 +131,15 @@ func ClaimsFromContext(ctx context.Context) *AuthenticationClaims {
 func ClaimsFromMap(m map[string]string) *AuthenticationClaims {
 	var authenticationClaims AuthenticationClaims
 
-	if val, ok := m["tenant_id"]; ok {
-		authenticationClaims = AuthenticationClaims{}
-		authenticationClaims.TenantID = val
+	authenticationClaims = AuthenticationClaims{
+		Ext: map[string]interface{}{},
+	}
 
-		if val, ok := m["partition_id"]; ok {
-			authenticationClaims.PartitionID = val
-
-			if val, ok := m["profile_id"]; ok {
-				authenticationClaims.ProfileID = val
-
-				if val, ok := m["access_id"]; ok {
-					authenticationClaims.AccessID = val
-					if val, ok := m["roles"]; ok {
-						authenticationClaims.Roles = strings.Split(val, ",")
-						return &authenticationClaims
-					}
-				}
-			}
+	for key, val := range m {
+		if key == "roles" {
+			authenticationClaims.Ext[key] = strings.Split(val, ",")
+		} else {
+			authenticationClaims.Ext[key] = val
 		}
 	}
 

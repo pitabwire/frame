@@ -49,13 +49,13 @@ func (model *BaseModel) GenID(ctx context.Context) {
 		return
 	}
 
-	if authClaim.AccessID != "" {
-		model.AccessID = authClaim.AccessID
+	if authClaim.AccessId() != "" {
+		model.AccessID = authClaim.AccessId()
 	}
 
-	if authClaim.TenantID != "" && authClaim.PartitionID != "" {
-		model.PartitionID = authClaim.PartitionID
-		model.TenantID = authClaim.TenantID
+	if authClaim.TenantId() != "" && authClaim.PartitionId() != "" {
+		model.PartitionID = authClaim.PartitionId()
+		model.TenantID = authClaim.TenantId()
 	}
 }
 

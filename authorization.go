@@ -23,8 +23,8 @@ func AuthHasAccess(ctx context.Context, action string, subject string) (bool, er
 	}
 
 	payload := map[string]interface{}{
-		"namespace":  authClaims.TenantID,
-		"object":     authClaims.PartitionID,
+		"namespace":  authClaims.TenantId(),
+		"object":     authClaims.PartitionId(),
 		"relation":   action,
 		"subject_id": subject,
 	}

@@ -40,7 +40,7 @@ func (s *Service) RegisterForJwt(ctx context.Context) error {
 // This is useful for situations where one may need to register external applications for access token generation
 func (s *Service) RegisterForJwtWithParams(ctx context.Context,
 	oauth2ServiceAdminHost string, clientName string, clientSecret string,
-	scope string, audienceList []string, metadata map[string]string) (map[string]interface{}, error) {
+	scope string, audienceList []string, metadata map[string]string) (map[string]any, error) {
 	oauth2AdminURI := fmt.Sprintf("%s%s", oauth2ServiceAdminHost, "/admin/clients")
 	oauth2AdminIDUri := fmt.Sprintf("%s?client_name=%s", oauth2AdminURI, url.QueryEscape(clientName))
 
@@ -59,7 +59,7 @@ func (s *Service) RegisterForJwtWithParams(ctx context.Context,
 		return nil, fmt.Errorf("invalid existing clients check response : %s", response)
 	}
 
-	var existingClients []map[string]interface{}
+	var existingClients []map[string]any
 	err = json.Unmarshal(response, &existingClients)
 	if err != nil {
 		s.L().WithError(err).WithField("payload", string(response)).
@@ -72,7 +72,7 @@ func (s *Service) RegisterForJwtWithParams(ctx context.Context,
 	}
 
 	metadata["cc_bot"] = "true"
-	payload := map[string]interface{}{
+	payload := map[string]any{
 		"client_name":                url.QueryEscape(clientName),
 		"client_secret":              url.QueryEscape(clientSecret),
 		"grant_types":                []string{"client_credentials"},
@@ -100,7 +100,7 @@ func (s *Service) RegisterForJwtWithParams(ctx context.Context,
 		return nil, fmt.Errorf("invalid registration response : %s", response)
 	}
 
-	var newClient map[string]interface{}
+	var newClient map[string]any
 	err = json.Unmarshal(response, &newClient)
 	if err != nil {
 		s.L().WithError(err).Error("could not un marshal new client")
@@ -116,7 +116,7 @@ func (s *Service) UnRegisterForJwt(ctx context.Context,
 
 	oauth2AdminURI := fmt.Sprintf("%s%s/%s", oauth2ServiceAdminHost, "/admin/clients", clientID)
 
-	status, result, err := s.InvokeRestService(ctx, http.MethodDelete, oauth2AdminURI, make(map[string]interface{}), nil)
+	status, result, err := s.InvokeRestService(ctx, http.MethodDelete, oauth2AdminURI, make(map[string]any), nil)
 	if err != nil {
 		s.L().WithContext(ctx).
 			WithError(err).

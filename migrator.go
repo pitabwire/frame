@@ -116,12 +116,12 @@ func (m *migrator) applyNewMigrations(ctx context.Context) error {
 }
 
 // MigrateDatastore finds missing migrations and records them in the database
-func (s *Service) MigrateDatastore(ctx context.Context, migrationsDirPath string, migrations ...interface{}) error {
+func (s *Service) MigrateDatastore(ctx context.Context, migrationsDirPath string, migrations ...any) error {
 	if migrationsDirPath == "" {
 		migrationsDirPath = "./migrations/0001"
 	}
 
-	migrations = append([]interface{}{&Migration{}}, migrations...)
+	migrations = append([]any{&Migration{}}, migrations...)
 	// Migrate the schema
 	err := s.DB(ctx, false).AutoMigrate(migrations...)
 	if err != nil {

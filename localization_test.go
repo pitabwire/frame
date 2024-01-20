@@ -18,7 +18,7 @@ func TestTranslations(t *testing.T) {
 		DefaultMessage: &i18n.Message{
 			ID: "Example",
 		},
-		TemplateData: map[string]interface{}{
+		TemplateData: map[string]any{
 			"Name": "Air",
 		},
 		PluralCount: 1,
@@ -38,7 +38,7 @@ func TestTranslations(t *testing.T) {
 		DefaultMessage: &i18n.Message{
 			ID: "Example",
 		},
-		TemplateData: map[string]interface{}{
+		TemplateData: map[string]any{
 			"Name": "Air",
 		},
 		PluralCount: 1,
@@ -66,13 +66,13 @@ func TestTranslationsHelpers(t *testing.T) {
 		return
 	}
 
-	englishVersion = srv.TranslateWithMap("en", "Example", map[string]interface{}{"Name": "MapMan"})
+	englishVersion = srv.TranslateWithMap("en", "Example", map[string]any{"Name": "MapMan"})
 	if englishVersion != "MapMan has nothing" {
 		t.Errorf("Localizations didn't quite work like they should, found : %s expected : %s", englishVersion, "MapMan has nothing")
 		return
 	}
 
-	englishVersion = srv.TranslateWithMapAndCount("en", "Example", map[string]interface{}{"Name": "CountMen"}, 2)
+	englishVersion = srv.TranslateWithMapAndCount("en", "Example", map[string]any{"Name": "CountMen"}, 2)
 	if englishVersion != "CountMen have nothing" {
 		t.Errorf("Localizations didn't quite work like they should, found : %s expected : %s", englishVersion, "CountMen have nothing")
 		return

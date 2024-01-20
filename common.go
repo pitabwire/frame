@@ -160,6 +160,6 @@ func GetMacAddress() string {
 }
 
 // ConfigProcess convenience method to processFunc configs
-func ConfigProcess(prefix string, config interface{}) error {
+func ConfigProcess(prefix string, config any) error {
 	return envconfig.Process(prefix, config)
 }

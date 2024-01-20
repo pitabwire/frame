@@ -38,7 +38,7 @@ const ctxKeyService = contextKey("serviceKey")
 // It is pushed and pulled from contexts to make it easy to pass around.
 type Service struct {
 	name                       string
-	jwtClient                  map[string]interface{}
+	jwtClient                  map[string]any
 	jwtClientSecret            string
 	version                    string
 	environment                string
@@ -54,7 +54,7 @@ type Service struct {
 	poolWorkerCount            int
 	poolCapacity               int
 	pool                       *pond.WorkerPool
-	driver                     interface{}
+	driver                     any
 	grpcServer                 *grpc.Server
 	grpcServerEnableReflection bool
 	priListener                net.Listener
@@ -70,7 +70,7 @@ type Service struct {
 	startup                    func(s *Service)
 	cleanup                    func(ctx context.Context)
 	eventRegistry              map[string]EventI
-	configuration              interface{}
+	configuration              any
 	startOnce                  sync.Once
 	stopMutex                  sync.Mutex
 }
@@ -152,7 +152,7 @@ func (s *Service) LogLevel() *logrus.Level {
 }
 
 // JwtClient gets the authenticated jwt client if configured at startup
-func (s *Service) JwtClient() map[string]interface{} {
+func (s *Service) JwtClient() map[string]any {
 	return s.jwtClient
 }
 

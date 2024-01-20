@@ -18,12 +18,12 @@ func (event *MessageToTest) Name() string {
 	return "message.to.test"
 }
 
-func (event *MessageToTest) PayloadType() interface{} {
+func (event *MessageToTest) PayloadType() any {
 	pType := ""
 	return &pType
 }
 
-func (event *MessageToTest) Validate(ctx context.Context, payload interface{}) error {
+func (event *MessageToTest) Validate(ctx context.Context, payload any) error {
 	if _, ok := payload.(*string); !ok {
 		return fmt.Errorf(fmt.Sprintf(" payload is %T not of type %T", payload, event.PayloadType()))
 	}
@@ -31,7 +31,7 @@ func (event *MessageToTest) Validate(ctx context.Context, payload interface{}) e
 	return nil
 }
 
-func (event *MessageToTest) Execute(ctx context.Context, payload interface{}) error {
+func (event *MessageToTest) Execute(ctx context.Context, payload any) error {
 	message := payload.(*string)
 	logger := logrus.WithField("payload", message).WithField("type", event.Name())
 	logger.Info("handling event")

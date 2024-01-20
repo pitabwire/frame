@@ -49,7 +49,7 @@ func (repo *BaseRepository) GetByID(id string, result BaseModelI) error {
 	return repo.getReadDb().Preload(clause.Associations).First(result, "id = ?", id).Error
 }
 
-func (repo *BaseRepository) GetLastestBy(properties map[string]interface{}, result BaseModelI) error {
+func (repo *BaseRepository) GetLastestBy(properties map[string]any, result BaseModelI) error {
 
 	db := repo.getReadDb()
 
@@ -60,7 +60,7 @@ func (repo *BaseRepository) GetLastestBy(properties map[string]interface{}, resu
 	return db.Last(result).Error
 }
 
-func (repo *BaseRepository) GetAllBy(properties map[string]interface{}, result []BaseModelI) error {
+func (repo *BaseRepository) GetAllBy(properties map[string]any, result []BaseModelI) error {
 
 	db := repo.getReadDb()
 

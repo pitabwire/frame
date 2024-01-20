@@ -3,7 +3,7 @@ package internal
 import "context"
 
 // AckID is the identifier of a message for purposes of acknowledgement.
-type AckID interface{}
+type AckID any
 
 // Message is data that moves around between client and server
 type Message struct {

@@ -18,17 +18,17 @@ func (s *Service) Bundle() *i18n.Bundle {
 }
 
 // Translate performs a quick translation based on the supplied message id
-func (s *Service) Translate(request interface{}, messageId string) string {
-	return s.TranslateWithMap(request, messageId, map[string]interface{}{})
+func (s *Service) Translate(request any, messageId string) string {
+	return s.TranslateWithMap(request, messageId, map[string]any{})
 }
 
 // TranslateWithMap performs a translation with variables based on the supplied message id
-func (s *Service) TranslateWithMap(request interface{}, messageId string, variables map[string]interface{}) string {
+func (s *Service) TranslateWithMap(request any, messageId string, variables map[string]any) string {
 	return s.TranslateWithMapAndCount(request, messageId, variables, 1)
 }
 
 // TranslateWithMapAndCount performs a translation with variables based on the supplied message id and can pluralize
-func (s *Service) TranslateWithMapAndCount(request interface{}, messageId string, variables map[string]interface{}, count int) string {
+func (s *Service) TranslateWithMapAndCount(request any, messageId string, variables map[string]any, count int) string {
 
 	var languageSlice []string
 

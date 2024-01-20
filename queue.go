@@ -172,7 +172,7 @@ func (s *Service) AddPublisher(ctx context.Context, reference string, queueURL s
 }
 
 // Publish Queue method to write a new message into the queue pre initialized with the supplied reference
-func (s *Service) Publish(ctx context.Context, reference string, payload interface{}) error {
+func (s *Service) Publish(ctx context.Context, reference string, payload any) error {
 	var metadata map[string]string
 
 	authClaim := ClaimsFromContext(ctx)

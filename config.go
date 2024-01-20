@@ -8,13 +8,13 @@ import (
 )
 
 // Config Option that helps to specify or override the configuration object of our service.
-func Config(config interface{}) Option {
+func Config(config any) Option {
 	return func(s *Service) {
 		s.configuration = config
 	}
 }
 
-func (s *Service) Config() interface{} {
+func (s *Service) Config() any {
 	return s.configuration
 }
 

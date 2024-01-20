@@ -24,8 +24,8 @@ const ctxKeyAuthentication = contextKey("authenticationKey")
 // AuthenticationClaims Create a struct that will be encoded to a JWT.
 // We add jwt.StandardClaims as an embedded type, to provide fields like expiry time
 type AuthenticationClaims struct {
-	ProfileID string                 `json:"sub,omitempty"`
-	Ext       map[string]interface{} `json:"ext,omitempty"`
+	ProfileID string         `json:"sub,omitempty"`
+	Ext       map[string]any `json:"ext,omitempty"`
 	jwt.RegisteredClaims
 }
 
@@ -129,10 +129,9 @@ func ClaimsFromContext(ctx context.Context) *AuthenticationClaims {
 
 // ClaimsFromMap extracts authentication claims from the supplied map if they exist
 func ClaimsFromMap(m map[string]string) *AuthenticationClaims {
-	var authenticationClaims AuthenticationClaims
 
-	authenticationClaims = AuthenticationClaims{
-		Ext: map[string]interface{}{},
+	authenticationClaims := AuthenticationClaims{
+		Ext: map[string]any{},
 	}
 
 	for key, val := range m {
@@ -188,7 +187,7 @@ type JSONWebKeys struct {
 	X5c []string `json:"x5c"`
 }
 
-func (s *Service) getPemCert(token *jwt.Token) (interface{}, error) {
+func (s *Service) getPemCert(token *jwt.Token) (any, error) {
 	config, ok := s.Config().(ConfigurationOAUTH2)
 	if !ok {
 		return nil, errors.New("could not cast config for oauth2 settings")
@@ -312,8 +311,8 @@ func grpcJwtTokenExtractor(ctx context.Context) (string, error) {
 
 // UnaryAuthInterceptor Simple grpc interceptor to extract the jwt supplied via authorization bearer token and verify the authentication claims in the token
 func (s *Service) UnaryAuthInterceptor(audience string, issuer string) grpc.UnaryServerInterceptor {
-	return func(ctx context.Context, req interface{},
-		info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+	return func(ctx context.Context, req any,
+		info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
 		jwtToken, err := grpcJwtTokenExtractor(ctx)
 		if err != nil {
 			return nil, err
@@ -342,7 +341,7 @@ func (s *serverStreamWrapper) Context() context.Context {
 
 // StreamAuthInterceptor An authentication claims extractor that will always verify the information flowing in the streams as true jwt claims
 func (s *Service) StreamAuthInterceptor(audience string, issuer string) grpc.StreamServerInterceptor {
-	return func(srv interface{}, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
+	return func(srv any, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
 		localServerStream := ss
 		authClaim := ClaimsFromContext(localServerStream.Context())
 		if authClaim == nil {

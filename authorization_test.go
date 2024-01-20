@@ -18,7 +18,7 @@ func authorizationControlListWrite(ctx context.Context, writeServerURL string, a
 		return errors.New("only authenticated requsts should be used to check authorization")
 	}
 
-	payload := map[string]interface{}{
+	payload := map[string]any{
 		"namespace":  authClaims.TenantId(),
 		"object":     authClaims.PartitionId(),
 		"relation":   action,
@@ -36,7 +36,7 @@ func authorizationControlListWrite(ctx context.Context, writeServerURL string, a
 		return fmt.Errorf(" invalid response status %d had message %s", status, string(result))
 	}
 
-	var response map[string]interface{}
+	var response map[string]any
 	err = json.Unmarshal(result, &response)
 	if err != nil {
 		return err

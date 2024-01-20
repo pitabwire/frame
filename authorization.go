@@ -22,7 +22,7 @@ func AuthHasAccess(ctx context.Context, action string, subject string) (bool, er
 		return false, errors.New("only authenticated requsts should be used to check authorization")
 	}
 
-	payload := map[string]interface{}{
+	payload := map[string]any{
 		"namespace":  authClaims.TenantId(),
 		"object":     authClaims.PartitionId(),
 		"relation":   action,
@@ -39,7 +39,7 @@ func AuthHasAccess(ctx context.Context, action string, subject string) (bool, er
 		return false, fmt.Errorf(" invalid response status %d had message %s", status, string(result))
 	}
 
-	var response map[string]interface{}
+	var response map[string]any
 	err = json.Unmarshal(result, &response)
 	if err != nil {
 		return false, err

@@ -42,7 +42,7 @@ func DBPropertiesToMap(props json.Marshaler) map[string]string {
 		return payload
 	}
 
-	properties := make(map[string]interface{})
+	properties := make(map[string]any)
 	payloadValue, _ := props.MarshalJSON()
 	err := json.Unmarshal(payloadValue, &properties)
 	if err != nil {
@@ -82,7 +82,7 @@ func DBPropertiesFromMap(propsMap map[string]string) datatypes.JSONMap {
 			continue
 		}
 
-		var prop interface{}
+		var prop any
 		err := json.Unmarshal([]byte(val), prop)
 		if err != nil {
 			continue

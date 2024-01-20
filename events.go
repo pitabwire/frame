@@ -20,13 +20,13 @@ type EventI interface {
 	Name() string
 
 	// PayloadType determines the type of payload the event uses. This is useful for decoding queue data.
-	PayloadType() interface{}
+	PayloadType() any
 
 	// Validate enables automatic validation of payload supplied to the event without handling it in the execute block
-	Validate(ctx context.Context, payload interface{}) error
+	Validate(ctx context.Context, payload any) error
 
 	// Execute performs all the logic required to action a step in the sequence of events required to achieve the end goal.
-	Execute(ctx context.Context, payload interface{}) error
+	Execute(ctx context.Context, payload any) error
 }
 
 // RegisterEvents Option to write an event or list of events into the service registry for future use.
@@ -46,7 +46,7 @@ func RegisterEvents(events ...EventI) Option {
 }
 
 // Emit a simple method used to deploy
-func (s *Service) Emit(ctx context.Context, name string, payload interface{}) error {
+func (s *Service) Emit(ctx context.Context, name string, payload any) error {
 
 	payloadBytes, err := json.Marshal(payload)
 

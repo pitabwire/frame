@@ -13,7 +13,7 @@ import (
 
 // InvokeRestService convenience method to call a http endpoint and utilize the raw results
 func (s *Service) InvokeRestService(ctx context.Context,
-	method string, endpointURL string, payload map[string]interface{},
+	method string, endpointURL string, payload map[string]any,
 	headers map[string][]string) (int, []byte, error) {
 
 	if headers == nil {

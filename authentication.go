@@ -329,14 +329,13 @@ func (s *Service) UnaryAuthInterceptor(audience string, issuer string) grpc.Unar
 
 // serverStreamWrapper simple wrapper method that stores auth claims for the server stream context
 type serverStreamWrapper struct {
-	authClaim *AuthenticationClaims
+	ctx context.Context
 	grpc.ServerStream
 }
 
-// Context convert the stream wrappers claims to be contained in the streams context
+// Context convert the stream wrappers claims to be contained in the stream context
 func (s *serverStreamWrapper) Context() context.Context {
-	ctx := s.ServerStream.Context()
-	return s.authClaim.ClaimsToContext(ctx)
+	return s.ctx
 }
 
 // StreamAuthInterceptor An authentication claims extractor that will always verify the information flowing in the streams as true jwt claims
@@ -358,9 +357,7 @@ func (s *Service) StreamAuthInterceptor(audience string, issuer string) grpc.Str
 				return status.Error(codes.Unauthenticated, err.Error())
 			}
 
-			authClaim = ClaimsFromContext(ctx)
-
-			localServerStream = &serverStreamWrapper{authClaim, ss}
+			localServerStream = &serverStreamWrapper{ctx, ss}
 		}
 		return handler(srv, localServerStream)
 	}

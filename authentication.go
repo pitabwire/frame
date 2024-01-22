@@ -79,15 +79,24 @@ func (a *AuthenticationClaims) AccessId() string {
 
 func (a *AuthenticationClaims) Roles() []string {
 
-	result := []string{}
-	val, ok := a.Ext["roles"]
+	var result []string
+	roles, ok := a.Ext["roles"]
 	if !ok {
-		return result
-	}
+		role, ok1 := a.Ext["role"]
+		if !ok1 {
+			return result
+		}
 
-	result, ok = val.([]string)
-	if !ok {
-		return []string{}
+		roleStr, ok2 := role.(string)
+		if ok2 {
+			result = append(result, roleStr)
+		}
+	} else {
+
+		result, ok = roles.([]string)
+		if !ok {
+			return []string{}
+		}
 	}
 
 	return result
@@ -130,7 +139,7 @@ func ClaimsFromContext(ctx context.Context) *AuthenticationClaims {
 // ClaimsFromMap extracts authentication claims from the supplied map if they exist
 func ClaimsFromMap(m map[string]string) *AuthenticationClaims {
 
-	authenticationClaims := AuthenticationClaims{
+	authenticationClaims := &AuthenticationClaims{
 		Ext: map[string]any{},
 	}
 
@@ -142,7 +151,7 @@ func ClaimsFromMap(m map[string]string) *AuthenticationClaims {
 		}
 	}
 
-	return nil
+	return authenticationClaims
 }
 
 func (s *Service) Authenticate(ctx context.Context,

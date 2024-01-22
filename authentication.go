@@ -97,31 +97,49 @@ func (a *AuthenticationClaims) Roles() []string {
 	var result []string
 	roles, ok := a.Ext["roles"]
 	if !ok {
-		role, ok1 := a.Ext["role"]
-		if !ok1 {
+		roles, ok = a.Ext["role"]
+		if !ok {
 			return result
 		}
+	}
 
-		roleStr, ok2 := role.(string)
-		if ok2 {
-			result = append(result, roleStr)
-		}
-	} else {
+	roleStr, ok2 := roles.(string)
+	if ok2 {
+		result = append(result, strings.Split(roleStr, ",")...)
+	}
 
-		result, ok = roles.([]string)
-		if !ok {
-			return []string{}
-		}
+	return result
+}
+
+func (a *AuthenticationClaims) ServiceName() string {
+
+	result := ""
+	val, ok := a.Ext["service_name"]
+	if !ok {
+		return ""
+	}
+
+	result, ok = val.(string)
+	if !ok {
+		return ""
 	}
 
 	return result
 }
 
 func (a *AuthenticationClaims) isSystem() bool {
-	//TODO: tokens which are granted as client credentials have no partition information attached
-	// Since we cannot pass custom information to token to allow specifying who is an admin.
-	// We will check if the subject starts with service. for now and make them system see: https://github.com/ory/hydra/issues/1748
-	return strings.HasPrefix(a.Subject, "service_")
+
+	roles := a.Roles()
+	if len(roles) == 1 {
+		if strings.HasPrefix(roles[0], "system_") {
+			return true
+		}
+	}
+	if strings.HasPrefix(a.ServiceName(), "service_") {
+		return true
+	}
+
+	return false
 }
 
 // AsMetadata Creates a string map to be used as metadata in queue data

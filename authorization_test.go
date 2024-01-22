@@ -53,13 +53,13 @@ func TestAuthorizationControlListWrite(t *testing.T) {
 	ctx = frame.ToContext(ctx, srv)
 
 	authClaim := frame.AuthenticationClaims{
-		ProfileID: "profile",
 		Ext: map[string]any{
 			"partition_id": "partition",
 			"tenant_id":    "default",
 			"access_id":    "access",
 		},
 	}
+	authClaim.Subject = "profile"
 	ctx = authClaim.ClaimsToContext(ctx)
 
 	err := authorizationControlListWrite(ctx, authorizationServerURL, "read", "tested")
@@ -79,12 +79,12 @@ func TestAuthHasAccess(t *testing.T) {
 	ctx = frame.ToContext(ctx, srv)
 
 	authClaim := frame.AuthenticationClaims{
-		ProfileID: "profile",
 		Ext: map[string]any{
 			"partition_id": "partition",
 			"tenant_id":    "default",
 			"access_id":    "access",
 		}}
+	authClaim.Subject = "profile"
 	ctx = authClaim.ClaimsToContext(ctx)
 
 	err := authorizationControlListWrite(ctx, authorizationServerURL, "read", "reader")

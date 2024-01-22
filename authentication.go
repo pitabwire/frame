@@ -19,13 +19,28 @@ import (
 	"google.golang.org/grpc/metadata"
 )
 
-const ctxKeyAuthentication = contextKey("authenticationKey")
+const ctxKeyAuthenticationClaim = contextKey("authenticationClaimKey")
+const ctxKeyAuthenticationJwt = contextKey("authenticationJwtKey")
+
+// JwtToContext adds authentication jwt to the current supplied context
+func jwtToContext(ctx context.Context, jwt string) context.Context {
+	return context.WithValue(ctx, ctxKeyAuthenticationJwt, jwt)
+}
+
+// JwtFromContext extracts authentication jwt from the supplied context if any exist
+func JwtFromContext(ctx context.Context) string {
+	jwtString, ok := ctx.Value(ctxKeyAuthenticationJwt).(string)
+	if !ok {
+		return ""
+	}
+
+	return jwtString
+}
 
 // AuthenticationClaims Create a struct that will be encoded to a JWT.
 // We add jwt.StandardClaims as an embedded type, to provide fields like expiry time
 type AuthenticationClaims struct {
-	ProfileID string         `json:"sub,omitempty"`
-	Ext       map[string]any `json:"ext,omitempty"`
+	Ext map[string]any `json:"ext,omitempty"`
 	jwt.RegisteredClaims
 }
 
@@ -113,9 +128,9 @@ func (a *AuthenticationClaims) isSystem() bool {
 func (a *AuthenticationClaims) AsMetadata() map[string]string {
 
 	m := make(map[string]string)
+	m["sub"] = a.Subject
 	m["tenant_id"] = a.TenantId()
 	m["partition_id"] = a.PartitionId()
-	m["profile_id"] = a.ProfileID
 	m["access_id"] = a.AccessId()
 	m["roles"] = strings.Join(a.Roles(), ",")
 	return m
@@ -123,12 +138,12 @@ func (a *AuthenticationClaims) AsMetadata() map[string]string {
 
 // ClaimsToContext adds authentication claims to the current supplied context
 func (a *AuthenticationClaims) ClaimsToContext(ctx context.Context) context.Context {
-	return context.WithValue(ctx, ctxKeyAuthentication, a)
+	return context.WithValue(ctx, ctxKeyAuthenticationClaim, a)
 }
 
 // ClaimsFromContext extracts authentication claims from the supplied context if any exist
 func ClaimsFromContext(ctx context.Context) *AuthenticationClaims {
-	authenticationClaims, ok := ctx.Value(ctxKeyAuthentication).(*AuthenticationClaims)
+	authenticationClaims, ok := ctx.Value(ctxKeyAuthenticationClaim).(*AuthenticationClaims)
 	if !ok {
 		return nil
 	}
@@ -144,7 +159,9 @@ func ClaimsFromMap(m map[string]string) *AuthenticationClaims {
 	}
 
 	for key, val := range m {
-		if key == "roles" {
+		if key == "sub" {
+			authenticationClaims.Subject = m[key]
+		} else if key == "roles" {
 			authenticationClaims.Ext[key] = strings.Split(val, ",")
 		} else {
 			authenticationClaims.Ext[key] = val
@@ -176,6 +193,8 @@ func (s *Service) Authenticate(ctx context.Context,
 	if !token.Valid {
 		return ctx, errors.New("supplied token was invalid")
 	}
+
+	ctx = jwtToContext(ctx, jwtToken)
 
 	ctx = claims.ClaimsToContext(ctx)
 
@@ -215,7 +234,12 @@ func (s *Service) getPemCert(token *jwt.Token) (any, error) {
 		if err != nil {
 			return nil, err
 		}
-		defer resp.Body.Close()
+		defer func(Body io.ReadCloser) {
+			err := Body.Close()
+			if err != nil {
+
+			}
+		}(resp.Body)
 		jwkKeyBytes, err = io.ReadAll(resp.Body)
 		if err != nil {
 			return nil, err

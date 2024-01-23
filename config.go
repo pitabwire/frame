@@ -19,6 +19,8 @@ func (s *Service) Config() any {
 }
 
 type ConfigurationDefault struct {
+	LogLevel string `default:"info" envconfig:"LOG_LEVEL"`
+
 	ServerPort     string `default:":7000" envconfig:"PORT"`
 	HttpServerPort string `default:":8080" envconfig:"HTTP_PORT"`
 	GrpcServerPort string `default:":50051" envconfig:"GRPC_PORT"`

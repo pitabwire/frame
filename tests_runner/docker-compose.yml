@@ -4,7 +4,7 @@ services:
 
   postgresd:
     container_name: frame_postgres
-    image: postgres:16.1
+    image: postgres:16.2
     environment:
       - POSTGRES_USER=frame
       - POSTGRES_PASSWORD=secret

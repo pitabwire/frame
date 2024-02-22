@@ -93,6 +93,21 @@ func (model *BaseModel) BeforeUpdate(db *gorm.DB) error {
 	return nil
 }
 
+func (model *BaseModel) SetPartitionInfo(ctx context.Context) {
+
+	claims := ClaimsFromContext(ctx)
+
+	if claims == nil {
+		return
+	}
+
+	if model.TenantID == "" || model.PartitionID == "" {
+		model.TenantID = claims.TenantId()
+		model.PartitionID = claims.PartitionId()
+		model.AccessID = claims.AccessId()
+	}
+}
+
 // Migration Our simple table holding all the migration data
 type Migration struct {
 	BaseModel

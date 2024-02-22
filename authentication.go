@@ -220,6 +220,33 @@ func (s *Service) Authenticate(ctx context.Context,
 
 }
 
+func (s *Service) systemPadPartitionInfo(ctx context.Context, tenantId, partitionId, accessId string) context.Context {
+
+	claims := ClaimsFromContext(ctx)
+
+	if claims != nil && claims.isSystem() {
+
+		val, ok := claims.Ext["tenant_id"]
+		if !ok || val == "" {
+			claims.Ext["tenant_id"] = tenantId
+		}
+
+		val, ok = claims.Ext["partition_id"]
+		if !ok || val == "" {
+			claims.Ext["partition_id"] = partitionId
+		}
+
+		val, ok = claims.Ext["access_id"]
+		if !ok || val == "" {
+			claims.Ext["access_id"] = accessId
+		}
+
+		ctx = claims.ClaimsToContext(ctx)
+	}
+
+	return ctx
+}
+
 type Jwks struct {
 	Keys []JSONWebKeys `json:"keys"`
 }
@@ -332,6 +359,8 @@ func (s *Service) AuthenticationMiddleware(next http.Handler, audience string, i
 			return
 		}
 
+		s.systemPadPartitionInfo(ctx, r.Header.Get("tenant_id"), r.Header.Get("partition_id"), r.Header.Get("access_id"))
+
 		r = r.WithContext(ctx)
 
 		next.ServeHTTP(w, r)
@@ -360,6 +389,20 @@ func grpcJwtTokenExtractor(ctx context.Context) (string, error) {
 	return strings.TrimSpace(extractedJwtToken[1]), nil
 }
 
+func getGrpcMetadata(ctx context.Context, key string) string {
+	requestMetadata, ok := metadata.FromIncomingContext(ctx)
+	if !ok {
+		return ""
+	}
+
+	vv, ok := requestMetadata[key]
+	if !ok {
+		return ""
+	}
+
+	return vv[0]
+}
+
 // UnaryAuthInterceptor Simple grpc interceptor to extract the jwt supplied via authorization bearer token and verify the authentication claims in the token
 func (s *Service) UnaryAuthInterceptor(audience string, issuer string) grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req any,
@@ -374,6 +417,10 @@ func (s *Service) UnaryAuthInterceptor(audience string, issuer string) grpc.Unar
 			log.Printf(" UnaryAuthInterceptor -- could not authenticate token : [%s]  due to error : %s", jwtToken, err)
 			return nil, status.Error(codes.Unauthenticated, err.Error())
 		}
+
+		ctx = s.systemPadPartitionInfo(ctx, getGrpcMetadata(ctx, "tenant_id"),
+			getGrpcMetadata(ctx, "partition_id"), getGrpcMetadata(ctx, "access_id"))
+
 		return handler(ctx, req)
 	}
 }
@@ -407,6 +454,9 @@ func (s *Service) StreamAuthInterceptor(audience string, issuer string) grpc.Str
 				log.Printf(" StreamAuthInterceptor -- could not authenticate token : [%s]  due to error : %s", jwtToken, err)
 				return status.Error(codes.Unauthenticated, err.Error())
 			}
+
+			ctx = s.systemPadPartitionInfo(ctx, getGrpcMetadata(ctx, "tenant_id"),
+				getGrpcMetadata(ctx, "partition_id"), getGrpcMetadata(ctx, "access_id"))
 
 			localServerStream = &serverStreamWrapper{ctx, ss}
 		}

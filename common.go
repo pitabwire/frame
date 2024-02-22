@@ -49,14 +49,18 @@ func (model *BaseModel) GenID(ctx context.Context) {
 		return
 	}
 
-	if authClaim.AccessId() != "" {
+	if model.AccessID == "" && authClaim.AccessId() != "" {
 		model.AccessID = authClaim.AccessId()
 	}
 
-	if authClaim.TenantId() != "" && authClaim.PartitionId() != "" {
+	if model.PartitionID == "" && authClaim.PartitionId() != "" {
 		model.PartitionID = authClaim.PartitionId()
+	}
+
+	if model.TenantID == "" && authClaim.TenantId() != "" {
 		model.TenantID = authClaim.TenantId()
 	}
+
 }
 
 // ValidXID Validates that the supplied string is an xid
@@ -91,21 +95,6 @@ func (model *BaseModel) BeforeUpdate(db *gorm.DB) error {
 	model.ModifiedAt = time.Now()
 	model.Version += 1
 	return nil
-}
-
-func (model *BaseModel) SetPartitionInfo(ctx context.Context) {
-
-	claims := ClaimsFromContext(ctx)
-
-	if claims == nil {
-		return
-	}
-
-	if model.TenantID == "" || model.PartitionID == "" {
-		model.TenantID = claims.TenantId()
-		model.PartitionID = claims.PartitionId()
-		model.AccessID = claims.AccessId()
-	}
 }
 
 func (model *BaseModel) CopyPartitionInfo(parent *BaseModel) {

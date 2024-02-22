@@ -108,6 +108,19 @@ func (model *BaseModel) SetPartitionInfo(ctx context.Context) {
 	}
 }
 
+func (model *BaseModel) CopyPartitionInfo(parent *BaseModel) {
+
+	if parent == nil {
+		return
+	}
+
+	if model.TenantID == "" || model.PartitionID == "" {
+		model.TenantID = parent.TenantID
+		model.PartitionID = parent.PartitionID
+		model.AccessID = parent.AccessID
+	}
+}
+
 // Migration Our simple table holding all the migration data
 type Migration struct {
 	BaseModel

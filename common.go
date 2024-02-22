@@ -45,7 +45,7 @@ func (model *BaseModel) GenID(ctx context.Context) {
 	model.ID = xid.New().String()
 
 	authClaim := ClaimsFromContext(ctx)
-	if authClaim == nil || authClaim.isSystem() {
+	if authClaim == nil {
 		return
 	}
 

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/stdlib"
 	"gocloud.dev/server/health/sqlhealth"
@@ -13,6 +14,8 @@ import (
 	"gorm.io/gorm"
 	"log"
 	"math/rand"
+	"strconv"
+	"strings"
 )
 
 type store struct {
@@ -34,34 +37,40 @@ func tenantPartition(ctx context.Context) func(db *gorm.DB) *gorm.DB {
 }
 
 // DBPropertiesToMap converts the supplied db json content into a golang map
-func DBPropertiesToMap(props json.Marshaler) map[string]string {
-
-	payload := make(map[string]string)
+func DBPropertiesToMap(props datatypes.JSONMap) map[string]string {
 
 	if props == nil {
-		return payload
+		return make(map[string]string, len(props))
 	}
 
-	properties := make(map[string]any)
-	payloadValue, _ := props.MarshalJSON()
-	err := json.Unmarshal(payloadValue, &properties)
-	if err != nil {
-		return payload
-	}
+	payload := make(map[string]string, len(props))
 
-	for k, val := range properties {
+	for k, val := range props {
 
-		stringVal, ok := val.(string)
-		if ok {
-			payload[k] = stringVal
-			continue
+		switch v := val.(type) {
+		case nil:
+			payload[k] = ""
+		case string:
+			payload[k] = v
+
+		case bool:
+			payload[k] = strconv.FormatBool(v)
+			break
+		case int, int64, int32, int16, int8:
+			payload[k] = strconv.FormatInt(int64(val.(int)), 10)
+
+		case float32, float64:
+			payload[k] = strconv.FormatFloat(val.(float64), 'g', -1, 64)
+			break
+		default:
+
+			marVal, err1 := json.Marshal(val)
+			if err1 != nil {
+				payload[k] = fmt.Sprintf("%v", val)
+				continue
+			}
+			payload[k] = string(marVal)
 		}
-
-		marVal, err1 := json.Marshal(val)
-		if err1 != nil {
-			continue
-		}
-		payload[k] = string(marVal)
 	}
 
 	return payload
@@ -77,16 +86,18 @@ func DBPropertiesFromMap(propsMap map[string]string) datatypes.JSONMap {
 
 	for k, val := range propsMap {
 
-		if !json.Valid([]byte(val)) {
-			jsonMap[k] = val
+		jsonMap[k] = val
+
+		if !strings.HasPrefix(val, "{") && !strings.HasPrefix(val, "[") {
 			continue
 		}
 
 		var prop any
-		err := json.Unmarshal([]byte(val), prop)
-		if err != nil {
+		// Determine if the JSON is an object or an array and unmarshal accordingly
+		if err := json.Unmarshal([]byte(val), &prop); err != nil {
 			continue
 		}
+
 		jsonMap[k] = prop
 	}
 

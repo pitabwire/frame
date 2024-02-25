@@ -60,7 +60,6 @@ func (model *BaseModel) GenID(ctx context.Context) {
 	if model.TenantID == "" && authClaim.TenantId() != "" {
 		model.TenantID = authClaim.TenantId()
 	}
-
 }
 
 // ValidXID Validates that the supplied string is an xid

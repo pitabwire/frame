@@ -341,7 +341,7 @@ func (s *Service) AuthenticationMiddleware(next http.Handler, audience string, i
 			return
 		}
 
-		extractedJwtToken := strings.Split(authorizationHeader, "Bearer ")
+		extractedJwtToken := strings.Split(authorizationHeader, " ")
 
 		if len(extractedJwtToken) != 2 {
 			http.Error(w, "Malformed Authorization header", http.StatusBadRequest)

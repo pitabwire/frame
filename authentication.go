@@ -280,10 +280,7 @@ func (s *Service) getPemCert(token *jwt.Token) (any, error) {
 			return nil, err
 		}
 		defer func(Body io.ReadCloser) {
-			err := Body.Close()
-			if err != nil {
-
-			}
+			_ = Body.Close()
 		}(resp.Body)
 		jwkKeyBytes, err = io.ReadAll(resp.Body)
 		if err != nil {

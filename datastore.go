@@ -55,13 +55,11 @@ func DBPropertiesToMap(props datatypes.JSONMap) map[string]string {
 
 		case bool:
 			payload[k] = strconv.FormatBool(v)
-			break
 		case int, int64, int32, int16, int8:
 			payload[k] = strconv.FormatInt(int64(val.(int)), 10)
 
 		case float32, float64:
 			payload[k] = strconv.FormatFloat(val.(float64), 'g', -1, 64)
-			break
 		default:
 
 			marVal, err1 := json.Marshal(val)

@@ -52,23 +52,17 @@ func Logger() Option {
 		switch logLevel {
 		case "debug":
 			logger.SetLevel(logrus.DebugLevel)
-			break
 		case "trace":
 			logger.SetLevel(logrus.TraceLevel)
-			break
 		case "warn":
 			logger.SetLevel(logrus.WarnLevel)
-			break
 		case "error":
 			logger.SetLevel(logrus.ErrorLevel)
-			break
 		case "fatal":
 			logger.SetLevel(logrus.FatalLevel)
-			break
 		default:
 
 			logger.SetLevel(logrus.InfoLevel)
-			break
 		}
 
 		s.logger = logger

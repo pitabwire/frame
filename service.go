@@ -42,7 +42,6 @@ type Service struct {
 	jwtClientSecret            string
 	version                    string
 	environment                string
-	logger                     *logrus.Logger
 	logLevel                   *logrus.Level
 	traceExporter              trace.SpanExporter
 	traceSampler               trace.Sampler
@@ -101,7 +100,6 @@ func NewService(name string, opts ...Option) (context.Context, *Service) {
 		},
 		client:          &http.Client{},
 		queue:           q,
-		logger:          logrus.New(),
 		poolWorkerCount: concurrency,
 		poolCapacity:    100,
 	}
@@ -144,11 +142,6 @@ func (s *Service) Version() string {
 // Environment gets the runtime environment of the service.
 func (s *Service) Environment() string {
 	return s.environment
-}
-
-// LogLevel gets the loglevel of the service as set at startup
-func (s *Service) LogLevel() *logrus.Level {
-	return s.logLevel
 }
 
 // JwtClient gets the authenticated jwt client if configured at startup

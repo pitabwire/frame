@@ -59,11 +59,11 @@ type ConfigurationLogLevel interface {
 }
 
 func (c *ConfigurationDefault) LoggingLevel() string {
-	return c.LogLevel
+	return strings.ToLower(c.LogLevel)
 }
 
 func (c *ConfigurationDefault) LoggingLevelIsDebug() bool {
-	return strings.ToLower(c.LogLevel) == "debug"
+	return c.LoggingLevel() == "debug" || c.LoggingLevel() == "trace"
 }
 
 type ConfigurationPorts interface {

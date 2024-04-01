@@ -18,9 +18,9 @@ func Logger() Option {
 		logLevel := "info"
 
 		if s.Config() != nil {
-			oauth2Config, ok := s.Config().(ConfigurationDefault)
+			config, ok := s.Config().(ConfigurationLogLevel)
 			if ok {
-				logLevel = oauth2Config.LogLevel
+				logLevel = config.LoggingLevel()
 			}
 		}
 
@@ -48,8 +48,7 @@ func Logger() Option {
 			},
 		})
 
-		logLevel = strings.ToLower(logLevel)
-		switch logLevel {
+		switch strings.ToLower(logLevel) {
 		case "debug":
 			logger.SetLevel(logrus.DebugLevel)
 		case "trace":

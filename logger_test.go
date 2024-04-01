@@ -9,9 +9,10 @@ import (
 
 func TestLogs(t *testing.T) {
 	_, srv := frame.NewService("Logger Srv", frame.Config(
-		&frame.ConfigurationDefault{Oauth2WellKnownJwk: sampleWellKnownJwk}))
+		&frame.ConfigurationDefault{LogLevel: "Debug", Oauth2WellKnownJwk: sampleWellKnownJwk}))
 
 	logger := srv.L()
+	logger.Debug("testing debug logs")
 	logger.Info("testing logs")
 
 	err := errors.New("")

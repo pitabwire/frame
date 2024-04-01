@@ -42,7 +42,7 @@ type Service struct {
 	jwtClientSecret            string
 	version                    string
 	environment                string
-	logLevel                   *logrus.Level
+	logger                     *logrus.Logger
 	traceExporter              trace.SpanExporter
 	traceSampler               trace.Sampler
 	handler                    http.Handler

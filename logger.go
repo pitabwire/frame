@@ -27,16 +27,18 @@ func Logger() Option {
 		if err != nil {
 			logLevel = logrus.InfoLevel
 		}
-		// set global log level
-		logrus.SetLevel(logLevel)
 
-		logrus.SetFormatter(&logrus.TextFormatter{
+		s.logger = logrus.New()
+		// set global log level
+		s.logger.SetLevel(logLevel)
+
+		s.logger.SetFormatter(&logrus.TextFormatter{
 			FullTimestamp: true,
 			DisableQuote:  true,
 		})
-		logrus.SetReportCaller(true)
-		logrus.SetOutput(io.Discard)
-		logrus.AddHook(&writer.Hook{
+		s.logger.SetReportCaller(true)
+		s.logger.SetOutput(io.Discard)
+		s.logger.AddHook(&writer.Hook{
 			Writer: os.Stderr,
 			LogLevels: []logrus.Level{
 				logrus.PanicLevel,
@@ -45,7 +47,7 @@ func Logger() Option {
 				logrus.WarnLevel,
 			},
 		})
-		logrus.AddHook(&writer.Hook{
+		s.logger.AddHook(&writer.Hook{
 			Writer: os.Stdout,
 			LogLevels: []logrus.Level{
 				logrus.InfoLevel,
@@ -54,12 +56,11 @@ func Logger() Option {
 			},
 		})
 
-		s.logLevel = &logLevel
 	}
 }
 
 func (s *Service) L() *logrus.Entry {
-	return logrus.New().WithField("service", s.Name())
+	return s.logger.WithField("service", s.Name())
 }
 
 func GetLoggingOptions() []logging.Option {

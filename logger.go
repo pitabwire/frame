@@ -8,21 +8,27 @@ import (
 	"github.com/sirupsen/logrus/hooks/writer"
 	"io"
 	"os"
-	"strings"
 )
 
 // Logger Option that helps with initialization of our internal logger
 func Logger() Option {
 	return func(s *Service) {
 
-		logLevel := "info"
+		logLevelStr := "info"
 
 		if s.Config() != nil {
 			config, ok := s.Config().(ConfigurationLogLevel)
 			if ok {
-				logLevel = config.LoggingLevel()
+				logLevelStr = config.LoggingLevel()
 			}
 		}
+
+		logLevel, err := logrus.ParseLevel(logLevelStr)
+		if err != nil {
+			logLevel = logrus.InfoLevel
+		}
+		// set global log level
+		logrus.SetLevel(logLevel)
 
 		logger := logrus.New()
 		logger.SetFormatter(&logrus.TextFormatter{
@@ -45,24 +51,11 @@ func Logger() Option {
 			LogLevels: []logrus.Level{
 				logrus.InfoLevel,
 				logrus.DebugLevel,
+				logrus.TraceLevel,
 			},
 		})
 
-		switch strings.ToLower(logLevel) {
-		case "debug":
-			logger.SetLevel(logrus.DebugLevel)
-		case "trace":
-			logger.SetLevel(logrus.TraceLevel)
-		case "warn":
-			logger.SetLevel(logrus.WarnLevel)
-		case "error":
-			logger.SetLevel(logrus.ErrorLevel)
-		case "fatal":
-			logger.SetLevel(logrus.FatalLevel)
-		default:
-
-			logger.SetLevel(logrus.InfoLevel)
-		}
+		logger.SetLevel(logLevel)
 
 		s.logger = logger
 	}

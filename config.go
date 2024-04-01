@@ -53,6 +53,19 @@ type ConfigurationDefault struct {
 	EventsQueueUrl  string `default:"mem://frame.events.internal_._queue" envconfig:"EVENTS_QUEUE_URL"`
 }
 
+type ConfigurationLogLevel interface {
+	LoggingLevel() string
+	LoggingLevelIsDebug() bool
+}
+
+func (c *ConfigurationDefault) LoggingLevel() string {
+	return c.LogLevel
+}
+
+func (c *ConfigurationDefault) LoggingLevelIsDebug() bool {
+	return strings.ToLower(c.LogLevel) == "debug"
+}
+
 type ConfigurationPorts interface {
 	Port() string
 	HttpPort() string

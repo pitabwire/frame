@@ -137,7 +137,14 @@ func (s *Service) DB(ctx context.Context, readOnly bool) *gorm.DB {
 		db = s.dataStore.writeDatabase[randomIndex]
 	}
 
-	return db.WithContext(ctx).Scopes(tenantPartition(ctx))
+	partitionedDb := db.WithContext(ctx).Scopes(tenantPartition(ctx))
+
+	config, ok := s.Config().(ConfigurationLogLevel)
+	if ok && config.LoggingLevelIsDebug() {
+		return partitionedDb.Debug()
+	}
+
+	return partitionedDb
 }
 
 // DatastoreCon Option method to store a connection that will be utilized when connecting to the database

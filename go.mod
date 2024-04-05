@@ -15,8 +15,8 @@ require (
 	github.com/pitabwire/natspubsub v0.1.3
 	github.com/rs/xid v1.5.0
 	github.com/sirupsen/logrus v1.9.3
-	go.opentelemetry.io/otel v1.24.0
-	go.opentelemetry.io/otel/sdk v1.24.0
+	go.opentelemetry.io/otel v1.25.0
+	go.opentelemetry.io/otel/sdk v1.25.0
 	gocloud.dev v0.37.0
 	golang.org/x/net v0.24.0
 	golang.org/x/text v0.14.0
@@ -50,8 +50,8 @@ require (
 	github.com/nats-io/nuid v1.0.1 // indirect
 	github.com/rs/cors v1.8.3 // indirect
 	go.opencensus.io v0.24.0 // indirect
-	go.opentelemetry.io/otel/metric v1.24.0 // indirect
-	go.opentelemetry.io/otel/trace v1.24.0 // indirect
+	go.opentelemetry.io/otel/metric v1.25.0 // indirect
+	go.opentelemetry.io/otel/trace v1.25.0 // indirect
 	golang.org/x/crypto v0.22.0 // indirect
 	golang.org/x/sync v0.6.0 // indirect
 	golang.org/x/sys v0.19.0 // indirect

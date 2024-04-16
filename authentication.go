@@ -336,7 +336,7 @@ func (s *Service) AuthenticationMiddleware(next http.Handler, audience string, i
 		logger := s.logger.WithField("authorization_header", authorizationHeader)
 
 		if authorizationHeader == "" || !strings.HasPrefix(authorizationHeader, "Bearer ") {
-			logger.Debug(" AuthenticationMiddleware -- could not authenticate missing token")
+			logger.WithField("available_headers", r.Header).Debug(" AuthenticationMiddleware -- could not authenticate missing token")
 			http.Error(w, "An authorization header is required", http.StatusForbidden)
 			return
 		}

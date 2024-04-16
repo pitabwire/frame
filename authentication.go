@@ -333,7 +333,10 @@ func (s *Service) AuthenticationMiddleware(next http.Handler, audience string, i
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		authorizationHeader := r.Header.Get("Authorization")
 
+		logger := s.logger.WithField("authorization_header", authorizationHeader)
+
 		if authorizationHeader == "" || !strings.HasPrefix(authorizationHeader, "Bearer ") {
+			logger.Debug(" AuthenticationMiddleware -- could not authenticate missing token")
 			http.Error(w, "An authorization header is required", http.StatusForbidden)
 			return
 		}
@@ -341,6 +344,7 @@ func (s *Service) AuthenticationMiddleware(next http.Handler, audience string, i
 		extractedJwtToken := strings.Split(authorizationHeader, " ")
 
 		if len(extractedJwtToken) != 2 {
+			logger.Debug(" AuthenticationMiddleware -- token format is not valid")
 			http.Error(w, "Malformed Authorization header", http.StatusBadRequest)
 			return
 		}
@@ -351,7 +355,7 @@ func (s *Service) AuthenticationMiddleware(next http.Handler, audience string, i
 		ctx, err := s.Authenticate(ctx, jwtToken, audience, issuer)
 
 		if err != nil {
-			log.Printf(" AuthenticationMiddleware -- could not authenticate token : [%s]  due to error : %s", jwtToken, err)
+			logger.WithError(err).Info(" AuthenticationMiddleware -- could not authenticate token")
 			http.Error(w, "Authorization header is invalid", http.StatusUnauthorized)
 			return
 		}

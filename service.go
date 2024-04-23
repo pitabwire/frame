@@ -59,7 +59,6 @@ type Service struct {
 	priListener                net.Listener
 	secListener                net.Listener
 	grpcPort                   string
-	corsPolicy                 string
 	client                     *http.Client
 	queue                      *queue
 	dataStore                  *store
@@ -232,10 +231,6 @@ func (s *Service) Run(ctx context.Context, address string) error {
 
 	}
 
-	if s.corsPolicy == "" {
-		s.corsPolicy = "*"
-	}
-
 	go func() {
 		err = s.initServer(ctx, address)
 		if err != nil || s.backGroundClient == nil {
@@ -367,7 +362,6 @@ func (s *Service) initServer(ctx context.Context, httpPort string) error {
 			s.driver = &grpcDriver{
 				defaultDriver: defaultServer,
 				grpcPort:      s.grpcPort,
-				corsPolicy:    s.corsPolicy,
 				grpcServer:    s.grpcServer,
 				grpcListener:  s.secListener,
 			}

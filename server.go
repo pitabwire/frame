@@ -118,8 +118,7 @@ func (dd *defaultDriver) Shutdown(ctx context.Context) error {
 
 type grpcDriver struct {
 	defaultDriver
-	corsPolicy string
-	grpcPort   string
+	grpcPort string
 
 	errorChannel chan error
 
@@ -134,8 +133,6 @@ func (gd *grpcDriver) ListenAndServe(addr string, h http.Handler) error {
 	gd.httpServer.Addr = addr
 
 	gd.httpServer.Handler = http.HandlerFunc(func(resp http.ResponseWriter, req *http.Request) {
-		resp.Header().Set("Access-Control-Allow-Origin", gd.corsPolicy)
-
 		if gd.wrappedGrpcServer.IsGrpcWebRequest(req) ||
 			gd.wrappedGrpcServer.IsAcceptableGrpcCorsRequest(req) ||
 			gd.wrappedGrpcServer.IsGrpcWebSocketRequest(req) {
@@ -272,13 +269,6 @@ func GrpcServerListener(listener net.Listener) Option {
 func GrpcPort(port string) Option {
 	return func(c *Service) {
 		c.grpcPort = port
-	}
-}
-
-// CorsPolicy Option to specify the cors policy to utilize on the client
-func CorsPolicy(cors string) Option {
-	return func(c *Service) {
-		c.corsPolicy = cors
 	}
 }
 

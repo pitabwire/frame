@@ -25,10 +25,13 @@ type ConfigurationDefault struct {
 	HttpServerPort string `default:":8080" envconfig:"HTTP_PORT"`
 	GrpcServerPort string `default:":50051" envconfig:"GRPC_PORT"`
 
-	CORSEnabled        bool     `default:"false" envconfig:"CORS_ENABLED"`
-	CORSAllowedHeaders []string `default:"Authorization" envconfig:"CORS_ALLOWED_HEADERS"`
-	CORSAllowedOrigins []string `default:"*" envconfig:"CORS_ALLOWED_ORIGINS"`
-	CORSAllowedMethods []string `default:"GET,HEAD,POST,PUT,OPTIONS" envconfig:"CORS_ALLOWED_METHODS"`
+	CORSEnabled          bool     `default:"false" envconfig:"CORS_ENABLED"`
+	CORSAllowCredentials bool     `default:"false" envconfig:"CORS_ALLOW_CREDENTIALS"`
+	CORSAllowedHeaders   []string `default:"Authorization" envconfig:"CORS_ALLOWED_HEADERS"`
+	CORSExposedHeaders   []string `default:"*" envconfig:"CORS_EXPOSED_HEADERS"`
+	CORSAllowedOrigins   []string `default:"*" envconfig:"CORS_ALLOWED_ORIGINS"`
+	CORSAllowedMethods   []string `default:"GET,HEAD,POST,PUT,OPTIONS" envconfig:"CORS_ALLOWED_METHODS"`
+	CORSMaxAge           int      `default:"3600" envconfig:"CORS_MAX_AGE"`
 
 	TLSCertificatePath    string `envconfig:"TLS_CERTIFICATE_PATH"`
 	TLSCertificateKeyPath string `envconfig:"TLS_CERTIFICATE_KEY_PATH"`
@@ -112,13 +115,20 @@ func (c *ConfigurationDefault) GrpcPort() string {
 
 type ConfigurationCORS interface {
 	IsCORSEnabled() bool
+	IsCORSAllowCredentials() bool
 	GetCORSAllowedHeaders() []string
+	GetCORSExposedHeaders() []string
 	GetCORSAllowedOrigins() []string
 	GetCORSAllowedMethods() []string
+	GetCORSMaxAge() int
 }
 
 func (c *ConfigurationDefault) IsCORSEnabled() bool {
 	return c.CORSEnabled
+}
+
+func (c *ConfigurationDefault) IsCORSAllowCredentials() bool {
+	return c.CORSAllowCredentials
 }
 
 func (c *ConfigurationDefault) GetCORSAllowedHeaders() []string {

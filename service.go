@@ -315,11 +315,20 @@ func (s *Service) initServer(ctx context.Context, httpPort string) error {
 
 		config, ok := s.Config().(ConfigurationCORS)
 		if ok && config.IsCORSEnabled() {
-			headersOpt := ghandler.AllowedHeaders(config.GetCORSAllowedHeaders())
-			originsOpt := ghandler.AllowedOrigins(config.GetCORSAllowedOrigins())
-			methodsOpt := ghandler.AllowedMethods(config.GetCORSAllowedMethods())
 
-			s.handler = ghandler.CORS(headersOpt, originsOpt, methodsOpt)(mux)
+			corsOptions := []ghandler.CORSOption{
+				ghandler.AllowedHeaders(config.GetCORSAllowedHeaders()),
+				ghandler.ExposedHeaders(config.GetCORSExposedHeaders()),
+				ghandler.AllowedOrigins(config.GetCORSAllowedOrigins()),
+				ghandler.AllowedMethods(config.GetCORSAllowedMethods()),
+				ghandler.MaxAge(config.GetCORSMaxAge()),
+			}
+
+			if config.IsCORSAllowCredentials() {
+				corsOptions = append(corsOptions, ghandler.AllowCredentials())
+			}
+
+			s.handler = ghandler.CORS(corsOptions...)(mux)
 		} else {
 			s.handler = mux
 		}

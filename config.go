@@ -134,6 +134,9 @@ func (c *ConfigurationDefault) IsCORSAllowCredentials() bool {
 func (c *ConfigurationDefault) GetCORSAllowedHeaders() []string {
 	return c.CORSAllowedHeaders
 }
+func (c *ConfigurationDefault) GetCORSExposedHeaders() []string {
+	return c.CORSExposedHeaders
+}
 func (c *ConfigurationDefault) GetCORSAllowedOrigins() []string {
 	return c.CORSAllowedOrigins
 }

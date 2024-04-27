@@ -61,6 +61,8 @@ type ConfigurationLogLevel interface {
 	LoggingLevelIsDebug() bool
 }
 
+var _ ConfigurationLogLevel = new(ConfigurationDefault)
+
 func (c *ConfigurationDefault) LoggingLevel() string {
 	return strings.ToLower(c.LogLevel)
 }
@@ -74,6 +76,8 @@ type ConfigurationPorts interface {
 	HttpPort() string
 	GrpcPort() string
 }
+
+var _ ConfigurationPorts = new(ConfigurationDefault)
 
 func (c *ConfigurationDefault) Port() string {
 	if i, err := strconv.Atoi(c.ServerPort); err == nil && i > 0 {
@@ -123,12 +127,17 @@ type ConfigurationCORS interface {
 	GetCORSMaxAge() int
 }
 
+var _ ConfigurationCORS = new(ConfigurationDefault)
+
 func (c *ConfigurationDefault) IsCORSEnabled() bool {
 	return c.CORSEnabled
 }
 
 func (c *ConfigurationDefault) IsCORSAllowCredentials() bool {
 	return c.CORSAllowCredentials
+}
+func (c *ConfigurationDefault) GetCORSMaxAge() int {
+	return c.CORSMaxAge
 }
 
 func (c *ConfigurationDefault) GetCORSAllowedHeaders() []string {
@@ -151,6 +160,8 @@ type ConfigurationOAUTH2 interface {
 	GetOauth2ServiceAudience() string
 	GetOauth2ServiceAdminURI() string
 }
+
+var _ ConfigurationOAUTH2 = new(ConfigurationDefault)
 
 func (c *ConfigurationDefault) GetOauthWellKnownJwk() string {
 	return c.Oauth2WellKnownJwk
@@ -175,6 +186,8 @@ type ConfigurationAuthorization interface {
 	GetAuthorizationServiceWriteURI() string
 }
 
+var _ ConfigurationAuthorization = new(ConfigurationDefault)
+
 func (c *ConfigurationDefault) GetAuthorizationServiceReadURI() string {
 	return c.AuthorizationServiceReadURI
 }
@@ -189,6 +202,8 @@ type ConfigurationDatabase interface {
 	DoDatabaseMigrate() bool
 	GetDatabaseMigrationPath() string
 }
+
+var _ ConfigurationDatabase = new(ConfigurationDefault)
 
 func (c *ConfigurationDefault) GetDatabasePrimaryHostURL() string {
 	return c.DatabasePrimaryURL
@@ -217,6 +232,8 @@ type ConfigurationEvents interface {
 	GetEventsQueueUrl() string
 }
 
+var _ ConfigurationEvents = new(ConfigurationDefault)
+
 func (c *ConfigurationDefault) GetEventsQueueName() string {
 	return c.EventsQueueName
 }
@@ -230,6 +247,8 @@ type ConfigurationTLS interface {
 	TLSCertKeyPath() string
 	SetTLSCertAndKeyPath(certificatePath, certificateKeyPath string)
 }
+
+var _ ConfigurationTLS = new(ConfigurationDefault)
 
 func (c *ConfigurationDefault) TLSCertKeyPath() string {
 	return c.TLSCertificateKeyPath

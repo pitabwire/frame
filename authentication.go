@@ -11,7 +11,6 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"io"
-	"log"
 	"math/big"
 	"net/http"
 	"strings"
@@ -40,13 +39,21 @@ func JwtFromContext(ctx context.Context) string {
 // AuthenticationClaims Create a struct that will be encoded to a JWT.
 // We add jwt.StandardClaims as an embedded type, to provide fields like expiry time
 type AuthenticationClaims struct {
-	Ext map[string]any `json:"ext,omitempty"`
+	Ext         map[string]any `json:"ext,omitempty"`
+	TenantID    string         `json:"tenant_id,omitempty"`
+	PartitionID string         `json:"partition_id,omitempty"`
+	AccessID    string         `json:"access_id,omitempty"`
+	ContactID   string         `json:"contact_id,omitempty"`
+	Roles       []string       `json:"roles,omitempty"`
 	jwt.RegisteredClaims
 }
 
-func (a *AuthenticationClaims) TenantId() string {
+func (a *AuthenticationClaims) GetTenantId() string {
 
-	result := ""
+	result := a.TenantID
+	if result != "" {
+		return result
+	}
 	val, ok := a.Ext["tenant_id"]
 	if !ok {
 		return ""
@@ -60,9 +67,12 @@ func (a *AuthenticationClaims) TenantId() string {
 	return result
 }
 
-func (a *AuthenticationClaims) PartitionId() string {
+func (a *AuthenticationClaims) GetPartitionId() string {
 
-	result := ""
+	result := a.PartitionID
+	if result != "" {
+		return result
+	}
 	val, ok := a.Ext["partition_id"]
 	if !ok {
 		return ""
@@ -76,9 +86,12 @@ func (a *AuthenticationClaims) PartitionId() string {
 	return result
 }
 
-func (a *AuthenticationClaims) AccessId() string {
+func (a *AuthenticationClaims) GetAccessId() string {
 
-	result := ""
+	result := a.AccessID
+	if result != "" {
+		return result
+	}
 	val, ok := a.Ext["access_id"]
 	if !ok {
 		return ""
@@ -92,9 +105,32 @@ func (a *AuthenticationClaims) AccessId() string {
 	return result
 }
 
-func (a *AuthenticationClaims) Roles() []string {
+func (a *AuthenticationClaims) GetContactId() string {
 
-	var result []string
+	result := a.ContactID
+	if result != "" {
+		return result
+	}
+	val, ok := a.Ext["contact_id"]
+	if !ok {
+		return ""
+	}
+
+	result, ok = val.(string)
+	if !ok {
+		return ""
+	}
+
+	return result
+}
+
+func (a *AuthenticationClaims) GetRoles() []string {
+
+	var result = a.Roles
+	if len(result) > 0 {
+		return result
+	}
+
 	roles, ok := a.Ext["roles"]
 	if !ok {
 		roles, ok = a.Ext["role"]
@@ -129,7 +165,7 @@ func (a *AuthenticationClaims) ServiceName() string {
 
 func (a *AuthenticationClaims) isSystem() bool {
 
-	roles := a.Roles()
+	roles := a.GetRoles()
 	if len(roles) == 1 {
 		if strings.HasPrefix(roles[0], "system_") {
 			return true
@@ -147,10 +183,11 @@ func (a *AuthenticationClaims) AsMetadata() map[string]string {
 
 	m := make(map[string]string)
 	m["sub"] = a.Subject
-	m["tenant_id"] = a.TenantId()
-	m["partition_id"] = a.PartitionId()
-	m["access_id"] = a.AccessId()
-	m["roles"] = strings.Join(a.Roles(), ",")
+	m["tenant_id"] = a.GetTenantId()
+	m["partition_id"] = a.GetPartitionId()
+	m["access_id"] = a.GetAccessId()
+	m["contact_id"] = a.GetContactId()
+	m["roles"] = strings.Join(a.GetRoles(), ",")
 	return m
 }
 
@@ -179,6 +216,14 @@ func ClaimsFromMap(m map[string]string) *AuthenticationClaims {
 	for key, val := range m {
 		if key == "sub" {
 			authenticationClaims.Subject = m[key]
+		} else if key == "tenant_id" {
+			authenticationClaims.TenantID = m[key]
+		} else if key == "partition_id" {
+			authenticationClaims.PartitionID = m[key]
+		} else if key == "access_id" {
+			authenticationClaims.AccessID = m[key]
+		} else if key == "contact_id" {
+			authenticationClaims.ContactID = m[key]
 		} else if key == "roles" {
 			authenticationClaims.Ext[key] = strings.Split(val, ",")
 		} else {
@@ -220,25 +265,35 @@ func (s *Service) Authenticate(ctx context.Context,
 
 }
 
-func (s *Service) systemPadPartitionInfo(ctx context.Context, tenantId, partitionId, accessId string) context.Context {
+func (s *Service) systemPadPartitionInfo(ctx context.Context, tenantId, partitionId, accessId, contactId, roles string) context.Context {
 
 	claims := ClaimsFromContext(ctx)
 
 	if claims != nil && claims.isSystem() {
 
-		val, ok := claims.Ext["tenant_id"]
-		if !ok || val == "" {
-			claims.Ext["tenant_id"] = tenantId
+		val := claims.GetTenantId()
+		if val == "" {
+			claims.TenantID = tenantId
 		}
 
-		val, ok = claims.Ext["partition_id"]
-		if !ok || val == "" {
-			claims.Ext["partition_id"] = partitionId
+		val = claims.GetPartitionId()
+		if val == "" {
+			claims.PartitionID = partitionId
 		}
 
-		val, ok = claims.Ext["access_id"]
-		if !ok || val == "" {
-			claims.Ext["access_id"] = accessId
+		val = claims.GetAccessId()
+		if val == "" {
+			claims.AccessID = accessId
+		}
+
+		val = claims.GetContactId()
+		if val == "" {
+			claims.ContactID = contactId
+		}
+
+		valRoles := claims.GetRoles()
+		if len(valRoles) == 0 {
+			claims.Roles = strings.Split(roles, ",")
 		}
 
 		ctx = claims.ClaimsToContext(ctx)
@@ -360,7 +415,7 @@ func (s *Service) AuthenticationMiddleware(next http.Handler, audience string, i
 			return
 		}
 
-		s.systemPadPartitionInfo(ctx, r.Header.Get("tenant_id"), r.Header.Get("partition_id"), r.Header.Get("access_id"))
+		s.systemPadPartitionInfo(ctx, r.Header.Get("tenant_id"), r.Header.Get("partition_id"), r.Header.Get("access_id"), r.Header.Get("contact_id"), r.Header.Get("roles"))
 
 		r = r.WithContext(ctx)
 
@@ -415,12 +470,14 @@ func (s *Service) UnaryAuthInterceptor(audience string, issuer string) grpc.Unar
 
 		ctx, err = s.Authenticate(ctx, jwtToken, audience, issuer)
 		if err != nil {
-			log.Printf(" UnaryAuthInterceptor -- could not authenticate token : [%s]  due to error : %s", jwtToken, err)
+			logger := s.L().WithError(err).WithField("jwtToken", jwtToken)
+			logger.Info(" UnaryAuthInterceptor -- could not authenticate token")
 			return nil, status.Error(codes.Unauthenticated, err.Error())
 		}
 
 		ctx = s.systemPadPartitionInfo(ctx, getGrpcMetadata(ctx, "tenant_id"),
-			getGrpcMetadata(ctx, "partition_id"), getGrpcMetadata(ctx, "access_id"))
+			getGrpcMetadata(ctx, "partition_id"), getGrpcMetadata(ctx, "access_id"),
+			getGrpcMetadata(ctx, "contact_id"), getGrpcMetadata(ctx, "roles"))
 
 		return handler(ctx, req)
 	}
@@ -452,12 +509,14 @@ func (s *Service) StreamAuthInterceptor(audience string, issuer string) grpc.Str
 
 			ctx, err = s.Authenticate(ctx, jwtToken, audience, issuer)
 			if err != nil {
-				log.Printf(" StreamAuthInterceptor -- could not authenticate token : [%s]  due to error : %s", jwtToken, err)
+				logger := s.L().WithError(err).WithField("jwtToken", jwtToken)
+				logger.Info(" StreamAuthInterceptor -- could not authenticate token")
 				return status.Error(codes.Unauthenticated, err.Error())
 			}
 
 			ctx = s.systemPadPartitionInfo(ctx, getGrpcMetadata(ctx, "tenant_id"),
-				getGrpcMetadata(ctx, "partition_id"), getGrpcMetadata(ctx, "access_id"))
+				getGrpcMetadata(ctx, "partition_id"), getGrpcMetadata(ctx, "access_id"),
+				getGrpcMetadata(ctx, "contact_id"), getGrpcMetadata(ctx, "roles"))
 
 			localServerStream = &serverStreamWrapper{ctx, ss}
 		}

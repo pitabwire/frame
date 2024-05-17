@@ -12,7 +12,6 @@ import (
 	"gorm.io/datatypes"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
-	"log"
 	"math/rand"
 	"strconv"
 	"strings"
@@ -27,10 +26,10 @@ func tenantPartition(ctx context.Context) func(db *gorm.DB) *gorm.DB {
 	return func(db *gorm.DB) *gorm.DB {
 		authClaim := ClaimsFromContext(ctx)
 		if authClaim != nil &&
-			authClaim.TenantId() != "" &&
-			authClaim.PartitionId() != "" &&
+			authClaim.GetTenantId() != "" &&
+			authClaim.GetPartitionId() != "" &&
 			!authClaim.isSystem() {
-			return db.Where("tenant_id = ? AND partition_id = ?", authClaim.TenantId(), authClaim.PartitionId())
+			return db.Where("tenant_id = ? AND partition_id = ?", authClaim.GetTenantId(), authClaim.GetPartitionId())
 		}
 		return db
 	}
@@ -126,7 +125,8 @@ func (s *Service) DB(ctx context.Context, readOnly bool) *gorm.DB {
 	if db == nil {
 		writeCount := len(s.dataStore.writeDatabase)
 		if writeCount == 0 {
-			log.Printf("DB -- attempting use a database when none is setup")
+			logger := s.L()
+			logger.Error("DB -- attempting use a database when none is setup")
 			return nil
 		}
 
@@ -167,7 +167,8 @@ func DatastoreCon(postgresqlConnection string, readOnly bool) Option {
 
 		config, err := pgx.ParseConfig(postgresqlConnection)
 		if err != nil {
-			log.Printf("Datastore -- problem parsing database connection : %s", err)
+			logger := s.L().WithError(err).WithField("pgConnection", postgresqlConnection)
+			logger.Error("Datastore -- problem parsing database connection")
 		}
 
 		db := stdlib.OpenDB(*config)

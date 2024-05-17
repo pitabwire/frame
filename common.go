@@ -49,16 +49,16 @@ func (model *BaseModel) GenID(ctx context.Context) {
 		return
 	}
 
-	if model.AccessID == "" && authClaim.AccessId() != "" {
-		model.AccessID = authClaim.AccessId()
+	if model.AccessID == "" && authClaim.GetAccessId() != "" {
+		model.AccessID = authClaim.GetAccessId()
 	}
 
-	if model.PartitionID == "" && authClaim.PartitionId() != "" {
-		model.PartitionID = authClaim.PartitionId()
+	if model.PartitionID == "" && authClaim.GetPartitionId() != "" {
+		model.PartitionID = authClaim.GetPartitionId()
 	}
 
-	if model.TenantID == "" && authClaim.TenantId() != "" {
-		model.TenantID = authClaim.TenantId()
+	if model.TenantID == "" && authClaim.GetTenantId() != "" {
+		model.TenantID = authClaim.GetTenantId()
 	}
 }
 

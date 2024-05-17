@@ -7,7 +7,6 @@ import (
 	"github.com/nicksnyder/go-i18n/v2/i18n"
 	"golang.org/x/text/language"
 	"google.golang.org/grpc/metadata"
-	"log"
 	"net/http"
 	"strings"
 )
@@ -47,20 +46,23 @@ func (s *Service) TranslateWithMapAndCount(request any, messageId string, variab
 		languageSlice = v
 
 	default:
-		log.Printf("TranslateWithMapAndCount -- no valid request object found, use string, []string, context or http.Request")
+		logger := s.L().WithField("messageId", messageId).WithField("variables", variables)
+		logger.Warn("TranslateWithMapAndCount -- no valid request object found, use string, []string, context or http.Request")
 		return messageId
 	}
 
 	localizer := i18n.NewLocalizer(s.Bundle(), languageSlice...)
 
 	transVersion, err := localizer.Localize(&i18n.LocalizeConfig{
+		MessageID:      messageId,
 		DefaultMessage: &i18n.Message{ID: messageId},
 		TemplateData:   variables,
 		PluralCount:    count,
 	})
 
 	if err != nil {
-		log.Printf(" TranslateWithMapAndCount -- translation problem %s", err)
+		logger := s.L().WithError(err)
+		logger.Error(" TranslateWithMapAndCount -- could not perform translation")
 	}
 
 	return transVersion

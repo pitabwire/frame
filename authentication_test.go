@@ -98,19 +98,19 @@ func TestAuthenticateWithTenantClaims(t *testing.T) {
 		t.Errorf("supplied context should contain authentication claims")
 	}
 
-	if claims.TenantId() == "" {
+	if claims.GetTenantId() == "" {
 		t.Errorf("auth claim has no tenant Id")
 	}
 
-	if claims.PartitionId() == "" {
+	if claims.GetPartitionId() == "" {
 		t.Errorf("auth claim has no partition Id")
 	}
 
-	if claims.AccessId() == "" {
+	if claims.GetAccessId() == "" {
 		t.Errorf("auth claim has no access Id")
 	}
 
-	if len(claims.Roles()) == 0 {
+	if len(claims.GetRoles()) == 0 {
 		t.Errorf("auth claim has no roles")
 	}
 

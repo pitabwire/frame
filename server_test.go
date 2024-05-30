@@ -217,7 +217,7 @@ func getBufferedClConn(listener *bufconn.Listener, opts ...grpc.DialOption) (
 	ctx, cancel := context.WithCancel(context.Background())
 
 	opts = append(opts, grpc.WithContextDialer(getBufDialer(listener)))
-	conn, err := grpc.NewClient("", opts...)
+	conn, err := grpc.NewClient("passthrough://bufnet", opts...)
 
 	return ctx, cancel, conn, err
 

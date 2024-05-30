@@ -1,6 +1,11 @@
 linters-settings:
   govet:
     check-shadowing: true
+  errcheck:
+    exclude-functions:
+      - fmt.Errorf
+run:
+  timeout: 3m
 linters:
   disable:
     - gocritic
@@ -40,3 +45,4 @@ linters:
     - whitespace
 issues:
   fix: true
+

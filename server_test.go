@@ -217,7 +217,7 @@ func getBufferedClConn(listener *bufconn.Listener, opts ...grpc.DialOption) (
 	ctx, cancel := context.WithCancel(context.Background())
 
 	opts = append(opts, grpc.WithContextDialer(getBufDialer(listener)))
-	conn, err := grpc.DialContext(ctx, "", opts...)
+	conn, err := grpc.NewClient("", opts...)
 
 	return ctx, cancel, conn, err
 
@@ -227,7 +227,7 @@ func getNetworkClConn(address string, opts ...grpc.DialOption) (
 	context.Context, context.CancelFunc, *grpc.ClientConn, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 
-	conn, err := grpc.DialContext(ctx, address, opts...)
+	conn, err := grpc.NewClient(address, opts...)
 
 	return ctx, cancel, conn, err
 }

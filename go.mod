@@ -18,7 +18,7 @@ require (
 	go.opentelemetry.io/otel v1.27.0
 	go.opentelemetry.io/otel/sdk v1.27.0
 	gocloud.dev v0.37.0
-	golang.org/x/net v0.25.0
+	golang.org/x/net v0.26.0
 	golang.org/x/text v0.16.0
 	google.golang.org/grpc v1.64.0
 	google.golang.org/grpc/examples v0.0.0-20240604165302-6d236200ea68
@@ -51,9 +51,9 @@ require (
 	go.opencensus.io v0.24.0 // indirect
 	go.opentelemetry.io/otel/metric v1.27.0 // indirect
 	go.opentelemetry.io/otel/trace v1.27.0 // indirect
-	golang.org/x/crypto v0.23.0 // indirect
+	golang.org/x/crypto v0.24.0 // indirect
 	golang.org/x/sync v0.7.0 // indirect
-	golang.org/x/sys v0.20.0 // indirect
+	golang.org/x/sys v0.21.0 // indirect
 	golang.org/x/xerrors v0.0.0-20231012003039-104605ab7028 // indirect
 	google.golang.org/api v0.182.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20240528184218-531527333157 // indirect

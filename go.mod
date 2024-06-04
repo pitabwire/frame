@@ -19,7 +19,7 @@ require (
 	go.opentelemetry.io/otel/sdk v1.27.0
 	gocloud.dev v0.37.0
 	golang.org/x/net v0.25.0
-	golang.org/x/text v0.15.0
+	golang.org/x/text v0.16.0
 	google.golang.org/grpc v1.64.0
 	google.golang.org/grpc/examples v0.0.0-20240603223258-7e5898e7c569
 	gorm.io/datatypes v1.2.0

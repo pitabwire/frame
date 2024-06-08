@@ -25,13 +25,18 @@ type store struct {
 func tenantPartition(ctx context.Context) func(db *gorm.DB) *gorm.DB {
 	return func(db *gorm.DB) *gorm.DB {
 		authClaim := ClaimsFromContext(ctx)
-		if authClaim != nil &&
-			authClaim.GetTenantId() != "" &&
-			authClaim.GetPartitionId() != "" &&
-			!authClaim.isSystem() {
-			return db.Where("tenant_id = ? AND partition_id = ?", authClaim.GetTenantId(), authClaim.GetPartitionId())
+		if authClaim == nil {
+			return db
 		}
-		return db
+		if authClaim.GetTenantId() == "" ||
+			authClaim.GetPartitionId() == "" {
+			if !authClaim.isInternalSystem() {
+				_ = db.AddError(errors.New("tenancy scope not present in context"))
+				return db
+			}
+		}
+
+		return db.Where("tenant_id = ? AND partition_id = ?", authClaim.GetTenantId(), authClaim.GetPartitionId())
 	}
 }
 

@@ -163,16 +163,25 @@ func (a *AuthenticationClaims) ServiceName() string {
 	return result
 }
 
-func (a *AuthenticationClaims) isSystem() bool {
+func (a *AuthenticationClaims) isInternalSystem() bool {
 
 	roles := a.GetRoles()
 	if len(roles) == 1 {
-		if strings.HasPrefix(roles[0], "system_") {
+		if strings.HasPrefix(roles[0], "system_internal") {
 			return true
 		}
 	}
-	if strings.HasPrefix(a.ServiceName(), "service_") {
-		return true
+
+	return false
+}
+
+func (a *AuthenticationClaims) isExternalSystem() bool {
+
+	roles := a.GetRoles()
+	if len(roles) == 1 {
+		if strings.HasPrefix(roles[0], "system_external") {
+			return true
+		}
 	}
 
 	return false
@@ -269,7 +278,7 @@ func (s *Service) systemPadPartitionInfo(ctx context.Context, tenantId, partitio
 
 	claims := ClaimsFromContext(ctx)
 
-	if claims != nil && claims.isSystem() {
+	if claims != nil && claims.isInternalSystem() {
 
 		val := claims.GetTenantId()
 		if val == "" {

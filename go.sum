@@ -612,6 +612,8 @@ google.golang.org/grpc v1.32.0/go.mod h1:N36X2cJ7JwdamYAgDz+s+rVMFjt3numwzf/HckM
 google.golang.org/grpc v1.33.2/go.mod h1:JMHMWHQWaTccqQQlmk3MJZS+GWXOdAesneDmEnv2fbc=
 google.golang.org/grpc v1.64.0 h1:KH3VH9y/MgNQg1dE7b3XfVK0GsPSIzJwdF617gUSbvY=
 google.golang.org/grpc v1.64.0/go.mod h1:oxjF8E3FBnjp+/gVFYdWacaLDx9na1aqy9oovLpxQYg=
+google.golang.org/grpc v1.65.0 h1:bs/cUb4lp1G5iImFFd3u5ixQzweKizoZJAwBNLR42lc=
+google.golang.org/grpc v1.65.0/go.mod h1:WgYC2ypjlB0EiQi6wdKixMqukr6lBc0Vo+oOgjrM5ZQ=
 google.golang.org/grpc/examples v0.0.0-20240607165656-e40eb2e2c1bd h1:C9kU/3aayp99khAqrOZnIcO+uWepiHcAZU6KixF872U=
 google.golang.org/grpc/examples v0.0.0-20240607165656-e40eb2e2c1bd/go.mod h1:Kv65TzOvWxYVJI7IM7XFPgAEYjsMeuMcFfmuLaU6dzc=
 google.golang.org/grpc/examples v0.0.0-20240610175601-c4753c39391b h1:L5+H6UaLjJLIgYD4b/v/zXJCn83y4olQGa1CBZEhOqU=

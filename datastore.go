@@ -15,6 +15,7 @@ import (
 	"math/rand"
 	"strconv"
 	"strings"
+	"time"
 )
 
 type store struct {
@@ -179,7 +180,13 @@ func DatastoreCon(postgresqlConnection string, readOnly bool) Option {
 		db := stdlib.OpenDB(*config)
 		gormDB, _ := gorm.Open(
 			postgres.New(postgres.Config{Conn: db, PreferSimpleProtocol: true}),
-			&gorm.Config{SkipDefaultTransaction: true},
+			&gorm.Config{
+				SkipDefaultTransaction: true,
+				NowFunc: func() time.Time {
+					utc, _ := time.LoadLocation("")
+					return time.Now().In(utc)
+				},
+			},
 		)
 
 		//_ = gormDB.Use(tracing.NewPlugin())

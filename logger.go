@@ -6,8 +6,11 @@ import (
 	"github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/logging"
 	"github.com/sirupsen/logrus"
 	"github.com/sirupsen/logrus/hooks/writer"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"io"
 	"os"
+	"runtime/debug"
 )
 
 // Logger Option that helps with initialization of our internal logger
@@ -93,4 +96,14 @@ func LoggingInterceptor(l logrus.FieldLogger) logging.Logger {
 			panic(fmt.Sprintf("unknown level %v", lvl))
 		}
 	})
+}
+
+func RecoveryHandlerFun(ctx context.Context, p interface{}) error {
+
+	s := FromContext(ctx)
+	logger := s.L()
+	logger.WithContext(ctx).WithField("trigger", p).Errorf("recovered from panic %s", debug.Stack())
+
+	// Return a gRPC error
+	return status.Errorf(codes.Internal, "Internal server error")
 }

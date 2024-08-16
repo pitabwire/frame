@@ -277,7 +277,7 @@ func TestService_Run(t *testing.T) {
 
 	go func() {
 		if err := srv2.Run(ctx2, ":"); err != nil {
-			if !errors.Is(context.Canceled, err) {
+			if !errors.Is(err, context.Canceled) {
 				t.Errorf("Could not run Server : %s", err)
 			}
 		}

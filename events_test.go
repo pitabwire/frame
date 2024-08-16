@@ -25,7 +25,7 @@ func (event *MessageToTest) PayloadType() any {
 
 func (event *MessageToTest) Validate(ctx context.Context, payload any) error {
 	if _, ok := payload.(*string); !ok {
-		return fmt.Errorf(fmt.Sprintf(" payload is %T not of type %T", payload, event.PayloadType()))
+		return fmt.Errorf(" payload is %T not of type %T", payload, event.PayloadType())
 	}
 
 	return nil

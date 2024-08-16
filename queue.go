@@ -249,7 +249,7 @@ func (s *Service) initSubscriber(ctx context.Context, sub *subscriber) error {
 
 func (s *Service) initPubsub(ctx context.Context) error {
 	// Whenever the registry is not empty the events queue is automatically initiated
-	if s.eventRegistry != nil && len(s.eventRegistry) > 0 {
+	if len(s.eventRegistry) > 0 {
 		eventsQueueHandler := eventQueueHandler{
 			service: s,
 		}

@@ -167,8 +167,19 @@ func (s *Service) SubmitJob(ctx context.Context, job Job) error {
 
 				// Return a nil just to make sure if a processFunc is waiting on the channel we can have it exit
 				job.CloseChan()
+
 			},
 		)
+		return nil
+	}
+}
+
+// SafeChannelWrite writes a value to a channel, returning an error if the context is canceled.
+func SafeChannelWrite(ctx context.Context, ch chan<- any, value any) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case ch <- value:
 		return nil
 	}
 }

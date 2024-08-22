@@ -14,7 +14,7 @@ type fields struct {
 	counter   int
 }
 
-func (f *fields) process(ctx context.Context) error {
+func (f fields) process(ctx context.Context) error {
 
 	if f.test == "first error" {
 		f.counter += 1
@@ -31,6 +31,7 @@ func TestJobImpl_Process(t *testing.T) {
 	tests := []struct {
 		name    string
 		fields  fields
+		runs    int
 		wantErr bool
 	}{
 		{
@@ -38,6 +39,7 @@ func TestJobImpl_Process(t *testing.T) {
 			fields: fields{
 				sleepTime: 1 * time.Second,
 			},
+			runs:    1,
 			wantErr: false,
 		}, {
 			name: "Happy path 2",
@@ -45,6 +47,7 @@ func TestJobImpl_Process(t *testing.T) {
 				sleepTime: 1 * time.Second,
 				test:      "overriden",
 			},
+			runs:    1,
 			wantErr: false,
 		},
 	}
@@ -70,8 +73,8 @@ func TestJobImpl_Process(t *testing.T) {
 
 			time.Sleep(50 * time.Millisecond)
 
-			if "confirmed" != tt.fields.test {
-				t.Errorf("Test error could not confirm function run")
+			if tt.runs != job.Runs() {
+				t.Errorf("Test error could not retry for some reason")
 			}
 
 		})
@@ -83,6 +86,7 @@ func TestService_NewJobWithRetry(t *testing.T) {
 	tests := []struct {
 		name    string
 		fields  fields
+		runs    int
 		wantErr bool
 	}{
 		{
@@ -91,6 +95,7 @@ func TestService_NewJobWithRetry(t *testing.T) {
 				sleepTime: 1 * time.Second,
 				test:      "first error",
 			},
+			runs:    2,
 			wantErr: false,
 		}, {
 			name: "Happy path no error",
@@ -98,6 +103,7 @@ func TestService_NewJobWithRetry(t *testing.T) {
 				sleepTime: 1 * time.Second,
 				test:      "first error",
 			},
+			runs:    2,
 			wantErr: false,
 		},
 	}
@@ -123,23 +129,20 @@ func TestService_NewJobWithRetry(t *testing.T) {
 
 			time.Sleep(50 * time.Millisecond)
 
-			if tt.fields.counter == 0 {
+			if tt.runs != job.Runs() {
 				t.Errorf("Test error could not retry for some reason")
-			}
-
-			if "confirmed" != tt.fields.test {
-				t.Errorf("Test error could not confirm function run")
 			}
 
 		})
 	}
 }
 
-func TestService_NewJobWithRetryAndErrorChan(t *testing.T) {
+func TestService_NewJobWithBufferAndRetry(t *testing.T) {
 
 	tests := []struct {
 		name    string
 		fields  fields
+		runs    int
 		wantErr bool
 	}{
 		{
@@ -148,6 +151,7 @@ func TestService_NewJobWithRetryAndErrorChan(t *testing.T) {
 				sleepTime: 1 * time.Second,
 				test:      "first error",
 			},
+			runs:    2,
 			wantErr: false,
 		}, {
 			name: "Happy path no error",
@@ -155,13 +159,12 @@ func TestService_NewJobWithRetryAndErrorChan(t *testing.T) {
 				sleepTime: 1 * time.Second,
 				test:      "first error",
 			},
+			runs:    2,
 			wantErr: false,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-
-			errChan := make(chan error, 1)
 
 			ctx, srv := frame.NewService(tt.name,
 				frame.NoopDriver(),
@@ -174,24 +177,23 @@ func TestService_NewJobWithRetryAndErrorChan(t *testing.T) {
 				t.Errorf("could not start a background consumer peacefully : %v", err)
 			}
 
-			job := srv.NewJobWithRetryAndErrorChan(tt.fields.process, 1, errChan)
+			job := srv.NewJobWithBufferAndRetry(tt.fields.process, 4, 1)
 
-			if err := srv.SubmitJob(ctx, job); (err != nil) != tt.wantErr {
+			if err = srv.SubmitJob(ctx, job); (err != nil) != tt.wantErr {
 				t.Errorf("Process() error = %v, wantErr %v", err, tt.wantErr)
 			}
 
 			select {
-			case <-errChan:
+			case <-job.ResultChan():
 				break
 			case <-time.Tick(500 * time.Millisecond):
 				t.Errorf("could not handle job within timelimit")
 				break
 			}
 
-			if "confirmed" != tt.fields.test {
-				t.Errorf("Test error could not confirm function run")
+			if tt.runs == job.Runs() {
+				t.Errorf("Test error could not retry for some reason")
 			}
-
 		})
 	}
 }

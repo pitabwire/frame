@@ -5,25 +5,32 @@ import (
 	"errors"
 	"github.com/rs/xid"
 	"runtime/debug"
+	"sync"
 )
 
 type Job interface {
 	F() func(ctx context.Context) error
 	Process(ctx context.Context) error
 	ID() string
-	CanRetry() bool
-	DecreaseRetries() int
-	ErrChan() chan error
-	PipeError(err error)
-	CloseChan()
+	CanRun() bool
+	Retries() int
+	Runs() int
+	ResultBufferSize() int
+	ResultChan() <-chan any
+	WriteResult(ctx context.Context, val any) error
+	Close()
+	IsClosed() bool
 }
 
 type JobImpl struct {
-	id        string
-	retries   int
-	errorChan chan error
-
-	processFunc func(ctx context.Context) error
+	id               string
+	runs             int
+	retries          int
+	resultBufferSize int
+	resultChan       chan any
+	resultMu         sync.Mutex
+	resultChanDone   bool
+	processFunc      func(ctx context.Context) error
 }
 
 func (ji *JobImpl) ID() string {
@@ -35,60 +42,76 @@ func (ji *JobImpl) F() func(ctx context.Context) error {
 }
 
 func (ji *JobImpl) Process(ctx context.Context) error {
+
 	if ji.processFunc != nil {
+
+		ji.resultMu.Lock()
+		defer ji.resultMu.Unlock()
+		ji.runs = ji.runs + 1
+
 		return ji.processFunc(ctx)
 	}
 	return errors.New("implement this function")
 }
-func (ji *JobImpl) CanRetry() bool {
-	return ji.retries > 0
+func (ji *JobImpl) CanRun() bool {
+	return ji.Retries() > (ji.Runs() - 1)
 }
 
-func (ji *JobImpl) DecreaseRetries() int {
-	ji.retries = ji.retries - 1
+func (ji *JobImpl) Retries() int {
 	return ji.retries
 }
-func (ji *JobImpl) ErrChan() chan error {
-	return ji.errorChan
-}
-func (ji *JobImpl) PipeError(err error) {
-	if ji.ErrChan() != nil {
-		select {
-		case ji.errorChan <- err:
-			break
-		default:
 
-		}
-
-	}
-	ji.CloseChan()
+func (ji *JobImpl) Runs() int {
+	return ji.runs
 }
-func (ji *JobImpl) CloseChan() {
-	if ji.ErrChan() != nil {
-		close(ji.errorChan)
+
+func (ji *JobImpl) ResultBufferSize() int {
+	return ji.resultBufferSize
+}
+
+func (ji *JobImpl) ResultChan() <-chan any {
+	return ji.resultChan
+}
+func (ji *JobImpl) WriteResult(ctx context.Context, val any) error {
+	return SafeChannelWrite(ctx, ji.resultChan, val)
+}
+
+func (ji *JobImpl) Close() {
+
+	ji.resultMu.Lock()
+	defer ji.resultMu.Unlock()
+	if !ji.resultChanDone {
+		close(ji.resultChan)
+		ji.resultChanDone = true
 	}
+}
+
+func (ji *JobImpl) IsClosed() bool {
+	ji.resultMu.Lock()
+	defer ji.resultMu.Unlock()
+	return ji.resultChanDone
 }
 
 func (s *Service) NewJob(process func(ctx context.Context) error) Job {
-	return s.NewJobWithRetry(process, 0)
+	return s.NewJobWithBufferAndRetry(process, 10, 0)
+}
+
+func (s *Service) NewJobWithBuffer(process func(ctx context.Context) error, buffer int) Job {
+	return s.NewJobWithBufferAndRetry(process, buffer, 0)
 }
 
 func (s *Service) NewJobWithRetry(process func(ctx context.Context) error, retries int) Job {
-	return s.NewJobWithRetryAndErrorChan(process, retries, nil)
+	return s.NewJobWithBufferAndRetry(process, 10, retries)
 }
 
-func (s *Service) NewJobWithErrorChan(process func(ctx context.Context) error) Job {
-	return s.NewJobWithRetryAndErrorChan(process, 0, make(chan error, 1))
-}
-
-func (s *Service) NewJobWithRetryAndErrorChan(process func(ctx context.Context) error, retries int, errChan chan error) Job {
+func (s *Service) NewJobWithBufferAndRetry(process func(ctx context.Context) error, resultBufferSize, retries int) Job {
 	return &JobImpl{
-		id:          xid.New().String(),
-		retries:     retries,
-		processFunc: process,
-		errorChan:   errChan,
+		id:               xid.New().String(),
+		retries:          retries,
+		processFunc:      process,
+		resultBufferSize: resultBufferSize,
+		resultChan:       make(chan any, resultBufferSize),
 	}
-
 }
 
 // BackGroundConsumer Option to register a background processing function that is initialized before running servers
@@ -128,49 +151,47 @@ func (s *Service) SubmitJob(ctx context.Context, job Job) error {
 	if p.Stopped() {
 		return errors.New("pool is closed")
 	}
-	select {
-	case <-ctx.Done():
-		return errors.New("pool is closed")
-	default:
 
-		p.Submit(
-			func() {
+	for {
+		select {
+		case <-ctx.Done():
+			return errors.New("pool is closed")
+		default:
 
-				err := job.Process(ctx)
-				if err != nil {
-					logger := s.L().WithError(err).
-						WithField("job", job.ID())
+			if !job.CanRun() {
+				return nil
+			}
 
-					if !job.CanRetry() {
+			p.Submit(
+				func() {
 
-						logger.
-							WithField("stacktrace", string(debug.Stack())).
-							Debug("could not processFunc job")
+					defer job.Close()
 
-						job.PipeError(err)
-						return
+					err := job.Process(ctx)
+					if err != nil {
+						logger := s.L().WithError(err).
+							WithField("job", job.ID()).
+							WithField("retry", job.Retries())
+
+						if job.CanRun() {
+
+							err1 := s.SubmitJob(ctx, job)
+							if err1 != nil {
+								logger.
+									WithError(err1).
+									WithField("stacktrace", string(debug.Stack())).
+									Info("could not resubmit job for retry")
+								return
+							} else {
+								logger.Debug("job resubmitted for retry")
+								return
+							}
+						}
 					}
-					retries := job.DecreaseRetries()
-
-					retryJob := s.NewJobWithRetryAndErrorChan(job.F(), retries, job.ErrChan())
-					err1 := s.SubmitJob(ctx, retryJob)
-					if err1 != nil {
-						logger.
-							WithField("stacktrace", string(debug.Stack())).
-							Debug("could not resubmit job for retry")
-						job.PipeError(err)
-					} else {
-						logger.Debug("job resubmitted for retry")
-						return
-					}
-				}
-
-				// Return a nil just to make sure if a processFunc is waiting on the channel we can have it exit
-				job.CloseChan()
-
-			},
-		)
-		return nil
+				},
+			)
+			return nil
+		}
 	}
 }
 

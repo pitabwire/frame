@@ -35,7 +35,7 @@ func (event *MessageToTest) Execute(ctx context.Context, payload any) error {
 	message := payload.(*string)
 	logger := logrus.WithField("payload", message).WithField("type", event.Name())
 	logger.Info("handling event")
-	event.Count++
+	event.Count = event.Count + 1
 	return nil
 }
 
@@ -73,10 +73,11 @@ func TestService_EventsPublishingWorks(t *testing.T) {
 		t.Errorf("could not processFunc configs %s", err)
 		return
 	}
-	testEvent := &MessageToTest{Count: 50}
-	events := frame.RegisterEvents(testEvent)
+	testEvent := MessageToTest{Count: 50}
+	events := frame.RegisterEvents(&testEvent)
 
-	ctx, srv := frame.NewService("Test Srv", events, frame.Config(&cfg), frame.NoopDriver())
+	ctx, srv := frame.NewService("Test Srv", frame.Config(&cfg), frame.NoopDriver())
+	srv.Init(events)
 	if err = srv.Run(ctx, ""); err != nil {
 		t.Errorf("We somehow fail to instantiate subscription %s", err)
 	}

@@ -57,7 +57,7 @@ type subscriber struct {
 	isInit       atomic.Bool
 }
 
-func (s *subscriber) listen(ctx context.Context) {
+func (s *subscriber) listen(ctx context.Context) error {
 
 	service := FromContext(ctx)
 	logger := service.L().WithField("name", s.reference).WithField("function", "subscription").WithField("url", s.url)
@@ -68,7 +68,7 @@ func (s *subscriber) listen(ctx context.Context) {
 		case <-ctx.Done():
 			s.isInit.Store(false)
 			logger.Debug("exiting due to canceled context")
-			return
+			return ctx.Err()
 
 		default:
 
@@ -80,8 +80,7 @@ func (s *subscriber) listen(ctx context.Context) {
 
 				logger.WithError(err).Error(" could not pull message")
 				s.isInit.Store(false)
-				service.errorChannel <- err
-				return
+				return err
 			}
 
 			job := service.NewJob(func(ctx context.Context) error {
@@ -109,7 +108,7 @@ func (s *subscriber) listen(ctx context.Context) {
 			err = service.SubmitJob(ctx, job)
 			if err != nil {
 				logger.WithError(err).Warn(" Ignoring handle error message")
-				continue
+				return err
 			}
 
 		}
@@ -243,6 +242,7 @@ func (s *Service) initSubscriber(ctx context.Context, sub *subscriber) error {
 		}
 		sub.subscription = subsc
 	}
+
 	sub.isInit.Store(true)
 	return nil
 }
@@ -317,7 +317,13 @@ func (s *Service) subscribe(ctx context.Context) {
 		}
 		subsc.logger = logger
 
-		go subsc.listen(ctx)
+		job := s.NewJob(subsc.listen)
+
+		err := s.SubmitJob(ctx, job)
+		if err != nil {
+			logger.WithError(err).WithField("subscriber", subsc).Error(" could not listen or subscribe for messages")
+			return false
+		}
 
 		return true
 	})

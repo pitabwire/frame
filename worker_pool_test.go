@@ -14,7 +14,7 @@ type fields struct {
 	counter   int
 }
 
-func (f fields) process(ctx context.Context) error {
+func (f *fields) process(ctx context.Context) error {
 
 	if f.test == "first error" {
 		f.counter += 1

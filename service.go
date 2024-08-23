@@ -52,7 +52,7 @@ type Service struct {
 	backGroundClient           func(ctx context.Context) error
 	poolWorkerCount            int
 	poolCapacity               int
-	pool                       *ants.Pool
+	pool                       *ants.MultiPool
 	driver                     any
 	grpcServer                 *grpc.Server
 	grpcServerEnableReflection bool
@@ -103,15 +103,16 @@ func NewService(name string, opts ...Option) (context.Context, *Service) {
 		poolCapacity:    100,
 	}
 
-	poolOptions := []ants.Option{
-		ants.WithMaxBlockingTasks(service.poolCapacity),
-	}
-
-	service.pool, _ = ants.NewPool(service.poolWorkerCount, poolOptions...)
-
 	opts = append(opts, Logger())
 
 	service.Init(opts...)
+
+	poolOptions := []ants.Option{
+		ants.WithLogger(service.L()),
+		ants.WithNonblocking(true),
+	}
+
+	service.pool, _ = ants.NewMultiPool(service.poolWorkerCount, service.poolCapacity, ants.LeastTasks, poolOptions...)
 
 	ctx1 := ToContext(ctx0, service)
 	return ctx1, service
@@ -422,7 +423,7 @@ func (s *Service) Stop(ctx context.Context) {
 	}
 
 	if s.pool != nil {
-		s.pool.Release()
+		s.pool.Free()
 	}
 
 	if s.cancelFunc != nil {

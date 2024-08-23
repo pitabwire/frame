@@ -57,7 +57,7 @@ type subscriber struct {
 	isInit       atomic.Bool
 }
 
-func (s *subscriber) listen(ctx context.Context) error {
+func (s *subscriber) listen(ctx context.Context, _ JobResultPipe) error {
 
 	service := FromContext(ctx)
 	logger := service.L().WithField("name", s.reference).WithField("function", "subscription").WithField("url", s.url)
@@ -83,7 +83,7 @@ func (s *subscriber) listen(ctx context.Context) error {
 				return err
 			}
 
-			job := service.NewJob(func(ctx context.Context) error {
+			job := service.NewJob(func(ctx context.Context, _ JobResultPipe) error {
 				authClaim := ClaimsFromMap(msg.Metadata)
 
 				var ctx2 context.Context

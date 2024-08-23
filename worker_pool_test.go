@@ -14,7 +14,7 @@ type fields struct {
 	counter   int
 }
 
-func (f *fields) process(ctx context.Context) error {
+func (f *fields) process(ctx context.Context, _ frame.JobResultPipe) error {
 
 	if f.test == "first error" {
 		f.counter += 1
@@ -74,7 +74,7 @@ func TestJobImpl_Process(t *testing.T) {
 			time.Sleep(50 * time.Millisecond)
 
 			if tt.runs != job.Runs() {
-				t.Errorf("Test error could not retry for some reason")
+				t.Errorf("Test error could not retry for some reason, expected %d runs got %d ", tt.runs, job.Runs())
 			}
 
 		})

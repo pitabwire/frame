@@ -8,18 +8,23 @@ import (
 	"sync"
 )
 
+type JobResultPipe interface {
+	ResultBufferSize() int
+	ResultChan() <-chan any
+	WriteResult(ctx context.Context, val any) error
+	ReadResult(ctx context.Context) (any, bool, error)
+	IsClosed() bool
+	Close()
+}
+
 type Job interface {
-	F() func(ctx context.Context) error
-	Process(ctx context.Context) error
+	JobResultPipe
+	F() func(ctx context.Context, result JobResultPipe) error
 	ID() string
 	CanRun() bool
 	Retries() int
 	Runs() int
-	ResultBufferSize() int
-	ResultChan() <-chan any
-	WriteResult(ctx context.Context, val any) error
-	Close()
-	IsClosed() bool
+	IncreaseRuns()
 }
 
 type JobImpl struct {
@@ -30,29 +35,17 @@ type JobImpl struct {
 	resultChan       chan any
 	resultMu         sync.Mutex
 	resultChanDone   bool
-	processFunc      func(ctx context.Context) error
+	processFunc      func(ctx context.Context, result JobResultPipe) error
 }
 
 func (ji *JobImpl) ID() string {
 	return ji.id
 }
 
-func (ji *JobImpl) F() func(ctx context.Context) error {
+func (ji *JobImpl) F() func(ctx context.Context, result JobResultPipe) error {
 	return ji.processFunc
 }
 
-func (ji *JobImpl) Process(ctx context.Context) error {
-
-	if ji.processFunc != nil {
-
-		ji.resultMu.Lock()
-		defer ji.resultMu.Unlock()
-		ji.runs = ji.runs + 1
-
-		return ji.processFunc(ctx)
-	}
-	return errors.New("implement this function")
-}
 func (ji *JobImpl) CanRun() bool {
 	return ji.Retries() > (ji.Runs() - 1)
 }
@@ -65,12 +58,23 @@ func (ji *JobImpl) Runs() int {
 	return ji.runs
 }
 
+func (ji *JobImpl) IncreaseRuns() {
+	ji.resultMu.Lock()
+	defer ji.resultMu.Unlock()
+
+	ji.runs = ji.runs + 1
+}
+
 func (ji *JobImpl) ResultBufferSize() int {
 	return ji.resultBufferSize
 }
 
 func (ji *JobImpl) ResultChan() <-chan any {
 	return ji.resultChan
+}
+
+func (ji *JobImpl) ReadResult(ctx context.Context) (any, bool, error) {
+	return SafeChannelRead(ctx, ji.resultChan)
 }
 func (ji *JobImpl) WriteResult(ctx context.Context, val any) error {
 	return SafeChannelWrite(ctx, ji.resultChan, val)
@@ -92,19 +96,19 @@ func (ji *JobImpl) IsClosed() bool {
 	return ji.resultChanDone
 }
 
-func (s *Service) NewJob(process func(ctx context.Context) error) Job {
+func (s *Service) NewJob(process func(ctx context.Context, result JobResultPipe) error) Job {
 	return s.NewJobWithBufferAndRetry(process, 10, 0)
 }
 
-func (s *Service) NewJobWithBuffer(process func(ctx context.Context) error, buffer int) Job {
+func (s *Service) NewJobWithBuffer(process func(ctx context.Context, result JobResultPipe) error, buffer int) Job {
 	return s.NewJobWithBufferAndRetry(process, buffer, 0)
 }
 
-func (s *Service) NewJobWithRetry(process func(ctx context.Context) error, retries int) Job {
+func (s *Service) NewJobWithRetry(process func(ctx context.Context, result JobResultPipe) error, retries int) Job {
 	return s.NewJobWithBufferAndRetry(process, 10, retries)
 }
 
-func (s *Service) NewJobWithBufferAndRetry(process func(ctx context.Context) error, resultBufferSize, retries int) Job {
+func (s *Service) NewJobWithBufferAndRetry(process func(ctx context.Context, result JobResultPipe) error, resultBufferSize, retries int) Job {
 	return &JobImpl{
 		id:               xid.New().String(),
 		retries:          retries,
@@ -167,7 +171,16 @@ func (s *Service) SubmitJob(ctx context.Context, job Job) error {
 
 					defer job.Close()
 
-					err := job.Process(ctx)
+					if job.F() == nil {
+						err := job.WriteResult(ctx, errors.New("implement this function"))
+						if err != nil {
+							return
+						}
+						return
+					}
+
+					job.IncreaseRuns()
+					err := job.F()(ctx, job)
 					if err != nil {
 						logger := s.L().WithError(err).
 							WithField("job", job.ID()).
@@ -202,5 +215,24 @@ func SafeChannelWrite(ctx context.Context, ch chan<- any, value any) error {
 		return ctx.Err()
 	case ch <- value:
 		return nil
+	}
+}
+
+func SafeChannelRead(ctx context.Context, ch <-chan any) (any, bool, error) {
+
+	select {
+	case <-ctx.Done():
+		// If the context is canceled, drain the channel in a non-blocking way
+		go func() {
+			for range ch {
+				// Draining the channel
+			}
+		}()
+		// Return context error without blocking
+		return nil, false, ctx.Err()
+
+	case result, ok := <-ch:
+		// Channel read successfully or channel closed
+		return result, ok, nil
 	}
 }

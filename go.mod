@@ -4,7 +4,6 @@ go 1.21
 
 require (
 	github.com/BurntSushi/toml v1.4.0
-	github.com/alitto/pond v1.9.1
 	github.com/golang-jwt/jwt/v5 v5.2.1
 	github.com/gorilla/handlers v1.5.2
 	github.com/grpc-ecosystem/go-grpc-middleware/v2 v2.1.0
@@ -12,6 +11,7 @@ require (
 	github.com/jackc/pgx/v5 v5.6.0
 	github.com/kelseyhightower/envconfig v1.4.0
 	github.com/nicksnyder/go-i18n/v2 v2.4.0
+	github.com/panjf2000/ants/v2 v2.10.0
 	github.com/pitabwire/natspubsub v0.1.7
 	github.com/rs/xid v1.5.0
 	github.com/sirupsen/logrus v1.9.3

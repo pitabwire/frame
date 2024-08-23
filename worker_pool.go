@@ -152,7 +152,7 @@ func WithPoolCapacity(capacity int) Option {
 func (s *Service) SubmitJob(ctx context.Context, job Job) error {
 
 	p := s.pool
-	if p.Stopped() {
+	if p.IsClosed() {
 		return errors.New("pool is closed")
 	}
 
@@ -166,7 +166,7 @@ func (s *Service) SubmitJob(ctx context.Context, job Job) error {
 				return nil
 			}
 
-			p.Submit(
+			return p.Submit(
 				func() {
 
 					defer job.Close()
@@ -203,7 +203,6 @@ func (s *Service) SubmitJob(ctx context.Context, job Job) error {
 					}
 				},
 			)
-			return nil
 		}
 	}
 }

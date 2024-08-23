@@ -4,9 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/alitto/pond"
 	ghandler "github.com/gorilla/handlers"
 	"github.com/nicksnyder/go-i18n/v2/i18n"
+	"github.com/panjf2000/ants/v2"
 	"github.com/pitabwire/frame/internal"
 	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/otel/sdk/trace"
@@ -52,7 +52,7 @@ type Service struct {
 	backGroundClient           func(ctx context.Context) error
 	poolWorkerCount            int
 	poolCapacity               int
-	pool                       *pond.WorkerPool
+	pool                       *ants.Pool
 	driver                     any
 	grpcServer                 *grpc.Server
 	grpcServerEnableReflection bool
@@ -103,7 +103,11 @@ func NewService(name string, opts ...Option) (context.Context, *Service) {
 		poolCapacity:    100,
 	}
 
-	service.pool = pond.New(service.poolWorkerCount, service.poolCapacity, pond.Strategy(pond.Lazy()))
+	poolOptions := []ants.Option{
+		ants.WithMaxBlockingTasks(service.poolCapacity),
+	}
+
+	service.pool, _ = ants.NewPool(service.poolWorkerCount, poolOptions...)
 
 	opts = append(opts, Logger())
 
@@ -418,7 +422,7 @@ func (s *Service) Stop(ctx context.Context) {
 	}
 
 	if s.pool != nil {
-		s.pool.Stop()
+		s.pool.Release()
 	}
 
 	if s.cancelFunc != nil {

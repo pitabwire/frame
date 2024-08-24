@@ -13,7 +13,7 @@ require (
 	github.com/nicksnyder/go-i18n/v2 v2.4.0
 	github.com/panjf2000/ants/v2 v2.10.0
 	github.com/pitabwire/natspubsub v0.1.7
-	github.com/rs/xid v1.5.0
+	github.com/rs/xid v1.6.0
 	github.com/sirupsen/logrus v1.9.3
 	go.opentelemetry.io/otel v1.29.0
 	go.opentelemetry.io/otel/sdk v1.29.0

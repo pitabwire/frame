@@ -154,7 +154,7 @@ func (s *Service) DB(ctx context.Context, readOnly bool) *gorm.DB {
 }
 
 // DatastoreCon Option method to store a connection that will be utilized when connecting to the database
-func DatastoreCon(postgresqlConnection string, readOnly bool) Option {
+func DatastoreCon(postgresqlConnection string, skipDefaultTransaction bool, readOnly bool) Option {
 	return func(s *Service) {
 		if s.dataStore == nil {
 			s.dataStore = &store{
@@ -181,7 +181,7 @@ func DatastoreCon(postgresqlConnection string, readOnly bool) Option {
 		gormDB, _ := gorm.Open(
 			postgres.New(postgres.Config{Conn: db, PreferSimpleProtocol: true}),
 			&gorm.Config{
-				SkipDefaultTransaction: true,
+				SkipDefaultTransaction: skipDefaultTransaction,
 				NowFunc: func() time.Time {
 					utc, _ := time.LoadLocation("")
 					return time.Now().In(utc)
@@ -213,13 +213,13 @@ func Datastore(ctx context.Context) Option {
 			return
 		}
 
-		primaryDatabase := DatastoreCon(config.GetDatabasePrimaryHostURL(), false)
+		primaryDatabase := DatastoreCon(config.GetDatabasePrimaryHostURL(), config.SkipDefaultTransaction(), false)
 		primaryDatabase(s)
 		replicaURL := config.GetDatabaseReplicaHostURL()
 		if replicaURL == "" {
 			replicaURL = config.GetDatabasePrimaryHostURL()
 		}
-		replicaDatabase := DatastoreCon(replicaURL, true)
+		replicaDatabase := DatastoreCon(replicaURL, config.SkipDefaultTransaction(), true)
 		replicaDatabase(s)
 	}
 }

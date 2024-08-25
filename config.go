@@ -47,10 +47,11 @@ type ConfigurationDefault struct {
 	AuthorizationServiceReadURI  string `envconfig:"AUTHORIZATION_SERVICE_READ_URI"`
 	AuthorizationServiceWriteURI string `envconfig:"AUTHORIZATION_SERVICE_WRITE_URI"`
 
-	DatabasePrimaryURL    string `envconfig:"DATABASE_URL"`
-	DatabaseReplicaURL    string `envconfig:"REPLICA_DATABASE_URL"`
-	DatabaseMigrate       string `default:"false" envconfig:"DO_MIGRATION"`
-	DatabaseMigrationPath string `default:"./migrations/0001" envconfig:"MIGRATION_PATH"`
+	DatabasePrimaryURL             string `envconfig:"DATABASE_URL"`
+	DatabaseReplicaURL             string `envconfig:"REPLICA_DATABASE_URL"`
+	DatabaseMigrate                string `default:"false" envconfig:"DO_MIGRATION"`
+	DatabaseMigrationPath          string `default:"./migrations/0001" envconfig:"MIGRATION_PATH"`
+	DatabaseSkipDefaultTransaction bool   `default:"true" envconfig:"SKIP_DEFAULT_TRANSACTION"`
 
 	EventsQueueName string `default:"frame.events.internal_._queue" envconfig:"EVENTS_QUEUE_NAME"`
 	EventsQueueUrl  string `default:"mem://frame.events.internal_._queue" envconfig:"EVENTS_QUEUE_URL"`
@@ -200,6 +201,7 @@ type ConfigurationDatabase interface {
 	GetDatabasePrimaryHostURL() string
 	GetDatabaseReplicaHostURL() string
 	DoDatabaseMigrate() bool
+	SkipDefaultTransaction() bool
 	GetDatabaseMigrationPath() string
 }
 
@@ -221,6 +223,10 @@ func (c *ConfigurationDefault) DoDatabaseMigrate() bool {
 
 	stdArgs := os.Args[1:]
 	return isMigration || (len(stdArgs) > 0 && stdArgs[0] == "migrate")
+}
+
+func (c *ConfigurationDefault) SkipDefaultTransaction() bool {
+	return c.DatabaseSkipDefaultTransaction
 }
 
 func (c *ConfigurationDefault) GetDatabaseMigrationPath() string {

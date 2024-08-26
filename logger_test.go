@@ -8,10 +8,10 @@ import (
 )
 
 func TestLogs(t *testing.T) {
-	_, srv := frame.NewService("Logger Srv", frame.Config(
+	ctx, srv := frame.NewService("Logger Srv", frame.Config(
 		&frame.ConfigurationDefault{LogLevel: "Debug", Oauth2WellKnownJwk: sampleWellKnownJwk}))
 
-	logger := srv.L()
+	logger := srv.L(ctx)
 	logger.Debug("testing debug logs")
 	logger.Info("testing logs")
 

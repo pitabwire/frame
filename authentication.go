@@ -467,7 +467,7 @@ func (s *Service) UnaryAuthInterceptor(audience string, issuer string) grpc.Unar
 
 		ctx, err = s.Authenticate(ctx, jwtToken, audience, issuer)
 		if err != nil {
-			logger := s.L().WithError(err).WithField("jwtToken", jwtToken)
+			logger := s.L(ctx).WithError(err).WithField("jwtToken", jwtToken)
 			logger.Info(" UnaryAuthInterceptor -- could not authenticate token")
 			return nil, status.Error(codes.Unauthenticated, err.Error())
 		}
@@ -506,7 +506,7 @@ func (s *Service) StreamAuthInterceptor(audience string, issuer string) grpc.Str
 
 			ctx, err = s.Authenticate(ctx, jwtToken, audience, issuer)
 			if err != nil {
-				logger := s.L().WithError(err).WithField("jwtToken", jwtToken)
+				logger := s.L(ctx).WithError(err).WithField("jwtToken", jwtToken)
 				logger.Info(" StreamAuthInterceptor -- could not authenticate token")
 				return status.Error(codes.Unauthenticated, err.Error())
 			}

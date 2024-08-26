@@ -182,7 +182,7 @@ func (s *Service) SubmitJob(ctx context.Context, job Job) error {
 					job.IncreaseRuns()
 					err := job.F()(ctx, job)
 					if err != nil {
-						logger := s.L().WithError(err).
+						logger := s.L(ctx).WithError(err).
 							WithField("job", job.ID()).
 							WithField("retry", job.Retries())
 

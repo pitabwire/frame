@@ -42,7 +42,7 @@ func (s *Service) InvokeRestService(ctx context.Context,
 
 	reqDump, _ := httputil.DumpRequestOut(req, true)
 
-	s.L().WithField("request", string(reqDump)).Debug("request out")
+	s.L(ctx).WithField("request", string(reqDump)).Debug("request out")
 
 	resp, err := s.client.Do(req)
 	if err != nil {
@@ -50,7 +50,7 @@ func (s *Service) InvokeRestService(ctx context.Context,
 	}
 
 	respDump, _ := httputil.DumpResponse(resp, true)
-	s.L().WithField("response", string(respDump)).Debug("response in")
+	s.L(ctx).WithField("response", string(respDump)).Debug("response in")
 
 	defer resp.Body.Close()
 
@@ -71,7 +71,7 @@ func (s *Service) InvokeRestServiceUrlEncoded(ctx context.Context,
 		}
 	}
 
-	logger := s.L().WithField("method", method).WithField("endpoint", endpointURL).WithField("header", headers)
+	logger := s.L(ctx).WithField("method", method).WithField("endpoint", endpointURL).WithField("header", headers)
 
 	req, err := http.NewRequestWithContext(ctx, method, endpointURL, strings.NewReader(payload.Encode()))
 	if err != nil {
@@ -91,7 +91,7 @@ func (s *Service) InvokeRestServiceUrlEncoded(ctx context.Context,
 	}
 
 	respDump, _ := httputil.DumpResponse(resp, true)
-	s.L().WithField("response", string(respDump)).Info("response in")
+	s.L(ctx).WithField("response", string(respDump)).Info("response in")
 
 	defer func(Body io.ReadCloser) {
 		err = Body.Close()

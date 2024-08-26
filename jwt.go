@@ -46,12 +46,12 @@ func (s *Service) RegisterForJwtWithParams(ctx context.Context,
 
 	status, response, err := s.InvokeRestService(ctx, http.MethodGet, oauth2AdminIDUri, nil, nil)
 	if err != nil {
-		s.L().WithError(err).Error("could not get existing clients")
+		s.L(ctx).WithError(err).Error("could not get existing clients")
 		return nil, err
 	}
 
 	if status > 299 || status < 200 {
-		s.L().WithContext(ctx).
+		s.L(ctx).
 			WithField("status", status).
 			WithField("result", string(response)).
 			Error(" invalid response from oauth2 server")
@@ -62,7 +62,7 @@ func (s *Service) RegisterForJwtWithParams(ctx context.Context,
 	var existingClients []map[string]any
 	err = json.Unmarshal(response, &existingClients)
 	if err != nil {
-		s.L().WithError(err).WithField("payload", string(response)).
+		s.L(ctx).WithError(err).WithField("payload", string(response)).
 			Error("could not unmarshal existing clients")
 		return nil, err
 	}
@@ -87,12 +87,12 @@ func (s *Service) RegisterForJwtWithParams(ctx context.Context,
 
 	status, response, err = s.InvokeRestService(ctx, http.MethodPost, oauth2AdminURI, payload, nil)
 	if err != nil {
-		s.L().WithError(err).Error("could not create a new client")
+		s.L(ctx).WithError(err).Error("could not create a new client")
 		return nil, err
 	}
 
 	if status > 299 || status < 200 {
-		s.L().WithContext(ctx).
+		s.L(ctx).
 			WithField("status", status).
 			WithField("result", string(response)).
 			Error(" invalid response from server")
@@ -103,7 +103,7 @@ func (s *Service) RegisterForJwtWithParams(ctx context.Context,
 	var newClient map[string]any
 	err = json.Unmarshal(response, &newClient)
 	if err != nil {
-		s.L().WithError(err).Error("could not un marshal new client")
+		s.L(ctx).WithError(err).Error("could not un marshal new client")
 		return nil, err
 	}
 
@@ -118,7 +118,7 @@ func (s *Service) UnRegisterForJwt(ctx context.Context,
 
 	status, result, err := s.InvokeRestService(ctx, http.MethodDelete, oauth2AdminURI, make(map[string]any), nil)
 	if err != nil {
-		s.L().WithContext(ctx).
+		s.L(ctx).
 			WithError(err).
 			WithField("status", status).
 			WithField("result", string(result)).

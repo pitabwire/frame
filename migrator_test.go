@@ -8,8 +8,10 @@ import (
 
 func TestSaveNewMigrations(t *testing.T) {
 	testDBURL := GetEnv("TEST_DATABASE_URL", "postgres://frame:secret@localhost:5431/framedatabase?sslmode=disable")
-	mainDB := DatastoreConnection(testDBURL, false)
-	ctx, srv := NewService("Test Migrations Srv", mainDB)
+	ctx, srv := NewService("Test Migrations Srv")
+
+	mainDB := DatastoreConnection(ctx, testDBURL, false)
+	srv.Init(mainDB)
 
 	srv.DB(ctx, false).Session(&gorm.Session{AllowGlobalUpdate: true}).Unscoped().Delete(&Migration{})
 
@@ -75,8 +77,10 @@ func TestSaveNewMigrations(t *testing.T) {
 
 func TestApplyMigrations(t *testing.T) {
 	testDBURL := GetEnv("TEST_DATABASE_URL", "postgres://frame:secret@localhost:5431/framedatabase?sslmode=disable")
-	mainDB := DatastoreConnection(testDBURL, false)
-	ctx, srv := NewService("Test Migrations Srv", mainDB)
+	ctx, srv := NewService("Test Migrations Srv")
+
+	mainDB := DatastoreConnection(ctx, testDBURL, false)
+	srv.Init(mainDB)
 
 	srv.DB(ctx, false).Session(&gorm.Session{AllowGlobalUpdate: true}).Unscoped().Delete(&Migration{})
 
@@ -131,9 +135,12 @@ func TestApplyMigrations(t *testing.T) {
 
 func TestService_MigrateDatastore(t *testing.T) {
 	testDBURL := GetEnv("TEST_DATABASE_URL", "postgres://frame:secret@localhost:5431/framedatabase?sslmode=disable")
-	mainDB := DatastoreConnection(testDBURL, false)
 
-	ctx, srv := NewService("Test Migrations Srv", mainDB)
+	ctx, srv := NewService("Test Migrations Srv")
+
+	mainDB := DatastoreConnection(ctx, testDBURL, false)
+	srv.Init(mainDB)
+
 	srv.DB(ctx, false).Session(&gorm.Session{AllowGlobalUpdate: true}).Unscoped().Delete(&Migration{})
 
 	migrationPath := "./migrations/default"
@@ -148,9 +155,12 @@ func TestService_MigrateDatastore(t *testing.T) {
 func TestService_MigrateDatastoreIdempotency(t *testing.T) {
 
 	testDBURL := GetEnv("TEST_DATABASE_URL", "postgres://frame:secret@localhost:5431/framedatabase?sslmode=disable")
-	mainDB := DatastoreConnection(testDBURL, false)
 
-	ctx, srv := NewService("Test Migrations Srv", mainDB)
+	ctx, srv := NewService("Test Migrations Srv")
+
+	mainDB := DatastoreConnection(ctx, testDBURL, false)
+	srv.Init(mainDB)
+
 	srv.DB(ctx, false).Session(&gorm.Session{AllowGlobalUpdate: true}).Unscoped().Delete(&Migration{})
 
 	migrationPath := "./migrations/default"

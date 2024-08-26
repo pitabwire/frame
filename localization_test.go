@@ -58,21 +58,21 @@ func TestTranslations(t *testing.T) {
 func TestTranslationsHelpers(t *testing.T) {
 
 	translations := frame.Translations("tests_runner/localization", "en", "sw")
-	_, srv := frame.NewService("Test Localization Srv", translations)
+	ctx, srv := frame.NewService("Test Localization Srv", translations)
 
-	englishVersion := srv.Translate("en", "Example")
+	englishVersion := srv.Translate(ctx, "en", "Example")
 	if englishVersion != "<no value> has nothing" {
 		t.Errorf("Localizations didn't quite work like they should, found : %s expected : %s", englishVersion, "<no value> has nothing")
 		return
 	}
 
-	englishVersion = srv.TranslateWithMap("en", "Example", map[string]any{"Name": "MapMan"})
+	englishVersion = srv.TranslateWithMap(ctx, "en", "Example", map[string]any{"Name": "MapMan"})
 	if englishVersion != "MapMan has nothing" {
 		t.Errorf("Localizations didn't quite work like they should, found : %s expected : %s", englishVersion, "MapMan has nothing")
 		return
 	}
 
-	englishVersion = srv.TranslateWithMapAndCount("en", "Example", map[string]any{"Name": "CountMen"}, 2)
+	englishVersion = srv.TranslateWithMapAndCount(ctx, "en", "Example", map[string]any{"Name": "CountMen"}, 2)
 	if englishVersion != "CountMen have nothing" {
 		t.Errorf("Localizations didn't quite work like they should, found : %s expected : %s", englishVersion, "CountMen have nothing")
 		return

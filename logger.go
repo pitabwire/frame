@@ -62,8 +62,8 @@ func Logger() Option {
 	}
 }
 
-func (s *Service) L() *logrus.Entry {
-	return s.logger.WithField("service", s.Name())
+func (s *Service) L(ctx context.Context) *logrus.Entry {
+	return s.logger.WithContext(ctx).WithField("service", s.Name())
 }
 
 func GetLoggingOptions() []logging.Option {
@@ -101,8 +101,8 @@ func LoggingInterceptor(l logrus.FieldLogger) logging.Logger {
 func RecoveryHandlerFun(ctx context.Context, p interface{}) error {
 
 	s := FromContext(ctx)
-	logger := s.L()
-	logger.WithContext(ctx).WithField("trigger", p).Errorf("recovered from panic %s", debug.Stack())
+	logger := s.L(ctx)
+	logger.WithField("trigger", p).Errorf("recovered from panic %s", debug.Stack())
 
 	// Return a gRPC error
 	return status.Errorf(codes.Internal, "Internal server error")

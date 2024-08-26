@@ -17,17 +17,17 @@ func (s *Service) Bundle() *i18n.Bundle {
 }
 
 // Translate performs a quick translation based on the supplied message id
-func (s *Service) Translate(request any, messageId string) string {
-	return s.TranslateWithMap(request, messageId, map[string]any{})
+func (s *Service) Translate(ctx context.Context, request any, messageId string) string {
+	return s.TranslateWithMap(ctx, request, messageId, map[string]any{})
 }
 
 // TranslateWithMap performs a translation with variables based on the supplied message id
-func (s *Service) TranslateWithMap(request any, messageId string, variables map[string]any) string {
-	return s.TranslateWithMapAndCount(request, messageId, variables, 1)
+func (s *Service) TranslateWithMap(ctx context.Context, request any, messageId string, variables map[string]any) string {
+	return s.TranslateWithMapAndCount(ctx, request, messageId, variables, 1)
 }
 
 // TranslateWithMapAndCount performs a translation with variables based on the supplied message id and can pluralize
-func (s *Service) TranslateWithMapAndCount(request any, messageId string, variables map[string]any, count int) string {
+func (s *Service) TranslateWithMapAndCount(ctx context.Context, request any, messageId string, variables map[string]any, count int) string {
 
 	var languageSlice []string
 
@@ -46,7 +46,7 @@ func (s *Service) TranslateWithMapAndCount(request any, messageId string, variab
 		languageSlice = v
 
 	default:
-		logger := s.L().WithField("messageId", messageId).WithField("variables", variables)
+		logger := s.L(ctx).WithField("messageId", messageId).WithField("variables", variables)
 		logger.Warn("TranslateWithMapAndCount -- no valid request object found, use string, []string, context or http.Request")
 		return messageId
 	}
@@ -61,7 +61,7 @@ func (s *Service) TranslateWithMapAndCount(request any, messageId string, variab
 	})
 
 	if err != nil {
-		logger := s.L().WithError(err)
+		logger := s.L(ctx).WithError(err)
 		logger.Error(" TranslateWithMapAndCount -- could not perform translation")
 	}
 

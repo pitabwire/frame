@@ -112,35 +112,30 @@ func DBErrorIsRecordNotFound(err error) bool {
 	return errors.Is(err, gorm.ErrRecordNotFound)
 }
 
+// Returns a random item from the slice, or an error if the slice is empty
+func getRandomConnection(connectionPool []*gorm.DB) *gorm.DB {
+	if len(connectionPool) == 0 {
+		return nil
+	}
+	randomIndex := rand.Intn(len(connectionPool))
+	return connectionPool[randomIndex]
+}
+
 // DB obtains an already instantiated db connection with the option
 // to specify if you want write or read only db connection
 func (s *Service) DB(ctx context.Context, readOnly bool) *gorm.DB {
 	var db *gorm.DB
 
 	if readOnly {
-		replicaCount := len(s.dataStore.readDatabase)
-		if replicaCount > 0 {
-			randomIndex := 0
-			if replicaCount > 1 {
-				randomIndex = rand.Intn(replicaCount)
-			}
-			db = s.dataStore.readDatabase[randomIndex]
-		}
+		db = getRandomConnection(s.dataStore.readDatabase)
 	}
 
 	if db == nil {
-		writeCount := len(s.dataStore.writeDatabase)
-		if writeCount == 0 {
-			logger := s.L()
-			logger.Error("DB -- attempting use a database when none is setup")
+		db = getRandomConnection(s.dataStore.writeDatabase)
+		if db == nil {
+			s.L(ctx).Error("DB -- attempting to use a database when none is setup")
 			return nil
 		}
-
-		randomIndex := 0
-		if writeCount > 1 {
-			randomIndex = rand.Intn(writeCount)
-		}
-		db = s.dataStore.writeDatabase[randomIndex]
 	}
 
 	partitionedDb := db.WithContext(ctx).Scopes(tenantPartition(ctx))
@@ -154,15 +149,15 @@ func (s *Service) DB(ctx context.Context, readOnly bool) *gorm.DB {
 }
 
 // DatastoreConnection Option method to store a connection that will be utilized when connecting to the database
-func DatastoreConnection(postgresqlConnection string, readOnly bool) Option {
-	return DatastoreConnectionWithSkipDefaultTransaction(postgresqlConnection, true, readOnly)
+func DatastoreConnection(ctx context.Context, postgresqlConnection string, readOnly bool) Option {
+	return DatastoreConnectionWithSkipDefaultTransaction(ctx, postgresqlConnection, true, readOnly)
 }
 
-func DatastoreConnectionWithSkipDefaultTransaction(postgresqlConnection string, skipDefaultTransaction bool, readOnly bool) Option {
-	return DatastoreConnectionWithPooling(postgresqlConnection, skipDefaultTransaction, 20, 200, 5*time.Minute, readOnly)
+func DatastoreConnectionWithSkipDefaultTransaction(ctx context.Context, postgresqlConnection string, skipDefaultTransaction bool, readOnly bool) Option {
+	return DatastoreConnectionWithPooling(ctx, postgresqlConnection, skipDefaultTransaction, 20, 200, 5*time.Minute, readOnly)
 }
 
-func DatastoreConnectionWithPooling(postgresqlConnection string, skipDefaultTransaction bool,
+func DatastoreConnectionWithPooling(ctx context.Context, postgresqlConnection string, skipDefaultTransaction bool,
 	maxIdleConnections, maxOpenConnections int, maxConnectionLifeTime time.Duration, readOnly bool) Option {
 	return func(s *Service) {
 		if s.dataStore == nil {
@@ -182,7 +177,7 @@ func DatastoreConnectionWithPooling(postgresqlConnection string, skipDefaultTran
 
 		config, err := pgx.ParseConfig(postgresqlConnection)
 		if err != nil {
-			logger := s.L().WithError(err).WithField("pgConnection", postgresqlConnection)
+			logger := s.L(ctx).WithError(err).WithField("pgConnection", postgresqlConnection)
 			logger.Error("Datastore -- problem parsing database connection")
 		}
 
@@ -224,17 +219,17 @@ func Datastore(ctx context.Context) Option {
 	return func(s *Service) {
 		config, ok := s.Config().(ConfigurationDatabase)
 		if !ok {
-			s.L().Warn("configuration object not of type : ConfigurationDatabase")
+			s.L(ctx).Warn("configuration object not of type : ConfigurationDatabase")
 			return
 		}
 
-		primaryDatabase := DatastoreConnectionWithPooling(config.GetDatabasePrimaryHostURL(), config.SkipDefaultTransaction(), config.GetMaxIdleConnections(), config.GetMaxOpenConnections(), config.GetMaxConnectionLifeTimeInSeconds(), false)
+		primaryDatabase := DatastoreConnectionWithPooling(ctx, config.GetDatabasePrimaryHostURL(), config.SkipDefaultTransaction(), config.GetMaxIdleConnections(), config.GetMaxOpenConnections(), config.GetMaxConnectionLifeTimeInSeconds(), false)
 		primaryDatabase(s)
 		replicaURL := config.GetDatabaseReplicaHostURL()
 		if replicaURL == "" {
 			replicaURL = config.GetDatabasePrimaryHostURL()
 		}
-		replicaDatabase := DatastoreConnectionWithPooling(replicaURL, config.SkipDefaultTransaction(), config.GetMaxIdleConnections(), config.GetMaxOpenConnections(), config.GetMaxConnectionLifeTimeInSeconds(), true)
+		replicaDatabase := DatastoreConnectionWithPooling(ctx, replicaURL, config.SkipDefaultTransaction(), config.GetMaxIdleConnections(), config.GetMaxOpenConnections(), config.GetMaxConnectionLifeTimeInSeconds(), true)
 		replicaDatabase(s)
 	}
 }

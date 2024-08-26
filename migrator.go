@@ -125,7 +125,7 @@ func (s *Service) MigrateDatastore(ctx context.Context, migrationsDirPath string
 	// Migrate the schema
 	err := s.DB(ctx, false).AutoMigrate(migrations...)
 	if err != nil {
-		s.L().WithError(err).Error("MigrateDatastore -- couldn't automigrate")
+		s.L(ctx).WithError(err).Error("MigrateDatastore -- couldn't automigrate")
 		return err
 	}
 

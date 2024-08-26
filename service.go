@@ -79,7 +79,7 @@ type Option func(service *Service)
 // It is used together with the Init option to setup components of a service that is not yet running.
 func NewService(name string, opts ...Option) (context.Context, *Service) {
 
-	ctx0, cancel := signal.NotifyContext(context.Background(),
+	ctx, cancel := signal.NotifyContext(context.Background(),
 		syscall.SIGHUP,
 		syscall.SIGINT,
 		syscall.SIGTERM,
@@ -87,7 +87,7 @@ func NewService(name string, opts ...Option) (context.Context, *Service) {
 
 	concurrency := runtime.NumCPU() * 10
 
-	q := newQueue(ctx0)
+	q := newQueue(ctx)
 
 	service := &Service{
 		name:         name,
@@ -108,13 +108,13 @@ func NewService(name string, opts ...Option) (context.Context, *Service) {
 	service.Init(opts...)
 
 	poolOptions := []ants.Option{
-		ants.WithLogger(service.L()),
+		ants.WithLogger(service.L(ctx)),
 		ants.WithNonblocking(true),
 	}
 
 	service.pool, _ = ants.NewMultiPool(service.poolWorkerCount, service.poolCapacity, ants.LeastTasks, poolOptions...)
 
-	ctx1 := ToContext(ctx0, service)
+	ctx1 := ToContext(ctx, service)
 	return ctx1, service
 }
 
@@ -249,12 +249,12 @@ func (s *Service) Run(ctx context.Context, address string) error {
 		return ctx.Err()
 	case err0 := <-s.errorChannel:
 		if err0 != nil {
-			s.L().
+			s.L(ctx).
 				WithError(err0).
 				WithField("stacktrace", string(debug.Stack())).
 				Info("system exit in error")
 		} else {
-			s.L().Info("system exit without fuss")
+			s.L(ctx).Info("system exit without fuss")
 		}
 		return err0
 	}
@@ -340,7 +340,7 @@ func (s *Service) initServer(ctx context.Context, httpPort string) error {
 
 		defaultServer := defaultDriver{
 			ctx:  ctx,
-			log:  s.L(),
+			log:  s.L(ctx),
 			port: httpPort,
 			httpServer: &http.Server{
 				BaseContext: func(listener net.Listener) context.Context {

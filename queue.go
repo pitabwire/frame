@@ -60,7 +60,7 @@ type subscriber struct {
 func (s *subscriber) listen(ctx context.Context, _ JobResultPipe) error {
 
 	service := FromContext(ctx)
-	logger := service.L().WithField("name", s.reference).WithField("function", "subscription").WithField("url", s.url)
+	logger := service.L(ctx).WithField("name", s.reference).WithField("function", "subscription").WithField("url", s.url)
 	logger.Debug("starting to listen for messages")
 	for {
 
@@ -256,7 +256,7 @@ func (s *Service) initPubsub(ctx context.Context) error {
 
 		config, ok := s.Config().(ConfigurationEvents)
 		if !ok {
-			s.L().Warn("configuration object not of type : ConfigurationDefault")
+			s.L(ctx).Warn("configuration object not of type : ConfigurationDefault")
 			return errors.New("could not cast config to ConfigurationEvents")
 		}
 
@@ -310,7 +310,7 @@ func (s *Service) subscribe(ctx context.Context) {
 	s.queue.subscriptionQueueMap.Range(func(key, value any) bool {
 
 		subsc := value.(*subscriber)
-		logger := s.L().WithField("subscriber", subsc.reference).WithField("url", subsc.url)
+		logger := s.L(ctx).WithField("subscriber", subsc.reference).WithField("url", subsc.url)
 
 		if strings.HasPrefix(subsc.url, "http") {
 			return true

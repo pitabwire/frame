@@ -12,7 +12,7 @@ import (
 func TestService_Datastore(t *testing.T) {
 
 	testDBURL := frame.GetEnv("TEST_DATABASE_URL", "postgres://frame:secret@localhost:5431/framedatabase?sslmode=disable")
-	mainDB := frame.DatastoreCon(testDBURL, true, false)
+	mainDB := frame.DatastoreConnection(testDBURL, false)
 
 	ctx, srv := frame.NewService("Test Srv", mainDB, frame.NoopDriver())
 
@@ -62,8 +62,8 @@ func TestService_DatastoreSet(t *testing.T) {
 
 func TestService_DatastoreRead(t *testing.T) {
 	testDBURL := frame.GetEnv("TEST_DATABASE_URL", "postgres://frame:secret@localhost:5431/framedatabase?sslmode=disable")
-	mainDB := frame.DatastoreCon(testDBURL, true, false)
-	readDB := frame.DatastoreCon(testDBURL, true, true)
+	mainDB := frame.DatastoreConnection(testDBURL, false)
+	readDB := frame.DatastoreConnection(testDBURL, true)
 
 	ctx, srv := frame.NewService("Test Srv", mainDB, readDB)
 

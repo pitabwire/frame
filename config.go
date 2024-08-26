@@ -5,6 +5,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // Config Option that helps to specify or override the configuration object of our service.
@@ -52,6 +53,10 @@ type ConfigurationDefault struct {
 	DatabaseMigrate                string `default:"false" envconfig:"DO_MIGRATION"`
 	DatabaseMigrationPath          string `default:"./migrations/0001" envconfig:"MIGRATION_PATH"`
 	DatabaseSkipDefaultTransaction bool   `default:"true" envconfig:"SKIP_DEFAULT_TRANSACTION"`
+
+	DatabaseMaxIdleConnections           int `default:"20" envconfig:"DATABASE_MAX_IDLE_CONNECTIONS"`
+	DatabaseMaxOpenConnections           int `default:"200" envconfig:"DATABASE_MAX_OPEN_CONNECTIONS"`
+	DatabaseMaxConnectionLifeTimeSeconds int `default:"300" envconfig:"DATABASE_MAX_CONNECTION_LIFE_TIME_IN_SECONDS"`
 
 	EventsQueueName string `default:"frame.events.internal_._queue" envconfig:"EVENTS_QUEUE_NAME"`
 	EventsQueueUrl  string `default:"mem://frame.events.internal_._queue" envconfig:"EVENTS_QUEUE_URL"`
@@ -202,6 +207,10 @@ type ConfigurationDatabase interface {
 	GetDatabaseReplicaHostURL() string
 	DoDatabaseMigrate() bool
 	SkipDefaultTransaction() bool
+	GetMaxIdleConnections() int
+	GetMaxOpenConnections() int
+	GetMaxConnectionLifeTimeInSeconds() time.Duration
+
 	GetDatabaseMigrationPath() string
 }
 
@@ -227,6 +236,18 @@ func (c *ConfigurationDefault) DoDatabaseMigrate() bool {
 
 func (c *ConfigurationDefault) SkipDefaultTransaction() bool {
 	return c.DatabaseSkipDefaultTransaction
+}
+
+func (c *ConfigurationDefault) GetMaxIdleConnections() int {
+	return c.DatabaseMaxIdleConnections
+}
+
+func (c *ConfigurationDefault) GetMaxOpenConnections() int {
+	return c.DatabaseMaxOpenConnections
+}
+
+func (c *ConfigurationDefault) GetMaxConnectionLifeTimeInSeconds() time.Duration {
+	return time.Duration(c.DatabaseMaxConnectionLifeTimeSeconds) * time.Second
 }
 
 func (c *ConfigurationDefault) GetDatabaseMigrationPath() string {

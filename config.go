@@ -48,11 +48,11 @@ type ConfigurationDefault struct {
 	AuthorizationServiceReadURI  string `envconfig:"AUTHORIZATION_SERVICE_READ_URI"`
 	AuthorizationServiceWriteURI string `envconfig:"AUTHORIZATION_SERVICE_WRITE_URI"`
 
-	DatabasePrimaryURL             string `envconfig:"DATABASE_URL"`
-	DatabaseReplicaURL             string `envconfig:"REPLICA_DATABASE_URL"`
-	DatabaseMigrate                string `default:"false" envconfig:"DO_MIGRATION"`
-	DatabaseMigrationPath          string `default:"./migrations/0001" envconfig:"MIGRATION_PATH"`
-	DatabaseSkipDefaultTransaction bool   `default:"true" envconfig:"SKIP_DEFAULT_TRANSACTION"`
+	DatabasePrimaryURL             []string `envconfig:"DATABASE_URL"`
+	DatabaseReplicaURL             []string `envconfig:"REPLICA_DATABASE_URL"`
+	DatabaseMigrate                string   `default:"false" envconfig:"DO_MIGRATION"`
+	DatabaseMigrationPath          string   `default:"./migrations/0001" envconfig:"MIGRATION_PATH"`
+	DatabaseSkipDefaultTransaction bool     `default:"true" envconfig:"SKIP_DEFAULT_TRANSACTION"`
 
 	DatabaseMaxIdleConnections           int `default:"20" envconfig:"DATABASE_MAX_IDLE_CONNECTIONS"`
 	DatabaseMaxOpenConnections           int `default:"200" envconfig:"DATABASE_MAX_OPEN_CONNECTIONS"`
@@ -203,8 +203,8 @@ func (c *ConfigurationDefault) GetAuthorizationServiceWriteURI() string {
 }
 
 type ConfigurationDatabase interface {
-	GetDatabasePrimaryHostURL() string
-	GetDatabaseReplicaHostURL() string
+	GetDatabasePrimaryHostURL() []string
+	GetDatabaseReplicaHostURL() []string
 	DoDatabaseMigrate() bool
 	SkipDefaultTransaction() bool
 	GetMaxIdleConnections() int
@@ -216,11 +216,11 @@ type ConfigurationDatabase interface {
 
 var _ ConfigurationDatabase = new(ConfigurationDefault)
 
-func (c *ConfigurationDefault) GetDatabasePrimaryHostURL() string {
+func (c *ConfigurationDefault) GetDatabasePrimaryHostURL() []string {
 	return c.DatabasePrimaryURL
 }
 
-func (c *ConfigurationDefault) GetDatabaseReplicaHostURL() string {
+func (c *ConfigurationDefault) GetDatabaseReplicaHostURL() []string {
 	return c.DatabasePrimaryURL
 }
 

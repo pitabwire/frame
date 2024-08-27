@@ -6,6 +6,7 @@ import (
 	"github.com/pitabwire/frame"
 	"net/http"
 	"os"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -94,7 +95,7 @@ func Test_Config_Process(t *testing.T) {
 		t.Errorf("inherited PORT config not processed")
 	}
 
-	if conf.GetDatabasePrimaryHostURL() != "testingu" {
+	if !slices.Contains(conf.GetDatabasePrimaryHostURL(), "testingu") {
 		t.Errorf("inherited Database URL config not processed")
 	}
 }
@@ -102,12 +103,17 @@ func Test_Config_Process(t *testing.T) {
 func Test_ConfigCastingIssues(t *testing.T) {
 
 	os.Setenv("PORT", "testingp")
-	os.Setenv("DATABASE_URL", "testingu")
+	err := os.Setenv("DATABASE_URL", "testingu")
+	if err != nil {
+		t.Errorf(" could not set config to env : %v", err)
+		return
+	}
 
 	var conf name
-	err := frame.ConfigProcess("", &conf)
+	err = frame.ConfigProcess("", &conf)
 	if err != nil {
 		t.Errorf(" could not load config from env : %v", err)
+		return
 	}
 
 	_, srv := frame.NewService("Test Srv", frame.Config(&conf))

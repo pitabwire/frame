@@ -17,7 +17,6 @@ import (
 	"syscall"
 
 	"google.golang.org/grpc/health/grpc_health_v1"
-	"gorm.io/gorm"
 	"net"
 	"net/http"
 	"runtime"
@@ -90,13 +89,10 @@ func NewService(name string, opts ...Option) (context.Context, *Service) {
 	q := newQueue(ctx)
 
 	service := &Service{
-		name:         name,
-		cancelFunc:   cancel,
-		errorChannel: make(chan error, 1),
-		dataStore: &store{
-			readDatabase:  []*gorm.DB{},
-			writeDatabase: []*gorm.DB{},
-		},
+		name:            name,
+		cancelFunc:      cancel,
+		errorChannel:    make(chan error, 1),
+		dataStore:       newDataStore(),
 		client:          &http.Client{},
 		queue:           q,
 		poolWorkerCount: concurrency,

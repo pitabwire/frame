@@ -21,6 +21,32 @@ import (
 type store struct {
 	writeDatabase []*gorm.DB
 	readDatabase  []*gorm.DB
+	randomSource  rand.Source
+}
+
+func newDataStore() *store {
+	return &store{
+		randomSource:  rand.NewSource(time.Now().UnixNano()),
+		readDatabase:  []*gorm.DB{},
+		writeDatabase: []*gorm.DB{},
+	}
+}
+
+// Returns a random item from the slice, or an error if the slice is empty
+func (s *Service) getRandomDatastoreConnection(readOnly bool) *gorm.DB {
+
+	var connectionPool []*gorm.DB
+	if readOnly {
+		connectionPool = s.dataStore.readDatabase
+	} else {
+		connectionPool = s.dataStore.writeDatabase
+	}
+
+	if len(connectionPool) == 0 {
+		return nil
+	}
+	randomIndex := rand.New(s.dataStore.randomSource).Intn(len(connectionPool))
+	return connectionPool[randomIndex]
 }
 
 func tenantPartition(ctx context.Context) func(db *gorm.DB) *gorm.DB {
@@ -112,26 +138,17 @@ func DBErrorIsRecordNotFound(err error) bool {
 	return errors.Is(err, gorm.ErrRecordNotFound)
 }
 
-// Returns a random item from the slice, or an error if the slice is empty
-func getRandomConnection(connectionPool []*gorm.DB) *gorm.DB {
-	if len(connectionPool) == 0 {
-		return nil
-	}
-	randomIndex := rand.Intn(len(connectionPool))
-	return connectionPool[randomIndex]
-}
-
 // DB obtains an already instantiated db connection with the option
 // to specify if you want write or read only db connection
 func (s *Service) DB(ctx context.Context, readOnly bool) *gorm.DB {
 	var db *gorm.DB
 
 	if readOnly {
-		db = getRandomConnection(s.dataStore.readDatabase)
+		db = s.getRandomDatastoreConnection(true)
 	}
 
 	if db == nil {
-		db = getRandomConnection(s.dataStore.writeDatabase)
+		db = s.getRandomDatastoreConnection(false)
 		if db == nil {
 			s.L(ctx).Error("DB -- attempting to use a database when none is setup")
 			return nil
@@ -161,10 +178,7 @@ func DatastoreConnectionWithPooling(ctx context.Context, postgresqlConnection st
 	maxIdleConnections, maxOpenConnections int, maxConnectionLifeTime time.Duration, readOnly bool) Option {
 	return func(s *Service) {
 		if s.dataStore == nil {
-			s.dataStore = &store{
-				writeDatabase: []*gorm.DB{},
-				readDatabase:  []*gorm.DB{},
-			}
+			s.dataStore = newDataStore()
 		}
 
 		if s.dataStore.writeDatabase == nil {

@@ -68,7 +68,25 @@ func (s *Service) L(ctx context.Context) *logrus.Entry {
 
 func GetLoggingOptions() []logging.Option {
 	return []logging.Option{
-		logging.WithLogOnEvents(logging.StartCall, logging.FinishCall),
+		logging.WithLevels(func(code codes.Code) logging.Level {
+			switch code {
+			case codes.OK, codes.AlreadyExists:
+				return logging.LevelDebug
+			case codes.NotFound, codes.Canceled, codes.InvalidArgument, codes.Unauthenticated:
+				return logging.LevelInfo
+
+			case codes.DeadlineExceeded, codes.PermissionDenied, codes.ResourceExhausted, codes.FailedPrecondition, codes.Aborted,
+				codes.OutOfRange, codes.Unavailable:
+				return logging.LevelWarn
+
+			case codes.Unknown, codes.Unimplemented, codes.Internal, codes.DataLoss:
+				return logging.LevelError
+
+			default:
+				return logging.LevelError
+			}
+		}),
+		logging.WithLogOnEvents(logging.StartCall, logging.FinishCall, logging.PayloadReceived, logging.PayloadSent),
 	}
 }
 

@@ -54,8 +54,8 @@ type ConfigurationDefault struct {
 	DatabaseMigrationPath          string   `default:"./migrations/0001" envconfig:"MIGRATION_PATH"`
 	DatabaseSkipDefaultTransaction bool     `default:"true" envconfig:"SKIP_DEFAULT_TRANSACTION"`
 
-	DatabaseMaxIdleConnections           int `default:"20" envconfig:"DATABASE_MAX_IDLE_CONNECTIONS"`
-	DatabaseMaxOpenConnections           int `default:"200" envconfig:"DATABASE_MAX_OPEN_CONNECTIONS"`
+	DatabaseMaxIdleConnections           int `default:"2" envconfig:"DATABASE_MAX_IDLE_CONNECTIONS"`
+	DatabaseMaxOpenConnections           int `default:"5" envconfig:"DATABASE_MAX_OPEN_CONNECTIONS"`
 	DatabaseMaxConnectionLifeTimeSeconds int `default:"300" envconfig:"DATABASE_MAX_CONNECTION_LIFE_TIME_IN_SECONDS"`
 
 	EventsQueueName string `default:"frame.events.internal_._queue" envconfig:"EVENTS_QUEUE_NAME"`

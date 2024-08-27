@@ -221,12 +221,6 @@ func SafeChannelRead(ctx context.Context, ch <-chan any) (any, bool, error) {
 
 	select {
 	case <-ctx.Done():
-		// If the context is canceled, drain the channel in a non-blocking way
-		go func() {
-			for range ch {
-				// Draining the channel
-			}
-		}()
 		// Return context error without blocking
 		return nil, false, ctx.Err()
 

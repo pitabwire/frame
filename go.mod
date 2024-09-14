@@ -22,7 +22,7 @@ require (
 	golang.org/x/text v0.18.0
 	google.golang.org/grpc v1.66.2
 	google.golang.org/grpc/examples v0.0.0-20240913164237-31ffeeeb001c
-	gorm.io/datatypes v1.2.1
+	gorm.io/datatypes v1.2.2
 	gorm.io/driver/postgres v1.5.9
 	gorm.io/gorm v1.25.12
 

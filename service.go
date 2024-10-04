@@ -74,11 +74,18 @@ type Service struct {
 
 type Option func(service *Service)
 
-// NewService creates a new instance of Service with the name and supplied options
-// It is used together with the Init option to setup components of a service that is not yet running.
+// NewService creates a new instance of Service with the name and supplied options.
+// Internally it calls NewServiceWithContext and creates a background context for use.
 func NewService(name string, opts ...Option) (context.Context, *Service) {
+	ctx := context.Background()
+	return NewServiceWithContext(ctx, name, opts...)
+}
 
-	ctx, cancel := signal.NotifyContext(context.Background(),
+// NewServiceWithContext creates a new instance of Service with context, name and supplied options
+// It is used together with the Init option to setup components of a service that is not yet running.
+func NewServiceWithContext(ctx context.Context, name string, opts ...Option) (context.Context, *Service) {
+
+	ctx, cancel := signal.NotifyContext(ctx,
 		syscall.SIGHUP,
 		syscall.SIGINT,
 		syscall.SIGTERM,

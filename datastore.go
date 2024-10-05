@@ -54,10 +54,10 @@ func tenantPartition(ctx context.Context) func(db *gorm.DB) *gorm.DB {
 	return func(db *gorm.DB) *gorm.DB {
 		rawConfig := ConfigFromContext(ctx)
 
-		serviceRunsSecurely := true
+		runsSecurely := true
 		config, ok := rawConfig.(ConfigurationSecurity)
 		if ok {
-			serviceRunsSecurely = config.IsRunSecurely()
+			runsSecurely = config.IsRunSecurely()
 		}
 
 		authClaim := ClaimsFromContext(ctx)
@@ -66,7 +66,7 @@ func tenantPartition(ctx context.Context) func(db *gorm.DB) *gorm.DB {
 		}
 		if authClaim.GetTenantId() == "" ||
 			authClaim.GetPartitionId() == "" {
-			if !authClaim.isInternalSystem() && serviceRunsSecurely {
+			if !authClaim.isInternalSystem() && runsSecurely {
 				_ = db.AddError(errors.New("tenancy scope not present in context"))
 				return db
 			}

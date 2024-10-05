@@ -1,12 +1,15 @@
 package frame
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"strconv"
 	"strings"
 	"time"
 )
+
+const ctxKeyConfiguration = contextKey("configurationKey")
 
 // Config Option that helps to specify or override the configuration object of our service.
 func Config(config any) Option {
@@ -19,8 +22,19 @@ func (s *Service) Config() any {
 	return s.configuration
 }
 
+// ConfigToContext adds service configuration to the current supplied context
+func ConfigToContext(ctx context.Context, config any) context.Context {
+	return context.WithValue(ctx, ctxKeyConfiguration, config)
+}
+
+// ConfigFromContext extracts service configuration from the supplied context if any exist
+func ConfigFromContext(ctx context.Context) any {
+	return ctx.Value(ctxKeyConfiguration)
+}
+
 type ConfigurationDefault struct {
-	LogLevel string `default:"info" envconfig:"LOG_LEVEL"`
+	LogLevel           string `default:"info" envconfig:"LOG_LEVEL"`
+	RunServiceSecurely bool   `default:"true" envconfig:"RUN_SERVICE_SECURELY"`
 
 	ServerPort     string `default:":7000" envconfig:"PORT"`
 	HttpServerPort string `default:":8080" envconfig:"HTTP_PORT"`
@@ -60,6 +74,16 @@ type ConfigurationDefault struct {
 
 	EventsQueueName string `default:"frame.events.internal_._queue" envconfig:"EVENTS_QUEUE_NAME"`
 	EventsQueueUrl  string `default:"mem://frame.events.internal_._queue" envconfig:"EVENTS_QUEUE_URL"`
+}
+
+type ConfigurationSecurity interface {
+	IsRunSecurely() bool
+}
+
+var _ ConfigurationSecurity = new(ConfigurationDefault)
+
+func (c *ConfigurationDefault) IsRunSecurely() bool {
+	return c.RunServiceSecurely
 }
 
 type ConfigurationLogLevel interface {

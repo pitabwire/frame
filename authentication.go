@@ -383,6 +383,19 @@ func (s *Service) getPemCert(token *jwt.Token) (any, error) {
 // to verify and extract authentication data supplied in a jwt as authorization bearer token
 func (s *Service) AuthenticationMiddleware(next http.Handler, audience string, issuer string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+
+		rawConfig := s.Config()
+		runsSecurely := true
+		config, ok := rawConfig.(ConfigurationSecurity)
+		if ok {
+			runsSecurely = config.IsRunSecurely()
+		}
+
+		if !runsSecurely {
+			next.ServeHTTP(w, r)
+			return
+		}
+
 		authorizationHeader := r.Header.Get("Authorization")
 
 		logger := s.logger.WithField("authorization_header", authorizationHeader)
@@ -460,22 +473,32 @@ func getGrpcMetadata(ctx context.Context, key string) string {
 func (s *Service) UnaryAuthInterceptor(audience string, issuer string) grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req any,
 		info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
-		jwtToken, err := grpcJwtTokenExtractor(ctx)
-		if err != nil {
-			return nil, err
+
+		rawConfig := s.Config()
+		runsSecurely := true
+		config, ok := rawConfig.(ConfigurationSecurity)
+		if ok {
+			runsSecurely = config.IsRunSecurely()
 		}
 
-		ctx, err = s.Authenticate(ctx, jwtToken, audience, issuer)
-		if err != nil {
-			logger := s.L(ctx).WithError(err).WithField("jwtToken", jwtToken)
-			logger.Info(" UnaryAuthInterceptor -- could not authenticate token")
-			return nil, status.Error(codes.Unauthenticated, err.Error())
+		if runsSecurely {
+
+			jwtToken, err := grpcJwtTokenExtractor(ctx)
+			if err != nil {
+				return nil, err
+			}
+
+			ctx, err = s.Authenticate(ctx, jwtToken, audience, issuer)
+			if err != nil {
+				logger := s.L(ctx).WithError(err).WithField("jwtToken", jwtToken)
+				logger.Info(" UnaryAuthInterceptor -- could not authenticate token")
+				return nil, status.Error(codes.Unauthenticated, err.Error())
+			}
+
+			ctx = s.systemPadPartitionInfo(ctx, getGrpcMetadata(ctx, "tenant_id"),
+				getGrpcMetadata(ctx, "partition_id"), getGrpcMetadata(ctx, "access_id"),
+				getGrpcMetadata(ctx, "contact_id"), getGrpcMetadata(ctx, "roles"))
 		}
-
-		ctx = s.systemPadPartitionInfo(ctx, getGrpcMetadata(ctx, "tenant_id"),
-			getGrpcMetadata(ctx, "partition_id"), getGrpcMetadata(ctx, "access_id"),
-			getGrpcMetadata(ctx, "contact_id"), getGrpcMetadata(ctx, "roles"))
-
 		return handler(ctx, req)
 	}
 }
@@ -486,7 +509,7 @@ type serverStreamWrapper struct {
 	grpc.ServerStream
 }
 
-// Context convert the stream wrappers claims to be contained in the stream context
+// Context converts the stream wrappers claims to be contained in the stream context
 func (s *serverStreamWrapper) Context() context.Context {
 	return s.ctx
 }
@@ -499,22 +522,31 @@ func (s *Service) StreamAuthInterceptor(audience string, issuer string) grpc.Str
 		if authClaim == nil {
 			ctx := ss.Context()
 
-			jwtToken, err := grpcJwtTokenExtractor(ctx)
-			if err != nil {
-				return err
+			rawConfig := s.Config()
+			runsSecurely := true
+			config, ok := rawConfig.(ConfigurationSecurity)
+			if ok {
+				runsSecurely = config.IsRunSecurely()
 			}
 
-			ctx, err = s.Authenticate(ctx, jwtToken, audience, issuer)
-			if err != nil {
-				logger := s.L(ctx).WithError(err).WithField("jwtToken", jwtToken)
-				logger.Info(" StreamAuthInterceptor -- could not authenticate token")
-				return status.Error(codes.Unauthenticated, err.Error())
+			if runsSecurely {
+
+				jwtToken, err := grpcJwtTokenExtractor(ctx)
+				if err != nil {
+					return err
+				}
+
+				ctx, err = s.Authenticate(ctx, jwtToken, audience, issuer)
+				if err != nil {
+					logger := s.L(ctx).WithError(err).WithField("jwtToken", jwtToken)
+					logger.Info(" StreamAuthInterceptor -- could not authenticate token")
+					return status.Error(codes.Unauthenticated, err.Error())
+				}
+
+				ctx = s.systemPadPartitionInfo(ctx, getGrpcMetadata(ctx, "tenant_id"),
+					getGrpcMetadata(ctx, "partition_id"), getGrpcMetadata(ctx, "access_id"),
+					getGrpcMetadata(ctx, "contact_id"), getGrpcMetadata(ctx, "roles"))
 			}
-
-			ctx = s.systemPadPartitionInfo(ctx, getGrpcMetadata(ctx, "tenant_id"),
-				getGrpcMetadata(ctx, "partition_id"), getGrpcMetadata(ctx, "access_id"),
-				getGrpcMetadata(ctx, "contact_id"), getGrpcMetadata(ctx, "roles"))
-
 			localServerStream = &serverStreamWrapper{ctx, ss}
 		}
 		return handler(srv, localServerStream)

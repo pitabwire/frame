@@ -206,29 +206,43 @@ func ClaimsFromContext(ctx context.Context) *AuthenticationClaims {
 // ClaimsFromMap extracts authentication claims from the supplied map if they exist
 func ClaimsFromMap(m map[string]string) *AuthenticationClaims {
 
-	authenticationClaims := &AuthenticationClaims{
-		Ext: map[string]any{},
+	// Extract required fields and return nil if any are missing
+	sub, okSubject := m["sub"]
+	tenantID, okTenant := m["tenant_id"]
+	partitionID, okPartition := m["partition_id"]
+
+	if !okSubject || !okTenant || !okPartition {
+		return nil
 	}
 
+	// Initialize AuthenticationClaims with required fields
+	claims := &AuthenticationClaims{
+		TenantID:    tenantID,
+		PartitionID: partitionID,
+		Ext:         make(map[string]any),
+	}
+	claims.Subject = sub
+
+	// Process optional fields
 	for key, val := range m {
-		if key == "sub" {
-			authenticationClaims.Subject = m[key]
-		} else if key == "tenant_id" {
-			authenticationClaims.TenantID = m[key]
-		} else if key == "partition_id" {
-			authenticationClaims.PartitionID = m[key]
-		} else if key == "access_id" {
-			authenticationClaims.AccessID = m[key]
-		} else if key == "contact_id" {
-			authenticationClaims.ContactID = m[key]
-		} else if key == "roles" {
-			authenticationClaims.Ext[key] = strings.Split(val, ",")
-		} else {
-			authenticationClaims.Ext[key] = val
+		switch key {
+		case "access_id":
+			claims.AccessID = val
+		case "contact_id":
+			claims.ContactID = val
+		case "roles":
+			claims.Ext[key] = strings.Split(val, ",")
+		default:
+			// Skip primary values ("sub", "tenant_id", "partition_id")
+			if key == "sub" || key == "tenant_id" || key == "partition_id" {
+				continue
+			}
+			// Add other fields to Ext
+			claims.Ext[key] = val
 		}
 	}
 
-	return authenticationClaims
+	return claims
 }
 
 func (s *Service) Authenticate(ctx context.Context,

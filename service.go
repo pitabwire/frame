@@ -118,6 +118,7 @@ func NewServiceWithContext(ctx context.Context, name string, opts ...Option) (co
 	service.pool, _ = ants.NewMultiPool(service.poolWorkerCount, service.poolCapacity, ants.LeastTasks, poolOptions...)
 
 	ctx1 := ToContext(ctx, service)
+	ctx1 = ConfigToContext(ctx1, service.Config())
 	return ctx1, service
 }
 

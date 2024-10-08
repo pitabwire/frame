@@ -211,7 +211,7 @@ func ClaimsFromMap(m map[string]string) *AuthenticationClaims {
 	tenantID, okTenant := m["tenant_id"]
 	partitionID, okPartition := m["partition_id"]
 
-	if !okSubject || !okTenant || !okPartition {
+	if !okSubject && !okTenant && !okPartition {
 		return nil
 	}
 
@@ -223,7 +223,6 @@ func ClaimsFromMap(m map[string]string) *AuthenticationClaims {
 	}
 	claims.Subject = sub
 
-	// Process optional fields
 	for key, val := range m {
 		switch key {
 		case "access_id":

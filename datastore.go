@@ -164,7 +164,7 @@ func (s *Service) DB(ctx context.Context, readOnly bool) *gorm.DB {
 		}
 	}
 
-	partitionedDb := db.WithContext(ctx).Scopes(tenantPartition(ctx))
+	partitionedDb := db.Session(&gorm.Session{NewDB: true}).WithContext(ctx).Scopes(tenantPartition(ctx))
 
 	config, ok := s.Config().(ConfigurationLogLevel)
 	if ok && config.LoggingLevelIsDebug() {

@@ -193,6 +193,11 @@ func (a *AuthenticationClaims) ClaimsToContext(ctx context.Context) context.Cont
 	return context.WithValue(ctx, ctxKeyAuthenticationClaim, a)
 }
 
+// RemoveClaimsFromContext removes authentication claims from the current supplied context
+func RemoveClaimsFromContext(ctx context.Context) context.Context {
+	return context.WithValue(ctx, ctxKeyAuthenticationClaim, nil)
+}
+
 // ClaimsFromContext extracts authentication claims from the supplied context if any exist
 func ClaimsFromContext(ctx context.Context) *AuthenticationClaims {
 	authenticationClaims, ok := ctx.Value(ctxKeyAuthenticationClaim).(*AuthenticationClaims)

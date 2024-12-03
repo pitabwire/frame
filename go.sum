@@ -761,6 +761,8 @@ google.golang.org/grpc/examples v0.0.0-20241202182755-3ce87dd3800b h1:NCCg9BTdRC
 google.golang.org/grpc/examples v0.0.0-20241202182755-3ce87dd3800b/go.mod h1:SBR4SSKghJOkMGhxZo40z65IN1uA78E+JbK6I7+/U44=
 google.golang.org/grpc/examples v0.0.0-20241202210358-17d08f746b51 h1:pzo1hqMMcRVEhNfT7BduHFpJNE/j6MLTbJ6rX3v8GYA=
 google.golang.org/grpc/examples v0.0.0-20241202210358-17d08f746b51/go.mod h1:SBR4SSKghJOkMGhxZo40z65IN1uA78E+JbK6I7+/U44=
+google.golang.org/grpc/examples v0.0.0-20241203054329-78aa51be7ea1 h1:rSjqeaFLlqSV1F4hlpNkAz8WD0bewt9/A7QNPjnu2Ok=
+google.golang.org/grpc/examples v0.0.0-20241203054329-78aa51be7ea1/go.mod h1:SBR4SSKghJOkMGhxZo40z65IN1uA78E+JbK6I7+/U44=
 google.golang.org/protobuf v0.0.0-20200109180630-ec00e32a8dfd/go.mod h1:DFci5gLYBciE7Vtevhsrf46CRTquxDuWsQurQQe4oz8=
 google.golang.org/protobuf v0.0.0-20200221191635-4d8936d0db64/go.mod h1:kwYJMbMJ01Woi6D6+Kah6886xMZcty6N08ah7+eCXa0=
 google.golang.org/protobuf v0.0.0-20200228230310-ab0ca4ff8a60/go.mod h1:cfTl7dwQJ+fmap5saPgwCLgHXTUD7jkjRqWcaiX5VyM=

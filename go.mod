@@ -21,7 +21,7 @@ require (
 	golang.org/x/net v0.31.0
 	golang.org/x/text v0.20.0
 	google.golang.org/grpc v1.68.0
-	google.golang.org/grpc/examples v0.0.0-20241203070029-634497b75899
+	google.golang.org/grpc/examples v0.0.0-20241204053122-5565631455d3
 	gorm.io/datatypes v1.2.4
 	gorm.io/driver/postgres v1.5.11
 	gorm.io/gorm v1.25.12

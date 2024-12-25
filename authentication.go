@@ -19,6 +19,7 @@ import (
 )
 
 const ctxKeyAuthenticationClaim = contextKey("authenticationClaimKey")
+const ctxKeySkipTenancyCheckOnClaim = contextKey("skipTenancyCheckOnClaimKey")
 const ctxKeyAuthenticationJwt = contextKey("authenticationJwtKey")
 
 // JwtToContext adds authentication jwt to the current supplied context
@@ -193,9 +194,17 @@ func (a *AuthenticationClaims) ClaimsToContext(ctx context.Context) context.Cont
 	return context.WithValue(ctx, ctxKeyAuthenticationClaim, a)
 }
 
-// RemoveClaimsFromContext removes authentication claims from the current supplied context
-func RemoveClaimsFromContext(ctx context.Context) context.Context {
-	return context.WithValue(ctx, ctxKeyAuthenticationClaim, nil)
+// SkipTenancyChecksOnClaims removes authentication claims from the current supplied context
+func SkipTenancyChecksOnClaims(ctx context.Context) context.Context {
+	return context.WithValue(ctx, ctxKeySkipTenancyCheckOnClaim, true)
+}
+
+func IsTenancyChecksOnClaimSkipped(ctx context.Context) bool {
+	isSkipped, ok := ctx.Value(ctxKeySkipTenancyCheckOnClaim).(bool)
+	if !ok {
+		return false
+	}
+	return isSkipped
 }
 
 // ClaimsFromContext extracts authentication claims from the supplied context if any exist

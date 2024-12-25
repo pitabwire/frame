@@ -64,12 +64,18 @@ func tenantPartition(ctx context.Context) func(db *gorm.DB) *gorm.DB {
 		if authClaim == nil {
 			return db
 		}
+
 		if authClaim.GetTenantId() == "" ||
 			authClaim.GetPartitionId() == "" {
-			if !authClaim.isInternalSystem() && runsSecurely {
+			if runsSecurely {
 				_ = db.AddError(errors.New("tenancy scope not present in context"))
 				return db
 			}
+		}
+
+		skipTenancyChecksOnClaims := IsTenancyChecksOnClaimSkipped(ctx)
+		if authClaim.isInternalSystem() && skipTenancyChecksOnClaims {
+			return db
 		}
 
 		return db.Where("tenant_id = ? AND partition_id = ?", authClaim.GetTenantId(), authClaim.GetPartitionId())

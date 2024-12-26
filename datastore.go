@@ -59,7 +59,7 @@ func tenantPartition(ctx context.Context) func(db *gorm.DB) *gorm.DB {
 		}
 
 		skipTenancyChecksOnClaims := IsTenancyChecksOnClaimSkipped(ctx)
-		if authClaim.isInternalSystem() && skipTenancyChecksOnClaims {
+		if skipTenancyChecksOnClaims {
 			return db
 		}
 

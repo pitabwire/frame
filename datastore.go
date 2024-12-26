@@ -52,25 +52,10 @@ func (s *Service) getRandomDatastoreConnection(readOnly bool) *gorm.DB {
 
 func tenantPartition(ctx context.Context) func(db *gorm.DB) *gorm.DB {
 	return func(db *gorm.DB) *gorm.DB {
-		rawConfig := ConfigFromContext(ctx)
-
-		runsSecurely := true
-		config, ok := rawConfig.(ConfigurationSecurity)
-		if ok {
-			runsSecurely = config.IsRunSecurely()
-		}
 
 		authClaim := ClaimsFromContext(ctx)
 		if authClaim == nil {
 			return db
-		}
-
-		if authClaim.GetTenantId() == "" ||
-			authClaim.GetPartitionId() == "" {
-			if runsSecurely {
-				_ = db.AddError(errors.New("tenancy scope not present in context"))
-				return db
-			}
 		}
 
 		skipTenancyChecksOnClaims := IsTenancyChecksOnClaimSkipped(ctx)

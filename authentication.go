@@ -45,6 +45,7 @@ type AuthenticationClaims struct {
 	PartitionID string         `json:"partition_id,omitempty"`
 	AccessID    string         `json:"access_id,omitempty"`
 	ContactID   string         `json:"contact_id,omitempty"`
+	DeviceID    string         `json:"device_id,omitempty"`
 	Roles       []string       `json:"roles,omitempty"`
 	jwt.RegisteredClaims
 }
@@ -125,6 +126,25 @@ func (a *AuthenticationClaims) GetContactId() string {
 	return result
 }
 
+func (a *AuthenticationClaims) GetDeviceId() string {
+
+	result := a.DeviceID
+	if result != "" {
+		return result
+	}
+	val, ok := a.Ext["device_id"]
+	if !ok {
+		return ""
+	}
+
+	result, ok = val.(string)
+	if !ok {
+		return ""
+	}
+
+	return result
+}
+
 func (a *AuthenticationClaims) GetRoles() []string {
 
 	var result = a.Roles
@@ -185,6 +205,7 @@ func (a *AuthenticationClaims) AsMetadata() map[string]string {
 	m["partition_id"] = a.GetPartitionId()
 	m["access_id"] = a.GetAccessId()
 	m["contact_id"] = a.GetContactId()
+	m["device_id"] = a.GetDeviceId()
 	m["roles"] = strings.Join(a.GetRoles(), ",")
 	return m
 }
@@ -243,6 +264,8 @@ func ClaimsFromMap(m map[string]string) *AuthenticationClaims {
 			claims.AccessID = val
 		case "contact_id":
 			claims.ContactID = val
+		case "device_id":
+			claims.DeviceID = val
 		case "roles":
 			claims.Ext[key] = strings.Split(val, ",")
 		default:
@@ -289,7 +312,7 @@ func (s *Service) Authenticate(ctx context.Context,
 
 }
 
-func (s *Service) systemPadPartitionInfo(ctx context.Context, tenantId, partitionId, accessId, contactId, roles string) context.Context {
+func (s *Service) systemPadPartitionInfo(ctx context.Context, tenantId, partitionId, accessId, contactId, deviceId, roles string) context.Context {
 
 	claims := ClaimsFromContext(ctx)
 
@@ -313,6 +336,11 @@ func (s *Service) systemPadPartitionInfo(ctx context.Context, tenantId, partitio
 		val = claims.GetContactId()
 		if val == "" {
 			claims.ContactID = contactId
+		}
+
+		val = claims.GetDeviceId()
+		if val == "" {
+			claims.DeviceID = deviceId
 		}
 
 		valRoles := claims.GetRoles()
@@ -452,7 +480,10 @@ func (s *Service) AuthenticationMiddleware(next http.Handler, audience string, i
 			return
 		}
 
-		s.systemPadPartitionInfo(ctx, r.Header.Get("tenant_id"), r.Header.Get("partition_id"), r.Header.Get("access_id"), r.Header.Get("contact_id"), r.Header.Get("roles"))
+		s.systemPadPartitionInfo(ctx,
+			r.Header.Get("tenant_id"), r.Header.Get("partition_id"),
+			r.Header.Get("access_id"), r.Header.Get("contact_id"),
+			r.Header.Get("device_id"), r.Header.Get("roles"))
 
 		r = r.WithContext(ctx)
 
@@ -524,7 +555,8 @@ func (s *Service) UnaryAuthInterceptor(audience string, issuer string) grpc.Unar
 
 			ctx = s.systemPadPartitionInfo(ctx, getGrpcMetadata(ctx, "tenant_id"),
 				getGrpcMetadata(ctx, "partition_id"), getGrpcMetadata(ctx, "access_id"),
-				getGrpcMetadata(ctx, "contact_id"), getGrpcMetadata(ctx, "roles"))
+				getGrpcMetadata(ctx, "contact_id"), getGrpcMetadata(ctx, "device_id"),
+				getGrpcMetadata(ctx, "roles"))
 		}
 		return handler(ctx, req)
 	}
@@ -572,7 +604,8 @@ func (s *Service) StreamAuthInterceptor(audience string, issuer string) grpc.Str
 
 				ctx = s.systemPadPartitionInfo(ctx, getGrpcMetadata(ctx, "tenant_id"),
 					getGrpcMetadata(ctx, "partition_id"), getGrpcMetadata(ctx, "access_id"),
-					getGrpcMetadata(ctx, "contact_id"), getGrpcMetadata(ctx, "roles"))
+					getGrpcMetadata(ctx, "contact_id"), getGrpcMetadata(ctx, "device_id"),
+					getGrpcMetadata(ctx, "roles"))
 			}
 			localServerStream = &serverStreamWrapper{ctx, ss}
 		}

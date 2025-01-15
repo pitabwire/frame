@@ -8,7 +8,7 @@ services:
       - POSTGRES_PASSWORD=secret
       - POSTGRES_DB=framedatabase
     ports:
-      - 5431:5432
+      - "5431:5432"
 
   keto-migrate:
     container_name: frame_keto_migration
@@ -37,6 +37,6 @@ services:
     volumes:
       - ./keto.yaml:/home/ory/keto.yml
     ports:
-      - 4466:4466
-      - 4467:4467
+      - "4466:4466"
+      - "4467:4467"
       

@@ -14,7 +14,7 @@ type fields struct {
 	counter   int
 }
 
-func (f *fields) process(ctx context.Context, _ frame.JobResultPipe) error {
+func (f *fields) process(ctx context.Context, _ frame.JobResultPipe[any]) error {
 
 	if f.test == "first error" {
 		f.counter += 1
@@ -65,9 +65,9 @@ func TestJobImpl_Process(t *testing.T) {
 				t.Errorf("could not start a background consumer peacefully : %v", err)
 			}
 
-			job := srv.NewJob(tt.fields.process)
+			job := frame.NewJob(tt.fields.process)
 
-			if err := srv.SubmitJob(ctx, job); (err != nil) != tt.wantErr {
+			if err := frame.SubmitJob(ctx, srv, job); (err != nil) != tt.wantErr {
 				t.Errorf("Process() error = %v, wantErr %v", err, tt.wantErr)
 			}
 
@@ -121,9 +121,9 @@ func TestService_NewJobWithRetry(t *testing.T) {
 				t.Errorf("could not start a background consumer peacefully : %v", err)
 			}
 
-			job := srv.NewJobWithRetry(tt.fields.process, 1)
+			job := frame.NewJobWithRetry(tt.fields.process, 1)
 
-			if err := srv.SubmitJob(ctx, job); (err != nil) != tt.wantErr {
+			if err := frame.SubmitJob(ctx, srv, job); (err != nil) != tt.wantErr {
 				t.Errorf("Process() error = %v, wantErr %v", err, tt.wantErr)
 			}
 
@@ -177,9 +177,9 @@ func TestService_NewJobWithBufferAndRetry(t *testing.T) {
 				t.Errorf("could not start a background consumer peacefully : %v", err)
 			}
 
-			job := srv.NewJobWithBufferAndRetry(tt.fields.process, 4, 1)
+			job := frame.NewJobWithBufferAndRetry(tt.fields.process, 4, 1)
 
-			if err = srv.SubmitJob(ctx, job); (err != nil) != tt.wantErr {
+			if err = frame.SubmitJob(ctx, srv, job); (err != nil) != tt.wantErr {
 				t.Errorf("Process() error = %v, wantErr %v", err, tt.wantErr)
 			}
 

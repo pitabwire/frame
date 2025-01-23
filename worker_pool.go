@@ -8,18 +8,27 @@ import (
 	"sync"
 )
 
-type JobResultPipe interface {
+type JobResult[J any] struct {
+	Item  J
+	Error error
+}
+
+func (j JobResult[J]) IsError() bool {
+	return j.Error != nil
+}
+
+type JobResultPipe[J any] interface {
 	ResultBufferSize() int
-	ResultChan() <-chan any
-	WriteResult(ctx context.Context, val any) error
-	ReadResult(ctx context.Context) (any, bool, error)
+	ResultChan() <-chan JobResult[J]
+	WriteResult(ctx context.Context, val JobResult[J]) error
+	ReadResult(ctx context.Context) (JobResult[J], bool)
 	IsClosed() bool
 	Close()
 }
 
-type Job interface {
-	JobResultPipe
-	F() func(ctx context.Context, result JobResultPipe) error
+type Job[J any] interface {
+	JobResultPipe[J]
+	F() func(ctx context.Context, result JobResultPipe[J]) error
 	ID() string
 	CanRun() bool
 	Retries() int
@@ -27,60 +36,60 @@ type Job interface {
 	IncreaseRuns()
 }
 
-type JobImpl struct {
+type JobImpl[J any] struct {
 	id               string
 	runs             int
 	retries          int
 	resultBufferSize int
-	resultChan       chan any
+	resultChan       chan JobResult[J]
 	resultMu         sync.Mutex
 	resultChanDone   bool
-	processFunc      func(ctx context.Context, result JobResultPipe) error
+	processFunc      func(ctx context.Context, result JobResultPipe[J]) error
 }
 
-func (ji *JobImpl) ID() string {
+func (ji *JobImpl[J]) ID() string {
 	return ji.id
 }
 
-func (ji *JobImpl) F() func(ctx context.Context, result JobResultPipe) error {
+func (ji *JobImpl[J]) F() func(ctx context.Context, result JobResultPipe[J]) error {
 	return ji.processFunc
 }
 
-func (ji *JobImpl) CanRun() bool {
+func (ji *JobImpl[J]) CanRun() bool {
 	return ji.Retries() > (ji.Runs() - 1)
 }
 
-func (ji *JobImpl) Retries() int {
+func (ji *JobImpl[J]) Retries() int {
 	return ji.retries
 }
 
-func (ji *JobImpl) Runs() int {
+func (ji *JobImpl[J]) Runs() int {
 	return ji.runs
 }
 
-func (ji *JobImpl) IncreaseRuns() {
+func (ji *JobImpl[J]) IncreaseRuns() {
 	ji.resultMu.Lock()
 	defer ji.resultMu.Unlock()
 
 	ji.runs = ji.runs + 1
 }
 
-func (ji *JobImpl) ResultBufferSize() int {
+func (ji *JobImpl[J]) ResultBufferSize() int {
 	return ji.resultBufferSize
 }
 
-func (ji *JobImpl) ResultChan() <-chan any {
+func (ji *JobImpl[J]) ResultChan() <-chan JobResult[J] {
 	return ji.resultChan
 }
 
-func (ji *JobImpl) ReadResult(ctx context.Context) (any, bool, error) {
+func (ji *JobImpl[J]) ReadResult(ctx context.Context) (JobResult[J], bool) {
 	return SafeChannelRead(ctx, ji.resultChan)
 }
-func (ji *JobImpl) WriteResult(ctx context.Context, val any) error {
+func (ji *JobImpl[J]) WriteResult(ctx context.Context, val JobResult[J]) error {
 	return SafeChannelWrite(ctx, ji.resultChan, val)
 }
 
-func (ji *JobImpl) Close() {
+func (ji *JobImpl[J]) Close() {
 
 	ji.resultMu.Lock()
 	defer ji.resultMu.Unlock()
@@ -90,31 +99,31 @@ func (ji *JobImpl) Close() {
 	}
 }
 
-func (ji *JobImpl) IsClosed() bool {
+func (ji *JobImpl[J]) IsClosed() bool {
 	ji.resultMu.Lock()
 	defer ji.resultMu.Unlock()
 	return ji.resultChanDone
 }
 
-func (s *Service) NewJob(process func(ctx context.Context, result JobResultPipe) error) Job {
-	return s.NewJobWithBufferAndRetry(process, 10, 0)
+func NewJob[J any](process func(ctx context.Context, result JobResultPipe[J]) error) Job[J] {
+	return NewJobWithBufferAndRetry[J](process, 10, 0)
 }
 
-func (s *Service) NewJobWithBuffer(process func(ctx context.Context, result JobResultPipe) error, buffer int) Job {
-	return s.NewJobWithBufferAndRetry(process, buffer, 0)
+func NewJobWithBuffer[J any](process func(ctx context.Context, result JobResultPipe[J]) error, buffer int) Job[J] {
+	return NewJobWithBufferAndRetry(process, buffer, 0)
 }
 
-func (s *Service) NewJobWithRetry(process func(ctx context.Context, result JobResultPipe) error, retries int) Job {
-	return s.NewJobWithBufferAndRetry(process, 10, retries)
+func NewJobWithRetry[J any](process func(ctx context.Context, result JobResultPipe[J]) error, retries int) Job[J] {
+	return NewJobWithBufferAndRetry(process, 10, retries)
 }
 
-func (s *Service) NewJobWithBufferAndRetry(process func(ctx context.Context, result JobResultPipe) error, resultBufferSize, retries int) Job {
-	return &JobImpl{
+func NewJobWithBufferAndRetry[J any](process func(ctx context.Context, result JobResultPipe[J]) error, resultBufferSize, retries int) Job[J] {
+	return &JobImpl[J]{
 		id:               xid.New().String(),
 		retries:          retries,
 		processFunc:      process,
 		resultBufferSize: resultBufferSize,
-		resultChan:       make(chan any, resultBufferSize),
+		resultChan:       make(chan JobResult[J], resultBufferSize),
 	}
 }
 
@@ -149,7 +158,7 @@ func WithPoolCapacity(capacity int) Option {
 // This is done by simply by listening to the jobs ErrChan. Be sure to also check for when its closed
 //
 //	err, ok := <- errChan
-func (s *Service) SubmitJob(ctx context.Context, job Job) error {
+func SubmitJob[J any](ctx context.Context, s *Service, job Job[J]) error {
 
 	p := s.pool
 	if p.IsClosed() {
@@ -172,7 +181,7 @@ func (s *Service) SubmitJob(ctx context.Context, job Job) error {
 					defer job.Close()
 
 					if job.F() == nil {
-						err := job.WriteResult(ctx, errors.New("implement this function"))
+						err := job.WriteResult(ctx, JobResult[J]{Error: errors.New("implement this function")})
 						if err != nil {
 							return
 						}
@@ -188,7 +197,7 @@ func (s *Service) SubmitJob(ctx context.Context, job Job) error {
 
 						if job.CanRun() {
 
-							err1 := s.SubmitJob(ctx, job)
+							err1 := SubmitJob(ctx, s, job)
 							if err1 != nil {
 								logger.
 									WithError(err1).
@@ -208,7 +217,7 @@ func (s *Service) SubmitJob(ctx context.Context, job Job) error {
 }
 
 // SafeChannelWrite writes a value to a channel, returning an error if the context is canceled.
-func SafeChannelWrite(ctx context.Context, ch chan<- any, value any) error {
+func SafeChannelWrite[J any](ctx context.Context, ch chan<- JobResult[J], value JobResult[J]) error {
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
@@ -217,15 +226,15 @@ func SafeChannelWrite(ctx context.Context, ch chan<- any, value any) error {
 	}
 }
 
-func SafeChannelRead(ctx context.Context, ch <-chan any) (any, bool, error) {
+func SafeChannelRead[J any](ctx context.Context, ch <-chan JobResult[J]) (JobResult[J], bool) {
 
 	select {
 	case <-ctx.Done():
 		// Return context error without blocking
-		return nil, false, ctx.Err()
+		return JobResult[J]{Error: ctx.Err()}, false
 
 	case result, ok := <-ch:
 		// Channel read successfully or channel closed
-		return result, ok, nil
+		return result, ok
 	}
 }

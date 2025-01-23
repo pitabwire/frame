@@ -57,7 +57,7 @@ type subscriber struct {
 	isInit       atomic.Bool
 }
 
-func (s *subscriber) listen(ctx context.Context, _ JobResultPipe) error {
+func (s *subscriber) listen(ctx context.Context, _ JobResultPipe[*pubsub.Message]) error {
 
 	service := FromContext(ctx)
 	logger := service.L(ctx).WithField("name", s.reference).WithField("function", "subscription").WithField("url", s.url)
@@ -83,7 +83,7 @@ func (s *subscriber) listen(ctx context.Context, _ JobResultPipe) error {
 				return err
 			}
 
-			job := service.NewJob(func(ctx context.Context, _ JobResultPipe) error {
+			job := NewJob(func(ctx context.Context, _ JobResultPipe[*pubsub.Message]) error {
 				authClaim := ClaimsFromMap(msg.Metadata)
 
 				var ctx2 context.Context
@@ -105,7 +105,7 @@ func (s *subscriber) listen(ctx context.Context, _ JobResultPipe) error {
 				return nil
 			})
 
-			err = service.SubmitJob(ctx, job)
+			err = SubmitJob(ctx, service, job)
 			if err != nil {
 				logger.WithError(err).Warn(" Ignoring handle error message")
 				return err
@@ -317,9 +317,9 @@ func (s *Service) subscribe(ctx context.Context) {
 		}
 		subsc.logger = logger
 
-		job := s.NewJob(subsc.listen)
+		job := NewJob(subsc.listen)
 
-		err := s.SubmitJob(ctx, job)
+		err := SubmitJob(ctx, s, job)
 		if err != nil {
 			logger.WithError(err).WithField("subscriber", subsc).Error(" could not listen or subscribe for messages")
 			return false

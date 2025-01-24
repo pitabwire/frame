@@ -23,7 +23,7 @@ type grpcServer struct {
 	grpcping.UnimplementedFramePingServer
 }
 
-func (s *grpcServer) SayHello(ctx context.Context, in *grpcping.HelloRequest) (
+func (s *grpcServer) SayPing(ctx context.Context, in *grpcping.HelloRequest) (
 	*grpcping.HelloResponse, error) {
 
 	return &grpcping.HelloResponse{Message: "Hello " + in.Name + " from frame"}, nil

@@ -82,4 +82,6 @@ gen_tls_certificates:
 			-CAkey tests_runner/ca-key.pem -CAcreateserial -out tests_runner/server-cert.pem
 
 
-build: clean fmt vet gen_tls_certificates docker-setup tests docker-stop ## run all preliminary steps and tests the setup
+build_setup: clean fmt vet gen_tls_certificates docker-setup  ## run all preliminary steps and tests the setup
+build_cleanup:  docker-stop ## run all preliminary steps and tests the setup
+build: build_setup tests build_cleanup ## run all preliminary steps and tests the setup

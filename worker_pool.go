@@ -8,19 +8,34 @@ import (
 	"sync"
 )
 
-type JobResult[J any] struct {
-	Item  J
-	Error error
+type JobResult[J any] interface {
+	IsError() bool
+	Error() error
+	Item() J
 }
 
-func (j JobResult[J]) IsError() bool {
-	return j.Error != nil
+type jobResult[J any] struct {
+	item  J
+	error error
+}
+
+func (j *jobResult[J]) IsError() bool {
+	return j.error != nil
+}
+
+func (j *jobResult[J]) Error() error {
+	return j.error
+}
+
+func (j *jobResult[J]) Item() J {
+	return j.item
 }
 
 type JobResultPipe[J any] interface {
 	ResultBufferSize() int
 	ResultChan() <-chan JobResult[J]
-	WriteResult(ctx context.Context, val JobResult[J]) error
+	WriteError(ctx context.Context, val error) error
+	WriteResult(ctx context.Context, val J) error
 	ReadResult(ctx context.Context) (JobResult[J], bool)
 	IsClosed() bool
 	Close()
@@ -85,8 +100,13 @@ func (ji *JobImpl[J]) ResultChan() <-chan JobResult[J] {
 func (ji *JobImpl[J]) ReadResult(ctx context.Context) (JobResult[J], bool) {
 	return SafeChannelRead(ctx, ji.resultChan)
 }
-func (ji *JobImpl[J]) WriteResult(ctx context.Context, val JobResult[J]) error {
-	return SafeChannelWrite(ctx, ji.resultChan, val)
+
+func (ji *JobImpl[J]) WriteError(ctx context.Context, val error) error {
+	return SafeChannelWrite(ctx, ji.resultChan, &jobResult[J]{error: val})
+}
+
+func (ji *JobImpl[J]) WriteResult(ctx context.Context, val J) error {
+	return SafeChannelWrite(ctx, ji.resultChan, &jobResult[J]{item: val})
 }
 
 func (ji *JobImpl[J]) Close() {
@@ -181,7 +201,7 @@ func SubmitJob[J any](ctx context.Context, s *Service, job Job[J]) error {
 					defer job.Close()
 
 					if job.F() == nil {
-						err := job.WriteResult(ctx, JobResult[J]{Error: errors.New("implement this function")})
+						err := job.WriteError(ctx, errors.New("implement this function"))
 						if err != nil {
 							return
 						}
@@ -231,7 +251,7 @@ func SafeChannelRead[J any](ctx context.Context, ch <-chan JobResult[J]) (JobRes
 	select {
 	case <-ctx.Done():
 		// Return context error without blocking
-		return JobResult[J]{Error: ctx.Err()}, false
+		return &jobResult[J]{error: ctx.Err()}, false
 
 	case result, ok := <-ch:
 		// Channel read successfully or channel closed

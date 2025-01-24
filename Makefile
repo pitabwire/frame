@@ -35,6 +35,9 @@ vet:    ## run go vet on the source files
 doc:    ## generate godocs and start a local documentation webserver on port 8085
 	godoc -http=:8085 -index
 
+generate_hello:
+	go generate grpchello ...
+
 # this command will start docker components that we set in docker-compose.yml
 docker-setup: ## sets up docker container images
 	docker compose -f tests_runner/docker-compose.yml up -d
@@ -42,6 +45,8 @@ docker-setup: ## sets up docker container images
 # shutting down docker components
 docker-stop: ## stops all docker containers
 	docker compose -f tests_runner/docker-compose.yml down
+
+
 
 # this command will run all tests in the repo
 # INTEGRATION_TEST_SUITE_PATH is used to run specific tests in Golang,

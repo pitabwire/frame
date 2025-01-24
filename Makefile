@@ -35,8 +35,8 @@ vet:    ## run go vet on the source files
 doc:    ## generate godocs and start a local documentation webserver on port 8085
 	godoc -http=:8085 -index
 
-generate_hello:
-	go generate grpchello ...
+generate_ping:
+	protoc --go_out=./ --go_opt=paths=source_relative --go-grpc_out=./ --go-grpc_opt=paths=source_relative grpcping/frameping.proto
 
 # this command will start docker components that we set in docker-compose.yml
 docker-setup: ## sets up docker container images

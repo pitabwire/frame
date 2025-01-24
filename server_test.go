@@ -5,7 +5,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"errors"
-	"github.com/pitabwire/frame/grpchello"
+	"github.com/pitabwire/frame/grpcping"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
@@ -20,20 +20,20 @@ import (
 )
 
 type grpcServer struct {
-	grpchello.UnimplementedGreeterServer
+	grpcping.UnimplementedFramePingServer
 }
 
-func (s *grpcServer) SayHello(ctx context.Context, in *grpchello.HelloRequest) (
-	*grpchello.HelloReply, error) {
+func (s *grpcServer) SayHello(ctx context.Context, in *grpcping.HelloRequest) (
+	*grpcping.HelloResponse, error) {
 
-	return &grpchello.HelloReply{Message: "Hello " + in.Name + " from frame"}, nil
+	return &grpcping.HelloResponse{Message: "Hello " + in.Name + " from frame"}, nil
 }
 
 func startGRPCServer() (*grpc.Server, *bufconn.Listener) {
 	bufferSize := 1024 * 1024
 	listener := bufconn.Listen(bufferSize)
 	srv := grpc.NewServer()
-	grpchello.RegisterGreeterServer(srv, &grpcServer{})
+	grpcping.RegisterFramePingServer(srv, &grpcServer{})
 
 	go func() {
 		if err := srv.Serve(listener); err != nil {
@@ -74,7 +74,7 @@ func TestServiceGrpcHealthServer(t *testing.T) {
 	bufferSize := 1024 * 1024
 	listener := bufconn.Listen(bufferSize)
 	gsrv := grpc.NewServer()
-	grpchello.RegisterGreeterServer(gsrv, &grpcServer{})
+	grpcping.RegisterFramePingServer(gsrv, &grpcServer{})
 
 	var defConf ConfigurationDefault
 	err := ConfigProcess("", &defConf)
@@ -113,7 +113,7 @@ func TestServiceGrpcServer(t *testing.T) {
 	bufferSize := 1024 * 1024
 	listener := bufconn.Listen(bufferSize)
 	gsrv := grpc.NewServer()
-	grpchello.RegisterGreeterServer(gsrv, &grpcServer{})
+	grpcping.RegisterFramePingServer(gsrv, &grpcServer{})
 
 	var defConf ConfigurationDefault
 	err := ConfigProcess("", &defConf)
@@ -169,7 +169,7 @@ func TestServiceGrpcTLSServer(t *testing.T) {
 	//}
 
 	gsrv := grpc.NewServer()
-	grpchello.RegisterGreeterServer(gsrv, &grpcServer{})
+	grpcping.RegisterFramePingServer(gsrv, &grpcServer{})
 
 	srv.Init(GrpcServer(gsrv), GrpcPort(":50053"))
 
@@ -234,13 +234,13 @@ func getNetworkClConn(address string, opts ...grpc.DialOption) (
 
 func clientInvokeGrpc(ctx context.Context, conn *grpc.ClientConn) error {
 
-	cli := grpchello.NewGreeterClient(conn)
+	cli := grpcping.NewFramePingClient(conn)
 
-	req := grpchello.HelloRequest{
+	req := grpcping.HelloRequest{
 		Name: "Testing Roma",
 	}
 
-	resp, err := cli.SayHello(ctx, &req)
+	resp, err := cli.SayPing(ctx, &req)
 	if err != nil {
 		return err
 	}

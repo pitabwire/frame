@@ -2,52 +2,28 @@ name: Publish New Release
 
 on:
   schedule:
-    - cron: "0 0 */3 * *"  # Runs every 3 days at midnight UTC
+    - cron: "0 0 */5 * *"  # Runs every 3 days at midnight UTC
 
 jobs:
   check-draft-exists:
     runs-on: ubuntu-latest
     outputs:
-      draft_exists: ${{ steps.check_draft.outputs.draft_exists }}
       draft_id: ${{ steps.check_draft.outputs.draft_id }}
-      draft_tag_name: ${{ steps.check_draft.outputs.draft_tag_name }}
-      draft_name: ${{ steps.check_draft.outputs.draft_name }}
-      draft_body: ${{ steps.check_draft.outputs.draft_body }}
-
     steps:
-      - name: Check out the repository
-        uses: actions/checkout@v4
-
       - name: Check if draft release exists
         id: check_draft
         run: |
-          DRAFT_RELEASE=$(curl -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+          DRAFT_RELEASE=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
                                 -H "Accept: application/vnd.github.v3+json" \
                                 https://api.github.com/repos/${{ github.repository }}/releases)
-          DRAFT_RELEASE_ID=$(echo $DRAFT_RELEASE | jq '.[] | select(.draft == true) | .id')
-          DRAFT_RELEASE_TAG_NAME=$(echo $DRAFT_RELEASE | jq '.[] | select(.draft == true) | .tag_name')
-          DRAFT_RELEASE_NAME=$(echo $DRAFT_RELEASE | jq '.[] | select(.draft == true) | .name')
-          DRAFT_RELEASE_BODY=$(echo $DRAFT_RELEASE | jq '.[] | select(.draft == true) | .body')
+          DRAFT_RELEASE_ID=$(echo "$DRAFT_RELEASE" | jq -r '.[] | select(.draft == true) | .id // empty')
           echo "draft_id=$DRAFT_RELEASE_ID" >> $GITHUB_OUTPUT
-          echo "draft_tag_name=$DRAFT_RELEASE_TAG_NAME" >> $GITHUB_OUTPUT
-          echo "draft_name=$DRAFT_RELEASE_NAME" >> $GITHUB_OUTPUT
-          echo "draft_body=$DRAFT_RELEASE_BODY" >> $GITHUB_OUTPUT
-          
-          if [ -z "$DRAFT_RELEASE_ID" ]; then
-            echo "No draft exists for automatic publishing"
-            exit 0
-          else
-            echo "draft_exists=true" >> $GITHUB_OUTPUT
-          fi
 
   publish-release:
     needs: check-draft-exists
     runs-on: ubuntu-latest
+    if: needs.check-draft-exists.outputs.draft_id != ''
     steps:
-
-      - name: Check out the repository
-        uses: actions/checkout@v4
-
       - name: Publish the release
         uses: eregon/publish-release@v1
         with:

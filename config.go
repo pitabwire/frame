@@ -33,47 +33,47 @@ func ConfigFromContext(ctx context.Context) any {
 }
 
 type ConfigurationDefault struct {
-	LogLevel           string `default:"info" envconfig:"LOG_LEVEL"`
-	RunServiceSecurely bool   `default:"true" envconfig:"RUN_SERVICE_SECURELY"`
+	LogLevel           string `default:"info" envconfig:"LOG_LEVEL" yaml:"log_level"`
+	RunServiceSecurely bool   `default:"true" envconfig:"RUN_SERVICE_SECURELY" yaml:"run_service_securely"`
 
-	ServerPort     string `default:":7000" envconfig:"PORT"`
-	HttpServerPort string `default:":8080" envconfig:"HTTP_PORT"`
-	GrpcServerPort string `default:":50051" envconfig:"GRPC_PORT"`
+	ServerPort     string `default:":7000" envconfig:"PORT" yaml:"server_port"`
+	HttpServerPort string `default:":8080" envconfig:"HTTP_PORT" yaml:"http_server_port"`
+	GrpcServerPort string `default:":50051" envconfig:"GRPC_PORT" yaml:"grpc_server_port"`
 
-	CORSEnabled          bool     `default:"false" envconfig:"CORS_ENABLED"`
-	CORSAllowCredentials bool     `default:"false" envconfig:"CORS_ALLOW_CREDENTIALS"`
-	CORSAllowedHeaders   []string `default:"Authorization" envconfig:"CORS_ALLOWED_HEADERS"`
-	CORSExposedHeaders   []string `default:"*" envconfig:"CORS_EXPOSED_HEADERS"`
-	CORSAllowedOrigins   []string `default:"*" envconfig:"CORS_ALLOWED_ORIGINS"`
-	CORSAllowedMethods   []string `default:"GET,HEAD,POST,PUT,OPTIONS" envconfig:"CORS_ALLOWED_METHODS"`
-	CORSMaxAge           int      `default:"3600" envconfig:"CORS_MAX_AGE"`
+	CORSEnabled          bool     `default:"false" envconfig:"CORS_ENABLED" yaml:"cors_enabled"`
+	CORSAllowCredentials bool     `default:"false" envconfig:"CORS_ALLOW_CREDENTIALS" yaml:"cors_allow_credentials"`
+	CORSAllowedHeaders   []string `default:"Authorization" envconfig:"CORS_ALLOWED_HEADERS" yaml:"cors_allowed_headers"`
+	CORSExposedHeaders   []string `default:"*" envconfig:"CORS_EXPOSED_HEADERS" yaml:"cors_exposed_headers"`
+	CORSAllowedOrigins   []string `default:"*" envconfig:"CORS_ALLOWED_ORIGINS" yaml:"cors_allowed_origins"`
+	CORSAllowedMethods   []string `default:"GET,HEAD,POST,PUT,OPTIONS" envconfig:"CORS_ALLOWED_METHODS" yaml:"cors_allowed_methods"`
+	CORSMaxAge           int      `default:"3600" envconfig:"CORS_MAX_AGE" yaml:"cors_max_age"`
 
-	TLSCertificatePath    string `envconfig:"TLS_CERTIFICATE_PATH"`
-	TLSCertificateKeyPath string `envconfig:"TLS_CERTIFICATE_KEY_PATH"`
+	TLSCertificatePath    string `envconfig:"TLS_CERTIFICATE_PATH" yaml:"tls_certificate_path"`
+	TLSCertificateKeyPath string `envconfig:"TLS_CERTIFICATE_KEY_PATH" yaml:"tls_certificate_key_path"`
 
-	Oauth2WellKnownJwk        string `envconfig:"OAUTH2_WELL_KNOWN_JWK"`
-	Oauth2JwtVerifyAudience   string `envconfig:"OAUTH2_JWT_VERIFY_AUDIENCE"`
-	Oauth2JwtVerifyIssuer     string `envconfig:"OAUTH2_JWT_VERIFY_ISSUER"`
-	Oauth2ServiceURI          string `envconfig:"OAUTH2_SERVICE_URI"`
-	Oauth2ServiceClientSecret string `envconfig:"OAUTH2_SERVICE_CLIENT_SECRET"`
-	Oauth2ServiceAudience     string `envconfig:"OAUTH2_SERVICE_AUDIENCE"`
-	Oauth2ServiceAdminURI     string `envconfig:"OAUTH2_SERVICE_ADMIN_URI"`
+	Oauth2WellKnownJwk        string `envconfig:"OAUTH2_WELL_KNOWN_JWK" yaml:"oauth2_well_known_jwk"`
+	Oauth2JwtVerifyAudience   string `envconfig:"OAUTH2_JWT_VERIFY_AUDIENCE" yaml:"oauth2_jwt_verify_audience"`
+	Oauth2JwtVerifyIssuer     string `envconfig:"OAUTH2_JWT_VERIFY_ISSUER" yaml:"oauth2_jwt_verify_issuer"`
+	Oauth2ServiceURI          string `envconfig:"OAUTH2_SERVICE_URI" yaml:"oauth2_service_uri"`
+	Oauth2ServiceClientSecret string `envconfig:"OAUTH2_SERVICE_CLIENT_SECRET" yaml:"oauth2_service_client_secret"`
+	Oauth2ServiceAudience     string `envconfig:"OAUTH2_SERVICE_AUDIENCE" yaml:"oauth2_service_audience"`
+	Oauth2ServiceAdminURI     string `envconfig:"OAUTH2_SERVICE_ADMIN_URI" yaml:"oauth2_service_admin_uri"`
 
-	AuthorizationServiceReadURI  string `envconfig:"AUTHORIZATION_SERVICE_READ_URI"`
-	AuthorizationServiceWriteURI string `envconfig:"AUTHORIZATION_SERVICE_WRITE_URI"`
+	AuthorizationServiceReadURI  string `envconfig:"AUTHORIZATION_SERVICE_READ_URI" yaml:"authorization_service_read_uri"`
+	AuthorizationServiceWriteURI string `envconfig:"AUTHORIZATION_SERVICE_WRITE_URI" yaml:"authorization_service_write_uri"`
 
-	DatabasePrimaryURL             []string `envconfig:"DATABASE_URL"`
-	DatabaseReplicaURL             []string `envconfig:"REPLICA_DATABASE_URL"`
-	DatabaseMigrate                string   `default:"false" envconfig:"DO_MIGRATION"`
-	DatabaseMigrationPath          string   `default:"./migrations/0001" envconfig:"MIGRATION_PATH"`
-	DatabaseSkipDefaultTransaction bool     `default:"true" envconfig:"SKIP_DEFAULT_TRANSACTION"`
+	DatabasePrimaryURL             []string `envconfig:"DATABASE_URL" yaml:"database_url"`
+	DatabaseReplicaURL             []string `envconfig:"REPLICA_DATABASE_URL" yaml:"replica_database_url"`
+	DatabaseMigrate                string   `default:"false" envconfig:"DO_MIGRATION" yaml:"do_migration"`
+	DatabaseMigrationPath          string   `default:"./migrations/0001" envconfig:"MIGRATION_PATH" yaml:"migration_path"`
+	DatabaseSkipDefaultTransaction bool     `default:"true" envconfig:"SKIP_DEFAULT_TRANSACTION" yaml:"skip_default_transaction"`
 
-	DatabaseMaxIdleConnections           int `default:"2" envconfig:"DATABASE_MAX_IDLE_CONNECTIONS"`
-	DatabaseMaxOpenConnections           int `default:"5" envconfig:"DATABASE_MAX_OPEN_CONNECTIONS"`
-	DatabaseMaxConnectionLifeTimeSeconds int `default:"300" envconfig:"DATABASE_MAX_CONNECTION_LIFE_TIME_IN_SECONDS"`
+	DatabaseMaxIdleConnections           int `default:"2" envconfig:"DATABASE_MAX_IDLE_CONNECTIONS" yaml:"database_max_idle_connections"`
+	DatabaseMaxOpenConnections           int `default:"5" envconfig:"DATABASE_MAX_OPEN_CONNECTIONS" yaml:"database_max_open_connections"`
+	DatabaseMaxConnectionLifeTimeSeconds int `default:"300" envconfig:"DATABASE_MAX_CONNECTION_LIFE_TIME_IN_SECONDS" yaml:"database_max_connection_life_time_seconds"`
 
-	EventsQueueName string `default:"frame.events.internal_._queue" envconfig:"EVENTS_QUEUE_NAME"`
-	EventsQueueUrl  string `default:"mem://frame.events.internal_._queue" envconfig:"EVENTS_QUEUE_URL"`
+	EventsQueueName string `default:"frame.events.internal_._queue" envconfig:"EVENTS_QUEUE_NAME" yaml:"events_queue_name"`
+	EventsQueueUrl  string `default:"mem://frame.events.internal_._queue" envconfig:"EVENTS_QUEUE_URL" yaml:"events_queue_url"`
 }
 
 type ConfigurationSecurity interface {

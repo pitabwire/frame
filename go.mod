@@ -11,7 +11,7 @@ require (
 	github.com/jackc/pgx/v5 v5.7.2
 	github.com/kelseyhightower/envconfig v1.4.0
 	github.com/nicksnyder/go-i18n/v2 v2.5.1
-	github.com/panjf2000/ants/v2 v2.11.0
+	github.com/panjf2000/ants/v2 v2.11.1
 	github.com/pitabwire/natspubsub v0.1.8
 	github.com/rs/xid v1.6.0
 	github.com/sirupsen/logrus v1.9.3

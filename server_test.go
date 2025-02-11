@@ -76,8 +76,7 @@ func TestServiceGrpcHealthServer(t *testing.T) {
 	gsrv := grpc.NewServer()
 	grpcping.RegisterFramePingServer(gsrv, &grpcServer{})
 
-	var defConf ConfigurationDefault
-	err := ConfigProcess("", &defConf)
+	defConf, err := ConfigFromEnv[ConfigurationDefault]()
 	if err != nil {
 		t.Errorf("Could not processFunc test configurations %v", err)
 		return
@@ -115,8 +114,7 @@ func TestServiceGrpcServer(t *testing.T) {
 	gsrv := grpc.NewServer()
 	grpcping.RegisterFramePingServer(gsrv, &grpcServer{})
 
-	var defConf ConfigurationDefault
-	err := ConfigProcess("", &defConf)
+	defConf, err := ConfigFromEnv[ConfigurationDefault]()
 	if err != nil {
 		t.Errorf("Could not processFunc test configurations %v", err)
 		return
@@ -151,8 +149,7 @@ func TestServiceGrpcTLSServer(t *testing.T) {
 	bufferSize := 10 * 1024 * 1024
 	priListener := bufconn.Listen(bufferSize)
 
-	var defConf ConfigurationDefault
-	err := ConfigProcess("", &defConf)
+	defConf, err := ConfigFromEnv[ConfigurationDefault]()
 	if err != nil {
 		t.Errorf("Could not processFunc test configurations %v", err)
 		return

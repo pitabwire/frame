@@ -85,8 +85,7 @@ func Test_Config_Process(t *testing.T) {
 	os.Setenv("PORT", "testingp")
 	os.Setenv("DATABASE_URL", "testingu")
 
-	var conf name
-	err := frame.ConfigProcess("", &conf)
+	conf, err := frame.ConfigFromEnv[name]()
 	if err != nil {
 		t.Errorf(" could not load config from env : %v", err)
 	}
@@ -109,8 +108,7 @@ func Test_ConfigCastingIssues(t *testing.T) {
 		return
 	}
 
-	var conf name
-	err = frame.ConfigProcess("", &conf)
+	conf, err := frame.ConfigFromEnv[name]()
 	if err != nil {
 		t.Errorf(" could not load config from env : %v", err)
 		return

@@ -40,8 +40,7 @@ func (event *MessageToTest) Execute(ctx context.Context, payload any) error {
 }
 
 func TestService_RegisterEventsWorks(t *testing.T) {
-	var cfg frame.ConfigurationDefault
-	err := frame.ConfigProcess("", &cfg)
+	cfg, err := frame.ConfigFromEnv[frame.ConfigurationDefault]()
 	if err != nil {
 		t.Errorf("could not processFunc configs %s", err)
 		return
@@ -67,8 +66,7 @@ func TestService_RegisterEventsWorks(t *testing.T) {
 }
 
 func TestService_EventsPublishingWorks(t *testing.T) {
-	var cfg frame.ConfigurationDefault
-	err := frame.ConfigProcess("", &cfg)
+	cfg, err := frame.ConfigFromEnv[frame.ConfigurationDefault]()
 	if err != nil {
 		t.Errorf("could not processFunc configs %s", err)
 		return

@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"github.com/kelseyhightower/envconfig"
 	"github.com/rs/xid"
 	"gorm.io/gorm"
 	"net"
@@ -173,9 +172,4 @@ func GetMacAddress() string {
 		}
 	}
 	return ""
-}
-
-// ConfigProcess convenience method to processFunc configs
-func ConfigProcess(prefix string, config any) error {
-	return envconfig.Process(prefix, config)
 }

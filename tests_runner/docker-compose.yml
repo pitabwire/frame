@@ -2,7 +2,7 @@ services:
 
   postgresd:
     container_name: frame_postgres
-    image: postgres:17.2
+    image: postgres:17.3
     environment:
       - POSTGRES_USER=frame
       - POSTGRES_PASSWORD=secret

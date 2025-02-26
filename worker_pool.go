@@ -156,7 +156,7 @@ func BackGroundConsumer(deque func(ctx context.Context) error) Option {
 	}
 }
 
-// WithPoolConcurrency Option sets the count of pool workers to handle server load.
+// WithPoolConcurrency Option sets the count of pool workers to handle server loadOIDC.
 // By default this is count of CPU + 1
 func WithPoolConcurrency(workers int) Option {
 	return func(s *Service) {
@@ -164,7 +164,7 @@ func WithPoolConcurrency(workers int) Option {
 	}
 }
 
-// WithPoolCapacity Option sets the capacity of pool workers to handle server load.
+// WithPoolCapacity Option sets the capacity of pool workers to handle server loadOIDC.
 // By default this is 100
 func WithPoolCapacity(capacity int) Option {
 	return func(s *Service) {

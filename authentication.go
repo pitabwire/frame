@@ -10,7 +10,6 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"io"
 	"math/big"
 	"net/http"
 	"strings"
@@ -212,7 +211,13 @@ func (a *AuthenticationClaims) AsMetadata() map[string]string {
 
 // ClaimsToContext adds authentication claims to the current supplied context
 func (a *AuthenticationClaims) ClaimsToContext(ctx context.Context) context.Context {
-	return context.WithValue(ctx, ctxKeyAuthenticationClaim, a)
+	ctx = context.WithValue(ctx, ctxKeyAuthenticationClaim, a)
+
+	if a.isInternalSystem() {
+		ctx = SkipTenancyChecksOnClaims(ctx)
+	}
+
+	return ctx
 }
 
 // SkipTenancyChecksOnClaims removes authentication claims from the current supplied context
@@ -354,47 +359,17 @@ func (s *Service) systemPadPartitionInfo(ctx context.Context, tenantId, partitio
 	return ctx
 }
 
-type Jwks struct {
-	Keys []JSONWebKeys `json:"keys"`
-}
-
-type JSONWebKeys struct {
-	Kty string   `json:"kty"`
-	Kid string   `json:"kid"`
-	Use string   `json:"use"`
-	N   string   `json:"n"`
-	E   string   `json:"e"`
-	X5c []string `json:"x5c"`
-}
-
 func (s *Service) getPemCert(token *jwt.Token) (any, error) {
 	config, ok := s.Config().(ConfigurationOAUTH2)
 	if !ok {
 		return nil, errors.New("could not cast config for oauth2 settings")
 	}
 
-	var jwkKeyBytes []byte
-	if config.GetOauthWellKnownJwk() == "" {
-		return nil, errors.New("web key URL is invalid")
+	if config.GetOauth2WellKnownJwkData() == "" {
+		return nil, errors.New("json web key data is not available")
 	}
 
-	wellKnownJWK := config.GetOauthWellKnownJwk()
-
-	if strings.HasPrefix(wellKnownJWK, "http") {
-		resp, err := http.Get(wellKnownJWK)
-
-		if err != nil {
-			return nil, err
-		}
-		defer func(Body io.ReadCloser) {
-			_ = Body.Close()
-		}(resp.Body)
-		jwkKeyBytes, err = io.ReadAll(resp.Body)
-		if err != nil {
-			return nil, err
-		}
-		wellKnownJWK = string(jwkKeyBytes)
-	}
+	wellKnownJWK := config.GetOauth2WellKnownJwkData()
 
 	var jwks = Jwks{}
 	err := json.NewDecoder(strings.NewReader(wellKnownJWK)).Decode(&jwks)

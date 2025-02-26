@@ -95,7 +95,7 @@ func extractLanguageFromGrpcRequest(ctx context.Context) []string {
 
 }
 
-// Translations Option to initialize/load different language packs
+// Translations Option to initialize/loadOIDC different language packs
 func Translations(translationsFolder string, languages ...string) Option {
 
 	if translationsFolder == "" {

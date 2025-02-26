@@ -87,7 +87,7 @@ func Test_Config_Process(t *testing.T) {
 
 	conf, err := frame.ConfigFromEnv[name]()
 	if err != nil {
-		t.Errorf(" could not load config from env : %v", err)
+		t.Errorf(" could not loadOIDC config from env : %v", err)
 	}
 
 	if conf.ServerPort != "testingp" {
@@ -110,7 +110,7 @@ func Test_ConfigCastingIssues(t *testing.T) {
 
 	conf, err := frame.ConfigFromEnv[name]()
 	if err != nil {
-		t.Errorf(" could not load config from env : %v", err)
+		t.Errorf(" could not loadOIDC config from env : %v", err)
 		return
 	}
 

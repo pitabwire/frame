@@ -2,8 +2,12 @@ package frame
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"github.com/caarlos0/env/v11"
+	"io"
+	"net/http"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -31,6 +35,24 @@ func ConfigToContext(ctx context.Context, config any) context.Context {
 // ConfigFromContext extracts service configuration from the supplied context if any exist
 func ConfigFromContext(ctx context.Context) any {
 	return ctx.Value(ctxKeyConfiguration)
+}
+
+// ConfigLoadWithOIDC convenience method to process configs
+func ConfigLoadWithOIDC[T any](ctx context.Context) (cfg T, err error) {
+	cfg, err = ConfigFromEnv[T]()
+	if err != nil {
+		return cfg, err
+	}
+
+	oauth2Cfg, ok := any(&cfg).(ConfigurationOAUTH2)
+	if ok {
+		err = oauth2Cfg.LoadOauth2Config(ctx)
+		if err != nil {
+			return cfg, err
+		}
+	}
+
+	return cfg, nil
 }
 
 // ConfigFromEnv convenience method to process configs
@@ -62,13 +84,14 @@ type ConfigurationDefault struct {
 	TLSCertificatePath    string `env:"TLS_CERTIFICATE_PATH" yaml:"tls_certificate_path"`
 	TLSCertificateKeyPath string `env:"TLS_CERTIFICATE_KEY_PATH" yaml:"tls_certificate_key_path"`
 
-	Oauth2WellKnownJwk        string `env:"OAUTH2_WELL_KNOWN_JWK" yaml:"oauth2_well_known_jwk"`
+	Oauth2ServiceURI          string `env:"OAUTH2_SERVICE_URI" yaml:"oauth2_service_uri"`
+	Oauth2ServiceAdminURI     string `env:"OAUTH2_SERVICE_ADMIN_URI" yaml:"oauth2_service_admin_uri"`
+	Oauth2WellKnownOIDCPath   string `envDefault:".well-known/openid-configuration" env:"OAUTH2_WELL_KNOWN_OIDC_PATH" yaml:"oauth2_well_known_oidc_path"`
+	Oauth2WellKnownJwkData    string `env:"OAUTH2_WELL_KNOWN_JWK_DATA" yaml:"oauth2_well_known_jwk_data"`
+	Oauth2ServiceAudience     string `env:"OAUTH2_SERVICE_AUDIENCE" yaml:"oauth2_service_audience"`
 	Oauth2JwtVerifyAudience   string `env:"OAUTH2_JWT_VERIFY_AUDIENCE" yaml:"oauth2_jwt_verify_audience"`
 	Oauth2JwtVerifyIssuer     string `env:"OAUTH2_JWT_VERIFY_ISSUER" yaml:"oauth2_jwt_verify_issuer"`
-	Oauth2ServiceURI          string `env:"OAUTH2_SERVICE_URI" yaml:"oauth2_service_uri"`
 	Oauth2ServiceClientSecret string `env:"OAUTH2_SERVICE_CLIENT_SECRET" yaml:"oauth2_service_client_secret"`
-	Oauth2ServiceAudience     string `env:"OAUTH2_SERVICE_AUDIENCE" yaml:"oauth2_service_audience"`
-	Oauth2ServiceAdminURI     string `env:"OAUTH2_SERVICE_ADMIN_URI" yaml:"oauth2_service_admin_uri"`
 
 	AuthorizationServiceReadURI  string `env:"AUTHORIZATION_SERVICE_READ_URI" yaml:"authorization_service_read_uri"`
 	AuthorizationServiceWriteURI string `env:"AUTHORIZATION_SERVICE_WRITE_URI" yaml:"authorization_service_write_uri"`
@@ -85,6 +108,8 @@ type ConfigurationDefault struct {
 
 	EventsQueueName string `envDefault:"frame.events.internal_._queue" env:"EVENTS_QUEUE_NAME" yaml:"events_queue_name"`
 	EventsQueueUrl  string `envDefault:"mem://frame.events.internal_._queue" env:"EVENTS_QUEUE_URL" yaml:"events_queue_url"`
+
+	oidcMap OIDCMap `env:"-" yaml:"-"`
 }
 
 type ConfigurationSecurity interface {
@@ -195,7 +220,17 @@ func (c *ConfigurationDefault) GetCORSAllowedMethods() []string {
 }
 
 type ConfigurationOAUTH2 interface {
-	GetOauthWellKnownJwk() string
+	LoadOauth2Config(ctx context.Context) error
+	GetOauth2WellKnownOIDC() string
+	GetOauth2WellKnownJwk() string
+	GetOauth2WellKnownJwkData() string
+	GetOauth2Issuer() string
+	GetOauth2AuthorizationEndpoint() string
+	GetOauth2RegistrationEndpoint() string
+	GetOauth2TokenEndpoint() string
+	GetOauth2UserInfoEndpoint() string
+	GetOauth2RevocationEndpoint() string
+	GetOauth2EndSessionEndpoint() string
 	GetOauth2ServiceURI() string
 	GetOauth2ServiceClientSecret() string
 	GetOauth2ServiceAudience() string
@@ -204,8 +239,85 @@ type ConfigurationOAUTH2 interface {
 
 var _ ConfigurationOAUTH2 = new(ConfigurationDefault)
 
-func (c *ConfigurationDefault) GetOauthWellKnownJwk() string {
-	return c.Oauth2WellKnownJwk
+func (c *ConfigurationDefault) LoadOauth2Config(ctx context.Context) error {
+
+	if len(c.oidcMap) == 0 {
+		c.oidcMap = make(map[string]any)
+	}
+
+	err := c.oidcMap.loadOIDC(ctx, c.GetOauth2WellKnownOIDC())
+	if err != nil {
+		return err
+	}
+
+	c.Oauth2WellKnownJwkData, err = c.oidcMap.loadJWKData(ctx, c.GetOauth2WellKnownJwk())
+	if err != nil {
+		return err
+	}
+	return nil
+}
+func (c *ConfigurationDefault) GetOauth2WellKnownOIDC() string {
+	res, _ := url.JoinPath(c.GetOauth2ServiceURI(), c.Oauth2WellKnownOIDCPath)
+	return res
+}
+func (c *ConfigurationDefault) GetOauth2WellKnownJwk() string {
+	val, ok := c.oidcMap["jwks_uri"]
+	if !ok {
+		return ""
+	}
+	return val.(string)
+}
+func (c *ConfigurationDefault) GetOauth2WellKnownJwkData() string {
+	return c.Oauth2WellKnownJwkData
+}
+func (c *ConfigurationDefault) GetOauth2Issuer() string {
+	val, ok := c.oidcMap["issuer"]
+	if !ok {
+		return ""
+	}
+	return val.(string)
+}
+func (c *ConfigurationDefault) GetOauth2AuthorizationEndpoint() string {
+	val, ok := c.oidcMap["authorization_endpoint"]
+	if !ok {
+		return ""
+	}
+	return val.(string)
+}
+func (c *ConfigurationDefault) GetOauth2RegistrationEndpoint() string {
+	val, ok := c.oidcMap["registration_endpoint"]
+	if !ok {
+		return ""
+	}
+	return val.(string)
+}
+func (c *ConfigurationDefault) GetOauth2TokenEndpoint() string {
+	val, ok := c.oidcMap["token_endpoint"]
+	if !ok {
+		return ""
+	}
+	return val.(string)
+}
+func (c *ConfigurationDefault) GetOauth2UserInfoEndpoint() string {
+	val, ok := c.oidcMap["userinfo_endpoint"]
+	if !ok {
+		return ""
+	}
+	return val.(string)
+}
+func (c *ConfigurationDefault) GetOauth2RevocationEndpoint() string {
+	val, ok := c.oidcMap["revocation_endpoint"]
+	if !ok {
+		return ""
+	}
+	return val.(string)
+}
+func (c *ConfigurationDefault) GetOauth2EndSessionEndpoint() string {
+	val, ok := c.oidcMap["end_session_endpoint"]
+	if !ok {
+		return ""
+	}
+	return val.(string)
 }
 
 func (c *ConfigurationDefault) GetOauth2ServiceURI() string {
@@ -322,4 +434,72 @@ func (c *ConfigurationDefault) TLSCertPath() string {
 func (c *ConfigurationDefault) SetTLSCertAndKeyPath(certificatePath, certificateKeyPath string) {
 	c.TLSCertificatePath = certificatePath
 	c.TLSCertificateKeyPath = certificateKeyPath
+}
+
+type OIDCMap map[string]any
+
+func (oid *OIDCMap) loadOIDC(ctx context.Context, url string) error {
+	hreq, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return err
+	}
+	hreq.Header.Set("Accept", "application/jrd+json,application/json;q=0.9")
+
+	hresp, err := http.DefaultClient.Do(hreq)
+	if err != nil {
+		return err
+	}
+	defer func(Body io.ReadCloser) {
+		_ = Body.Close()
+	}(hresp.Body)
+
+	if hresp.StatusCode/100 != 2 {
+		return fmt.Errorf("OIDC discovery request %q failed: %d %s", url, hresp.StatusCode, hresp.Status)
+	}
+
+	err = json.NewDecoder(hresp.Body).Decode(oid)
+	if err != nil {
+		return fmt.Errorf("decoding OIDC discovery response from %q: %w", url, err)
+	}
+
+	return nil
+}
+
+type Jwks struct {
+	Keys []JSONWebKeys `json:"keys"`
+}
+
+type JSONWebKeys struct {
+	Kty string   `json:"kty"`
+	Kid string   `json:"kid"`
+	Use string   `json:"use"`
+	N   string   `json:"n"`
+	E   string   `json:"e"`
+	X5c []string `json:"x5c"`
+}
+
+func (oid *OIDCMap) loadJWKData(ctx context.Context, url string) (string, error) {
+	hreq, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return "", err
+	}
+	hreq.Header.Set("Accept", "application/jrd+json,application/json;q=0.9")
+
+	hresp, err := http.DefaultClient.Do(hreq)
+	if err != nil {
+		return "", err
+	}
+	defer func(Body io.ReadCloser) {
+		_ = Body.Close()
+	}(hresp.Body)
+
+	if hresp.StatusCode/100 != 2 {
+		return "", fmt.Errorf("JWKs data request %q failed: %d %s", url, hresp.StatusCode, hresp.Status)
+	}
+
+	var jwkData []byte
+	jwkData, err = io.ReadAll(hresp.Body)
+	jwkString := string(jwkData)
+
+	return jwkString, err
 }

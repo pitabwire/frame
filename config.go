@@ -46,6 +46,11 @@ func ConfigLoadWithOIDC[T any](ctx context.Context) (cfg T, err error) {
 
 	oauth2Cfg, ok := any(&cfg).(ConfigurationOAUTH2)
 	if ok {
+
+		if oauth2Cfg.GetOauth2ServiceURI() == "" {
+			return cfg, nil
+		}
+
 		err = oauth2Cfg.LoadOauth2Config(ctx)
 		if err != nil {
 			return cfg, err

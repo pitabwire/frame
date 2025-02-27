@@ -24,9 +24,9 @@ type BaseModel struct {
 	CreatedAt   time.Time
 	ModifiedAt  time.Time
 	Version     uint           `gorm:"DEFAULT 0"`
-	TenantID    string         `gorm:"type:varchar(50);"`
-	PartitionID string         `gorm:"type:varchar(50);"`
-	AccessID    string         `gorm:"type:varchar(50);"`
+	TenantID    string         `gorm:"type:varchar(50);index:,composite:base_tenancy"`
+	PartitionID string         `gorm:"type:varchar(50);index:,composite:base_tenancy"`
+	AccessID    string         `gorm:"type:varchar(50);index:,composite:base_tenancy"`
 	DeletedAt   gorm.DeletedAt `sql:"index"`
 }
 

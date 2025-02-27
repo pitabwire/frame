@@ -45,6 +45,7 @@ type AuthenticationClaims struct {
 	AccessID    string         `json:"access_id,omitempty"`
 	ContactID   string         `json:"contact_id,omitempty"`
 	DeviceID    string         `json:"device_id,omitempty"`
+	ServiceName string         `json:"service_name,omitempty"`
 	Roles       []string       `json:"roles,omitempty"`
 	jwt.RegisteredClaims
 }
@@ -167,9 +168,12 @@ func (a *AuthenticationClaims) GetRoles() []string {
 	return result
 }
 
-func (a *AuthenticationClaims) ServiceName() string {
+func (a *AuthenticationClaims) GetServiceName() string {
 
-	result := ""
+	result := a.ServiceName
+	if result != "" {
+		return result
+	}
 	val, ok := a.Ext["service_name"]
 	if !ok {
 		return ""

@@ -41,7 +41,7 @@ func (model *BaseModel) GenID(ctx context.Context) {
 		return
 	}
 
-	model.ID = xid.New().String()
+	model.ID = GenerateID(ctx)
 
 	authClaim := ClaimsFromContext(ctx)
 	if authClaim == nil {
@@ -115,6 +115,10 @@ type Migration struct {
 	Name      string `gorm:"type:varchar(50);uniqueIndex:idx_migrations_name"`
 	Patch     string `gorm:"type:text"`
 	AppliedAt sql.NullTime
+}
+
+func GenerateID(_ context.Context) string {
+	return xid.New().String()
 }
 
 // GetIp convenience method to extract the remote ip address from our inbound request

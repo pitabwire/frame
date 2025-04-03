@@ -1,6 +1,6 @@
 module github.com/pitabwire/frame
 
-go 1.23.0
+go 1.24.0
 
 require (
 	github.com/BurntSushi/toml v1.5.0
@@ -12,7 +12,7 @@ require (
 	github.com/jackc/pgx/v5 v5.7.4
 	github.com/nicksnyder/go-i18n/v2 v2.5.1
 	github.com/panjf2000/ants/v2 v2.11.2
-	github.com/pitabwire/natspubsub v0.1.8
+	github.com/pitabwire/natspubsub v0.1.9
 	github.com/rs/xid v1.6.0
 	github.com/sirupsen/logrus v1.9.3
 	go.opentelemetry.io/otel v1.35.0
@@ -29,19 +29,14 @@ require (
 )
 
 require (
-	cloud.google.com/go/auth v0.14.0 // indirect
-	cloud.google.com/go/auth/oauth2adapt v0.2.7 // indirect
-	cloud.google.com/go/iam v1.3.1 // indirect
-	cloud.google.com/go/pubsub v1.45.3 // indirect
 	filippo.io/edwards25519 v1.1.0 // indirect
 	github.com/cenkalti/backoff/v4 v4.2.1 // indirect
 	github.com/desertbit/timer v0.0.0-20180107155436-c41aec40b27f // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
 	github.com/go-logr/logr v1.4.2 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
-	github.com/go-sql-driver/mysql v1.8.1 // indirect
+	github.com/go-sql-driver/mysql v1.9.1 // indirect
 	github.com/golang/groupcache v0.0.0-20241129210726-2c02b8208cf8 // indirect
-	github.com/google/s2a-go v0.1.9 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/googleapis/gax-go/v2 v2.14.1 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
@@ -49,24 +44,21 @@ require (
 	github.com/jackc/puddle/v2 v2.2.2 // indirect
 	github.com/jinzhu/inflection v1.0.0 // indirect
 	github.com/jinzhu/now v1.1.5 // indirect
-	github.com/klauspost/compress v1.17.11 // indirect
-	github.com/nats-io/nats.go v1.39.0 // indirect
-	github.com/nats-io/nkeys v0.4.9 // indirect
+	github.com/klauspost/compress v1.18.0 // indirect
+	github.com/nats-io/nats.go v1.40.1 // indirect
+	github.com/nats-io/nkeys v0.4.10 // indirect
 	github.com/nats-io/nuid v1.0.1 // indirect
 	github.com/rs/cors v1.8.3 // indirect
 	go.opencensus.io v0.24.0 // indirect
 	go.opentelemetry.io/auto/sdk v1.1.0 // indirect
-	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.56.0 // indirect
-	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.58.0 // indirect
 	go.opentelemetry.io/otel/metric v1.35.0 // indirect
-	go.opentelemetry.io/otel/sdk/metric v1.34.0 // indirect
 	go.opentelemetry.io/otel/trace v1.35.0 // indirect
 	golang.org/x/crypto v0.36.0 // indirect
 	golang.org/x/sync v0.12.0 // indirect
 	golang.org/x/sys v0.31.0 // indirect
-	golang.org/x/xerrors v0.0.0-20240716161551-93cc26a95ae9 // indirect
-	google.golang.org/api v0.216.0 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20250115164207-1a7da9e5054f // indirect
+	golang.org/x/xerrors v0.0.0-20240903120638-7835f813f4da // indirect
+	google.golang.org/api v0.228.0 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20250324211829-b45e905df463 // indirect
 	gorm.io/driver/mysql v1.5.6 // indirect
 	gorm.io/driver/sqlite v1.5.0 // indirect
 	nhooyr.io/websocket v1.8.7 // indirect

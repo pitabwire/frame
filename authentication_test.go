@@ -80,7 +80,7 @@ func TestSimpleAuthenticateWithIssuer(t *testing.T) {
 
 func TestSimpleAuthenticateWithOIDC(t *testing.T) {
 
-	err := os.Setenv("OAUTH2_SERVICE_URI", "https://oauth2.chamamobile.com")
+	err := os.Setenv("OAUTH2_SERVICE_URI", "https://accounts.google.com")
 	if err != nil {
 		t.Error(err)
 	}

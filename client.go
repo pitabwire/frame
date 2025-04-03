@@ -52,7 +52,12 @@ func (s *Service) InvokeRestService(ctx context.Context,
 	respDump, _ := httputil.DumpResponse(resp, true)
 	s.L(ctx).WithField("response", string(respDump)).Debug("response in")
 
-	defer resp.Body.Close()
+	defer func(Body io.ReadCloser) {
+		err0 := Body.Close()
+		if err0 != nil {
+			s.L(ctx).WithError(err0).Error("could not close response body")
+		}
+	}(resp.Body)
 
 	response, err := io.ReadAll(resp.Body)
 

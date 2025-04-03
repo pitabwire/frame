@@ -44,7 +44,11 @@ func TestService_Datastore(t *testing.T) {
 }
 
 func TestService_DatastoreSet(t *testing.T) {
-	os.Setenv("DATABASE_URL", "postgres://frame:secret@localhost:5431/framedatabase?sslmode=disable")
+	err := os.Setenv("DATABASE_URL", "postgres://frame:secret@localhost:5431/framedatabase?sslmode=disable")
+	if err != nil {
+		t.Errorf("Could not set database url to ENV %v", err)
+		return
+	}
 	defConf, err := frame.ConfigFromEnv[frame.ConfigurationDefault]()
 	if err != nil {
 		t.Errorf("Could not processFunc test configurations %v", err)

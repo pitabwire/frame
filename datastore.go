@@ -9,6 +9,7 @@ import (
 	"math/rand"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"gocloud.dev/postgres"
@@ -25,32 +26,35 @@ type Store struct {
 	writeDatabase []*gorm.DB
 	readDatabase  []*gorm.DB
 	randomSource  rand.Source
+	readIdx       uint64 // atomic counter for round-robin
+	writeIdx      uint64 // atomic counter for round-robin
 }
 
 // Returns a random item from the slice, or an error if the slice is empty
 func (s *Store) getConnection(readOnly bool) *gorm.DB {
-
-	var connectionPool []*gorm.DB
+	var pool []*gorm.DB
+	var idx *uint64
 	if readOnly {
-		connectionPool = s.readDatabase
-		if len(connectionPool) == 0 {
-			connectionPool = s.writeDatabase
+		pool = s.readDatabase
+		idx = &s.readIdx
+		if len(pool) == 0 {
+			pool = s.writeDatabase
+			idx = &s.writeIdx
 		}
 	} else {
-		connectionPool = s.writeDatabase
+		pool = s.writeDatabase
+		idx = &s.writeIdx
 	}
-
-	return s.selectOne(connectionPool)
+	return s.selectOne(pool, idx)
 }
 
-func (s *Store) selectOne(pool []*gorm.DB) *gorm.DB {
-
+// selectOne uses atomic round-robin for high concurrency.
+func (s *Store) selectOne(pool []*gorm.DB, idx *uint64) *gorm.DB {
 	if len(pool) == 0 {
 		return nil
 	}
-
-	randomIndex := rand.New(s.randomSource).Intn(len(pool))
-	return pool[randomIndex]
+	pos := atomic.AddUint64(idx, 1)
+	return pool[int(pos-1)%len(pool)]
 }
 
 func (s *Store) add(db *gorm.DB, readOnly bool) {
@@ -176,6 +180,23 @@ func (s *Service) DBWithName(ctx context.Context, name string, readOnly bool) *g
 	}
 
 	return partitionedDb
+}
+
+// PoolStats returns stats for monitoring.
+func (s *Store) PoolStats() (readStats, writeStats []*sql.DBStats) {
+	for _, db := range s.readDatabase {
+		if sqlDB, err := db.DB(); err == nil {
+			stats := sqlDB.Stats()
+			readStats = append(readStats, &stats)
+		}
+	}
+	for _, db := range s.writeDatabase {
+		if sqlDB, err := db.DB(); err == nil {
+			stats := sqlDB.Stats()
+			writeStats = append(writeStats, &stats)
+		}
+	}
+	return
 }
 
 // DatastoreConnection Option method to store a connection that will be utilized when connecting to the database

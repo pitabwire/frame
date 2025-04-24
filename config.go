@@ -106,6 +106,7 @@ type ConfigurationDefault struct {
 	DatabaseMigrate                string   `envDefault:"false" env:"DO_MIGRATION" yaml:"do_migration"`
 	DatabaseMigrationPath          string   `envDefault:"./migrations/0001" env:"MIGRATION_PATH" yaml:"migration_path"`
 	DatabaseSkipDefaultTransaction bool     `envDefault:"true" env:"SKIP_DEFAULT_TRANSACTION" yaml:"skip_default_transaction"`
+	DatabasePreferSimpleProtocol   bool     `envDefault:"true" env:"PREFER_SIMPLE_PROTOCOL" yaml:"prefer_simple_protocol"`
 
 	DatabaseMaxIdleConnections           int `envDefault:"2" env:"DATABASE_MAX_IDLE_CONNECTIONS" yaml:"database_max_idle_connections"`
 	DatabaseMaxOpenConnections           int `envDefault:"5" env:"DATABASE_MAX_OPEN_CONNECTIONS" yaml:"database_max_open_connections"`
@@ -359,6 +360,7 @@ type ConfigurationDatabase interface {
 	GetDatabaseReplicaHostURL() []string
 	DoDatabaseMigrate() bool
 	SkipDefaultTransaction() bool
+	PreferSimpleProtocol() bool
 	GetMaxIdleConnections() int
 	GetMaxOpenConnections() int
 	GetMaxConnectionLifeTimeInSeconds() time.Duration
@@ -384,6 +386,10 @@ func (c *ConfigurationDefault) DoDatabaseMigrate() bool {
 
 	stdArgs := os.Args[1:]
 	return isMigration || (len(stdArgs) > 0 && stdArgs[0] == "migrate")
+}
+
+func (c *ConfigurationDefault) PreferSimpleProtocol() bool {
+	return c.DatabasePreferSimpleProtocol
 }
 
 func (c *ConfigurationDefault) SkipDefaultTransaction() bool {

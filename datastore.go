@@ -2,49 +2,211 @@ package frame
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"math/rand"
+	"gorm.io/driver/postgres"
+	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
-	"gocloud.dev/postgres"
-	"gocloud.dev/server/health/sqlhealth"
 	"gorm.io/datatypes"
-	gormpostgres "gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
+	"gorm.io/plugin/opentelemetry/tracing"
 )
 
 const defaultStoreName = "__default__"
 
 type Store struct {
-	writeDatabase []*gorm.DB
-	readDatabase  []*gorm.DB
-	randomSource  rand.Source
-	readIdx       uint64 // atomic counter for round-robin
-	writeIdx      uint64 // atomic counter for round-robin
+	ctx context.Context
+
+	readIdx             uint64            // atomic counter for round-robin
+	writeIdx            uint64            // atomic counter for round-robin
+	mu                  sync.RWMutex      // protects db slices
+	allReadDBs          map[*gorm.DB]bool // track all read DBs
+	allWriteDBs         map[*gorm.DB]bool // track all write DBs
+	lastHealthCheckTime time.Time
+
+	healthCheckCancel  context.CancelFunc
+	healthCheckStopped <-chan struct{}
+}
+
+func NewStore(ctx context.Context, srv *Service) *Store {
+	store := &Store{
+		ctx:                ctx,
+		allReadDBs:         make(map[*gorm.DB]bool),
+		allWriteDBs:        make(map[*gorm.DB]bool),
+		healthCheckStopped: make(chan struct{}),
+	}
+
+	srv.AddCleanupMethod(store.Cleanup)
+
+	return store
+}
+
+// AddConnection safely adds a DB connection to the pool.
+func (s *Store) AddConnection(db *gorm.DB, readOnly bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if readOnly {
+		if !s.allReadDBs[db] {
+			s.allReadDBs[db] = true
+		}
+	} else {
+		if !s.allWriteDBs[db] {
+			s.allWriteDBs[db] = true
+		}
+	}
+}
+
+// MarkHealthy marks a DB connection as healthy or unhealthy it from the pool.
+func (s *Store) MarkHealthy(readOnly bool, db *gorm.DB, isHealthy bool, err error) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if readOnly {
+		s.allReadDBs[db] = isHealthy
+	} else {
+		s.allWriteDBs[db] = isHealthy
+	}
+
+	return err
+}
+
+// CheckHealth iterates all known DBs, pings them, and updates pool membership accordingly.
+func (s *Store) CheckHealth() error {
+
+	healthCheckError := ""
+
+	if s.getConnection(true) == nil {
+		healthCheckError = "No healthy read db available"
+	}
+	if s.getConnection(false) == nil {
+		healthCheckError += "No healthy write db available"
+	}
+
+	now := time.Now()
+	if s.lastHealthCheckTime.IsZero() || now.Sub(s.lastHealthCheckTime) > 5*time.Minute {
+
+		ctx, cancel := context.WithCancel(s.ctx)
+		s.healthCheckCancel = cancel
+		stopped := make(chan struct{})
+		s.healthCheckStopped = stopped
+		go func(ctx context.Context) {
+			defer func() {
+				close(stopped)
+			}()
+
+			for db := range s.allWriteDBs {
+				_ = s.PingWithTimeoutAndRetry(ctx, false, db)
+			}
+			for db := range s.allReadDBs {
+				_ = s.PingWithTimeoutAndRetry(ctx, true, db)
+			}
+			s.lastHealthCheckTime = now
+
+		}(ctx)
+	}
+	if healthCheckError != "" {
+		return errors.New(healthCheckError)
+	}
+
+	return nil
+}
+
+func (s *Store) Cleanup(_ context.Context) {
+
+	if s.healthCheckCancel != nil {
+		s.healthCheckCancel()
+		<-s.healthCheckStopped
+	}
+
+	for db := range s.allReadDBs {
+		sqlDB, err := db.DB()
+		if err == nil {
+			_ = sqlDB.Close()
+		}
+	}
+	for db := range s.allWriteDBs {
+		sqlDB, err := db.DB()
+		if err == nil {
+			_ = sqlDB.Close()
+		}
+	}
+}
+
+// PingWithTimeoutAndRetry pings a DB with timeout and retry logic.
+func (s *Store) PingWithTimeoutAndRetry(ctx context.Context, readOnly bool, db *gorm.DB) error {
+	var timer *time.Timer
+	wait := 250 * time.Millisecond
+	const maxWait = 30 * time.Second
+
+	defer func() {
+		if timer != nil {
+			timer.Stop()
+		}
+	}()
+
+	for {
+		sqlDB, err := db.DB()
+		if err != nil {
+			return s.MarkHealthy(readOnly, db, false, err)
+		}
+		err = sqlDB.PingContext(ctx)
+		if err == nil {
+			return s.MarkHealthy(readOnly, db, true, nil)
+		}
+		if timer == nil {
+			timer = time.NewTimer(wait)
+		} else {
+			// Timer already fired, so resetting does not race.
+			timer.Reset(wait)
+		}
+		select {
+		case <-timer.C:
+			if wait < maxWait {
+				// Back off next ping.
+				wait *= 2
+				if wait > maxWait {
+					wait = maxWait
+				}
+			}
+		case <-ctx.Done():
+			return s.MarkHealthy(readOnly, db, false, ctx.Err())
+		}
+	}
 }
 
 // Returns a random item from the slice, or an error if the slice is empty
 func (s *Store) getConnection(readOnly bool) *gorm.DB {
 	var pool []*gorm.DB
 	var idx *uint64
+
+	s.mu.RLock()
 	if readOnly {
-		pool = s.readDatabase
-		idx = &s.readIdx
-		if len(pool) == 0 {
-			pool = s.writeDatabase
-			idx = &s.writeIdx
+		for db, healthy := range s.allReadDBs {
+			if healthy {
+				pool = append(pool, db)
+			}
 		}
-	} else {
-		pool = s.writeDatabase
-		idx = &s.writeIdx
+		idx = &s.readIdx
+		if len(pool) != 0 {
+			// This check ensures we are able to use the write db if no more read dbs exist
+			return s.selectOne(pool, idx)
+		}
 	}
+
+	for db, healthy := range s.allWriteDBs {
+		if healthy {
+			pool = append(pool, db)
+		}
+	}
+	idx = &s.writeIdx
+
+	s.mu.RUnlock()
 	return s.selectOne(pool, idx)
 }
 
@@ -57,14 +219,22 @@ func (s *Store) selectOne(pool []*gorm.DB, idx *uint64) *gorm.DB {
 	return pool[int(pos-1)%len(pool)]
 }
 
-func (s *Store) add(db *gorm.DB, readOnly bool) {
-
-	if readOnly {
-		s.readDatabase = append(s.readDatabase, db)
-	} else {
-		s.writeDatabase = append(s.writeDatabase, db)
+// SetPoolConfig updates pool sizes and connection lifetimes at runtime for all DBs.
+func (s *Store) SetPoolConfig(maxOpen, maxIdle int, maxLifetime time.Duration) {
+	for db := range s.allReadDBs {
+		if sqlDB, err := db.DB(); err == nil {
+			sqlDB.SetMaxOpenConns(maxOpen)
+			sqlDB.SetMaxIdleConns(maxIdle)
+			sqlDB.SetConnMaxLifetime(maxLifetime)
+		}
 	}
-
+	for db := range s.allWriteDBs {
+		if sqlDB, err := db.DB(); err == nil {
+			sqlDB.SetMaxOpenConns(maxOpen)
+			sqlDB.SetMaxIdleConns(maxIdle)
+			sqlDB.SetConnMaxLifetime(maxLifetime)
+		}
+	}
 }
 
 func tenantPartition(ctx context.Context) func(db *gorm.DB) *gorm.DB {
@@ -174,29 +344,7 @@ func (s *Service) DBWithName(ctx context.Context, name string, readOnly bool) *g
 
 	partitionedDb := db.Session(&gorm.Session{NewDB: true}).WithContext(ctx).Scopes(tenantPartition(ctx))
 
-	config, ok := s.Config().(ConfigurationLogLevel)
-	if ok && config.LoggingLevelIsDebug() {
-		return partitionedDb.Debug()
-	}
-
 	return partitionedDb
-}
-
-// PoolStats returns stats for monitoring.
-func (s *Store) PoolStats() (readStats, writeStats []*sql.DBStats) {
-	for _, db := range s.readDatabase {
-		if sqlDB, err := db.DB(); err == nil {
-			stats := sqlDB.Stats()
-			readStats = append(readStats, &stats)
-		}
-	}
-	for _, db := range s.writeDatabase {
-		if sqlDB, err := db.DB(); err == nil {
-			stats := sqlDB.Stats()
-			writeStats = append(writeStats, &stats)
-		}
-	}
-	return
 }
 
 // DatastoreConnection Option method to store a connection that will be utilized when connecting to the database
@@ -215,26 +363,28 @@ func DatastoreConnectionWithName(ctx context.Context, name string, postgresqlCon
 			}
 		}
 
-		db, err := postgres.Open(ctx, postgresqlConnection)
+		cleanedPostgresqlDSN, err := CleanPostgresDSN(postgresqlConnection)
 		if err != nil {
-			log := s.L(ctx).WithError(err).WithField("pgConnection", postgresqlConnection)
-			log.Error("Datastore -- problem parsing database connection")
+			s.L(ctx).WithError(err).WithField("dsn", postgresqlConnection).Fatal("could not get a clean postgresql dsn")
+			return
 		}
 
-		skipDefaultTx := true
-		dbConfig, ok0 := s.Config().(ConfigurationDatabase)
-		if ok0 {
-			skipDefaultTx = dbConfig.SkipDefaultTransaction()
-			// Set connection pool parameters
-			db.SetMaxIdleConns(dbConfig.GetMaxIdleConnections())                // Max idle connections
-			db.SetMaxOpenConns(dbConfig.GetMaxOpenConnections())                // Max open connections
-			db.SetConnMaxLifetime(dbConfig.GetMaxConnectionLifeTimeInSeconds()) // Max connection lifetime
+		preferSimpleProtocol := true
+		skipDefaultTransaction := true
+
+		dbConfig, _ := s.Config().(ConfigurationDatabase)
+		if dbConfig != nil {
+			preferSimpleProtocol = dbConfig.PreferSimpleProtocol()
+			skipDefaultTransaction = dbConfig.SkipDefaultTransaction()
 		}
 
 		gormDB, _ := gorm.Open(
-			gormpostgres.New(gormpostgres.Config{Conn: db}),
+			postgres.New(postgres.Config{
+				DSN:                  cleanedPostgresqlDSN,
+				PreferSimpleProtocol: preferSimpleProtocol,
+			}),
 			&gorm.Config{
-				SkipDefaultTransaction: skipDefaultTx,
+				SkipDefaultTransaction: skipDefaultTransaction,
 				NowFunc: func() time.Time {
 					utc, _ := time.LoadLocation("")
 					return time.Now().In(utc)
@@ -243,29 +393,34 @@ func DatastoreConnectionWithName(ctx context.Context, name string, postgresqlCon
 			},
 		)
 
-		//_ = gormDB.Use(tracing.NewPlugin())
+		err = gormDB.Use(tracing.NewPlugin())
+		if err != nil {
+			s.L(ctx).WithError(err).Warn("could not enable opentelemetry plugin")
+		}
 
-		s.AddCleanupMethod(func(ctx context.Context) {
-			_ = db.Close()
-		})
+		if logConfig != nil && logConfig.LoggingLevelIsDebug() {
+			gormDB = gormDB.Debug()
+		}
 
 		var store *Store
 		v, ok := s.dataStores.Load(name)
 		if ok {
 			store = v.(*Store)
 		} else {
-			store = &Store{
-				randomSource:  rand.NewSource(time.Now().UnixNano()),
-				readDatabase:  []*gorm.DB{},
-				writeDatabase: []*gorm.DB{},
-			}
+			store = NewStore(ctx, s)
 		}
 
-		store.add(gormDB, readOnly)
+		store.AddConnection(gormDB, readOnly)
 
 		s.dataStores.Store(name, store)
 
-		addSQLHealthChecker(s, db)
+		if dbConfig != nil {
+			store.SetPoolConfig(
+				dbConfig.GetMaxOpenConnections(),
+				dbConfig.GetMaxIdleConnections(),
+				dbConfig.GetMaxConnectionLifeTimeInSeconds(),
+			)
+		}
 
 	}
 }
@@ -291,11 +446,48 @@ func Datastore(ctx context.Context) Option {
 	}
 }
 
-// addSqlHealthChecker returns a health check for the database.
-func addSQLHealthChecker(s *Service, db *sql.DB) {
-	dbCheck := sqlhealth.New(db)
-	s.AddHealthCheck(dbCheck)
-	s.AddCleanupMethod(func(ctx context.Context) {
-		dbCheck.Stop()
-	})
+// CleanPostgresDSN checks if the input is already a DSN, otherwise converts a PostgreSQL URL to DSN.
+func CleanPostgresDSN(pgString string) (string, error) {
+	trimmed := strings.TrimSpace(pgString)
+	// Heuristic: if it contains '=' and does not start with postgres:// or postgresql://, treat as DSN
+	lower := strings.ToLower(trimmed)
+	if strings.Contains(trimmed, "=") && !strings.HasPrefix(lower, "postgres://") && !strings.HasPrefix(lower, "postgresql://") {
+		return trimmed, nil
+	}
+
+	u, err := url.Parse(trimmed)
+	if err != nil {
+		return "", err
+	}
+
+	if u.Scheme != "postgres" && u.Scheme != "postgresql" {
+		return "", fmt.Errorf("invalid scheme: %s", u.Scheme)
+	}
+
+	user := ""
+	password := ""
+	if u.User != nil {
+		user = u.User.Username()
+		password, _ = u.User.Password()
+	}
+	host := u.Hostname()
+	port := u.Port()
+	if port == "" {
+		port = "5432"
+	}
+	dbname := strings.TrimPrefix(u.Path, "/")
+
+	dsn := []string{
+		"host=" + host,
+		"port=" + port,
+		"user=" + user,
+		"password=" + password,
+		"dbname=" + dbname,
+	}
+	for k, vals := range u.Query() {
+		for _, v := range vals {
+			dsn = append(dsn, fmt.Sprintf("%s=%s", k, v))
+		}
+	}
+	return strings.Join(dsn, " "), nil
 }

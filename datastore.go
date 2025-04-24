@@ -200,7 +200,10 @@ func (s *Store) PoolStats() (readStats, writeStats []*sql.DBStats) {
 }
 
 // DatastoreConnection Option method to store a connection that will be utilized when connecting to the database
-func DatastoreConnection(ctx context.Context, name string, postgresqlConnection string, readOnly bool) Option {
+func DatastoreConnection(ctx context.Context, postgresqlConnection string, readOnly bool) Option {
+	return DatastoreConnectionWithName(ctx, defaultStoreName, postgresqlConnection, readOnly)
+}
+func DatastoreConnectionWithName(ctx context.Context, name string, postgresqlConnection string, readOnly bool) Option {
 
 	return func(s *Service) {
 
@@ -277,12 +280,12 @@ func Datastore(ctx context.Context) Option {
 		}
 
 		for _, primaryDbURL := range config.GetDatabasePrimaryHostURL() {
-			primaryDatabase := DatastoreConnection(ctx, defaultStoreName, primaryDbURL, false)
+			primaryDatabase := DatastoreConnection(ctx, primaryDbURL, false)
 			primaryDatabase(s)
 		}
 
 		for _, replicaDbURL := range config.GetDatabaseReplicaHostURL() {
-			replicaDatabase := DatastoreConnection(ctx, defaultStoreName, replicaDbURL, true)
+			replicaDatabase := DatastoreConnection(ctx, replicaDbURL, true)
 			replicaDatabase(s)
 		}
 	}

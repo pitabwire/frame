@@ -6,48 +6,61 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/stdlib"
-	"gocloud.dev/server/health/sqlhealth"
-	"gorm.io/datatypes"
-	"gorm.io/driver/postgres"
-	"gorm.io/gorm"
-	"gorm.io/gorm/logger"
 	"math/rand"
 	"strconv"
 	"strings"
 	"time"
+
+	"gocloud.dev/postgres"
+	"gocloud.dev/server/health/sqlhealth"
+	"gorm.io/datatypes"
+	gormpostgres "gorm.io/driver/postgres"
+	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 )
 
-type store struct {
+const defaultStoreName = "__default__"
+
+type Store struct {
 	writeDatabase []*gorm.DB
 	readDatabase  []*gorm.DB
 	randomSource  rand.Source
 }
 
-func newDataStore() *store {
-	return &store{
-		randomSource:  rand.NewSource(time.Now().UnixNano()),
-		readDatabase:  []*gorm.DB{},
-		writeDatabase: []*gorm.DB{},
-	}
-}
-
 // Returns a random item from the slice, or an error if the slice is empty
-func (s *Service) getRandomDatastoreConnection(readOnly bool) *gorm.DB {
+func (s *Store) getConnection(readOnly bool) *gorm.DB {
 
 	var connectionPool []*gorm.DB
 	if readOnly {
-		connectionPool = s.dataStore.readDatabase
+		connectionPool = s.readDatabase
+		if len(connectionPool) == 0 {
+			connectionPool = s.writeDatabase
+		}
 	} else {
-		connectionPool = s.dataStore.writeDatabase
+		connectionPool = s.writeDatabase
 	}
 
-	if len(connectionPool) == 0 {
+	return s.selectOne(connectionPool)
+}
+
+func (s *Store) selectOne(pool []*gorm.DB) *gorm.DB {
+
+	if len(pool) == 0 {
 		return nil
 	}
-	randomIndex := rand.New(s.dataStore.randomSource).Intn(len(connectionPool))
-	return connectionPool[randomIndex]
+
+	randomIndex := rand.New(s.randomSource).Intn(len(pool))
+	return pool[randomIndex]
+}
+
+func (s *Store) add(db *gorm.DB, readOnly bool) {
+
+	if readOnly {
+		s.readDatabase = append(s.readDatabase, db)
+	} else {
+		s.writeDatabase = append(s.writeDatabase, db)
+	}
+
 }
 
 func tenantPartition(ctx context.Context) func(db *gorm.DB) *gorm.DB {
@@ -141,19 +154,19 @@ func DBErrorIsRecordNotFound(err error) bool {
 // DB obtains an already instantiated db connection with the option
 // to specify if you want write or read only db connection
 func (s *Service) DB(ctx context.Context, readOnly bool) *gorm.DB {
+	return s.DBWithName(ctx, defaultStoreName, readOnly)
+}
+
+func (s *Service) DBWithName(ctx context.Context, name string, readOnly bool) *gorm.DB {
 	var db *gorm.DB
 
-	if readOnly {
-		db = s.getRandomDatastoreConnection(true)
+	v, ok := s.dataStores.Load(name)
+	if !ok {
+		return nil
 	}
 
-	if db == nil {
-		db = s.getRandomDatastoreConnection(false)
-		if db == nil {
-			s.L(ctx).Error("DB -- attempting to use a database when none is setup")
-			return nil
-		}
-	}
+	store := v.(*Store)
+	db = store.getConnection(readOnly)
 
 	partitionedDb := db.Session(&gorm.Session{NewDB: true}).WithContext(ctx).Scopes(tenantPartition(ctx))
 
@@ -166,12 +179,9 @@ func (s *Service) DB(ctx context.Context, readOnly bool) *gorm.DB {
 }
 
 // DatastoreConnection Option method to store a connection that will be utilized when connecting to the database
-func DatastoreConnection(ctx context.Context, postgresqlConnection string, readOnly bool) Option {
+func DatastoreConnection(ctx context.Context, name string, postgresqlConnection string, readOnly bool) Option {
 
 	return func(s *Service) {
-		if s.dataStore == nil {
-			s.dataStore = newDataStore()
-		}
 
 		dbQueryLogger := logger.Default.LogMode(logger.Warn)
 		logConfig, ok := s.Config().(ConfigurationLogLevel)
@@ -181,13 +191,11 @@ func DatastoreConnection(ctx context.Context, postgresqlConnection string, readO
 			}
 		}
 
-		connConfig, err := pgx.ParseConfig(postgresqlConnection)
+		db, err := postgres.Open(ctx, postgresqlConnection)
 		if err != nil {
 			log := s.L(ctx).WithError(err).WithField("pgConnection", postgresqlConnection)
 			log.Error("Datastore -- problem parsing database connection")
 		}
-
-		db := stdlib.OpenDB(*connConfig)
 
 		skipDefaultTx := true
 		dbConfig, ok0 := s.Config().(ConfigurationDatabase)
@@ -197,11 +205,10 @@ func DatastoreConnection(ctx context.Context, postgresqlConnection string, readO
 			db.SetMaxIdleConns(dbConfig.GetMaxIdleConnections())                // Max idle connections
 			db.SetMaxOpenConns(dbConfig.GetMaxOpenConnections())                // Max open connections
 			db.SetConnMaxLifetime(dbConfig.GetMaxConnectionLifeTimeInSeconds()) // Max connection lifetime
-
 		}
 
 		gormDB, _ := gorm.Open(
-			postgres.New(postgres.Config{Conn: db, PreferSimpleProtocol: true}),
+			gormpostgres.New(gormpostgres.Config{Conn: db}),
 			&gorm.Config{
 				SkipDefaultTransaction: skipDefaultTx,
 				NowFunc: func() time.Time {
@@ -217,11 +224,22 @@ func DatastoreConnection(ctx context.Context, postgresqlConnection string, readO
 		s.AddCleanupMethod(func(ctx context.Context) {
 			_ = db.Close()
 		})
-		if readOnly {
-			s.dataStore.readDatabase = append(s.dataStore.readDatabase, gormDB)
+
+		var store *Store
+		v, ok := s.dataStores.Load(name)
+		if ok {
+			store = v.(*Store)
 		} else {
-			s.dataStore.writeDatabase = append(s.dataStore.writeDatabase, gormDB)
+			store = &Store{
+				randomSource:  rand.NewSource(time.Now().UnixNano()),
+				readDatabase:  []*gorm.DB{},
+				writeDatabase: []*gorm.DB{},
+			}
 		}
+
+		store.add(gormDB, readOnly)
+
+		s.dataStores.Store(name, store)
 
 		addSQLHealthChecker(s, db)
 
@@ -238,12 +256,12 @@ func Datastore(ctx context.Context) Option {
 		}
 
 		for _, primaryDbURL := range config.GetDatabasePrimaryHostURL() {
-			primaryDatabase := DatastoreConnection(ctx, primaryDbURL, false)
+			primaryDatabase := DatastoreConnection(ctx, defaultStoreName, primaryDbURL, false)
 			primaryDatabase(s)
 		}
 
 		for _, replicaDbURL := range config.GetDatabaseReplicaHostURL() {
-			replicaDatabase := DatastoreConnection(ctx, replicaDbURL, true)
+			replicaDatabase := DatastoreConnection(ctx, defaultStoreName, replicaDbURL, true)
 			replicaDatabase(s)
 		}
 	}

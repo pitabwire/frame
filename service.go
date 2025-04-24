@@ -61,7 +61,7 @@ type Service struct {
 	grpcPort                   string
 	client                     *http.Client
 	queue                      *queue
-	dataStore                  *store
+	dataStores                 sync.Map
 	bundle                     *i18n.Bundle
 	healthCheckers             []Checker
 	healthCheckPath            string
@@ -100,7 +100,6 @@ func NewServiceWithContext(ctx context.Context, name string, opts ...Option) (co
 		name:            name,
 		cancelFunc:      cancel,
 		errorChannel:    make(chan error, 1),
-		dataStore:       newDataStore(),
 		client:          &http.Client{},
 		queue:           q,
 		poolWorkerCount: concurrency,

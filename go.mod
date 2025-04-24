@@ -17,6 +17,7 @@ require (
 	github.com/sirupsen/logrus v1.9.3
 	go.opentelemetry.io/otel v1.35.0
 	go.opentelemetry.io/otel/sdk v1.35.0
+	go.uber.org/automaxprocs v1.6.0
 	gocloud.dev v0.41.0
 	golang.org/x/net v0.38.0
 	golang.org/x/text v0.23.0

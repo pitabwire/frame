@@ -13,10 +13,13 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/XSAM/otelsql"
+
+	"go.opentelemetry.io/otel/attribute"
+	semconv "go.opentelemetry.io/otel/semconv/v1.30.0"
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
-	"gorm.io/plugin/opentelemetry/tracing"
 )
 
 const defaultStoreName = "__default__"
@@ -391,9 +394,20 @@ func DatastoreConnectionWithName(ctx context.Context, name string, postgresqlCon
 			skipDefaultTransaction = dbConfig.SkipDefaultTransaction()
 		}
 
+		conn, err := otelsql.Open("pgx", cleanedPostgresqlDSN,
+			otelsql.WithAttributes(
+				semconv.DBSystemNamePostgreSQL,
+				attribute.String("service.name", s.name),
+			),
+		)
+		if err != nil {
+			s.L(ctx).WithError(err).WithField("dsn", postgresqlConnection).Error("could not connect to pg now")
+			return
+		}
+
 		gormDB, _ := gorm.Open(
 			postgres.New(postgres.Config{
-				DSN:                  cleanedPostgresqlDSN,
+				Conn:                 conn,
 				PreferSimpleProtocol: preferSimpleProtocol,
 			}),
 			&gorm.Config{
@@ -405,11 +419,6 @@ func DatastoreConnectionWithName(ctx context.Context, name string, postgresqlCon
 				Logger: dbQueryLogger,
 			},
 		)
-
-		err = gormDB.Use(tracing.NewPlugin())
-		if err != nil {
-			s.L(ctx).WithError(err).Warn("could not enable opentelemetry plugin")
-		}
 
 		if logConfig != nil && logConfig.LoggingLevelIsDebug() {
 			gormDB = gormDB.Debug()

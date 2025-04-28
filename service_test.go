@@ -220,7 +220,7 @@ func TestHealthCheckEndpoints(t *testing.T) {
 			body, _ := io.ReadAll(resp.Body)
 
 			if resp.StatusCode != test.statusCode {
-				t.Errorf("expected status code %v is not %v", test.statusCode, resp.StatusCode)
+				t.Errorf("%v : expected status code %v is not %v", test.name, test.statusCode, resp.StatusCode)
 			}
 
 			fmt.Println(string(body))

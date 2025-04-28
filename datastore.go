@@ -247,7 +247,7 @@ func (s *Pool) SetPoolConfig(maxOpen, maxIdle int, maxLifetime time.Duration) {
 	}
 }
 
-func (s *Pool) canMigrate() bool {
+func (s *Pool) CanMigrate() bool {
 	return s.shouldDoMigrations
 }
 

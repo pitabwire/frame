@@ -53,8 +53,8 @@ func newStore(ctx context.Context, srv *Service) *Pool {
 	return store
 }
 
-// addConnection safely adds a DB connection to the pool.
-func (s *Pool) addConnection(db *gorm.DB, readOnly bool) {
+// addNewConnection safely adds a DB connection to the pool.
+func (s *Pool) addNewConnection(db *gorm.DB, readOnly bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if readOnly {
@@ -339,8 +339,14 @@ func DBErrorIsRecordNotFound(err error) bool {
 	return errors.Is(err, gorm.ErrRecordNotFound)
 }
 
-func (s *Service) DBPool(name string) *Pool {
-	v, ok := s.dataStores.Load(name)
+func (s *Service) DBPool(name ...string) *Pool {
+
+	dbPoolName := defaultStoreName
+	if len(name) > 0 {
+		dbPoolName = name[0]
+	}
+
+	v, ok := s.dataStores.Load(dbPoolName)
 	if !ok {
 		return nil
 	}
@@ -432,7 +438,7 @@ func DatastoreConnectionWithName(ctx context.Context, name string, postgresqlCon
 			store = newStore(ctx, s)
 		}
 
-		store.addConnection(gormDB, readOnly)
+		store.addNewConnection(gormDB, readOnly)
 
 		s.dataStores.Store(name, store)
 

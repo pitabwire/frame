@@ -112,9 +112,10 @@ func (model *BaseModel) CopyPartitionInfo(parent *BaseModel) {
 type Migration struct {
 	BaseModel
 
-	Name      string `gorm:"type:varchar(50);uniqueIndex:idx_migrations_name"`
-	Patch     string `gorm:"type:text"`
-	AppliedAt sql.NullTime
+	Name        string `gorm:"type:varchar(50);uniqueIndex:idx_migrations_name"`
+	Patch       string `gorm:"type:text"`
+	RevertPatch string `gorm:"type:text"`
+	AppliedAt   sql.NullTime
 }
 
 func GenerateID(_ context.Context) string {

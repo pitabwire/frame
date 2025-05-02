@@ -33,26 +33,42 @@ func (m *migrator) scanForNewMigrations(ctx context.Context, migrationsDirPath s
 
 	for _, file := range files {
 		filename := filepath.Base(file)
-		filename = strings.Replace(filename, ".sql", "", 1)
+
+		// Skip _down.sql files
+		if strings.HasSuffix(filename, "_down.sql") {
+			continue
+		}
 
 		migrationPatch, err0 := os.ReadFile(file)
-
 		if err0 != nil {
 			log.Printf("scanForNewMigrations -- Problem reading migration file content : %s", err0)
 			continue
 		}
 
-		err0 = m.SaveMigrationString(ctx, filename, string(migrationPatch))
+		revertPatch := ""
+		if strings.HasSuffix(filename, "_up.sql") {
+			// Try to find matching _down.sql file
+			downFilename := strings.TrimSuffix(filename, "_up.sql") + "_down.sql"
+			downFilePath := filepath.Join(migrationsDirPath, downFilename)
+			if _, err := os.Stat(downFilePath); err == nil {
+				downPatch, err := os.ReadFile(downFilePath)
+				if err == nil {
+					revertPatch = string(downPatch)
+				}
+			}
+		}
+		// For files not ending with _up.sql or _down.sql, revertPatch remains ""
+
+		err0 = m.SaveMigrationString(ctx, filename, string(migrationPatch), revertPatch)
 		if err0 != nil {
 			log.Printf("scanForNewMigrations -- new migration :%s could not be processed because: %s", file, err0)
 			return err0
 		}
-
 	}
 	return nil
 }
 
-func (m *migrator) SaveMigrationString(ctx context.Context, filename string, migrationPatch string) error {
+func (m *migrator) SaveMigrationString(ctx context.Context, filename string, migrationPatch string, revertPatch string) error {
 
 	//If a file name exists, save with the name it has
 	_, err := os.Stat(filename)
@@ -70,8 +86,9 @@ func (m *migrator) SaveMigrationString(ctx context.Context, filename string, mig
 		}
 
 		migration = Migration{
-			Name:  filename,
-			Patch: migrationPatch,
+			Name:        filename,
+			Patch:       migrationPatch,
+			RevertPatch: revertPatch,
 		}
 		err = m.DB(ctx).Create(&migration).Error
 		if err != nil {
@@ -83,6 +100,12 @@ func (m *migrator) SaveMigrationString(ctx context.Context, filename string, mig
 
 	if !migration.AppliedAt.Valid && migration.Patch != migrationPatch {
 		err = m.DB(ctx).Model(&migration).Update("patch", migrationPatch).Error
+		if err != nil {
+			return err
+		}
+	}
+	if !migration.AppliedAt.Valid && revertPatch != "" && migration.RevertPatch != revertPatch {
+		err = m.DB(ctx).Model(&migration).Update("revert_patch", revertPatch).Error
 		if err != nil {
 			return err
 		}

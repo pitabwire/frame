@@ -35,35 +35,41 @@ func (m *migrator) scanForNewMigrations(ctx context.Context, migrationsDirPath s
 		filename := filepath.Base(file)
 		filename = strings.Replace(filename, ".sql", "", 1)
 
-		migrationPatch, err := os.ReadFile(file)
+		migrationPatch, err0 := os.ReadFile(file)
 
-		if err != nil {
-			log.Printf("scanForNewMigrations -- Problem reading migration file content : %s", err)
+		if err0 != nil {
+			log.Printf("scanForNewMigrations -- Problem reading migration file content : %s", err0)
 			continue
 		}
 
-		err = m.saveNewMigrations(ctx, filename, string(migrationPatch))
-		if err != nil {
-			log.Printf("scanForNewMigrations -- new migration :%s could not be processed because: %s", file, err)
-			return err
+		err0 = m.SaveMigrationString(ctx, filename, string(migrationPatch))
+		if err0 != nil {
+			log.Printf("scanForNewMigrations -- new migration :%s could not be processed because: %s", file, err0)
+			return err0
 		}
 
 	}
 	return nil
 }
 
-func (m *migrator) saveNewMigrations(ctx context.Context, filename string, migrationPatch string) error {
+func (m *migrator) SaveMigrationString(ctx context.Context, filename string, migrationPatch string) error {
+
+	//If a file name exists, save with the name it has
+	_, err := os.Stat(filename)
+	if errors.Is(err, os.ErrNotExist) {
+		filename = fmt.Sprintf("string:%s", filename)
+	}
 
 	migration := Migration{}
 
-	err := m.DB(ctx).Model(&migration).First(&migration, "name = ?", filename).Error
+	err = m.DB(ctx).Model(&migration).First(&migration, "name = ?", filename).Error
 	if err != nil {
 
 		if !DBErrorIsRecordNotFound(err) {
 			return err
 		}
 
-		migration := Migration{
+		migration = Migration{
 			Name:  filename,
 			Patch: migrationPatch,
 		}
@@ -76,7 +82,7 @@ func (m *migrator) saveNewMigrations(ctx context.Context, filename string, migra
 	}
 
 	if !migration.AppliedAt.Valid && migration.Patch != migrationPatch {
-		err := m.DB(ctx).Model(&migration).Update("patch", migrationPatch).Error
+		err = m.DB(ctx).Model(&migration).Update("patch", migrationPatch).Error
 		if err != nil {
 			return err
 		}
@@ -100,11 +106,12 @@ func (m *migrator) applyNewMigrations(ctx context.Context) error {
 
 	for _, migration := range unAppliedMigrations {
 
-		if err := m.DB(ctx).Exec(migration.Patch).Error; err != nil {
+		err = m.DB(ctx).Exec(migration.Patch).Error
+		if err != nil {
 			return err
 		}
 
-		err := m.DB(ctx).Model(migration).Update("applied_at", time.Now()).Error
+		err = m.DB(ctx).Model(migration).Update("applied_at", time.Now()).Error
 		if err != nil {
 			return err
 		}
@@ -131,12 +138,14 @@ func (s *Service) MigrateDatastore(ctx context.Context, migrationsDirPath string
 
 	migrationExecutor := migrator{service: s}
 
-	if err := migrationExecutor.scanForNewMigrations(ctx, migrationsDirPath); err != nil {
+	err = migrationExecutor.scanForNewMigrations(ctx, migrationsDirPath)
+	if err != nil {
 		log.Printf("MigrateDatastore -- Error scanning for new migrations : %s ", err)
 		return err
 	}
 
-	if err := migrationExecutor.applyNewMigrations(ctx); err != nil {
+	err = migrationExecutor.applyNewMigrations(ctx)
+	if err != nil {
 		log.Printf("MigrateDatastore -- There was an error applying migrations : %s ", err)
 		return err
 	}

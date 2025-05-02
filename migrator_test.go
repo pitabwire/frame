@@ -37,7 +37,7 @@ func TestSaveNewMigrations(t *testing.T) {
 
 	migrator := migrator{service: srv}
 
-	err = migrator.saveNewMigrations(ctx, migrationPath, string(migrationContent))
+	err = migrator.SaveMigrationString(ctx, migrationPath, string(migrationContent))
 	if err != nil {
 		t.Errorf("Could not save new migration %s", err)
 		return
@@ -51,7 +51,7 @@ func TestSaveNewMigrations(t *testing.T) {
 	}
 
 	updateSQL := "SELECT 2;"
-	err = migrator.saveNewMigrations(ctx, migrationPath, updateSQL)
+	err = migrator.SaveMigrationString(ctx, migrationPath, updateSQL)
 	if err != nil {
 		t.Errorf("Could not update unapplied migration %s", err)
 		return
@@ -105,7 +105,7 @@ func TestApplyMigrations(t *testing.T) {
 	}
 
 	migrator := migrator{service: srv}
-	err = migrator.saveNewMigrations(ctx, migrationPath, string(migrationContent))
+	err = migrator.SaveMigrationString(ctx, migrationPath, string(migrationContent))
 	if err != nil {
 		t.Errorf("Could not save new migration %s", err)
 		return

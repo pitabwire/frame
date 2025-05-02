@@ -46,6 +46,7 @@ func newStore(ctx context.Context, srv *Service) *Pool {
 		allWriteDBs:        make(map[*gorm.DB]bool),
 		healthCheckStopped: make(chan struct{}),
 		shouldDoMigrations: true,
+		mu:                 sync.RWMutex{},
 	}
 
 	srv.AddCleanupMethod(store.cleanup)

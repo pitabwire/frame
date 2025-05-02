@@ -217,7 +217,7 @@ func (s *Pool) DB(ctx context.Context, readOnly bool) *gorm.DB {
 		return nil
 	}
 
-	return db.Session(&gorm.Session{NewDB: true}).WithContext(ctx).Scopes(tenantPartition(ctx))
+	return db.Session(&gorm.Session{NewDB: true, AllowGlobalUpdate: true}).WithContext(ctx).Scopes(tenantPartition(ctx))
 }
 
 // selectOne uses atomic round-robin for high concurrency.

@@ -184,7 +184,7 @@ func (s *Service) MigratePool(ctx context.Context, pool *Pool, migrationsDirPath
 
 	migrations = append([]any{&Migration{}}, migrations...)
 	// Migrate the schema
-	err := s.DB(ctx, false).AutoMigrate(migrations...)
+	err := pool.DB(ctx, false).AutoMigrate(migrations...)
 	if err != nil {
 		s.L(ctx).WithError(err).Error("MigrateDatastore -- couldn't automigrate")
 		return err

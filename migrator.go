@@ -13,12 +13,21 @@ import (
 	"time"
 )
 
+type MigrationPatch struct {
+	// Name is a simple description/name of this migration.
+	Name string
+	// Patch is the SQL to execute for an upgrade.
+	Patch string
+	// RevertPatch is the SQL to execute for a downgrade.
+	RevertPatch string
+}
+
 type migrator struct {
-	service *Service
+	pool *Pool
 }
 
 func (m *migrator) DB(ctx context.Context) *gorm.DB {
-	return m.service.DB(ctx, false)
+	return m.pool.DB(ctx, false)
 }
 
 func (m *migrator) scanForNewMigrations(ctx context.Context, migrationsDirPath string) error {
@@ -59,7 +68,7 @@ func (m *migrator) scanForNewMigrations(ctx context.Context, migrationsDirPath s
 		}
 		// For files not ending with _up.sql or _down.sql, revertPatch remains ""
 
-		err0 = m.SaveMigrationString(ctx, filename, string(migrationPatch), revertPatch)
+		err0 = m.saveMigrationString(ctx, filename, string(migrationPatch), revertPatch)
 		if err0 != nil {
 			log.Printf("scanForNewMigrations -- new migration :%s could not be processed because: %s", file, err0)
 			return err0
@@ -68,7 +77,7 @@ func (m *migrator) scanForNewMigrations(ctx context.Context, migrationsDirPath s
 	return nil
 }
 
-func (m *migrator) SaveMigrationString(ctx context.Context, filename string, migrationPatch string, revertPatch string) error {
+func (m *migrator) saveMigrationString(ctx context.Context, filename string, migrationPatch string, revertPatch string) error {
 
 	//If a file name exists, save with the name it has
 	_, err := os.Stat(filename)
@@ -145,8 +154,30 @@ func (m *migrator) applyNewMigrations(ctx context.Context) error {
 	return nil
 }
 
+func (s *Service) SaveMigration(ctx context.Context, migrationPatches ...MigrationPatch) error {
+	pool := s.DBPool()
+	return s.SaveMigrationWithPool(ctx, pool, migrationPatches...)
+}
+
+func (s *Service) SaveMigrationWithPool(ctx context.Context, pool *Pool, migrationPatches ...MigrationPatch) error {
+	migrationExecutor := migrator{pool: pool}
+	for _, migrationPatch := range migrationPatches {
+		err := migrationExecutor.saveMigrationString(ctx, migrationPatch.Name, migrationPatch.Patch, migrationPatch.RevertPatch)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // MigrateDatastore finds missing migrations and records them in the database
 func (s *Service) MigrateDatastore(ctx context.Context, migrationsDirPath string, migrations ...any) error {
+	pool := s.DBPool()
+	return s.MigratePool(ctx, pool, migrationsDirPath, migrations...)
+}
+
+// MigratePool finds missing migrations and records them in the database
+func (s *Service) MigratePool(ctx context.Context, pool *Pool, migrationsDirPath string, migrations ...any) error {
 	if migrationsDirPath == "" {
 		migrationsDirPath = "./migrations/0001"
 	}
@@ -159,7 +190,7 @@ func (s *Service) MigrateDatastore(ctx context.Context, migrationsDirPath string
 		return err
 	}
 
-	migrationExecutor := migrator{service: s}
+	migrationExecutor := migrator{pool: pool}
 
 	err = migrationExecutor.scanForNewMigrations(ctx, migrationsDirPath)
 	if err != nil {

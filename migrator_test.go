@@ -8,14 +8,14 @@ import (
 
 func TestSaveNewMigrations(t *testing.T) {
 	testDBURL := GetEnv("TEST_DATABASE_URL", "postgres://frame:secret@localhost:5431/framedatabase?sslmode=disable")
-	ctx, srv := NewService("Test Migrations Srv")
+	ctx, svc := NewService("Test Migrations Srv")
 
 	mainDB := DatastoreConnection(ctx, testDBURL, false)
-	srv.Init(mainDB)
+	svc.Init(mainDB)
 
-	srv.DB(ctx, false).Session(&gorm.Session{AllowGlobalUpdate: true}).Unscoped().Delete(&Migration{})
+	svc.DB(ctx, false).Session(&gorm.Session{AllowGlobalUpdate: true}).Unscoped().Delete(&Migration{})
 
-	err := srv.MigrateDatastore(ctx, "./tests_runner/migrations/default")
+	err := svc.MigrateDatastore(ctx, "./tests_runner/migrations/default")
 	if err != nil {
 		t.Errorf("Could not migrate successfully because : %s", err)
 		return
@@ -23,7 +23,7 @@ func TestSaveNewMigrations(t *testing.T) {
 
 	migrationPath := "./tests_runner/migrations/scans/scanned_select.sql"
 
-	err = srv.DB(ctx, false).Where("name = ?", migrationPath).Unscoped().Delete(&Migration{}).Error
+	err = svc.DB(ctx, false).Where("name = ?", migrationPath).Unscoped().Delete(&Migration{}).Error
 	if err != nil {
 		t.Errorf("Could not ensure migrations are clean%s", err)
 		return
@@ -35,8 +35,8 @@ func TestSaveNewMigrations(t *testing.T) {
 		return
 	}
 
-	pool := srv.DBPool()
-	testMigrator := migrator{pool: pool}
+	pool := svc.DBPool()
+	testMigrator := svc.newMigrator(ctx, pool)
 
 	err = testMigrator.saveMigrationString(ctx, migrationPath, string(migrationContent), "")
 	if err != nil {
@@ -45,7 +45,7 @@ func TestSaveNewMigrations(t *testing.T) {
 	}
 
 	migration := Migration{Name: migrationPath}
-	err = srv.DB(ctx, false).First(&migration, "name = ?", migrationPath).Error
+	err = svc.DB(ctx, false).First(&migration, "name = ?", migrationPath).Error
 	if err != nil || migration.ID == "" {
 		t.Errorf("Migration was not saved successfully %s", err)
 		return
@@ -59,7 +59,7 @@ func TestSaveNewMigrations(t *testing.T) {
 	}
 
 	updatedMigration := Migration{Name: migrationPath}
-	err = srv.DB(ctx, false).First(&updatedMigration, "name = ?", migrationPath).Error
+	err = svc.DB(ctx, false).First(&updatedMigration, "name = ?", migrationPath).Error
 	if err != nil {
 		t.Errorf("Migration was not updated successfully %s", err)
 		return
@@ -78,14 +78,14 @@ func TestSaveNewMigrations(t *testing.T) {
 
 func TestApplyMigrations(t *testing.T) {
 	testDBURL := GetEnv("TEST_DATABASE_URL", "postgres://frame:secret@localhost:5431/framedatabase?sslmode=disable")
-	ctx, srv := NewService("Test Migrations Srv")
+	ctx, svc := NewService("Test Migrations Srv")
 
 	mainDB := DatastoreConnection(ctx, testDBURL, false)
-	srv.Init(mainDB)
+	svc.Init(mainDB)
 
-	srv.DB(ctx, false).Session(&gorm.Session{AllowGlobalUpdate: true}).Unscoped().Delete(&Migration{})
+	svc.DB(ctx, false).Session(&gorm.Session{AllowGlobalUpdate: true}).Unscoped().Delete(&Migration{})
 
-	err := srv.MigrateDatastore(ctx, "./tests_runner/migrations/default")
+	err := svc.MigrateDatastore(ctx, "./tests_runner/migrations/default")
 	if err != nil {
 		t.Errorf("Could not migrate successfully because : %s", err)
 		return
@@ -93,7 +93,7 @@ func TestApplyMigrations(t *testing.T) {
 
 	migrationPath := "./tests_runner/migrations/applied/apply_select.sql"
 
-	err = srv.DB(ctx, false).Where("name = ?", migrationPath).Unscoped().Delete(&Migration{}).Error
+	err = svc.DB(ctx, false).Where("name = ?", migrationPath).Unscoped().Delete(&Migration{}).Error
 	if err != nil {
 		t.Errorf("Could not ensure migrations are clean%s", err)
 		return
@@ -105,8 +105,8 @@ func TestApplyMigrations(t *testing.T) {
 		return
 	}
 
-	pool := srv.DBPool()
-	testMigrator := migrator{pool: pool}
+	pool := svc.DBPool()
+	testMigrator := svc.newMigrator(ctx, pool)
 
 	err = testMigrator.saveMigrationString(ctx, migrationPath, string(migrationContent), "")
 	if err != nil {
@@ -115,7 +115,7 @@ func TestApplyMigrations(t *testing.T) {
 	}
 
 	migration := Migration{Name: migrationPath}
-	err = srv.DB(ctx, false).First(&migration, "name = ?", migrationPath).Error
+	err = svc.DB(ctx, false).First(&migration, "name = ?", migrationPath).Error
 	if err != nil || migration.AppliedAt.Valid {
 		t.Errorf("Migration was not applied successfully %s", err)
 		return
@@ -128,7 +128,7 @@ func TestApplyMigrations(t *testing.T) {
 	}
 
 	appliedMigration := Migration{Name: migrationPath}
-	err = srv.DB(ctx, false).First(&appliedMigration, "name = ?", migrationPath).Error
+	err = svc.DB(ctx, false).First(&appliedMigration, "name = ?", migrationPath).Error
 	if err != nil || !appliedMigration.AppliedAt.Valid {
 		t.Errorf("Migration was not applied successfully %s", err)
 		return

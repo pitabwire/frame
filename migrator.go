@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/sirupsen/logrus"
 	"gorm.io/gorm"
 	"log"
 	"os"
@@ -23,7 +24,8 @@ type MigrationPatch struct {
 }
 
 type migrator struct {
-	pool *Pool
+	pool   *Pool
+	logger *logrus.Entry
 }
 
 func (m *migrator) DB(ctx context.Context) *gorm.DB {
@@ -50,7 +52,7 @@ func (m *migrator) scanForNewMigrations(ctx context.Context, migrationsDirPath s
 
 		migrationPatch, err0 := os.ReadFile(file)
 		if err0 != nil {
-			log.Printf("scanForNewMigrations -- Problem reading migration file content : %s", err0)
+			m.logger.WithError(err0).WithField("file", filename).Error("scanForNewMigrations -- Problem reading migration file content")
 			continue
 		}
 
@@ -59,9 +61,9 @@ func (m *migrator) scanForNewMigrations(ctx context.Context, migrationsDirPath s
 			// Try to find matching _down.sql file
 			downFilename := strings.TrimSuffix(filename, "_up.sql") + "_down.sql"
 			downFilePath := filepath.Join(migrationsDirPath, downFilename)
-			if _, err := os.Stat(downFilePath); err == nil {
-				downPatch, err := os.ReadFile(downFilePath)
-				if err == nil {
+			if _, err0 = os.Stat(downFilePath); err0 == nil {
+				downPatch, err1 := os.ReadFile(downFilePath)
+				if err1 == nil {
 					revertPatch = string(downPatch)
 				}
 			}
@@ -70,7 +72,7 @@ func (m *migrator) scanForNewMigrations(ctx context.Context, migrationsDirPath s
 
 		err0 = m.saveMigrationString(ctx, filename, string(migrationPatch), revertPatch)
 		if err0 != nil {
-			log.Printf("scanForNewMigrations -- new migration :%s could not be processed because: %s", file, err0)
+			m.logger.WithError(err0).WithField("file", filename).Error("scanForNewMigrations -- new migration could not be saved")
 			return err0
 		}
 	}
@@ -130,7 +132,7 @@ func (m *migrator) applyNewMigrations(ctx context.Context) error {
 	if err != nil {
 
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			log.Printf("applyNewMigrations -- No migrations found to be applied ")
+			m.logger.Info("applyNewMigrations -- No migrations found to be applied ")
 			return nil
 		}
 		return err
@@ -148,10 +150,24 @@ func (m *migrator) applyNewMigrations(ctx context.Context) error {
 			return err
 		}
 
-		log.Printf("applyNewMigrations -- Successfully applied the file : %v", fmt.Sprintf("%s.sql", migration.Name))
+		m.logger.WithField("migration", migration.Name).Debug("applyNewMigrations -- Successfully applied migration")
 	}
 
 	return nil
+}
+
+func (s *Service) newMigrator(ctx context.Context, poolOpts ...*Pool) *migrator {
+	var pool *Pool
+	if len(poolOpts) > 0 {
+		pool = poolOpts[0]
+	} else {
+		pool = s.DBPool()
+	}
+
+	return &migrator{
+		pool:   pool,
+		logger: s.L(ctx),
+	}
 }
 
 func (s *Service) SaveMigration(ctx context.Context, migrationPatches ...MigrationPatch) error {
@@ -160,7 +176,7 @@ func (s *Service) SaveMigration(ctx context.Context, migrationPatches ...Migrati
 }
 
 func (s *Service) SaveMigrationWithPool(ctx context.Context, pool *Pool, migrationPatches ...MigrationPatch) error {
-	migrationExecutor := migrator{pool: pool}
+	migrationExecutor := s.newMigrator(ctx, pool)
 	for _, migrationPatch := range migrationPatches {
 		err := migrationExecutor.saveMigrationString(ctx, migrationPatch.Name, migrationPatch.Patch, migrationPatch.RevertPatch)
 		if err != nil {
@@ -190,7 +206,7 @@ func (s *Service) MigratePool(ctx context.Context, pool *Pool, migrationsDirPath
 		return err
 	}
 
-	migrationExecutor := migrator{pool: pool}
+	migrationExecutor := s.newMigrator(ctx, pool)
 
 	err = migrationExecutor.scanForNewMigrations(ctx, migrationsDirPath)
 	if err != nil {

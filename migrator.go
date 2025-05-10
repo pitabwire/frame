@@ -170,12 +170,12 @@ func (s *Service) newMigrator(ctx context.Context, poolOpts ...*Pool) *migrator 
 	}
 }
 
-func (s *Service) SaveMigration(ctx context.Context, migrationPatches ...MigrationPatch) error {
+func (s *Service) SaveMigration(ctx context.Context, migrationPatches ...*MigrationPatch) error {
 	pool := s.DBPool()
 	return s.SaveMigrationWithPool(ctx, pool, migrationPatches...)
 }
 
-func (s *Service) SaveMigrationWithPool(ctx context.Context, pool *Pool, migrationPatches ...MigrationPatch) error {
+func (s *Service) SaveMigrationWithPool(ctx context.Context, pool *Pool, migrationPatches ...*MigrationPatch) error {
 	migrationExecutor := s.newMigrator(ctx, pool)
 	for _, migrationPatch := range migrationPatches {
 		err := migrationExecutor.saveMigrationString(ctx, migrationPatch.Name, migrationPatch.Patch, migrationPatch.RevertPatch)

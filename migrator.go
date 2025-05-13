@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"github.com/sirupsen/logrus"
 	"gorm.io/gorm"
-	"log"
 	"os"
 	"path/filepath"
 	"sort"
@@ -92,7 +91,7 @@ func (m *migrator) saveMigrationString(ctx context.Context, filename string, mig
 	err = m.DB(ctx).Model(&migration).First(&migration, "name = ?", filename).Error
 	if err != nil {
 
-		if !DBErrorIsRecordNotFound(err) {
+		if !ErrorIsNoRows(err) {
 			return err
 		}
 
@@ -198,25 +197,37 @@ func (s *Service) MigratePool(ctx context.Context, pool *Pool, migrationsDirPath
 		migrationsDirPath = "./migrations/0001"
 	}
 
-	migrations = append([]any{&Migration{}}, migrations...)
-	// Migrate the schema
-	err := pool.DB(ctx, false).AutoMigrate(migrations...)
-	if err != nil {
-		s.L(ctx).WithError(err).Error("MigrateDatastore -- couldn't automigrate")
-		return err
+	migrtor := pool.DB(ctx, false).Migrator()
+	// Ensure the migration schema exists
+	if !migrtor.HasTable(&Migration{}) {
+
+		err := migrtor.CreateTable(&Migration{})
+		if err != nil {
+			s.L(ctx).WithError(err).Error("MigrateDatastore -- couldn't create migration table")
+			return err
+		}
+	}
+
+	if len(migrations) > 0 {
+		// Migrate the schema
+		err := migrtor.AutoMigrate(migrations...)
+		if err != nil {
+			s.L(ctx).WithError(err).Error("MigrateDatastore -- couldn't auto migrate")
+			return err
+		}
 	}
 
 	migrationExecutor := s.newMigrator(ctx, pool)
 
-	err = migrationExecutor.scanForNewMigrations(ctx, migrationsDirPath)
+	err := migrationExecutor.scanForNewMigrations(ctx, migrationsDirPath)
 	if err != nil {
-		log.Printf("MigrateDatastore -- Error scanning for new migrations : %s ", err)
+		s.L(ctx).WithError(err).Error("MigrateDatastore -- Error scanning for new migrations")
 		return err
 	}
 
 	err = migrationExecutor.applyNewMigrations(ctx)
 	if err != nil {
-		log.Printf("MigrateDatastore -- There was an error applying migrations : %s ", err)
+		s.L(ctx).WithError(err).Error("MigrateDatastore -- Error applying migrations ")
 		return err
 	}
 	return nil

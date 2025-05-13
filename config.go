@@ -103,7 +103,7 @@ type ConfigurationDefault struct {
 
 	DatabasePrimaryURL             []string `env:"DATABASE_URL" yaml:"database_url"`
 	DatabaseReplicaURL             []string `env:"REPLICA_DATABASE_URL" yaml:"replica_database_url"`
-	DatabaseMigrate                string   `envDefault:"false" env:"DO_MIGRATION" yaml:"do_migration"`
+	DatabaseMigrate                bool     `envDefault:"false" env:"DO_MIGRATION" yaml:"do_migration"`
 	DatabaseMigrationPath          string   `envDefault:"./migrations/0001" env:"MIGRATION_PATH" yaml:"migration_path"`
 	DatabaseSkipDefaultTransaction bool     `envDefault:"true" env:"SKIP_DEFAULT_TRANSACTION" yaml:"skip_default_transaction"`
 	DatabasePreferSimpleProtocol   bool     `envDefault:"true" env:"PREFER_SIMPLE_PROTOCOL" yaml:"prefer_simple_protocol"`
@@ -111,6 +111,8 @@ type ConfigurationDefault struct {
 	DatabaseMaxIdleConnections           int `envDefault:"2" env:"DATABASE_MAX_IDLE_CONNECTIONS" yaml:"database_max_idle_connections"`
 	DatabaseMaxOpenConnections           int `envDefault:"5" env:"DATABASE_MAX_OPEN_CONNECTIONS" yaml:"database_max_open_connections"`
 	DatabaseMaxConnectionLifeTimeSeconds int `envDefault:"300" env:"DATABASE_MAX_CONNECTION_LIFE_TIME_IN_SECONDS" yaml:"database_max_connection_life_time_seconds"`
+
+	DatabaseSlowQueryThreshold string `envDefault:"200ms" env:"DATABASE_SLOW_QUERY_THRESHOLD" yaml:"database_slow_query_threshold"`
 
 	EventsQueueName string `envDefault:"frame.events.internal_._queue" env:"EVENTS_QUEUE_NAME" yaml:"events_queue_name"`
 	EventsQueueUrl  string `envDefault:"mem://frame.events.internal_._queue" env:"EVENTS_QUEUE_URL" yaml:"events_queue_url"`
@@ -366,6 +368,7 @@ type ConfigurationDatabase interface {
 	GetMaxConnectionLifeTimeInSeconds() time.Duration
 
 	GetDatabaseMigrationPath() string
+	GetSlowQueryThreshold() time.Duration
 }
 
 var _ ConfigurationDatabase = new(ConfigurationDefault)
@@ -379,13 +382,9 @@ func (c *ConfigurationDefault) GetDatabaseReplicaHostURL() []string {
 }
 
 func (c *ConfigurationDefault) DoDatabaseMigrate() bool {
-	isMigration, err := strconv.ParseBool(c.DatabaseMigrate)
-	if err != nil {
-		isMigration = false
-	}
 
 	stdArgs := os.Args[1:]
-	return isMigration || (len(stdArgs) > 0 && stdArgs[0] == "migrate")
+	return c.DatabaseMigrate || (len(stdArgs) > 0 && stdArgs[0] == "migrate")
 }
 
 func (c *ConfigurationDefault) PreferSimpleProtocol() bool {
@@ -410,6 +409,13 @@ func (c *ConfigurationDefault) GetMaxConnectionLifeTimeInSeconds() time.Duration
 
 func (c *ConfigurationDefault) GetDatabaseMigrationPath() string {
 	return c.DatabaseMigrationPath
+}
+func (c *ConfigurationDefault) GetSlowQueryThreshold() time.Duration {
+	threshold, err := time.ParseDuration(c.DatabaseSlowQueryThreshold)
+	if err != nil {
+		threshold = 200 * time.Millisecond
+	}
+	return threshold
 }
 
 type ConfigurationEvents interface {

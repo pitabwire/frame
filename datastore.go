@@ -2,6 +2,7 @@ package frame
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -19,7 +20,6 @@ import (
 	semconv "go.opentelemetry.io/otel/semconv/v1.30.0"
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
-	"gorm.io/gorm/logger"
 )
 
 const defaultStoreName = "__default__"
@@ -335,9 +335,9 @@ func DBPropertiesFromMap(propsMap map[string]string) datatypes.JSONMap {
 	return jsonMap
 }
 
-// DBErrorIsRecordNotFound validate if supplied error is because of record missing in DB
-func DBErrorIsRecordNotFound(err error) bool {
-	return errors.Is(err, gorm.ErrRecordNotFound)
+// ErrorIsNoRows validate if supplied error is because of record missing in DB
+func ErrorIsNoRows(err error) bool {
+	return errors.Is(err, gorm.ErrRecordNotFound) || errors.Is(err, sql.ErrNoRows)
 }
 
 func (s *Service) DBPool(name ...string) *Pool {
@@ -378,13 +378,7 @@ func DatastoreConnectionWithName(ctx context.Context, name string, postgresqlCon
 
 	return func(s *Service) {
 
-		dbQueryLogger := logger.Default.LogMode(logger.Warn)
-		logConfig, ok := s.Config().(ConfigurationLogLevel)
-		if ok {
-			if logConfig.LoggingLevelIsDebug() {
-				dbQueryLogger = logger.Default.LogMode(logger.Info)
-			}
-		}
+		dbQueryLogger := buildDBLogger(s)
 
 		cleanedPostgresqlDSN, err := cleanPostgresDSN(postgresqlConnection)
 		if err != nil {
@@ -426,10 +420,6 @@ func DatastoreConnectionWithName(ctx context.Context, name string, postgresqlCon
 				Logger: dbQueryLogger,
 			},
 		)
-
-		if logConfig != nil && logConfig.LoggingLevelIsDebug() {
-			gormDB = gormDB.Debug()
-		}
 
 		var store *Pool
 		v, ok := s.dataStores.Load(name)

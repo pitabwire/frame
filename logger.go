@@ -8,12 +8,16 @@ import (
 	"github.com/sirupsen/logrus/hooks/writer"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"gorm.io/gorm/logger"
+	"gorm.io/gorm/utils"
 	"io"
 	"os"
 	"runtime/debug"
+	"strconv"
+	"time"
 )
 
-// Logger Option that helps with initialization of our internal logger
+// Logger Option that helps with initialization of our internal dbLogger
 func Logger() Option {
 	return func(s *Service) {
 
@@ -90,7 +94,7 @@ func GetLoggingOptions() []logging.Option {
 	}
 }
 
-// LoggingInterceptor adapts logrus logger to interceptor logger.
+// LoggingInterceptor adapts logrus dbLogger to interceptor dbLogger.
 func LoggingInterceptor(l logrus.FieldLogger) logging.Logger {
 	return logging.LoggerFunc(func(_ context.Context, lvl logging.Level, msg string, fields ...any) {
 		f := make(map[string]any, len(fields)/2)
@@ -124,4 +128,85 @@ func RecoveryHandlerFun(ctx context.Context, p interface{}) error {
 
 	// Return a gRPC error
 	return status.Errorf(codes.Internal, "Internal server error")
+}
+
+func buildDBLogger(s *Service) logger.Interface {
+
+	slowQueryThreshold := 200 * time.Millisecond
+
+	if s.Config() != nil {
+		config, ok := s.Config().(ConfigurationDatabase)
+		if ok {
+			slowQueryThreshold = config.GetSlowQueryThreshold()
+		}
+	}
+
+	return &dbLogger{
+		s:             s,
+		SlowThreshold: slowQueryThreshold,
+	}
+
+}
+
+type dbLogger struct {
+	s *Service
+
+	SlowThreshold time.Duration
+}
+
+// LogMode log mode
+func (l *dbLogger) LogMode(_ logger.LogLevel) logger.Interface {
+	return l
+}
+
+// Info print info
+func (l *dbLogger) Info(ctx context.Context, msg string, data ...interface{}) {
+
+	args := append([]any{msg}, data...)
+	l.s.L(ctx).Info(args...)
+}
+
+// Warn print warn messages
+func (l *dbLogger) Warn(ctx context.Context, msg string, data ...interface{}) {
+	args := append([]any{msg}, data...)
+	l.s.L(ctx).Warn(args...)
+}
+
+// Error print error messages
+func (l *dbLogger) Error(ctx context.Context, msg string, data ...interface{}) {
+	args := append([]any{msg}, data...)
+	l.s.L(ctx).Error(args...)
+}
+
+// Trace print sql message
+func (l *dbLogger) Trace(ctx context.Context, begin time.Time, fc func() (string, int64), err error) {
+
+	elapsed := time.Since(begin)
+
+	sql, rows := fc()
+
+	rowsAffected := "-"
+	if rows != -1 {
+		rowsAffected = strconv.FormatInt(rows, 10)
+	}
+
+	log := l.s.L(ctx).WithField("query", sql).WithField("duration", float64(elapsed.Nanoseconds())/1e6).WithField("rows", rowsAffected).WithField("file", utils.FileWithLineNum())
+
+	slowQuery := false
+	if elapsed > l.SlowThreshold && l.SlowThreshold != 0 {
+		log = log.WithField("SLOW Query", fmt.Sprintf(" >= %v", l.SlowThreshold))
+		slowQuery = true
+	}
+
+	switch {
+	case err != nil && !ErrorIsNoRows(err):
+		log.WithError(err).Error(" Query Error : ")
+	case log.Level >= logrus.WarnLevel && slowQuery:
+		log.Warn("SLOW Query ")
+	case log.Level >= logrus.InfoLevel && slowQuery:
+		log.Info("SLOW Query ")
+	case log.Level >= logrus.DebugLevel:
+		log.Info("Query Debug ")
+
+	}
 }

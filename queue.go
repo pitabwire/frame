@@ -9,6 +9,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"gocloud.dev/pubsub"
 	_ "gocloud.dev/pubsub/mempubsub"
+	"maps"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -171,14 +172,16 @@ func (s *Service) AddPublisher(ctx context.Context, reference string, queueURL s
 }
 
 // Publish Queue method to write a new message into the queue pre initialized with the supplied reference
-func (s *Service) Publish(ctx context.Context, reference string, payload any) error {
-	var metadata map[string]string
+func (s *Service) Publish(ctx context.Context, reference string, payload any, headers ...map[string]string) error {
+
+	metadata := make(map[string]string)
+	for _, h := range headers {
+		maps.Copy(metadata, h)
+	}
 
 	authClaim := ClaimsFromContext(ctx)
 	if authClaim != nil {
-		metadata = authClaim.AsMetadata()
-	} else {
-		metadata = make(map[string]string)
+		maps.Copy(metadata, authClaim.AsMetadata())
 	}
 
 	pub, err := s.queue.getPublisherByReference(reference)

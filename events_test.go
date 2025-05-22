@@ -49,16 +49,19 @@ func TestService_RegisterEventsWorks(t *testing.T) {
 
 	ctx, srv := frame.NewService("Test Srv", events, frame.Config(&cfg), frame.NoopDriver())
 
-	if srv.SubscriptionIsInitiated(cfg.EventsQueueName) {
-		t.Errorf("Subscription to event queue is invalid")
+	subs := srv.GetSubscriber(cfg.EventsQueueName)
+	if subs != nil && subs.Initiated() {
+		t.Fatalf("Subscription to event queue is invalid")
 	}
 
-	if err := srv.Run(ctx, ""); err != nil {
+	err = srv.Run(ctx, "")
+	if err != nil {
 		t.Errorf("We somehow fail to instantiate subscription ")
 	}
 
-	if !srv.SubscriptionIsInitiated(cfg.EventsQueueName) {
-		t.Errorf("Subscription to event queue is not done, should be subscribed")
+	subs = srv.GetSubscriber(cfg.EventsQueueName)
+	if !subs.Initiated() {
+		t.Fatalf("Subscription to event queue is not done, should be subscribed")
 	}
 
 	srv.Stop(ctx)

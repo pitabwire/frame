@@ -92,16 +92,16 @@ func TestService_RegisterPublisherMultiple(t *testing.T) {
 type messageHandler struct {
 }
 
-func (m *messageHandler) Handle(ctx context.Context, metadata map[string]string, message []byte) error {
-	log.Printf(" A nice message to handle: %v", string(message))
+func (m *messageHandler) Handle(_ context.Context, metadata map[string]string, message []byte) error {
+	log.Printf(" A nice message to handle: %v with headers [%v]", string(message), metadata)
 	return nil
 }
 
 type handlerWithError struct {
 }
 
-func (m *handlerWithError) Handle(ctx context.Context, metadata map[string]string, message []byte) error {
-	log.Printf(" A dreadful message to handle: %v", string(message))
+func (m *handlerWithError) Handle(_ context.Context, metadata map[string]string, message []byte) error {
+	log.Printf(" A dreadful message to handle: %v with headers [%v]", string(message), metadata)
 	return errors.New("throwing an error for tests")
 
 }
@@ -110,7 +110,7 @@ func TestService_RegisterSubscriber(t *testing.T) {
 	regSubTopic := "test-reg-sub-topic"
 
 	optTopic := frame.RegisterPublisher(regSubTopic, "mem://topicA")
-	opt := frame.RegisterSubscriber(regSubTopic, "mem://topicA", 5, &messageHandler{})
+	opt := frame.RegisterSubscriber(regSubTopic, "mem://topicA", &messageHandler{})
 
 	ctx, srv := frame.NewService("Test Srv", optTopic, opt, frame.NoopDriver())
 
@@ -141,7 +141,7 @@ func TestService_RegisterSubscriber(t *testing.T) {
 func TestService_RegisterSubscriberWithError(t *testing.T) {
 
 	regSubT := "reg_s_wit-error"
-	opt := frame.RegisterSubscriber(regSubT, "mem://topicErrors", 1, &handlerWithError{})
+	opt := frame.RegisterSubscriber(regSubT, "mem://topicErrors", &handlerWithError{})
 	optTopic := frame.RegisterPublisher(regSubT, "mem://topicErrors")
 
 	ctx, srv := frame.NewService("Test Srv", opt, optTopic, frame.NoopDriver())
@@ -164,7 +164,7 @@ func TestService_RegisterSubscriberWithError(t *testing.T) {
 func TestService_RegisterSubscriberInvalid(t *testing.T) {
 
 	opt := frame.RegisterSubscriber("test", "memt+://topicA",
-		5, &messageHandler{})
+		&messageHandler{})
 
 	ctx, srv := frame.NewService("Test Srv", opt, frame.NoopDriver())
 
@@ -179,22 +179,197 @@ func TestService_RegisterSubscriberContextCancelWorks(t *testing.T) {
 
 	optTopic := frame.RegisterPublisher("test", "mem://topicA")
 	opt := frame.RegisterSubscriber("test", "mem://topicA",
-		5, &messageHandler{})
+		&messageHandler{})
 
 	ctx, srv := frame.NewService("Test Srv", opt, optTopic, frame.NoopDriver())
+	defer srv.Stop(ctx)
 
-	if srv.SubscriptionIsInitiated("test") {
-		t.Errorf("Subscription is invalid yet it should be ok")
+	subs := srv.GetSubscriber("test")
+	if subs == nil {
+		t.Fatalf("Subscription is nil yet it should be defined")
+	}
+	if subs.Initiated() {
+		t.Fatalf("Subscription is invalid yet it should be ok")
 	}
 
 	if err := srv.Run(ctx, ""); err != nil {
 		t.Errorf("We somehow fail to instantiate subscription ")
 	}
 
-	if !srv.SubscriptionIsInitiated("test") {
-		t.Errorf("Subscription is valid yet it should not be ok")
+	if !subs.Initiated() {
+		t.Fatalf("Subscription is valid yet it should not be ok")
 	}
 
-	srv.Stop(ctx)
+}
 
+func TestService_AddPublisher(t *testing.T) {
+	ctx, srv := frame.NewService("Test Srv", frame.NoopDriver())
+	defer srv.Stop(ctx)
+
+	if err := srv.Run(ctx, ""); err != nil {
+		t.Errorf("We somehow fail to instantiate subscription ")
+	}
+
+	// Test case 1: Add a new publisher
+	reference := "new-publisher"
+	queueURL := "mem://topicX"
+
+	err := srv.AddPublisher(ctx, reference, queueURL)
+	if err != nil {
+		t.Errorf("Failed to add a new publisher: %v", err)
+	}
+
+	// Verify the publisher was added
+	pub := srv.GetPublisher(reference)
+	if pub == nil {
+		t.Error("Publisher was not added successfully")
+	}
+
+	// Test case 2: Add a publisher that already exists
+	err = srv.AddPublisher(ctx, reference, queueURL)
+	if err != nil {
+		t.Errorf("Expected no error when adding an existing publisher, got: %v", err)
+	}
+
+	// Test case 3: Initialize and use a new publisher
+	testPubRef := "test-pub-init"
+	err = srv.AddPublisher(ctx, testPubRef, "mem://topicInit")
+	if err != nil {
+		t.Errorf("Failed to add and initialize publisher: %v", err)
+	}
+
+	// Run the service to ensure full initialization
+	err = srv.Run(ctx, "")
+	if err != nil {
+		t.Errorf("Failed to run service: %v", err)
+	}
+
+	// Try to publish with the initialized publisher
+	err = srv.Publish(ctx, testPubRef, []byte("test message"))
+	if err != nil {
+		t.Errorf("Failed to publish with initialized publisher: %v", err)
+	}
+
+}
+
+func TestService_AddPublisher_InvalidURL(t *testing.T) {
+	// Test with an invalid URL scheme that should cause an error
+	ctx, srv := frame.NewService("Test Srv", frame.NoopDriver())
+	defer srv.Stop(ctx)
+
+	if err := srv.Run(ctx, ""); err != nil {
+		t.Errorf("We somehow fail to instantiate subscription ")
+	}
+
+	// Attempt to add a publisher with an invalid URL scheme
+	reference := "invalid-pub"
+	queueURL := "invalid://topic" // This scheme is not registered
+
+	// This should fail because the invalid URL can't be initialized
+	err := srv.AddPublisher(ctx, reference, queueURL)
+	if err == nil {
+		t.Error("Expected error when adding publisher with invalid URL, but got nil")
+	}
+}
+
+func TestService_AddSubscriber(t *testing.T) {
+	ctx, srv := frame.NewService("Test Srv", frame.NoopDriver())
+	defer srv.Stop(ctx)
+
+	if err := srv.Run(ctx, ""); err != nil {
+		t.Errorf("We somehow fail to instantiate subscription ")
+	}
+
+	// Test case 1: Add a new subscriber
+	reference := "new-subscriber"
+	queueURL := "mem://topicS"
+	handler := &messageHandler{}
+
+	// First register a publisher to create the topic
+	pubOpt := frame.RegisterPublisher(reference, queueURL)
+	pubOpt(srv)
+
+	// Run the service to initialize the publisher
+	err := srv.Run(ctx, "")
+	if err != nil {
+		t.Errorf("Failed to run service: %v", err)
+		return
+	}
+
+	// Now add the subscriber
+	err = srv.AddSubscriber(ctx, reference, queueURL, handler)
+	if err != nil {
+		t.Errorf("Failed to add a new subscriber: %v", err)
+	}
+
+	// Verify the subscriber was added
+	sub := srv.GetSubscriber(reference)
+	if sub == nil {
+		t.Error("Subscriber was not added successfully")
+	}
+
+	// Test case 2: Add a subscriber that already exists
+	err = srv.AddSubscriber(ctx, reference, queueURL, handler)
+	if err != nil {
+		t.Errorf("Expected no error when adding an existing subscriber, got: %v", err)
+	}
+
+}
+func TestService_AddSubscriberWithoutHandler(t *testing.T) {
+
+	noHandlerRef := "no-handler-sub"
+	noHandlerURL := "mem://topicNoHandler"
+
+	optTopic := frame.RegisterPublisher(noHandlerRef, noHandlerURL)
+
+	ctx, srv := frame.NewService("Test Srv 2", optTopic, frame.NoopDriver())
+	defer srv.Stop(ctx)
+
+	if err := srv.Run(ctx, ""); err != nil {
+		t.Errorf("We somehow fail to instantiate subscription ")
+	}
+
+	// Run the service to initialize the publisher
+	err := srv.Run(ctx, "")
+	if err != nil {
+		t.Errorf("Failed to run service: %v", err)
+		return
+	}
+
+	// Now add the subscriber
+	err = srv.AddSubscriber(ctx, noHandlerRef, noHandlerURL)
+	if err != nil {
+		t.Errorf("Failed to add subscriber without handler: %v", err)
+	}
+
+	// Verify it was added
+	sub := srv.GetSubscriber(noHandlerRef)
+	if sub == nil {
+		t.Error("Subscriber without handler was not added successfully")
+	}
+
+	// Clean up
+
+}
+
+func TestService_AddSubscriber_InvalidURL(t *testing.T) {
+	// Test with an invalid URL scheme that should cause an error
+	ctx, srv := frame.NewService("Test Srv", frame.NoopDriver())
+	defer srv.Stop(ctx)
+
+	if err := srv.Run(ctx, ""); err != nil {
+		t.Errorf("We somehow fail to instantiate subscription ")
+	}
+
+	// Attempt to add a subscriber with an invalid URL scheme
+	reference := "invalid-sub"
+	queueURL := "invalid://topic" // This scheme is not registered
+	handler := &messageHandler{}
+
+	// This should fail because the invalid URL can't be initialized
+	err := srv.AddSubscriber(ctx, reference, queueURL, handler)
+	if err == nil {
+		t.Error("Expected error when adding subscriber with invalid URL, but got nil")
+		srv.Stop(ctx) // Clean up if the test somehow passes
+	}
 }

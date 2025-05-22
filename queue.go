@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	_ "github.com/pitabwire/natspubsub"
-	"github.com/sirupsen/logrus"
 	"gocloud.dev/pubsub"
 	_ "gocloud.dev/pubsub/mempubsub"
 	"maps"
@@ -37,10 +36,131 @@ func newQueue(_ context.Context) *queue {
 	return q
 }
 
+type Publisher interface {
+	Initiated() bool
+
+	Init(ctx context.Context) error
+
+	Publish(ctx context.Context, payload any, headers ...map[string]string) error
+	Stop(ctx context.Context) error
+}
+
 type publisher struct {
 	reference string
 	url       string
 	topic     *pubsub.Topic
+	isInit    atomic.Bool
+}
+
+func (p *publisher) Publish(ctx context.Context, payload any, headers ...map[string]string) error {
+	metadata := make(map[string]string)
+	for _, h := range headers {
+		maps.Copy(metadata, h)
+	}
+
+	authClaim := ClaimsFromContext(ctx)
+	if authClaim != nil {
+		maps.Copy(metadata, authClaim.AsMetadata())
+	}
+
+	var message []byte
+	msg, ok := payload.([]byte)
+	if !ok {
+		msg0, err := json.Marshal(payload)
+		if err != nil {
+			return err
+		}
+		message = msg0
+	} else {
+		message = msg
+	}
+
+	topic := p.topic
+
+	return topic.Send(ctx, &pubsub.Message{
+		Body:     message,
+		Metadata: metadata,
+	})
+
+}
+
+func (p *publisher) Init(ctx context.Context) error {
+
+	if p.isInit.Load() && p.topic != nil {
+		return nil
+	}
+
+	var err error
+
+	p.topic, err = pubsub.OpenTopic(ctx, p.url)
+	if err != nil {
+		return err
+	}
+
+	p.isInit.Store(true)
+	return nil
+}
+
+func (p *publisher) Initiated() bool {
+	return p.isInit.Load()
+}
+
+func (p *publisher) Stop(ctx context.Context) error {
+
+	p.isInit.Store(false)
+
+	err := p.topic.Shutdown(ctx)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// RegisterPublisher Option to register publishing path referenced within the system
+func RegisterPublisher(reference string, queueURL string) Option {
+	return func(s *Service) {
+		s.queue.publishQueueMap.Store(reference, &publisher{
+			reference: reference,
+			url:       queueURL,
+		})
+	}
+}
+
+func (s *Service) AddPublisher(ctx context.Context, reference string, queueURL string) error {
+
+	pub := s.GetPublisher(reference)
+	if pub != nil {
+		return nil
+	}
+
+	pub = &publisher{
+		reference: reference,
+		url:       queueURL,
+	}
+	err := s.initPublisher(ctx, pub)
+	if err != nil {
+		return err
+	}
+
+	s.queue.publishQueueMap.Store(reference, pub)
+	return nil
+}
+
+func (s *Service) GetPublisher(path string) Publisher {
+	pub, ok := s.queue.publishQueueMap.Load(path)
+	if !ok {
+		return nil
+	}
+	return pub.(*publisher)
+}
+
+type Subscriber interface {
+	Initiated() bool
+
+	Init(ctx context.Context) error
+	Receive(ctx context.Context) (*pubsub.Message, error)
+	Stop(ctx context.Context) error
 }
 
 type SubscribeWorker interface {
@@ -48,32 +168,84 @@ type SubscribeWorker interface {
 }
 
 type subscriber struct {
-	logger *logrus.Entry
+	service *Service
 
 	reference    string
 	url          string
-	concurrency  int
 	handler      SubscribeWorker
 	subscription *pubsub.Subscription
 	isInit       atomic.Bool
 }
 
+func (s *subscriber) Receive(ctx context.Context) (*pubsub.Message, error) {
+	return s.subscription.Receive(ctx)
+}
+
+func (s *subscriber) Init(ctx context.Context) error {
+	if s.isInit.Load() && s.subscription != nil {
+		return nil
+	}
+
+	if !strings.HasPrefix(s.url, "http") {
+
+		subs, err := pubsub.OpenSubscription(ctx, s.url)
+		if err != nil {
+			return fmt.Errorf("could not open topic subscription: %s", err)
+		}
+		s.subscription = subs
+
+		if s.handler != nil {
+
+			job := NewJob(s.listen)
+
+			err = SubmitJob(ctx, s.service, job)
+			if err != nil {
+				s.service.L(ctx).WithField("subscriber", s.reference).WithField("url", s.url).
+					WithError(err).WithField("subscriber", subs).Error(" could not listen or subscribe for messages")
+				return err
+			}
+		}
+	}
+
+	s.isInit.Store(true)
+	return nil
+}
+
+func (s *subscriber) Initiated() bool {
+	return s.isInit.Load()
+}
+
+func (s *subscriber) Stop(ctx context.Context) error {
+
+	s.isInit.Store(false)
+
+	err := s.subscription.Shutdown(ctx)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func (s *subscriber) listen(ctx context.Context, _ JobResultPipe[*pubsub.Message]) error {
 
-	service := FromContext(ctx)
-	logger := service.L(ctx).WithField("name", s.reference).WithField("function", "subscription").WithField("url", s.url)
+	logger := s.service.L(ctx).WithField("name", s.reference).WithField("function", "subscription").WithField("url", s.url)
 	logger.Debug("starting to listen for messages")
 	for {
 
 		select {
 		case <-ctx.Done():
-			s.isInit.Store(false)
+			err := s.Stop(ctx)
+			if err != nil {
+				logger.WithError(err).Error("could not stop subscription")
+				return err
+			}
 			logger.Debug("exiting due to canceled context")
 			return ctx.Err()
 
 		default:
 
-			msg, err := s.subscription.Receive(ctx)
+			msg, err := s.Receive(ctx)
 			if err != nil {
 				if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 					continue
@@ -106,7 +278,7 @@ func (s *subscriber) listen(ctx context.Context, _ JobResultPipe[*pubsub.Message
 				return nil
 			})
 
-			err = SubmitJob(ctx, service, job)
+			err = SubmitJob(ctx, s.service, job)
 			if err != nil {
 				logger.WithError(err).Warn(" Ignoring handle error message")
 				return err
@@ -116,138 +288,85 @@ func (s *subscriber) listen(ctx context.Context, _ JobResultPipe[*pubsub.Message
 	}
 }
 
-// RegisterPublisher Option to register publishing path referenced within the system
-func RegisterPublisher(reference string, queueURL string) Option {
+// RegisterSubscriber Option to register a new subscription handler
+func RegisterSubscriber(reference string, queueURL string,
+	handler ...SubscribeWorker) Option {
 	return func(s *Service) {
-		s.queue.publishQueueMap.Store(reference, &publisher{
+
+		subs := subscriber{
+			service:   s,
 			reference: reference,
 			url:       queueURL,
-		})
+		}
+
+		if len(handler) > 0 {
+			subs.handler = handler[0]
+		}
+
+		s.queue.subscriptionQueueMap.Store(reference, &subs)
 	}
 }
 
-// RegisterSubscriber Option to register a new subscription handler
-func RegisterSubscriber(reference string, queueURL string, concurrency int,
-	handler SubscribeWorker) Option {
-	return func(s *Service) {
-		s.queue.subscriptionQueueMap.Store(reference, &subscriber{
-			reference:   reference,
-			url:         queueURL,
-			concurrency: concurrency,
-			handler:     handler,
-		})
-	}
-}
+func (s *Service) AddSubscriber(ctx context.Context, reference string, queueURL string, handler ...SubscribeWorker) error {
 
-func (s *Service) SubscriptionIsInitiated(path string) bool {
-	sub, ok := s.queue.subscriptionQueueMap.Load(path)
-	if !ok {
-		return false
-	}
-	return sub.(*subscriber).isInit.Load()
-}
-
-func (s *Service) IsPublisherRegistered(_ context.Context, reference string) bool {
-	_, ok := s.queue.publishQueueMap.Load(reference)
-	return ok
-}
-
-func (s *Service) AddPublisher(ctx context.Context, reference string, queueURL string) error {
-
-	if s.IsPublisherRegistered(ctx, reference) {
+	subs0 := s.GetSubscriber(reference)
+	if subs0 != nil {
 		return nil
 	}
 
-	pub := &publisher{
+	subs := subscriber{
+		service:   s,
 		reference: reference,
 		url:       queueURL,
 	}
-	err := s.initPublisher(ctx, pub)
+
+	if len(handler) > 0 {
+		subs.handler = handler[0]
+	}
+
+	err := s.initSubscriber(ctx, &subs)
 	if err != nil {
 		return err
 	}
 
-	s.queue.publishQueueMap.Store(reference, pub)
+	s.queue.subscriptionQueueMap.Store(reference, &subs)
+
 	return nil
+}
+
+func (s *Service) GetSubscriber(path string) Subscriber {
+	sub, ok := s.queue.subscriptionQueueMap.Load(path)
+	if !ok {
+		return nil
+	}
+	return sub.(*subscriber)
 }
 
 // Publish Queue method to write a new message into the queue pre initialized with the supplied reference
 func (s *Service) Publish(ctx context.Context, reference string, payload any, headers ...map[string]string) error {
 
-	metadata := make(map[string]string)
-	for _, h := range headers {
-		maps.Copy(metadata, h)
+	pub := s.GetPublisher(reference)
+	if pub == nil {
+		return fmt.Errorf("could not find publisher with reference %s", reference)
 	}
 
-	authClaim := ClaimsFromContext(ctx)
-	if authClaim != nil {
-		maps.Copy(metadata, authClaim.AsMetadata())
-	}
-
-	pub, err := s.queue.getPublisherByReference(reference)
-	if err != nil {
-		return err
-	}
-
-	var message []byte
-	msg, ok := payload.([]byte)
-	if !ok {
-		msg0, err0 := json.Marshal(payload)
-		if err0 != nil {
-			return err
-		}
-		message = msg0
-	} else {
-		message = msg
-	}
-
-	topic := pub.topic
-
-	return topic.Send(ctx, &pubsub.Message{
-		Body:     message,
-		Metadata: metadata,
-	})
-
+	return pub.Publish(ctx, payload, headers...)
 }
 
-func (s *Service) initPublisher(ctx context.Context, pub *publisher) error {
+func (s *Service) initPublisher(ctx context.Context, pub Publisher) error {
 
 	s.stopMutex.Lock()
 	defer s.stopMutex.Unlock()
 
-	if pub.topic != nil {
-		return nil
-	}
-
-	topic, err := pubsub.OpenTopic(ctx, pub.url)
-	if err != nil {
-		return err
-	}
-
-	pub.topic = topic
-
-	return nil
+	return pub.Init(ctx)
 }
-func (s *Service) initSubscriber(ctx context.Context, sub *subscriber) error {
+
+func (s *Service) initSubscriber(ctx context.Context, sub Subscriber) error {
 
 	s.stopMutex.Lock()
 	defer s.stopMutex.Unlock()
 
-	if sub.isInit.Load() && sub.subscription != nil {
-		return nil
-	}
-
-	if !strings.HasPrefix(sub.url, "http") {
-
-		subsc, err := pubsub.OpenSubscription(ctx, sub.url)
-		if err != nil {
-			return fmt.Errorf("could not open topic subscription: %s", err)
-		}
-		sub.subscription = subsc
-	}
-
-	sub.isInit.Store(true)
-	return nil
+	return sub.Init(ctx)
 }
 
 func (s *Service) initPubsub(ctx context.Context) error {
@@ -263,7 +382,7 @@ func (s *Service) initPubsub(ctx context.Context) error {
 			return errors.New("could not cast config to ConfigurationEvents")
 		}
 
-		eventsQueue := RegisterSubscriber(config.GetEventsQueueName(), config.GetEventsQueueUrl(), 10, &eventsQueueHandler)
+		eventsQueue := RegisterSubscriber(config.GetEventsQueueName(), config.GetEventsQueueUrl(), &eventsQueueHandler)
 		eventsQueue(s)
 		eventsQueueP := RegisterPublisher(config.GetEventsQueueName(), config.GetEventsQueueUrl())
 		eventsQueueP(s)
@@ -303,31 +422,5 @@ func (s *Service) initPubsub(ctx context.Context) error {
 		}
 	}
 
-	s.subscribe(ctx)
-
 	return nil
-}
-
-func (s *Service) subscribe(ctx context.Context) {
-
-	s.queue.subscriptionQueueMap.Range(func(key, value any) bool {
-
-		subsc := value.(*subscriber)
-		logger := s.L(ctx).WithField("subscriber", subsc.reference).WithField("url", subsc.url)
-
-		if strings.HasPrefix(subsc.url, "http") {
-			return true
-		}
-		subsc.logger = logger
-
-		job := NewJob(subsc.listen)
-
-		err := SubmitJob(ctx, s, job)
-		if err != nil {
-			logger.WithError(err).WithField("subscriber", subsc).Error(" could not listen or subscribe for messages")
-			return false
-		}
-
-		return true
-	})
 }

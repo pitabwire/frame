@@ -184,7 +184,10 @@ func TestService_RegisterSubscriberContextCancelWorks(t *testing.T) {
 	ctx, srv := frame.NewService("Test Srv", opt, optTopic, frame.NoopDriver())
 	defer srv.Stop(ctx)
 
-	subs := srv.GetSubscriber("test")
+	subs, err := srv.GetSubscriber("test")
+	if err != nil {
+		t.Errorf("Could not get subscriber %s", err)
+	}
 	if subs == nil {
 		t.Fatalf("Subscription is nil yet it should be defined")
 	}
@@ -220,7 +223,10 @@ func TestService_AddPublisher(t *testing.T) {
 	}
 
 	// Verify the publisher was added
-	pub := srv.GetPublisher(reference)
+	pub, err := srv.GetPublisher(reference)
+	if err != nil {
+		t.Errorf("Failed to get publisher: %v", err)
+	}
 	if pub == nil {
 		t.Error("Publisher was not added successfully")
 	}
@@ -303,7 +309,10 @@ func TestService_AddSubscriber(t *testing.T) {
 	}
 
 	// Verify the subscriber was added
-	sub := srv.GetSubscriber(reference)
+	sub, err := srv.GetSubscriber(reference)
+	if err != nil {
+		t.Errorf("Failed to get subscriber: %v", err)
+	}
 	if sub == nil {
 		t.Error("Subscriber was not added successfully")
 	}
@@ -343,7 +352,10 @@ func TestService_AddSubscriberWithoutHandler(t *testing.T) {
 	}
 
 	// Verify it was added
-	sub := srv.GetSubscriber(noHandlerRef)
+	sub, err := srv.GetSubscriber(noHandlerRef)
+	if err != nil {
+		t.Errorf("Failed to get subscriber: %v", err)
+	}
 	if sub == nil {
 		t.Error("Subscriber without handler was not added successfully")
 	}

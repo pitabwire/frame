@@ -19,14 +19,6 @@ type queue struct {
 	subscriptionQueueMap *sync.Map
 }
 
-func (q queue) getPublisherByReference(reference string) (*publisher, error) {
-	p, ok := q.publishQueueMap.Load(reference)
-	if !ok {
-		return nil, fmt.Errorf("reference does not exist")
-	}
-	return p.(*publisher), nil
-}
-
 func newQueue(_ context.Context) *queue {
 	q := &queue{
 		publishQueueMap:      &sync.Map{},
@@ -129,7 +121,7 @@ func RegisterPublisher(reference string, queueURL string) Option {
 
 func (s *Service) AddPublisher(ctx context.Context, reference string, queueURL string) error {
 
-	pub := s.GetPublisher(reference)
+	pub, _ := s.GetPublisher(reference)
 	if pub != nil {
 		return nil
 	}
@@ -147,12 +139,12 @@ func (s *Service) AddPublisher(ctx context.Context, reference string, queueURL s
 	return nil
 }
 
-func (s *Service) GetPublisher(path string) Publisher {
-	pub, ok := s.queue.publishQueueMap.Load(path)
+func (s *Service) GetPublisher(reference string) (Publisher, error) {
+	pub, ok := s.queue.publishQueueMap.Load(reference)
 	if !ok {
-		return nil
+		return nil, fmt.Errorf("publisher %s not found", reference)
 	}
-	return pub.(*publisher)
+	return pub.(*publisher), nil
 }
 
 type Subscriber interface {
@@ -309,7 +301,7 @@ func RegisterSubscriber(reference string, queueURL string,
 
 func (s *Service) AddSubscriber(ctx context.Context, reference string, queueURL string, handler ...SubscribeWorker) error {
 
-	subs0 := s.GetSubscriber(reference)
+	subs0, _ := s.GetSubscriber(reference)
 	if subs0 != nil {
 		return nil
 	}
@@ -334,20 +326,20 @@ func (s *Service) AddSubscriber(ctx context.Context, reference string, queueURL 
 	return nil
 }
 
-func (s *Service) GetSubscriber(path string) Subscriber {
-	sub, ok := s.queue.subscriptionQueueMap.Load(path)
+func (s *Service) GetSubscriber(reference string) (Subscriber, error) {
+	sub, ok := s.queue.subscriptionQueueMap.Load(reference)
 	if !ok {
-		return nil
+		return nil, fmt.Errorf("subscriber %s not found", reference)
 	}
-	return sub.(*subscriber)
+	return sub.(*subscriber), nil
 }
 
 // Publish Queue method to write a new message into the queue pre initialized with the supplied reference
 func (s *Service) Publish(ctx context.Context, reference string, payload any, headers ...map[string]string) error {
 
-	pub := s.GetPublisher(reference)
-	if pub == nil {
-		return fmt.Errorf("could not find publisher with reference %s", reference)
+	pub, err := s.GetPublisher(reference)
+	if err != nil {
+		return err
 	}
 
 	return pub.Publish(ctx, payload, headers...)

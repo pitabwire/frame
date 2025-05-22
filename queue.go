@@ -149,6 +149,7 @@ func (s *Service) GetPublisher(reference string) (Publisher, error) {
 
 type Subscriber interface {
 	Initiated() bool
+	Idle() bool
 
 	Init(ctx context.Context) error
 	Receive(ctx context.Context) (*pubsub.Message, error)
@@ -167,10 +168,21 @@ type subscriber struct {
 	handler      SubscribeWorker
 	subscription *pubsub.Subscription
 	isInit       atomic.Bool
+	isIdle       atomic.Bool
 }
 
 func (s *subscriber) Receive(ctx context.Context) (*pubsub.Message, error) {
-	return s.subscription.Receive(ctx)
+	msg, err := s.subscription.Receive(ctx)
+	if err != nil {
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			s.isIdle.Store(true)
+		}
+
+		s.isInit.Store(false)
+		return nil, err
+	}
+	s.isIdle.Store(false)
+	return msg, err
 }
 
 func (s *subscriber) Init(ctx context.Context) error {
@@ -205,6 +217,10 @@ func (s *subscriber) Init(ctx context.Context) error {
 
 func (s *subscriber) Initiated() bool {
 	return s.isInit.Load()
+}
+
+func (s *subscriber) Idle() bool {
+	return s.isIdle.Load()
 }
 
 func (s *subscriber) Stop(ctx context.Context) error {
@@ -244,7 +260,6 @@ func (s *subscriber) listen(ctx context.Context, _ JobResultPipe[*pubsub.Message
 				}
 
 				logger.WithError(err).Error(" could not pull message")
-				s.isInit.Store(false)
 				return err
 			}
 

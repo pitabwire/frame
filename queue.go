@@ -2,16 +2,19 @@ package frame
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
-	_ "github.com/pitabwire/natspubsub"
-	"gocloud.dev/pubsub"
-	_ "gocloud.dev/pubsub/mempubsub"
 	"maps"
 	"strings"
 	"sync"
+
+	"encoding/json"
 	"sync/atomic"
+
+	"gocloud.dev/pubsub"
+
+	_ "github.com/pitabwire/natspubsub"
+	_ "gocloud.dev/pubsub/mempubsub"
 )
 
 type queue struct {
@@ -163,12 +166,13 @@ type SubscribeWorker interface {
 type subscriber struct {
 	service *Service
 
-	reference    string
-	url          string
-	handler      SubscribeWorker
-	subscription *pubsub.Subscription
-	isInit       atomic.Bool
-	isIdle       atomic.Bool
+	reference       string
+	url             string
+	handler         SubscribeWorker
+	subscription    *pubsub.Subscription
+	subscribedTopic *pubsub.Topic
+	isInit          atomic.Bool
+	isIdle          atomic.Bool
 }
 
 func (s *subscriber) Receive(ctx context.Context) (*pubsub.Message, error) {
@@ -191,6 +195,14 @@ func (s *subscriber) Init(ctx context.Context) error {
 	}
 
 	if !strings.HasPrefix(s.url, "http") {
+
+		if strings.HasPrefix(s.url, "mem://") {
+			var err error
+			s.subscribedTopic, err = pubsub.OpenTopic(ctx, s.url)
+			if err != nil {
+				return err
+			}
+		}
 
 		subs, err := pubsub.OpenSubscription(ctx, s.url)
 		if err != nil {
@@ -226,6 +238,13 @@ func (s *subscriber) Idle() bool {
 func (s *subscriber) Stop(ctx context.Context) error {
 
 	s.isInit.Store(false)
+
+	if s.subscribedTopic != nil {
+		err := s.subscribedTopic.Shutdown(ctx)
+		if err != nil {
+			return err
+		}
+	}
 
 	err := s.subscription.Shutdown(ctx)
 	if err != nil {

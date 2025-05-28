@@ -7,6 +7,7 @@ import (
 	"maps"
 	"strings"
 	"sync"
+	"time"
 
 	"encoding/json"
 	"sync/atomic"
@@ -239,10 +240,12 @@ func (s *subscriber) Stop(ctx context.Context) error {
 
 	//TODO: incooporate trace information in shutdown context
 	var sctx context.Context
+	var cancelFunc context.CancelFunc
 
 	select {
 	case <-ctx.Done():
-		sctx = context.Background()
+		sctx, cancelFunc = context.WithTimeout(context.Background(), time.Second*30)
+		defer cancelFunc()
 	default:
 		sctx = ctx
 	}

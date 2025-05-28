@@ -237,16 +237,26 @@ func (s *subscriber) Idle() bool {
 
 func (s *subscriber) Stop(ctx context.Context) error {
 
+	//TODO: incooporate trace information in shutdown context
+	var sctx context.Context
+
+	select {
+	case <-ctx.Done():
+		sctx = context.Background()
+	default:
+		sctx = ctx
+	}
+
 	s.isInit.Store(false)
 
 	if s.subscribedTopic != nil {
-		err := s.subscribedTopic.Shutdown(ctx)
+		err := s.subscribedTopic.Shutdown(sctx)
 		if err != nil {
 			return err
 		}
 	}
 
-	err := s.subscription.Shutdown(ctx)
+	err := s.subscription.Shutdown(sctx)
 	if err != nil {
 		return err
 	}

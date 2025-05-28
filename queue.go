@@ -103,9 +103,23 @@ func (p *publisher) Initiated() bool {
 
 func (p *publisher) Stop(ctx context.Context) error {
 
+	//TODO: incooporate trace information in shutdown context
+	var sctx context.Context
+	var cancelFunc context.CancelFunc
+
+	select {
+	case <-ctx.Done():
+		sctx = context.Background()
+	default:
+		sctx = ctx
+	}
+
+	sctx, cancelFunc = context.WithTimeout(sctx, time.Second*30)
+	defer cancelFunc()
+
 	p.isInit.Store(false)
 
-	err := p.topic.Shutdown(ctx)
+	err := p.topic.Shutdown(sctx)
 	if err != nil {
 		return err
 	}
@@ -152,6 +166,9 @@ func (s *Service) GetPublisher(reference string) (Publisher, error) {
 }
 
 type Subscriber interface {
+	Ref() string
+
+	URI() string
 	Initiated() bool
 	Idle() bool
 
@@ -167,13 +184,20 @@ type SubscribeWorker interface {
 type subscriber struct {
 	service *Service
 
-	reference       string
-	url             string
-	handler         SubscribeWorker
-	subscription    *pubsub.Subscription
-	subscribedTopic *pubsub.Topic
-	isInit          atomic.Bool
-	isIdle          atomic.Bool
+	reference    string
+	url          string
+	handler      SubscribeWorker
+	subscription *pubsub.Subscription
+	isInit       atomic.Bool
+	isIdle       atomic.Bool
+}
+
+func (s *subscriber) Ref() string {
+	return s.reference
+}
+
+func (s *subscriber) URI() string {
+	return s.url
 }
 
 func (s *subscriber) Receive(ctx context.Context) (*pubsub.Message, error) {
@@ -196,14 +220,6 @@ func (s *subscriber) Init(ctx context.Context) error {
 	}
 
 	if !strings.HasPrefix(s.url, "http") {
-
-		if strings.HasPrefix(s.url, "mem://") {
-			var err error
-			s.subscribedTopic, err = pubsub.OpenTopic(ctx, s.url)
-			if err != nil {
-				return err
-			}
-		}
 
 		subs, err := pubsub.OpenSubscription(ctx, s.url)
 		if err != nil {
@@ -253,13 +269,6 @@ func (s *subscriber) Stop(ctx context.Context) error {
 	defer cancelFunc()
 
 	s.isInit.Store(false)
-
-	if s.subscribedTopic != nil {
-		err := s.subscribedTopic.Shutdown(sctx)
-		if err != nil {
-			return err
-		}
-	}
 
 	err := s.subscription.Shutdown(sctx)
 	if err != nil {
@@ -406,6 +415,11 @@ func (s *Service) initSubscriber(ctx context.Context, sub Subscriber) error {
 
 	s.stopMutex.Lock()
 	defer s.stopMutex.Unlock()
+
+	err := s.AddPublisher(ctx, sub.Ref(), sub.URI())
+	if err != nil {
+		return err
+	}
 
 	return sub.Init(ctx)
 }

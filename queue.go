@@ -244,11 +244,13 @@ func (s *subscriber) Stop(ctx context.Context) error {
 
 	select {
 	case <-ctx.Done():
-		sctx, cancelFunc = context.WithTimeout(context.Background(), time.Second*30)
-		defer cancelFunc()
+		sctx = context.Background()
 	default:
 		sctx = ctx
 	}
+
+	sctx, cancelFunc = context.WithTimeout(sctx, time.Second*30)
+	defer cancelFunc()
 
 	s.isInit.Store(false)
 

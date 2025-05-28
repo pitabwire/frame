@@ -148,7 +148,7 @@ func (s *Service) AddPublisher(ctx context.Context, reference string, queueURL s
 		reference: reference,
 		url:       queueURL,
 	}
-	err := s.initPublisher(ctx, pub)
+	err := pub.Init(ctx)
 	if err != nil {
 		return err
 	}
@@ -403,14 +403,6 @@ func (s *Service) Publish(ctx context.Context, reference string, payload any, he
 	return pub.Publish(ctx, payload, headers...)
 }
 
-func (s *Service) initPublisher(ctx context.Context, pub Publisher) error {
-
-	s.stopMutex.Lock()
-	defer s.stopMutex.Unlock()
-
-	return pub.Init(ctx)
-}
-
 func (s *Service) initSubscriber(ctx context.Context, sub Subscriber) error {
 
 	s.stopMutex.Lock()
@@ -456,7 +448,7 @@ func (s *Service) initPubsub(ctx context.Context) error {
 	})
 
 	for _, pub := range publishers {
-		err := s.initPublisher(ctx, pub)
+		err := pub.Init(ctx)
 		if err != nil {
 			return err
 		}

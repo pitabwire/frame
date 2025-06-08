@@ -157,6 +157,18 @@ func (s *Service) AddPublisher(ctx context.Context, reference string, queueURL s
 	return nil
 }
 
+func (s *Service) DiscardPublisher(ctx context.Context, reference string) error {
+
+	var err error
+	pub, _ := s.GetPublisher(reference)
+	if pub != nil {
+		err = pub.Stop(ctx)
+	}
+
+	s.queue.publishQueueMap.Delete(reference)
+	return err
+}
+
 func (s *Service) GetPublisher(reference string) (Publisher, error) {
 	pub, ok := s.queue.publishQueueMap.Load(reference)
 	if !ok {
@@ -382,6 +394,18 @@ func (s *Service) AddSubscriber(ctx context.Context, reference string, queueURL 
 	s.queue.subscriptionQueueMap.Store(reference, &subs)
 
 	return nil
+}
+
+func (s *Service) DiscardSubscriber(ctx context.Context, reference string) error {
+
+	var err error
+	sub, _ := s.GetSubscriber(reference)
+	if sub != nil {
+		err = sub.Stop(ctx)
+	}
+
+	s.queue.subscriptionQueueMap.Delete(reference)
+	return err
 }
 
 func (s *Service) GetSubscriber(reference string) (Subscriber, error) {

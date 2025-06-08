@@ -217,9 +217,9 @@ func (s *subscriber) Receive(ctx context.Context) (*pubsub.Message, error) {
 	if err != nil {
 		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 			s.isIdle.Store(true)
+		} else {
+			s.isInit.Store(false)
 		}
-
-		s.isInit.Store(false)
 		return nil, err
 	}
 	s.isIdle.Store(false)
@@ -277,7 +277,7 @@ func (s *subscriber) Stop(ctx context.Context) error {
 		sctx = ctx
 	}
 
-	sctx, cancelFunc = context.WithTimeout(sctx, time.Second*30)
+	sctx, cancelFunc = context.WithTimeout(sctx, time.Second*1)
 	defer cancelFunc()
 
 	s.isInit.Store(false)

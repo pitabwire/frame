@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/sirupsen/logrus"
 	"gorm.io/gorm"
 	"os"
 	"path/filepath"
@@ -24,7 +23,7 @@ type MigrationPatch struct {
 
 type migrator struct {
 	pool   *Pool
-	logger *logrus.Entry
+	logger *Entry
 }
 
 func (m *migrator) DB(ctx context.Context) *gorm.DB {

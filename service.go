@@ -17,7 +17,6 @@ import (
 	"github.com/nicksnyder/go-i18n/v2/i18n"
 	"github.com/panjf2000/ants/v2"
 	"github.com/pitabwire/frame/internal"
-	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/otel/sdk/trace"
 	_ "go.uber.org/automaxprocs"
 	"google.golang.org/grpc"
@@ -42,7 +41,7 @@ type Service struct {
 	jwtClientSecret            string
 	version                    string
 	environment                string
-	logger                     *logrus.Logger
+	logger                     *Logger
 	traceExporter              trace.SpanExporter
 	traceSampler               trace.Sampler
 	handler                    http.Handler
@@ -106,7 +105,7 @@ func NewServiceWithContext(ctx context.Context, name string, opts ...Option) (co
 		poolCapacity:    100,
 	}
 
-	opts = append(opts, Logger())
+	opts = append(opts, WithLogger())
 
 	service.Init(opts...)
 

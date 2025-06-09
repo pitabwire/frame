@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/tls"
 	"github.com/improbable-eng/grpc-web/go/grpcweb"
-	"github.com/sirupsen/logrus"
 	"golang.org/x/net/http2"
 	"google.golang.org/grpc"
 	"net"
@@ -24,7 +23,7 @@ func (t *noopDriver) Shutdown(_ context.Context) error {
 
 type defaultDriver struct {
 	ctx        context.Context
-	log        *logrus.Entry
+	log        *Entry
 	port       string
 	httpServer *http.Server
 	listener   net.Listener
@@ -86,7 +85,7 @@ func (dd *defaultDriver) ListenAndServe(addr string, h http.Handler) error {
 		return err0
 	}
 
-	dd.log.Infof("http server port is : %s", addr)
+	dd.log.Info("http server port is : %s", addr)
 
 	return dd.httpServer.Serve(ln)
 }
@@ -106,7 +105,7 @@ func (dd *defaultDriver) ListenAndServeTLS(addr, certPath, certKeyPath string, h
 		return err0
 	}
 
-	dd.log.Infof("http server port is : %s", addr)
+	dd.log.Info("http server port is : %s", addr)
 
 	return dd.httpServer.Serve(ln)
 
@@ -159,7 +158,7 @@ func (gd *grpcDriver) ListenAndServe(addr string, h http.Handler) error {
 			return
 		}
 
-		gd.log.Infof("grpc server port is : %s", gd.grpcPort)
+		gd.log.Info("grpc server port is : %s", gd.grpcPort)
 
 		err2 = gd.grpcServer.Serve(ln)
 		if err2 != nil {
@@ -172,7 +171,7 @@ func (gd *grpcDriver) ListenAndServe(addr string, h http.Handler) error {
 	if err0 != nil {
 		return err0
 	}
-	gd.log.Infof("http server port is : %s", addr)
+	gd.log.Info("http server port is : %s", addr)
 
 	return gd.httpServer.Serve(httpListener)
 }
@@ -205,7 +204,7 @@ func (gd *grpcDriver) ListenAndServeTLS(addr, certFile, certKeyFile string, h ht
 			return
 		}
 
-		gd.log.Infof("grpc server port is : %s", address)
+		gd.log.Info("grpc server port is : %s", address)
 
 		err2 = gd.grpcServer.Serve(ln)
 		if err2 != nil {
@@ -219,7 +218,7 @@ func (gd *grpcDriver) ListenAndServeTLS(addr, certFile, certKeyFile string, h ht
 		return err0
 	}
 
-	gd.log.Infof("http server port is : %s", addr)
+	gd.log.Info("http server port is : %s", addr)
 
 	return gd.httpServer.Serve(httpListener)
 

@@ -16,7 +16,7 @@ func TestLogs(t *testing.T) {
 	logger.Info("testing logs")
 
 	err := errors.New("")
-	logger.WithError(err).Errorf("testing errors")
+	logger.WithError(err).Error("testing errors")
 
-	logger.WithError(err).WithField("stacktrace", string(debug.Stack())).Errorf("testing errors with stacktrace")
+	logger.WithError(err).WithField("stacktrace", string(debug.Stack())).Error("testing errors with stacktrace")
 }

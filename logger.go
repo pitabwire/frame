@@ -311,6 +311,10 @@ func (e *Entry) Fatal(msg string, args ...any) {
 
 }
 
+func (e *Entry) Panic(msg string, args ...any) {
+	e.l.Panic(msg, args...)
+}
+
 func (e *Entry) WithError(err error) *Entry {
 	e.l.slog = e.l.slog.With("error", err)
 	return e

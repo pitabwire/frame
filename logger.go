@@ -16,6 +16,28 @@ import (
 	"time"
 )
 
+const ctxKeyLogger = contextKey("loggerKey")
+
+// LogToContext pushes a logger instance into the supplied context for easier propagation.
+func LogToContext(ctx context.Context, logger *Entry) context.Context {
+	return context.WithValue(ctx, ctxKeyLogger, logger)
+}
+
+// Log obtains a service instance being propagated through the context.
+func Log(ctx context.Context) *Entry {
+	l, ok := ctx.Value(ctxKeyLogger).(*Entry)
+	if !ok {
+		svc := Svc(ctx)
+		if svc == nil {
+			l = NewLogger(slog.LevelInfo).WithContext(ctx)
+		} else {
+			l = svc.L(ctx)
+		}
+	}
+
+	return l
+}
+
 // WithLogger Option that helps with initialization of our internal dbLogger
 func WithLogger() Option {
 	return func(s *Service) {
@@ -73,7 +95,7 @@ func GetLoggingOptions() []logging.Option {
 
 func RecoveryHandlerFun(ctx context.Context, p interface{}) error {
 
-	s := FromContext(ctx)
+	s := Svc(ctx)
 	s.L(ctx).WithField("trigger", p).Error("recovered from panic %s", debug.Stack())
 
 	// Return a gRPC error

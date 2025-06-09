@@ -32,8 +32,8 @@ func ConfigToContext(ctx context.Context, config any) context.Context {
 	return context.WithValue(ctx, ctxKeyConfiguration, config)
 }
 
-// ConfigFromContext extracts service configuration from the supplied context if any exist
-func ConfigFromContext(ctx context.Context) any {
+// Cfg extracts service configuration from the supplied context if any exist
+func Cfg(ctx context.Context) any {
 	return ctx.Value(ctxKeyConfiguration)
 }
 

@@ -44,14 +44,14 @@ func TestFromContext(t *testing.T) {
 
 	_, srv := frame.NewService("Test Srv")
 
-	nullSrv := frame.FromContext(ctx)
+	nullSrv := frame.Svc(ctx)
 	if nullSrv != nil {
 		t.Errorf("Service was found in context yet it was not set")
 	}
 
-	ctx = frame.ToContext(ctx, srv)
+	ctx = frame.SvcToContext(ctx, srv)
 
-	valueSrv := frame.FromContext(ctx)
+	valueSrv := frame.Svc(ctx)
 	if valueSrv == nil {
 		t.Errorf("No default service was found in context")
 	}

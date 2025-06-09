@@ -109,25 +109,27 @@ func NewServiceWithContext(ctx context.Context, name string, opts ...Option) (co
 
 	service.Init(opts...)
 
+	l := service.L(ctx)
 	poolOptions := []ants.Option{
-		ants.WithLogger(service.L(ctx)),
+		ants.WithLogger(l),
 		ants.WithNonblocking(true),
 	}
 
 	service.pool, _ = ants.NewMultiPool(service.poolWorkerCount, service.poolCapacity, ants.LeastTasks, poolOptions...)
 
-	ctx1 := ToContext(ctx, service)
+	ctx1 := SvcToContext(ctx, service)
 	ctx1 = ConfigToContext(ctx1, service.Config())
+	ctx1 = LogToContext(ctx1, l)
 	return ctx1, service
 }
 
-// ToContext pushes a service instance into the supplied context for easier propagation.
-func ToContext(ctx context.Context, service *Service) context.Context {
+// SvcToContext pushes a service instance into the supplied context for easier propagation.
+func SvcToContext(ctx context.Context, service *Service) context.Context {
 	return context.WithValue(ctx, ctxKeyService, service)
 }
 
-// FromContext obtains a service instance being propagated through the context.
-func FromContext(ctx context.Context) *Service {
+// Svc obtains a service instance being propagated through the context.
+func Svc(ctx context.Context) *Service {
 	service, ok := ctx.Value(ctxKeyService).(*Service)
 	if !ok {
 		return nil

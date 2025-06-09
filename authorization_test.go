@@ -12,7 +12,7 @@ import (
 
 func authorizationControlListWrite(ctx context.Context, writeServerURL string, action string, subject string) error {
 	authClaims := frame.ClaimsFromContext(ctx)
-	service := frame.FromContext(ctx)
+	service := frame.Svc(ctx)
 
 	if authClaims == nil {
 		return errors.New("only authenticated requsts should be used to check authorization")
@@ -50,7 +50,7 @@ func TestAuthorizationControlListWrite(t *testing.T) {
 	ctx, srv := frame.NewService("Test Srv", frame.Config(&frame.ConfigurationDefault{
 		AuthorizationServiceWriteURI: authorizationServerURL,
 	}))
-	ctx = frame.ToContext(ctx, srv)
+	ctx = frame.SvcToContext(ctx, srv)
 
 	authClaim := frame.AuthenticationClaims{
 		Ext: map[string]any{
@@ -76,7 +76,7 @@ func TestAuthHasAccess(t *testing.T) {
 			AuthorizationServiceReadURI:  "http://localhost:4466/relation-tuples/check",
 			AuthorizationServiceWriteURI: authorizationServerURL,
 		}))
-	ctx = frame.ToContext(ctx, srv)
+	ctx = frame.SvcToContext(ctx, srv)
 
 	authClaim := frame.AuthenticationClaims{
 		Ext: map[string]any{

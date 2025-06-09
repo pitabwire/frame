@@ -105,7 +105,7 @@ func NewServiceWithContext(ctx context.Context, name string, opts ...Option) (co
 		poolCapacity:    100,
 	}
 
-	opts = append(opts, WithLogger())
+	opts = append([]Option{WithLogger()}, opts...)
 
 	service.Init(opts...)
 

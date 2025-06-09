@@ -73,10 +73,12 @@ func TestService_EventsPublishingWorks(t *testing.T) {
 		t.Errorf("could not processFunc configs %s", err)
 		return
 	}
-	testEvent := MessageToTest{Count: 50}
-	events := frame.RegisterEvents(&testEvent)
 
 	ctx, srv := frame.NewService("Test Srv", frame.Config(&cfg), frame.NoopDriver())
+
+	testEvent := MessageToTest{Service: srv, Count: 50}
+	events := frame.RegisterEvents(&testEvent)
+
 	srv.Init(events)
 	if err = srv.Run(ctx, ""); err != nil {
 		t.Errorf("We somehow fail to instantiate subscription %s", err)

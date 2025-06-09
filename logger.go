@@ -39,6 +39,7 @@ func WithLogger() Option {
 }
 
 func (s *Service) L(ctx context.Context) *Entry {
+
 	return s.logger.WithContext(ctx).WithField("service", s.Name())
 }
 

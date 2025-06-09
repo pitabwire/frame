@@ -43,6 +43,10 @@ func (s *Service) L(ctx context.Context) *Entry {
 	return s.logger.WithContext(ctx).WithField("service", s.Name())
 }
 
+func (s *Service) SLog(_ context.Context) *slog.Logger {
+	return s.logger.slog.With("service", s.Name())
+}
+
 func GetLoggingOptions() []logging.Option {
 	return []logging.Option{
 		logging.WithLevels(func(code codes.Code) logging.Level {

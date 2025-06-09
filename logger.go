@@ -254,6 +254,11 @@ func (l *Logger) Fatal(msg string, args ...any) {
 	l.Exit(1)
 }
 
+func (l *Logger) Panic(msg string, args ...any) {
+	l.slog.ErrorContext(l._ctx(), msg, args...)
+	panic(msg)
+}
+
 func (l *Logger) Exit(code int) {
 	if l.ExitFunc == nil {
 		l.ExitFunc = os.Exit

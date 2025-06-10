@@ -112,6 +112,7 @@ type ConfigurationDefault struct {
 	DatabaseMaxOpenConnections           int `envDefault:"5" env:"DATABASE_MAX_OPEN_CONNECTIONS" yaml:"database_max_open_connections"`
 	DatabaseMaxConnectionLifeTimeSeconds int `envDefault:"300" env:"DATABASE_MAX_CONNECTION_LIFE_TIME_IN_SECONDS" yaml:"database_max_connection_life_time_seconds"`
 
+	DatabaseLogQueries         bool   `envDefault:"false" env:"DATABASE_LOG_QUERIES" yaml:"database_log_queries"`
 	DatabaseSlowQueryThreshold string `envDefault:"200ms" env:"DATABASE_SLOW_QUERY_THRESHOLD" yaml:"database_slow_query_threshold"`
 
 	EventsQueueName string `envDefault:"frame.events.internal_._queue" env:"EVENTS_QUEUE_NAME" yaml:"events_queue_name"`
@@ -368,6 +369,7 @@ type ConfigurationDatabase interface {
 	GetMaxConnectionLifeTimeInSeconds() time.Duration
 
 	GetDatabaseMigrationPath() string
+	CanLogDatabaseQueries() bool
 	GetSlowQueryThreshold() time.Duration
 }
 
@@ -409,6 +411,9 @@ func (c *ConfigurationDefault) GetMaxConnectionLifeTimeInSeconds() time.Duration
 
 func (c *ConfigurationDefault) GetDatabaseMigrationPath() string {
 	return c.DatabaseMigrationPath
+}
+func (c *ConfigurationDefault) CanLogDatabaseQueries() bool {
+	return c.DatabaseLogQueries
 }
 func (c *ConfigurationDefault) GetSlowQueryThreshold() time.Duration {
 	threshold, err := time.ParseDuration(c.DatabaseSlowQueryThreshold)

@@ -378,7 +378,7 @@ func DatastoreConnectionWithName(ctx context.Context, name string, postgresqlCon
 
 	return func(s *Service) {
 
-		dbQueryLogger := buildDBLogger(s.L(ctx))
+		dbQueryLogger := buildDBLogger(ctx, s)
 
 		cleanedPostgresqlDSN, err := cleanPostgresDSN(postgresqlConnection)
 		if err != nil {

@@ -12,7 +12,7 @@ require (
 	github.com/improbable-eng/grpc-web v0.15.0
 	github.com/nicksnyder/go-i18n/v2 v2.6.0
 	github.com/panjf2000/ants/v2 v2.11.3
-	github.com/pitabwire/natspubsub v0.4.0
+	github.com/pitabwire/natspubsub v0.5.0
 	github.com/rs/xid v1.6.0
 	go.opentelemetry.io/otel v1.36.0
 	go.opentelemetry.io/otel/sdk v1.36.0

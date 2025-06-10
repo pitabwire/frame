@@ -22,18 +22,18 @@ func buildDBLogger(ctx context.Context, s *Service) logger.Interface {
 		logQueries = config.CanLogDatabaseQueries()
 	}
 
-	return &dbLogger{
-		log:           s.L(ctx),
-		canLogQueries: logQueries,
-		slowThreshold: slowQueryThreshold,
+	if logQueries {
+		return &dbLogger{
+			log:           s.L(ctx),
+			slowThreshold: slowQueryThreshold,
+		}
 	}
+	return nil
 
 }
 
 type dbLogger struct {
-	log *LogEntry
-
-	canLogQueries bool
+	log           *LogEntry
 	slowThreshold time.Duration
 }
 
@@ -60,10 +60,6 @@ func (l *dbLogger) Error(ctx context.Context, msg string, data ...interface{}) {
 
 // Trace print sql message
 func (l *dbLogger) Trace(ctx context.Context, begin time.Time, fc func() (string, int64), err error) {
-
-	if !l.canLogQueries {
-		return
-	}
 
 	elapsed := time.Since(begin)
 

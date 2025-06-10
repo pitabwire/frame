@@ -23,7 +23,7 @@ type MigrationPatch struct {
 
 type migrator struct {
 	pool   *Pool
-	logger *Entry
+	logger *LogEntry
 }
 
 func (m *migrator) DB(ctx context.Context) *gorm.DB {

@@ -34,7 +34,7 @@ func newQueue(_ context.Context) *queue {
 
 type Publisher interface {
 	Initiated() bool
-
+	Ref() string
 	Init(ctx context.Context) error
 
 	Publish(ctx context.Context, payload any, headers ...map[string]string) error
@@ -48,7 +48,14 @@ type publisher struct {
 	isInit    atomic.Bool
 }
 
+func (p *publisher) Ref() string {
+	return p.reference
+}
+
 func (p *publisher) Publish(ctx context.Context, payload any, headers ...map[string]string) error {
+
+	var err error
+
 	metadata := make(map[string]string)
 	for _, h := range headers {
 		maps.Copy(metadata, h)
@@ -60,15 +67,19 @@ func (p *publisher) Publish(ctx context.Context, payload any, headers ...map[str
 	}
 
 	var message []byte
-	msg, ok := payload.([]byte)
+	message, ok := payload.([]byte)
 	if !ok {
-		msg0, err := json.Marshal(payload)
-		if err != nil {
-			return err
+
+		msgStr, ok0 := payload.(string)
+		if ok0 {
+			message = []byte(msgStr)
+		} else {
+
+			message, err = json.Marshal(payload)
+			if err != nil {
+				return err
+			}
 		}
-		message = msg0
-	} else {
-		message = msg
 	}
 
 	topic := p.topic

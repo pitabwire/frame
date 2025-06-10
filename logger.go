@@ -6,26 +6,22 @@ import (
 	"github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/logging"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"gorm.io/gorm/logger"
-	"gorm.io/gorm/utils"
 	"log/slog"
 	"os"
 	"runtime/debug"
-	"strconv"
 	"strings"
-	"time"
 )
 
 const ctxKeyLogger = contextKey("loggerKey")
 
 // LogToContext pushes a logger instance into the supplied context for easier propagation.
-func LogToContext(ctx context.Context, logger *Entry) context.Context {
+func LogToContext(ctx context.Context, logger *LogEntry) context.Context {
 	return context.WithValue(ctx, ctxKeyLogger, logger)
 }
 
 // Log obtains a service instance being propagated through the context.
-func Log(ctx context.Context) *Entry {
-	l, ok := ctx.Value(ctxKeyLogger).(*Entry)
+func Log(ctx context.Context) *LogEntry {
+	l, ok := ctx.Value(ctxKeyLogger).(*LogEntry)
 	if !ok {
 		svc := Svc(ctx)
 		if svc == nil {
@@ -60,7 +56,7 @@ func WithLogger() Option {
 	}
 }
 
-func (s *Service) L(ctx context.Context) *Entry {
+func (s *Service) L(ctx context.Context) *LogEntry {
 
 	return s.logger.WithContext(ctx).WithField("service", s.Name())
 }
@@ -100,84 +96,6 @@ func RecoveryHandlerFun(ctx context.Context, p interface{}) error {
 
 	// Return a gRPC error
 	return status.Errorf(codes.Internal, "Internal server error")
-}
-
-func buildDBLogger(s *Service) logger.Interface {
-
-	slowQueryThreshold := 200 * time.Millisecond
-
-	if s.Config() != nil {
-		config, ok := s.Config().(ConfigurationDatabase)
-		if ok {
-			slowQueryThreshold = config.GetSlowQueryThreshold()
-		}
-	}
-
-	return &dbLogger{
-		s:             s,
-		SlowThreshold: slowQueryThreshold,
-	}
-
-}
-
-type dbLogger struct {
-	s *Service
-
-	SlowThreshold time.Duration
-}
-
-// LogMode log mode
-func (l *dbLogger) LogMode(_ logger.LogLevel) logger.Interface {
-	return l
-}
-
-// Info print info
-func (l *dbLogger) Info(ctx context.Context, msg string, data ...interface{}) {
-
-	l.s.L(ctx).Info(msg, data...)
-}
-
-// Warn print warn messages
-func (l *dbLogger) Warn(ctx context.Context, msg string, data ...interface{}) {
-	l.s.L(ctx).Warn(msg, data...)
-}
-
-// Error print error messages
-func (l *dbLogger) Error(ctx context.Context, msg string, data ...interface{}) {
-	l.s.L(ctx).Error(msg, data...)
-}
-
-// Trace print sql message
-func (l *dbLogger) Trace(ctx context.Context, begin time.Time, fc func() (string, int64), err error) {
-
-	elapsed := time.Since(begin)
-
-	sql, rows := fc()
-
-	rowsAffected := "-"
-	if rows != -1 {
-		rowsAffected = strconv.FormatInt(rows, 10)
-	}
-
-	log := l.s.L(ctx).WithField("query", sql).WithField("duration", float64(elapsed.Nanoseconds())/1e6).WithField("rows", rowsAffected).WithField("file", utils.FileWithLineNum())
-
-	slowQuery := false
-	if elapsed > l.SlowThreshold && l.SlowThreshold != 0 {
-		log = log.WithField("SLOW Query", fmt.Sprintf(" >= %v", l.SlowThreshold))
-		slowQuery = true
-	}
-
-	switch {
-	case err != nil && !ErrorIsNoRows(err):
-		log.WithError(err).Error(" Query Error : ")
-	case log.Level() >= slog.LevelWarn && slowQuery:
-		log.Warn("SLOW Query ")
-	case log.Level() >= slog.LevelInfo && slowQuery:
-		log.Info("SLOW Query ")
-	case log.Level() >= slog.LevelDebug:
-		log.Info("Query Debug ")
-
-	}
 }
 
 type Logger struct {
@@ -224,24 +142,24 @@ func NewLogger(logLevel slog.Level) *Logger {
 	return &Logger{slog: newLogger, level: logLevel}
 }
 
-func (l *Logger) WithContext(ctx context.Context) *Entry {
+func (l *Logger) WithContext(ctx context.Context) *LogEntry {
 	l.ctx = ctx
-	return &Entry{l: l}
+	return &LogEntry{l: l}
 }
 
-func (l *Logger) WithError(err error) *Entry {
+func (l *Logger) WithError(err error) *LogEntry {
 	l.slog = l.slog.With("error", err)
-	return &Entry{l: l}
+	return &LogEntry{l: l}
 }
 
-func (l *Logger) WithField(key string, value any) *Entry {
+func (l *Logger) WithField(key string, value any) *LogEntry {
 	l.slog = l.slog.With(key, value)
-	return &Entry{l: l}
+	return &LogEntry{l: l}
 }
 
-func (l *Logger) WithFields(key string, value any) *Entry {
+func (l *Logger) WithFields(key string, value any) *LogEntry {
 	l.slog = l.slog.With(key, value)
-	return &Entry{l: l}
+	return &LogEntry{l: l}
 }
 
 func (l *Logger) _ctx() context.Context {
@@ -288,60 +206,60 @@ func (l *Logger) Exit(code int) {
 	l.ExitFunc(code)
 }
 
-// Entry Need a type to handle the chained calls
-type Entry struct {
+// LogEntry Need a type to handle the chained calls
+type LogEntry struct {
 	l *Logger
 }
 
 type exitFunc func(int)
 
-func (e *Entry) Level() slog.Level {
+func (e *LogEntry) Level() slog.Level {
 	return e.l.level
 }
 
-func (e *Entry) WithContext(ctx context.Context) *Entry {
+func (e *LogEntry) WithContext(ctx context.Context) *LogEntry {
 	e.l.WithContext(ctx)
 	return e
 }
 
-func (e *Entry) Log(ctx context.Context, level slog.Level, msg string, fields ...any) {
+func (e *LogEntry) Log(ctx context.Context, level slog.Level, msg string, fields ...any) {
 	e.l.Log(ctx, level, msg, fields...)
 }
 
-func (e *Entry) Debug(msg string, args ...any) {
+func (e *LogEntry) Debug(msg string, args ...any) {
 	e.l.Debug(msg, args...)
 }
 
-func (e *Entry) Info(msg string, args ...any) {
+func (e *LogEntry) Info(msg string, args ...any) {
 	e.l.Info(msg, args...)
 }
 
-func (e *Entry) Printf(format string, args ...any) {
+func (e *LogEntry) Printf(format string, args ...any) {
 	e.Info(format, args...)
 }
 
-func (e *Entry) Warn(msg string, args ...any) {
+func (e *LogEntry) Warn(msg string, args ...any) {
 	e.l.Warn(msg, args...)
 }
 
-func (e *Entry) Error(msg string, args ...any) {
+func (e *LogEntry) Error(msg string, args ...any) {
 	e.l.Error(msg, args...)
 }
 
-func (e *Entry) Fatal(msg string, args ...any) {
+func (e *LogEntry) Fatal(msg string, args ...any) {
 	e.l.Fatal(msg, args...)
 
 }
 
-func (e *Entry) Panic(msg string, args ...any) {
+func (e *LogEntry) Panic(msg string, args ...any) {
 	e.l.Panic(msg, args...)
 }
 
-func (e *Entry) WithError(err error) *Entry {
+func (e *LogEntry) WithError(err error) *LogEntry {
 	e.l.slog = e.l.slog.With("error", err)
 	return e
 }
-func (e *Entry) WithField(key string, value any) *Entry {
+func (e *LogEntry) WithField(key string, value any) *LogEntry {
 	e.l.slog = e.l.slog.With(key, value)
 	return e
 }

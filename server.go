@@ -23,7 +23,7 @@ func (t *noopDriver) Shutdown(_ context.Context) error {
 
 type defaultDriver struct {
 	ctx        context.Context
-	log        *Entry
+	log        *LogEntry
 	port       string
 	httpServer *http.Server
 	listener   net.Listener

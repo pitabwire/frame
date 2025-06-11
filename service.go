@@ -40,7 +40,7 @@ type Service struct {
 	jwtClientSecret            string
 	version                    string
 	environment                string
-	logger                     *Logger
+	logger                     *iLogger
 	traceExporter              trace.SpanExporter
 	traceSampler               trace.Sampler
 	handler                    http.Handler
@@ -104,7 +104,7 @@ func NewServiceWithContext(ctx context.Context, name string, opts ...Option) (co
 		poolCapacity:    100,
 	}
 
-	opts = append([]Option{WithLogger()}, opts...)
+	opts = append(opts, WithLogger())
 
 	service.Init(opts...)
 

@@ -17,7 +17,7 @@ import (
 
 const ctxKeyLogger = contextKey("loggerKey")
 
-// LogToContext pushes a logger instance into the supplied context for easier propagation.
+// LogToContext pushes a iLogger instance into the supplied context for easier propagation.
 func LogToContext(ctx context.Context, logger *LogEntry) context.Context {
 	return context.WithValue(ctx, ctxKeyLogger, logger)
 }
@@ -28,7 +28,7 @@ func Log(ctx context.Context) *LogEntry {
 	if !ok {
 		svc := Svc(ctx)
 		if svc == nil {
-			log := NewLogger(defaultLogOptions())
+			log := newLogger(defaultLogOptions())
 			log.ctx = ctx
 			logEntry = &LogEntry{l: log}
 		} else {
@@ -55,11 +55,12 @@ func WithLogger() Option {
 				}
 				opts.TimeFormat = config.LoggingTimeFormat()
 				opts.NoColor = !config.LoggingColored()
+				opts.ShowStackTrace = config.LoggingShowStackTrace()
 				opts.PrintFormat = config.LoggingFormat()
 			}
 		}
 
-		log := NewLogger(opts)
+		log := newLogger(opts)
 		log.WithField("service", s.Name())
 		s.logger = log
 	}
@@ -72,7 +73,7 @@ func (s *Service) Log(ctx context.Context) *LogEntry {
 }
 
 func (s *Service) SLog(_ context.Context) *slog.Logger {
-	return s.logger.slog.With("service", s.Name())
+	return s.logger.log.With("service", s.Name())
 }
 
 func GetLoggingOptions() []logging.Option {
@@ -108,24 +109,27 @@ func RecoveryHandlerFun(ctx context.Context, p interface{}) error {
 	return status.Errorf(codes.Internal, "Internal server error")
 }
 
-type Logger struct {
+type iLogger struct {
 	ctx context.Context
 	// Function to exit the application, defaults to `os.Exit()`
 	ExitFunc exitFunc
-	slog     *slog.Logger
+
+	log         *slog.Logger
+	stackTraces bool
 }
 
 type LogOptions struct {
 	*slog.HandlerOptions
-	PrintFormat string
-	TimeFormat  string
-	NoColor     bool
+	PrintFormat    string
+	TimeFormat     string
+	NoColor        bool
+	ShowStackTrace bool
 }
 
 func defaultLogOptions() *LogOptions {
 	return &LogOptions{
 		HandlerOptions: &slog.HandlerOptions{
-			AddSource: false,
+			AddSource: true,
 			Level:     slog.LevelInfo,
 		},
 		TimeFormat: time.DateTime,
@@ -133,7 +137,7 @@ func defaultLogOptions() *LogOptions {
 	}
 }
 
-// ParseLevel converts a string to a slog.Level.
+// ParseLevel converts a string to a log.Level.
 // It is case-insensitive.
 // Returns an error if the string does not match a known level.
 func ParseLevel(levelStr string) (slog.Level, error) {
@@ -152,126 +156,119 @@ func ParseLevel(levelStr string) (slog.Level, error) {
 	}
 }
 
-func NewLogger(options *LogOptions) *Logger {
+func newLogger(opts *LogOptions) *iLogger {
 
-	logLevel := options.Level.Level()
+	logLevel := opts.Level.Level()
 	outputWriter := os.Stdout
 	if logLevel >= slog.LevelError {
 		outputWriter = os.Stderr
 	}
 
 	handlerOptions := &tint.Options{
-		AddSource:  options.AddSource,
+		AddSource:  opts.AddSource,
 		Level:      logLevel,
-		TimeFormat: options.TimeFormat,
-		NoColor:    options.NoColor,
+		TimeFormat: opts.TimeFormat,
+		NoColor:    opts.NoColor,
 	}
 
-	handler := tint.NewHandler(outputWriter, handlerOptions)
+	tintHandler := tint.NewHandler(outputWriter, handlerOptions)
 
-	newLogger := slog.New(handler)
+	log := slog.New(tintHandler)
 
-	slog.SetDefault(newLogger)
+	slog.SetDefault(log)
 
-	return &Logger{slog: newLogger}
+	return &iLogger{log: log, stackTraces: opts.ShowStackTrace}
 }
 
-func (l *Logger) clone(ctx context.Context) *Logger {
-	sl := *l.slog
-	return &Logger{ctx: ctx, slog: &sl}
+func (l *iLogger) clone(ctx context.Context) *iLogger {
+	sl := *l.log
+	return &iLogger{ctx: ctx, log: &sl, stackTraces: l.stackTraces}
 }
 
-func (l *Logger) WithError(err error) {
-	l.slog = l.slog.With(tint.Err(err))
+func (l *iLogger) WithError(err error) {
+
+	l.log = l.log.With(tint.Err(err))
+	if l.stackTraces {
+		l.log = l.log.With("stacktrace", string(debug.Stack()))
+	}
 }
 
-func (l *Logger) WithAttr(attr ...any) {
-	l.slog = l.slog.With(attr...)
+func (l *iLogger) WithAttr(attr ...any) {
+	l.log = l.log.With(attr...)
 }
 
-func (l *Logger) WithField(key string, value any) {
-	l.slog = l.slog.With(key, value)
+func (l *iLogger) WithField(key string, value any) {
+	l.log = l.log.With(key, value)
 }
 
-func (l *Logger) With(args ...any) {
-	l.slog = l.slog.With(args...)
+func (l *iLogger) With(args ...any) {
+	l.log = l.log.With(args...)
 }
 
-func (l *Logger) _ctx() context.Context {
+func (l *iLogger) _ctx() context.Context {
 	if l.ctx == nil {
 		return context.Background()
 	}
 	return l.ctx
 }
 
-func (l *Logger) Log(ctx context.Context, level slog.Level, msg string, fields ...any) {
-	l.slog.Log(ctx, level, msg, fields...)
+func (l *iLogger) Log(ctx context.Context, level slog.Level, msg string, fields ...any) {
+	l.log.Log(ctx, level, msg, fields...)
 }
 
-func (l *Logger) Debug(msg string, args ...any) {
-	var log *slog.Logger
-	fileLineNum := l.fileWithLineNum()
-	if fileLineNum != "" {
-		log = l.slog.With(tint.Attr(4, slog.Any("file", fileLineNum)))
-	} else {
-		log = l.slog
-	}
+func (l *iLogger) Debug(msg string, args ...any) {
+	log := l.withFileLineNum()
 	log.DebugContext(l._ctx(), msg, args...)
 }
 
-func (l *Logger) Info(msg string, args ...any) {
-	l.slog.InfoContext(l._ctx(), msg, args...)
+func (l *iLogger) Info(msg string, args ...any) {
+	l.log.InfoContext(l._ctx(), msg, args...)
 }
 
-func (l *Logger) Warn(msg string, args ...any) {
-	l.slog.WarnContext(l._ctx(), msg, args...)
+func (l *iLogger) Warn(msg string, args ...any) {
+	l.log.WarnContext(l._ctx(), msg, args...)
 }
 
-func (l *Logger) Error(msg string, args ...any) {
+func (l *iLogger) Error(msg string, args ...any) {
 
-	var log *slog.Logger
-	fileLineNum := l.fileWithLineNum()
-	if fileLineNum != "" {
-		log = l.slog.With(tint.Attr(4, slog.Any("file", fileLineNum)))
-	} else {
-		log = l.slog
-	}
+	log := l.withFileLineNum()
 
 	log.ErrorContext(l._ctx(), msg, args...)
+
 }
 
-func (l *Logger) Fatal(msg string, args ...any) {
-	l.slog.ErrorContext(l._ctx(), msg, args...)
+func (l *iLogger) Fatal(msg string, args ...any) {
+	l.log.ErrorContext(l._ctx(), msg, args...)
 	l.Exit(1)
 }
 
-func (l *Logger) Panic(msg string, args ...any) {
-	l.slog.ErrorContext(l._ctx(), msg, args...)
+func (l *iLogger) Panic(msg string, args ...any) {
+	l.log.ErrorContext(l._ctx(), msg, args...)
 	panic(msg)
 }
 
-func (l *Logger) Exit(code int) {
+func (l *iLogger) Exit(code int) {
 	if l.ExitFunc == nil {
 		l.ExitFunc = os.Exit
 	}
 	l.ExitFunc(code)
 }
 
-func (l *Logger) Enabled(ctx context.Context, level slog.Level) bool {
-	return l.slog.Enabled(ctx, level)
+func (l *iLogger) Enabled(ctx context.Context, level slog.Level) bool {
+	return l.log.Enabled(ctx, level)
 }
 
-func (l *Logger) fileWithLineNum() string {
+func (l *iLogger) withFileLineNum() *slog.Logger {
 	_, file, line, ok := runtime.Caller(3)
 	if ok {
-		return fmt.Sprintf("%s:%d", file, line)
+		return l.log.With(tint.Attr(4, slog.Any("file", fmt.Sprintf("%s:%d", file, line))))
 	}
-	return ""
+	return l.log
 }
 
 // LogEntry Need a type to handle the chained calls
 type LogEntry struct {
-	l *Logger
+	l *iLogger
 }
 
 type exitFunc func(int)

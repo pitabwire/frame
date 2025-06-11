@@ -75,6 +75,7 @@ type ConfigurationDefault struct {
 	LogFormat          string `envDefault:"info" env:"LOG_FORMAT" yaml:"log_format"`
 	LogTimeFormat      string `envDefault:"2006-01-02T15:04:05Z07:00" env:"LOG_TIME_FORMAT" yaml:"log_time_format"`
 	LogColored         bool   `envDefault:"true" env:"LOG_COLORED" yaml:"log_colored"`
+	LogShowStackTrace  bool   `envDefault:"true" env:"LOG_SHOW_STACK_TRACE" yaml:"log_show_stack_trace"`
 	RunServiceSecurely bool   `envDefault:"true" env:"RUN_SERVICE_SECURELY" yaml:"run_service_securely"`
 
 	ServerPort     string `envDefault:":7000" env:"PORT" yaml:"server_port"`
@@ -138,6 +139,7 @@ type ConfigurationLogLevel interface {
 	LoggingLevel() string
 	LoggingFormat() string
 	LoggingTimeFormat() string
+	LoggingShowStackTrace() bool
 	LoggingColored() bool
 	LoggingLevelIsDebug() bool
 }
@@ -158,6 +160,10 @@ func (c *ConfigurationDefault) LoggingFormat() string {
 
 func (c *ConfigurationDefault) LoggingColored() bool {
 	return c.LogColored
+}
+
+func (c *ConfigurationDefault) LoggingShowStackTrace() bool {
+	return c.LogShowStackTrace
 }
 
 func (c *ConfigurationDefault) LoggingLevelIsDebug() bool {

@@ -4,13 +4,13 @@ import (
 	"context"
 	"fmt"
 	"github.com/lmittmann/tint"
-	"gorm.io/gorm/logger"
+	glogger "gorm.io/gorm/logger"
 	"log/slog"
 	"strconv"
 	"time"
 )
 
-func datbaseLogger(ctx context.Context, s *Service) logger.Interface {
+func datbaseLogger(ctx context.Context, s *Service) glogger.Interface {
 
 	logQueries := false
 	slowQueryThreshold := 200 * time.Millisecond
@@ -36,7 +36,7 @@ type dbLogger struct {
 }
 
 // LogMode log mode
-func (l *dbLogger) LogMode(_ logger.LogLevel) logger.Interface {
+func (l *dbLogger) LogMode(_ glogger.LogLevel) glogger.Interface {
 	return l
 }
 

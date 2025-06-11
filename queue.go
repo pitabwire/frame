@@ -71,6 +71,8 @@ func (p *publisher) Publish(ctx context.Context, payload any, headers ...map[str
 	switch v := payload.(type) {
 	case []byte:
 		message = v
+	case json.RawMessage:
+		message, _ = v.MarshalJSON()
 	case string:
 		message = []byte(v)
 	default:

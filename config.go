@@ -75,7 +75,7 @@ type ConfigurationDefault struct {
 	LogFormat          string `envDefault:"info" env:"LOG_FORMAT" yaml:"log_format"`
 	LogTimeFormat      string `envDefault:"2006-01-02T15:04:05Z07:00" env:"LOG_TIME_FORMAT" yaml:"log_time_format"`
 	LogColored         bool   `envDefault:"true" env:"LOG_COLORED" yaml:"log_colored"`
-	LogShowStackTrace  bool   `envDefault:"true" env:"LOG_SHOW_STACK_TRACE" yaml:"log_show_stack_trace"`
+	LogShowStackTrace  bool   `envDefault:"false" env:"LOG_SHOW_STACK_TRACE" yaml:"log_show_stack_trace"`
 	RunServiceSecurely bool   `envDefault:"true" env:"RUN_SERVICE_SECURELY" yaml:"run_service_securely"`
 
 	ServerPort     string `envDefault:":7000" env:"PORT" yaml:"server_port"`

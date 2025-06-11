@@ -60,7 +60,7 @@ func WithLogger() Option {
 		}
 
 		log := NewLogger(opts)
-		log.WithFields("service", s.Name())
+		log.WithField("service", s.Name())
 		s.logger = log
 	}
 }
@@ -193,8 +193,8 @@ func (l *Logger) WithField(key string, value any) {
 	l.slog = l.slog.With(key, value)
 }
 
-func (l *Logger) WithFields(key string, value any) {
-	l.slog = l.slog.With(key, value)
+func (l *Logger) With(args ...any) {
+	l.slog = l.slog.With(args...)
 }
 
 func (l *Logger) _ctx() context.Context {
@@ -328,5 +328,9 @@ func (e *LogEntry) WithError(err error) *LogEntry {
 }
 func (e *LogEntry) WithField(key string, value any) *LogEntry {
 	e.l.WithField(key, value)
+	return e
+}
+func (e *LogEntry) With(args ...any) *LogEntry {
+	e.l.With(args...)
 	return e
 }

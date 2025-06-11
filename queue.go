@@ -256,7 +256,7 @@ func (s *subscriber) Init(ctx context.Context) error {
 
 			err = SubmitJob(ctx, s.service, job)
 			if err != nil {
-				s.service.L(ctx).WithField("subscriber", s.reference).WithField("url", s.url).
+				s.service.Log(ctx).WithField("subscriber", s.reference).WithField("url", s.url).
 					WithError(err).WithField("subscriber", subs).Error(" could not listen or subscribe for messages")
 				return err
 			}
@@ -303,7 +303,7 @@ func (s *subscriber) Stop(ctx context.Context) error {
 
 func (s *subscriber) listen(ctx context.Context, _ JobResultPipe[*pubsub.Message]) error {
 
-	logger := s.service.L(ctx).WithField("name", s.reference).WithField("function", "subscription").WithField("url", s.url)
+	logger := s.service.Log(ctx).WithField("name", s.reference).WithField("function", "subscription").WithField("url", s.url)
 	logger.Debug("starting to listen for messages")
 	for {
 
@@ -460,7 +460,7 @@ func (s *Service) initPubsub(ctx context.Context) error {
 
 		config, ok := s.Config().(ConfigurationEvents)
 		if !ok {
-			s.L(ctx).Warn("configuration object not of type : ConfigurationDefault")
+			s.Log(ctx).Warn("configuration object not of type : ConfigurationDefault")
 			return errors.New("could not cast config to ConfigurationEvents")
 		}
 

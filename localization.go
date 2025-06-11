@@ -46,7 +46,7 @@ func (s *Service) TranslateWithMapAndCount(ctx context.Context, request any, mes
 		languageSlice = v
 
 	default:
-		logger := s.L(ctx).WithField("messageId", messageId).WithField("variables", variables)
+		logger := s.Log(ctx).WithField("messageId", messageId).WithField("variables", variables)
 		logger.Warn("TranslateWithMapAndCount -- no valid request object found, use string, []string, context or http.Request")
 		return messageId
 	}
@@ -61,7 +61,7 @@ func (s *Service) TranslateWithMapAndCount(ctx context.Context, request any, mes
 	})
 
 	if err != nil {
-		logger := s.L(ctx).WithError(err)
+		logger := s.Log(ctx).WithError(err)
 		logger.Error(" TranslateWithMapAndCount -- could not perform translation")
 	}
 

@@ -58,14 +58,14 @@ func (s *Service) Emit(ctx context.Context, name string, payload any) error {
 
 	config, ok := s.Config().(ConfigurationEvents)
 	if !ok {
-		s.L(ctx).Warn("configuration object not of type : ConfigurationDefault")
+		s.Log(ctx).Warn("configuration object not of type : ConfigurationDefault")
 		return errors.New("could not cast config to ConfigurationEvents")
 	}
 
 	// Queue event message for further processing
 	err = s.Publish(ctx, config.GetEventsQueueName(), e)
 	if err != nil {
-		s.L(ctx).WithError(err).WithField("name", name).Error("Could not emit event")
+		s.Log(ctx).WithError(err).WithField("name", name).Error("Could not emit event")
 		return err
 	}
 
@@ -86,7 +86,7 @@ func (eq *eventQueueHandler) Handle(ctx context.Context, header map[string]strin
 
 	eventHandler, ok := eq.service.eventRegistry[evtPyl.Name]
 	if !ok {
-		eq.service.L(ctx).WithField("event", evtPyl.Name).Error("Could not get event from registry")
+		eq.service.Log(ctx).WithField("event", evtPyl.Name).Error("Could not get event from registry")
 	}
 
 	payLType := eventHandler.PayloadType()

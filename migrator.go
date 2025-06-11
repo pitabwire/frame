@@ -164,7 +164,7 @@ func (s *Service) newMigrator(ctx context.Context, poolOpts ...*Pool) *migrator 
 
 	return &migrator{
 		pool:   pool,
-		logger: s.L(ctx),
+		logger: s.Log(ctx),
 	}
 }
 
@@ -202,7 +202,7 @@ func (s *Service) MigratePool(ctx context.Context, pool *Pool, migrationsDirPath
 
 		err := migrtor.CreateTable(&Migration{})
 		if err != nil {
-			s.L(ctx).WithError(err).Error("MigrateDatastore -- couldn't create migration table")
+			s.Log(ctx).WithError(err).Error("MigrateDatastore -- couldn't create migration table")
 			return err
 		}
 	}
@@ -211,7 +211,7 @@ func (s *Service) MigratePool(ctx context.Context, pool *Pool, migrationsDirPath
 		// Migrate the schema
 		err := migrtor.AutoMigrate(migrations...)
 		if err != nil {
-			s.L(ctx).WithError(err).Error("MigrateDatastore -- couldn't auto migrate")
+			s.Log(ctx).WithError(err).Error("MigrateDatastore -- couldn't auto migrate")
 			return err
 		}
 	}
@@ -220,13 +220,13 @@ func (s *Service) MigratePool(ctx context.Context, pool *Pool, migrationsDirPath
 
 	err := migrationExecutor.scanForNewMigrations(ctx, migrationsDirPath)
 	if err != nil {
-		s.L(ctx).WithError(err).Error("MigrateDatastore -- Error scanning for new migrations")
+		s.Log(ctx).WithError(err).Error("MigrateDatastore -- Error scanning for new migrations")
 		return err
 	}
 
 	err = migrationExecutor.applyNewMigrations(ctx)
 	if err != nil {
-		s.L(ctx).WithError(err).Error("MigrateDatastore -- Error applying migrations ")
+		s.Log(ctx).WithError(err).Error("MigrateDatastore -- Error applying migrations ")
 		return err
 	}
 	return nil

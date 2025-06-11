@@ -432,7 +432,7 @@ func (s *Service) AuthenticationMiddleware(next http.Handler, audience string, i
 
 		authorizationHeader := r.Header.Get("Authorization")
 
-		logger := s.logger.WithField("authorization_header", authorizationHeader)
+		logger := s.Log(r.Context()).WithField("authorization_header", authorizationHeader)
 
 		if authorizationHeader == "" || !strings.HasPrefix(authorizationHeader, "Bearer ") {
 			logger.WithField("available_headers", r.Header).Debug(" AuthenticationMiddleware -- could not authenticate missing token")
@@ -527,7 +527,7 @@ func (s *Service) UnaryAuthInterceptor(audience string, issuer string) grpc.Unar
 
 			ctx, err = s.Authenticate(ctx, jwtToken, audience, issuer)
 			if err != nil {
-				logger := s.L(ctx).WithError(err).WithField("jwtToken", jwtToken)
+				logger := s.Log(ctx).WithError(err).WithField("jwtToken", jwtToken)
 				logger.Info(" UnaryAuthInterceptor -- could not authenticate token")
 				return nil, status.Error(codes.Unauthenticated, err.Error())
 			}
@@ -576,7 +576,7 @@ func (s *Service) StreamAuthInterceptor(audience string, issuer string) grpc.Str
 
 				ctx, err = s.Authenticate(ctx, jwtToken, audience, issuer)
 				if err != nil {
-					logger := s.L(ctx).WithError(err).WithField("jwtToken", jwtToken)
+					logger := s.Log(ctx).WithError(err).WithField("jwtToken", jwtToken)
 					logger.Info(" StreamAuthInterceptor -- could not authenticate token")
 					return status.Error(codes.Unauthenticated, err.Error())
 				}

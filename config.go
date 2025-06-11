@@ -72,6 +72,9 @@ func ConfigFillFromEnv(cfg any) error {
 
 type ConfigurationDefault struct {
 	LogLevel           string `envDefault:"info" env:"LOG_LEVEL" yaml:"log_level"`
+	LogFormat          string `envDefault:"info" env:"LOG_FORMAT" yaml:"log_format"`
+	LogTimeFormat      string `envDefault:"2006-01-02T15:04:05Z07:00" env:"LOG_TIME_FORMAT" yaml:"log_time_format"`
+	LogColored         bool   `envDefault:"true" env:"LOG_COLORED" yaml:"log_colored"`
 	RunServiceSecurely bool   `envDefault:"true" env:"RUN_SERVICE_SECURELY" yaml:"run_service_securely"`
 
 	ServerPort     string `envDefault:":7000" env:"PORT" yaml:"server_port"`
@@ -112,8 +115,8 @@ type ConfigurationDefault struct {
 	DatabaseMaxOpenConnections           int `envDefault:"5" env:"DATABASE_MAX_OPEN_CONNECTIONS" yaml:"database_max_open_connections"`
 	DatabaseMaxConnectionLifeTimeSeconds int `envDefault:"300" env:"DATABASE_MAX_CONNECTION_LIFE_TIME_IN_SECONDS" yaml:"database_max_connection_life_time_seconds"`
 
-	DatabaseLogQueries         bool   `envDefault:"false" env:"DATABASE_LOG_QUERIES" yaml:"database_log_queries"`
-	DatabaseSlowQueryThreshold string `envDefault:"200ms" env:"DATABASE_SLOW_QUERY_THRESHOLD" yaml:"database_slow_query_threshold"`
+	DatabaseTraceQueries          bool   `envDefault:"false" env:"DATABASE_LOG_QUERIES" yaml:"database_log_queries"`
+	DatabaseSlowQueryLogThreshold string `envDefault:"200ms" env:"DATABASE_SLOW_QUERY_THRESHOLD" yaml:"database_slow_query_threshold"`
 
 	EventsQueueName string `envDefault:"frame.events.internal_._queue" env:"EVENTS_QUEUE_NAME" yaml:"events_queue_name"`
 	EventsQueueUrl  string `envDefault:"mem://frame.events.internal_._queue" env:"EVENTS_QUEUE_URL" yaml:"events_queue_url"`
@@ -133,13 +136,28 @@ func (c *ConfigurationDefault) IsRunSecurely() bool {
 
 type ConfigurationLogLevel interface {
 	LoggingLevel() string
+	LoggingFormat() string
+	LoggingTimeFormat() string
+	LoggingColored() bool
 	LoggingLevelIsDebug() bool
 }
 
 var _ ConfigurationLogLevel = new(ConfigurationDefault)
 
 func (c *ConfigurationDefault) LoggingLevel() string {
-	return strings.ToLower(c.LogLevel)
+	return c.LogLevel
+}
+
+func (c *ConfigurationDefault) LoggingTimeFormat() string {
+	return c.LogTimeFormat
+}
+
+func (c *ConfigurationDefault) LoggingFormat() string {
+	return c.LogFormat
+}
+
+func (c *ConfigurationDefault) LoggingColored() bool {
+	return c.LogColored
 }
 
 func (c *ConfigurationDefault) LoggingLevelIsDebug() bool {
@@ -369,8 +387,8 @@ type ConfigurationDatabase interface {
 	GetMaxConnectionLifeTimeInSeconds() time.Duration
 
 	GetDatabaseMigrationPath() string
-	CanLogDatabaseQueries() bool
-	GetSlowQueryThreshold() time.Duration
+	CanDatabaseTraceQueries() bool
+	GetDatabaseSlowQueryLogThreshold() time.Duration
 }
 
 var _ ConfigurationDatabase = new(ConfigurationDefault)
@@ -412,11 +430,11 @@ func (c *ConfigurationDefault) GetMaxConnectionLifeTimeInSeconds() time.Duration
 func (c *ConfigurationDefault) GetDatabaseMigrationPath() string {
 	return c.DatabaseMigrationPath
 }
-func (c *ConfigurationDefault) CanLogDatabaseQueries() bool {
-	return c.DatabaseLogQueries
+func (c *ConfigurationDefault) CanDatabaseTraceQueries() bool {
+	return c.DatabaseTraceQueries
 }
-func (c *ConfigurationDefault) GetSlowQueryThreshold() time.Duration {
-	threshold, err := time.ParseDuration(c.DatabaseSlowQueryThreshold)
+func (c *ConfigurationDefault) GetDatabaseSlowQueryLogThreshold() time.Duration {
+	threshold, err := time.ParseDuration(c.DatabaseSlowQueryLogThreshold)
 	if err != nil {
 		threshold = 200 * time.Millisecond
 	}

@@ -4,12 +4,15 @@ import (
 	"context"
 	"fmt"
 	"github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/logging"
+	"github.com/lmittmann/tint"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"log/slog"
 	"os"
+	"runtime"
 	"runtime/debug"
 	"strings"
+	"time"
 )
 
 const ctxKeyLogger = contextKey("loggerKey")
@@ -21,44 +24,51 @@ func LogToContext(ctx context.Context, logger *LogEntry) context.Context {
 
 // Log obtains a service instance being propagated through the context.
 func Log(ctx context.Context) *LogEntry {
-	l, ok := ctx.Value(ctxKeyLogger).(*LogEntry)
+	logEntry, ok := ctx.Value(ctxKeyLogger).(*LogEntry)
 	if !ok {
 		svc := Svc(ctx)
 		if svc == nil {
-			l = NewLogger(slog.LevelInfo).WithContext(ctx)
+			log := NewLogger(defaultLogOptions())
+			log.ctx = ctx
+			logEntry = &LogEntry{l: log}
 		} else {
-			l = svc.L(ctx)
+			logEntry = svc.Log(ctx)
 		}
 	}
 
-	return l
+	return logEntry
 }
 
 // WithLogger Option that helps with initialization of our internal dbLogger
 func WithLogger() Option {
 	return func(s *Service) {
 
-		logLevelStr := "info"
+		opts := defaultLogOptions()
 
 		if s.Config() != nil {
 			config, ok := s.Config().(ConfigurationLogLevel)
 			if ok {
-				logLevelStr = config.LoggingLevel()
+				logLevelStr := config.LoggingLevel()
+				logLevel, err := ParseLevel(logLevelStr)
+				if err == nil {
+					opts.Level = logLevel
+				}
+				opts.TimeFormat = config.LoggingTimeFormat()
+				opts.NoColor = !config.LoggingColored()
+				opts.PrintFormat = config.LoggingFormat()
 			}
 		}
 
-		logLevel, err := ParseLevel(logLevelStr)
-		if err != nil {
-			logLevel = slog.LevelInfo
-		}
-
-		s.logger = NewLogger(logLevel)
+		log := NewLogger(opts)
+		log.WithFields("service", s.Name())
+		s.logger = log
 	}
 }
 
-func (s *Service) L(ctx context.Context) *LogEntry {
-
-	return s.logger.WithContext(ctx).WithField("service", s.Name())
+func (s *Service) Log(ctx context.Context) *LogEntry {
+	return &LogEntry{
+		l: s.logger.clone(ctx),
+	}
 }
 
 func (s *Service) SLog(_ context.Context) *slog.Logger {
@@ -92,7 +102,7 @@ func GetLoggingOptions() []logging.Option {
 func RecoveryHandlerFun(ctx context.Context, p interface{}) error {
 
 	s := Svc(ctx)
-	s.L(ctx).WithField("trigger", p).Error("recovered from panic %s", debug.Stack())
+	s.Log(ctx).WithField("trigger", p).Error("recovered from panic %s", debug.Stack())
 
 	// Return a gRPC error
 	return status.Errorf(codes.Internal, "Internal server error")
@@ -102,8 +112,25 @@ type Logger struct {
 	ctx context.Context
 	// Function to exit the application, defaults to `os.Exit()`
 	ExitFunc exitFunc
-	level    slog.Level
 	slog     *slog.Logger
+}
+
+type LogOptions struct {
+	*slog.HandlerOptions
+	PrintFormat string
+	TimeFormat  string
+	NoColor     bool
+}
+
+func defaultLogOptions() *LogOptions {
+	return &LogOptions{
+		HandlerOptions: &slog.HandlerOptions{
+			AddSource: false,
+			Level:     slog.LevelInfo,
+		},
+		TimeFormat: time.DateTime,
+		NoColor:    false,
+	}
 }
 
 // ParseLevel converts a string to a slog.Level.
@@ -125,41 +152,49 @@ func ParseLevel(levelStr string) (slog.Level, error) {
 	}
 }
 
-func NewLogger(logLevel slog.Level) *Logger {
+func NewLogger(options *LogOptions) *Logger {
 
+	logLevel := options.Level.Level()
 	outputWriter := os.Stdout
 	if logLevel >= slog.LevelError {
 		outputWriter = os.Stderr
 	}
 
-	handlerOptions := &slog.HandlerOptions{
-		Level: logLevel,
+	handlerOptions := &tint.Options{
+		AddSource:  options.AddSource,
+		Level:      logLevel,
+		TimeFormat: options.TimeFormat,
+		NoColor:    options.NoColor,
 	}
 
-	handler := slog.NewTextHandler(outputWriter, handlerOptions)
+	handler := tint.NewHandler(outputWriter, handlerOptions)
+
 	newLogger := slog.New(handler)
 
-	return &Logger{slog: newLogger, level: logLevel}
+	slog.SetDefault(newLogger)
+
+	return &Logger{slog: newLogger}
 }
 
-func (l *Logger) WithContext(ctx context.Context) *LogEntry {
-	l.ctx = ctx
-	return &LogEntry{l: l}
+func (l *Logger) clone(ctx context.Context) *Logger {
+	sl := *l.slog
+	return &Logger{ctx: ctx, slog: &sl}
 }
 
-func (l *Logger) WithError(err error) *LogEntry {
-	l.slog = l.slog.With("error", err)
-	return &LogEntry{l: l}
+func (l *Logger) WithError(err error) {
+	l.slog = l.slog.With(tint.Err(err))
 }
 
-func (l *Logger) WithField(key string, value any) *LogEntry {
+func (l *Logger) WithAttr(attr ...any) {
+	l.slog = l.slog.With(attr...)
+}
+
+func (l *Logger) WithField(key string, value any) {
 	l.slog = l.slog.With(key, value)
-	return &LogEntry{l: l}
 }
 
-func (l *Logger) WithFields(key string, value any) *LogEntry {
+func (l *Logger) WithFields(key string, value any) {
 	l.slog = l.slog.With(key, value)
-	return &LogEntry{l: l}
 }
 
 func (l *Logger) _ctx() context.Context {
@@ -174,7 +209,14 @@ func (l *Logger) Log(ctx context.Context, level slog.Level, msg string, fields .
 }
 
 func (l *Logger) Debug(msg string, args ...any) {
-	l.slog.DebugContext(l._ctx(), msg, args...)
+	var log *slog.Logger
+	fileLineNum := l.fileWithLineNum()
+	if fileLineNum != "" {
+		log = l.slog.With(tint.Attr(4, slog.Any("file", fileLineNum)))
+	} else {
+		log = l.slog
+	}
+	log.DebugContext(l._ctx(), msg, args...)
 }
 
 func (l *Logger) Info(msg string, args ...any) {
@@ -186,7 +228,16 @@ func (l *Logger) Warn(msg string, args ...any) {
 }
 
 func (l *Logger) Error(msg string, args ...any) {
-	l.slog.ErrorContext(l._ctx(), msg, args...)
+
+	var log *slog.Logger
+	fileLineNum := l.fileWithLineNum()
+	if fileLineNum != "" {
+		log = l.slog.With(tint.Attr(4, slog.Any("file", fileLineNum)))
+	} else {
+		log = l.slog
+	}
+
+	log.ErrorContext(l._ctx(), msg, args...)
 }
 
 func (l *Logger) Fatal(msg string, args ...any) {
@@ -206,6 +257,18 @@ func (l *Logger) Exit(code int) {
 	l.ExitFunc(code)
 }
 
+func (l *Logger) Enabled(ctx context.Context, level slog.Level) bool {
+	return l.slog.Enabled(ctx, level)
+}
+
+func (l *Logger) fileWithLineNum() string {
+	_, file, line, ok := runtime.Caller(3)
+	if ok {
+		return fmt.Sprintf("%s:%d", file, line)
+	}
+	return ""
+}
+
 // LogEntry Need a type to handle the chained calls
 type LogEntry struct {
 	l *Logger
@@ -213,13 +276,12 @@ type LogEntry struct {
 
 type exitFunc func(int)
 
-func (e *LogEntry) Level() slog.Level {
-	return e.l.level
+func (e *LogEntry) LevelEnabled(ctx context.Context, level slog.Level) bool {
+	return e.l.Enabled(ctx, level)
 }
 
 func (e *LogEntry) WithContext(ctx context.Context) *LogEntry {
-	e.l.WithContext(ctx)
-	return e
+	return &LogEntry{e.l.clone(ctx)}
 }
 
 func (e *LogEntry) Log(ctx context.Context, level slog.Level, msg string, fields ...any) {
@@ -255,11 +317,16 @@ func (e *LogEntry) Panic(msg string, args ...any) {
 	e.l.Panic(msg, args...)
 }
 
+func (e *LogEntry) WithAttr(attr ...any) *LogEntry {
+	e.l.WithAttr(attr...)
+	return e
+}
+
 func (e *LogEntry) WithError(err error) *LogEntry {
-	e.l.slog = e.l.slog.With("error", err)
+	e.l.WithError(err)
 	return e
 }
 func (e *LogEntry) WithField(key string, value any) *LogEntry {
-	e.l.slog = e.l.slog.With(key, value)
+	e.l.WithField(key, value)
 	return e
 }

@@ -11,7 +11,7 @@ func TestLogs(t *testing.T) {
 	ctx, srv := frame.NewService("Logger Srv", frame.Config(
 		&frame.ConfigurationDefault{LogLevel: "Debug", Oauth2WellKnownJwkData: sampleWellKnownJwk}))
 
-	logger := srv.L(ctx)
+	logger := srv.Log(ctx)
 	logger.Debug("testing debug logs")
 	logger.Info("testing logs")
 

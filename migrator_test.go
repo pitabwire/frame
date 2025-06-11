@@ -78,14 +78,24 @@ func TestSaveNewMigrations(t *testing.T) {
 
 func TestApplyMigrations(t *testing.T) {
 	testDBURL := GetEnv("TEST_DATABASE_URL", "postgres://frame:secret@localhost:5431/framedatabase?sslmode=disable")
-	ctx, svc := NewService("Test Migrations Srv")
+
+	defConf, err := ConfigFromEnv[ConfigurationDefault]()
+	if err != nil {
+		t.Errorf("Could not processFunc test configurations %v", err)
+		return
+	}
+	defConf.DatabaseSlowQueryLogThreshold = "5ms"
+	defConf.DatabaseTraceQueries = true
+	defConf.LogLevel = "debug"
+
+	ctx, svc := NewService("Test Migrations Srv", Config(&defConf))
 
 	mainDB := DatastoreConnection(ctx, testDBURL, false)
 	svc.Init(mainDB)
 
 	svc.DB(ctx, false).Session(&gorm.Session{AllowGlobalUpdate: true}).Unscoped().Delete(&Migration{})
 
-	err := svc.MigrateDatastore(ctx, "./tests_runner/migrations/default")
+	err = svc.MigrateDatastore(ctx, "./tests_runner/migrations/default")
 	if err != nil {
 		t.Errorf("Could not migrate successfully because : %s", err)
 		return

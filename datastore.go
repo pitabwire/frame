@@ -378,11 +378,9 @@ func DatastoreConnectionWithName(ctx context.Context, name string, postgresqlCon
 
 	return func(s *Service) {
 
-		dbQueryLogger := buildDBLogger(ctx, s)
-
 		cleanedPostgresqlDSN, err := cleanPostgresDSN(postgresqlConnection)
 		if err != nil {
-			s.L(ctx).WithError(err).WithField("dsn", postgresqlConnection).Fatal("could not get a clean postgresql dsn")
+			s.Log(ctx).WithError(err).WithField("dsn", postgresqlConnection).Fatal("could not get a clean postgresql dsn")
 			return
 		}
 
@@ -402,7 +400,7 @@ func DatastoreConnectionWithName(ctx context.Context, name string, postgresqlCon
 			),
 		)
 		if err != nil {
-			s.L(ctx).WithError(err).WithField("dsn", postgresqlConnection).Error("could not connect to pg now")
+			s.Log(ctx).WithError(err).WithField("dsn", postgresqlConnection).Error("could not connect to pg now")
 			return
 		}
 
@@ -417,7 +415,7 @@ func DatastoreConnectionWithName(ctx context.Context, name string, postgresqlCon
 					utc, _ := time.LoadLocation("")
 					return time.Now().In(utc)
 				},
-				Logger: dbQueryLogger,
+				Logger: datbaseLogger(ctx, s),
 			},
 		)
 
@@ -450,7 +448,7 @@ func Datastore(ctx context.Context) Option {
 
 		config, ok := s.Config().(ConfigurationDatabase)
 		if !ok {
-			s.L(ctx).Warn("configuration object not of type : ConfigurationDatabase")
+			s.Log(ctx).Warn("configuration object not of type : ConfigurationDatabase")
 			return
 		}
 

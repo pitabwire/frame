@@ -32,7 +32,7 @@ func (event *MessageToTest) Validate(ctx context.Context, payload any) error {
 
 func (event *MessageToTest) Execute(ctx context.Context, payload any) error {
 	message := payload.(*string)
-	logger := event.Service.L(ctx).WithField("payload", message).WithField("type", event.Name())
+	logger := event.Service.Log(ctx).WithField("payload", message).WithField("type", event.Name())
 	logger.Info("handling event")
 	event.Count = event.Count + 1
 	return nil

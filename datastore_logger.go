@@ -3,37 +3,35 @@ package frame
 import (
 	"context"
 	"fmt"
+	"github.com/lmittmann/tint"
 	"gorm.io/gorm/logger"
-	"gorm.io/gorm/utils"
 	"log/slog"
 	"strconv"
 	"time"
 )
 
-func buildDBLogger(ctx context.Context, s *Service) logger.Interface {
+func datbaseLogger(ctx context.Context, s *Service) logger.Interface {
 
-	slowQueryThreshold := 200 * time.Millisecond
 	logQueries := false
+	slowQueryThreshold := 200 * time.Millisecond
 	if s.Config() != nil {
 		config, ok := s.Config().(ConfigurationDatabase)
 		if ok {
-			slowQueryThreshold = config.GetSlowQueryThreshold()
+			slowQueryThreshold = config.GetDatabaseSlowQueryLogThreshold()
 		}
-		logQueries = config.CanLogDatabaseQueries()
+		logQueries = config.CanDatabaseTraceQueries()
 	}
 
-	if logQueries {
-		return &dbLogger{
-			log:           s.L(ctx),
-			slowThreshold: slowQueryThreshold,
-		}
+	return &dbLogger{
+		log:           s.Log(ctx),
+		logQueries:    logQueries,
+		slowThreshold: slowQueryThreshold,
 	}
-	return nil
-
 }
 
 type dbLogger struct {
 	log           *LogEntry
+	logQueries    bool
 	slowThreshold time.Duration
 }
 
@@ -67,7 +65,10 @@ func (l *dbLogger) Trace(ctx context.Context, begin time.Time, fc func() (string
 
 	rowsAffected := strconv.FormatInt(rows, 10)
 
-	log := l.log.WithContext(ctx).WithField("query", sql).WithField("duration", elapsed.String()).WithField("rows", rowsAffected).WithField("file", utils.FileWithLineNum())
+	log := l.log.WithContext(ctx).
+		WithAttr(tint.Attr(214, slog.Any("duration", elapsed.String()))).
+		WithAttr(tint.Attr(12, slog.Any("rows", rowsAffected))).
+		WithAttr(tint.Attr(2, slog.Any("query", sql)))
 
 	queryIsSlow := false
 	if elapsed > l.slowThreshold && l.slowThreshold != 0 {
@@ -75,15 +76,27 @@ func (l *dbLogger) Trace(ctx context.Context, begin time.Time, fc func() (string
 		queryIsSlow = true
 	}
 
-	switch {
-	case err != nil && !ErrorIsNoRows(err):
-		log.WithError(err).Error("Query Error")
-	case log.Level() >= slog.LevelWarn && queryIsSlow:
-		log.Warn("SLOW Query ")
-	case log.Level() >= slog.LevelInfo && queryIsSlow:
-		log.Info("SLOW Query ")
-	case log.Level() == slog.LevelDebug:
-		log.Debug("Query Debug ")
-
+	if err != nil && !ErrorIsNoRows(err) {
+		log.WithError(err).Error(" Error running query ")
+		return
 	}
+
+	if log.LevelEnabled(ctx, slog.LevelDebug) {
+		log.Debug("query executed")
+		return
+	}
+
+	if log.LevelEnabled(ctx, slog.LevelInfo) {
+		if l.logQueries {
+			log.Info("query executed ")
+		}
+	}
+
+	if log.LevelEnabled(ctx, slog.LevelWarn) {
+		if queryIsSlow {
+			log.Warn("query is slow")
+		}
+		return
+	}
+
 }

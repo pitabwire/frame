@@ -87,7 +87,7 @@ func TestServiceGrpcHealthServer(t *testing.T) {
 	go func(t *testing.T, srv *Service) {
 		err = srv.Run(ctx, "")
 		if err != nil {
-			srv.L(ctx).WithError(err).Error(" failed to run server ")
+			srv.Log(ctx).WithError(err).Error(" failed to run server ")
 		}
 	}(t, srv)
 
@@ -124,7 +124,7 @@ func TestServiceGrpcServer(t *testing.T) {
 	go func() {
 		err = srv.Run(ctx, "")
 		if err != nil {
-			srv.L(ctx).WithError(err).Error(" failed to run server ")
+			srv.Log(ctx).WithError(err).Error(" failed to run server ")
 		}
 	}()
 
@@ -173,9 +173,8 @@ func TestServiceGrpcTLSServer(t *testing.T) {
 	go func() {
 		err = srv.Run(ctx, "")
 		if err != nil {
-			srv.L(ctx).WithError(err).Error(" failed to run server ")
+			srv.Log(ctx).WithError(err).Error(" failed to run server ")
 		}
-		srv.L(ctx).WithError(err).Error(" finished building TLS service")
 	}()
 	time.Sleep(5 * time.Second)
 

@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"os/signal"
 	"runtime"
-	"runtime/debug"
 	"sync"
 	"syscall"
 	"time"
@@ -109,7 +108,7 @@ func NewServiceWithContext(ctx context.Context, name string, opts ...Option) (co
 
 	service.Init(opts...)
 
-	l := service.L(ctx)
+	l := service.Log(ctx)
 	poolOptions := []ants.Option{
 		ants.WithLogger(l),
 		ants.WithNonblocking(true),
@@ -254,12 +253,11 @@ func (s *Service) Run(ctx context.Context, address string) error {
 		return ctx.Err()
 	case err0 := <-s.errorChannel:
 		if err0 != nil {
-			s.L(ctx).
+			s.Log(ctx).
 				WithError(err0).
-				WithField("stacktrace", string(debug.Stack())).
 				Info("system exit in error")
 		} else {
-			s.L(ctx).Info("system exit without fuss")
+			s.Log(ctx).Info("system exit without fuss")
 		}
 		return err0
 	}
@@ -345,7 +343,7 @@ func (s *Service) initServer(ctx context.Context, httpPort string) error {
 
 		defaultServer := defaultDriver{
 			ctx:  ctx,
-			log:  s.L(ctx),
+			log:  s.Log(ctx),
 			port: httpPort,
 			httpServer: &http.Server{
 				BaseContext: func(listener net.Listener) context.Context {

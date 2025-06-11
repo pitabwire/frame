@@ -54,6 +54,7 @@ func TestService_DatastoreSet(t *testing.T) {
 		t.Errorf("Could not processFunc test configurations %v", err)
 		return
 	}
+	defConf.DatabaseTraceQueries = true
 	ctx, srv := frame.NewService("Test Srv", frame.Config(&defConf))
 	srv.Init(frame.Datastore(ctx))
 
@@ -61,6 +62,35 @@ func TestService_DatastoreSet(t *testing.T) {
 	r := srv.DB(ctx, true)
 	if w == nil || r == nil {
 		t.Errorf("Read and write services setup but one couldn't be found")
+		return
+	}
+}
+
+func TestService_DatastoreRunQuery(t *testing.T) {
+	err := os.Setenv("DATABASE_URL", "postgres://frame:secret@localhost:5431/framedatabase?sslmode=disable")
+	if err != nil {
+		t.Errorf("Could not set database url to ENV %v", err)
+		return
+	}
+	defConf, err := frame.ConfigFromEnv[frame.ConfigurationDefault]()
+	if err != nil {
+		t.Errorf("Could not processFunc test configurations %v", err)
+		return
+	}
+	defConf.DatabaseTraceQueries = true
+	ctx, srv := frame.NewService("Test Srv", frame.Config(&defConf))
+	srv.Init(frame.Datastore(ctx))
+
+	w := srv.DB(ctx, false)
+	r := srv.DB(ctx, true)
+	if w == nil || r == nil {
+		t.Errorf("Read and write services setup but one couldn't be found")
+		return
+	}
+
+	_, err = w.Raw("SELECT 1 FROM").Rows()
+	if err == nil {
+		t.Errorf("Expected query to fail")
 		return
 	}
 }

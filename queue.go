@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"google.golang.org/protobuf/proto"
 	"maps"
 	"strings"
 	"sync"
@@ -67,21 +68,26 @@ func (p *publisher) Publish(ctx context.Context, payload any, headers ...map[str
 	}
 
 	var message []byte
-	message, ok := payload.([]byte)
-	if !ok {
+	switch v := payload.(type) {
+	case []byte:
+		message = v
+	case string:
+		message = []byte(v)
+	default:
 
-		msgStr, ok0 := payload.(string)
-		if ok0 {
-			message = []byte(msgStr)
+		protoMsg, ok := payload.(proto.Message)
+		if ok {
+			message, err = proto.Marshal(protoMsg)
+			if err != nil {
+				return err
+			}
 		} else {
-
 			message, err = json.Marshal(payload)
 			if err != nil {
 				return err
 			}
 		}
 	}
-
 	topic := p.topic
 
 	return topic.Send(ctx, &pubsub.Message{

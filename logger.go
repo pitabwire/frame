@@ -129,7 +129,7 @@ type LogOptions struct {
 func defaultLogOptions() *LogOptions {
 	return &LogOptions{
 		HandlerOptions: &slog.HandlerOptions{
-			AddSource: true,
+			AddSource: false,
 			Level:     slog.LevelInfo,
 		},
 		TimeFormat: time.DateTime,

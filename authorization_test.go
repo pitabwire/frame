@@ -47,7 +47,7 @@ func authorizationControlListWrite(ctx context.Context, writeServerURL string, a
 
 func TestAuthorizationControlListWrite(t *testing.T) {
 	authorizationServerURL := "http://localhost:4467/admin/relation-tuples"
-	ctx, srv := frame.NewService("Test Srv", frame.Config(&frame.ConfigurationDefault{
+	ctx, srv := frame.NewService("Test Srv", frame.WithConfig(&frame.ConfigurationDefault{
 		AuthorizationServiceWriteURI: authorizationServerURL,
 	}))
 	ctx = frame.SvcToContext(ctx, srv)
@@ -71,7 +71,7 @@ func TestAuthorizationControlListWrite(t *testing.T) {
 
 func TestAuthHasAccess(t *testing.T) {
 	authorizationServerURL := "http://localhost:4467/admin/relation-tuples"
-	ctx, srv := frame.NewService("Test Srv", frame.Config(
+	ctx, srv := frame.NewService("Test Srv", frame.WithConfig(
 		&frame.ConfigurationDefault{
 			AuthorizationServiceReadURI:  "http://localhost:4466/relation-tuples/check",
 			AuthorizationServiceWriteURI: authorizationServerURL,

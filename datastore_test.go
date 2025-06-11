@@ -13,10 +13,10 @@ func TestService_Datastore(t *testing.T) {
 
 	testDBURL := frame.GetEnv("TEST_DATABASE_URL", "postgres://frame:secret@localhost:5431/framedatabase?sslmode=disable")
 
-	ctx, srv := frame.NewService("Test Srv", frame.NoopDriver())
+	ctx, srv := frame.NewService("Test Srv", frame.WithNoopDriver())
 
-	mainDB := frame.DatastoreConnection(ctx, testDBURL, false)
-	srv.Init(mainDB)
+	mainDB := frame.WithDatastoreConnection(testDBURL, false)
+	srv.Init(ctx, mainDB)
 
 	if srv.Name() != "Test Srv" {
 		t.Errorf("s")
@@ -55,8 +55,8 @@ func TestService_DatastoreSet(t *testing.T) {
 		return
 	}
 	defConf.DatabaseTraceQueries = true
-	ctx, srv := frame.NewService("Test Srv", frame.Config(&defConf))
-	srv.Init(frame.Datastore(ctx))
+	ctx, srv := frame.NewService("Test Srv", frame.WithConfig(&defConf))
+	srv.Init(ctx, frame.WithDatastore())
 
 	w := srv.DB(ctx, false)
 	r := srv.DB(ctx, true)
@@ -78,8 +78,8 @@ func TestService_DatastoreRunQuery(t *testing.T) {
 		return
 	}
 	defConf.DatabaseTraceQueries = true
-	ctx, srv := frame.NewService("Test Srv", frame.Config(&defConf))
-	srv.Init(frame.Datastore(ctx))
+	ctx, srv := frame.NewService("Test Srv", frame.WithConfig(&defConf))
+	srv.Init(ctx, frame.WithDatastore())
 
 	w := srv.DB(ctx, false)
 	r := srv.DB(ctx, true)
@@ -100,9 +100,9 @@ func TestService_DatastoreRead(t *testing.T) {
 
 	ctx, srv := frame.NewService("Test Srv")
 
-	mainDB := frame.DatastoreConnection(ctx, testDBURL, false)
-	readDB := frame.DatastoreConnection(ctx, testDBURL, true)
-	srv.Init(mainDB, readDB)
+	mainDB := frame.WithDatastoreConnection(testDBURL, false)
+	readDB := frame.WithDatastoreConnection(testDBURL, true)
+	srv.Init(ctx, mainDB, readDB)
 
 	w := srv.DB(ctx, false)
 	r := srv.DB(ctx, true)

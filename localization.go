@@ -95,8 +95,8 @@ func extractLanguageFromGrpcRequest(ctx context.Context) []string {
 
 }
 
-// Translations Option to initialize/loadOIDC different language packs
-func Translations(translationsFolder string, languages ...string) Option {
+// WithTranslations Option to initialize/loadOIDC different language packs
+func WithTranslations(translationsFolder string, languages ...string) Option {
 
 	if translationsFolder == "" {
 		translationsFolder = "localization"
@@ -108,7 +108,7 @@ func Translations(translationsFolder string, languages ...string) Option {
 		bundle.MustLoadMessageFile(fmt.Sprintf("%s/messages.%v.toml", translationsFolder, lang))
 	}
 
-	return func(c *Service) {
+	return func(ctx context.Context, c *Service) {
 
 		c.bundle = bundle
 	}

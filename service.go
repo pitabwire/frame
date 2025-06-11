@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/pitabwire/util"
 	"net"
 	"net/http"
 	"os/signal"
@@ -40,7 +41,7 @@ type Service struct {
 	jwtClientSecret            string
 	version                    string
 	environment                string
-	logger                     *iLogger
+	logger                     *util.LogEntry
 	traceExporter              trace.SpanExporter
 	traceSampler               trace.Sampler
 	handler                    http.Handler
@@ -71,7 +72,7 @@ type Service struct {
 	stopMutex                  sync.Mutex
 }
 
-type Option func(service *Service)
+type Option func(ctx context.Context, service *Service)
 
 // NewService creates a new instance of Service with the name and supplied options.
 // Internally it calls NewServiceWithContext and creates a background context for use.
@@ -106,7 +107,7 @@ func NewServiceWithContext(ctx context.Context, name string, opts ...Option) (co
 
 	opts = append(opts, WithLogger())
 
-	service.Init(opts...)
+	service.Init(ctx, opts...)
 
 	l := service.Log(ctx)
 	poolOptions := []ants.Option{
@@ -116,10 +117,10 @@ func NewServiceWithContext(ctx context.Context, name string, opts ...Option) (co
 
 	service.pool, _ = ants.NewMultiPool(service.poolWorkerCount, service.poolCapacity, ants.LeastTasks, poolOptions...)
 
-	ctx1 := SvcToContext(ctx, service)
-	ctx1 = ConfigToContext(ctx1, service.Config())
-	ctx1 = LogToContext(ctx1, l)
-	return ctx1, service
+	ctx = SvcToContext(ctx, service)
+	ctx = ConfigToContext(ctx, service.Config())
+	ctx = util.ContextWithLogger(ctx, l)
+	return ctx, service
 }
 
 // SvcToContext pushes a service instance into the supplied context for easier propagation.
@@ -176,9 +177,9 @@ func (s *Service) H() http.Handler {
 }
 
 // Init evaluates the options provided as arguments and supplies them to the service object
-func (s *Service) Init(opts ...Option) {
+func (s *Service) Init(ctx context.Context, opts ...Option) {
 	for _, opt := range opts {
-		opt(s)
+		opt(ctx, s)
 	}
 }
 

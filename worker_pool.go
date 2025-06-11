@@ -147,11 +147,11 @@ func NewJobWithBufferAndRetry[J any](process func(ctx context.Context, result Jo
 	}
 }
 
-// BackGroundConsumer Option to register a background processing function that is initialized before running servers
+// WithBackGroundConsumer Option to register a background processing function that is initialized before running servers
 // this function is maintained alive using the same error group as the servers so that if any exit earlier due to error
 // all stop functioning
-func BackGroundConsumer(deque func(ctx context.Context) error) Option {
-	return func(s *Service) {
+func WithBackGroundConsumer(deque func(ctx context.Context) error) Option {
+	return func(ctx context.Context, s *Service) {
 		s.backGroundClient = deque
 	}
 }
@@ -159,7 +159,7 @@ func BackGroundConsumer(deque func(ctx context.Context) error) Option {
 // WithPoolConcurrency Option sets the count of pool workers to handle server loadOIDC.
 // By default this is count of CPU + 1
 func WithPoolConcurrency(workers int) Option {
-	return func(s *Service) {
+	return func(ctx context.Context, s *Service) {
 		s.poolWorkerCount = workers
 	}
 }
@@ -167,7 +167,7 @@ func WithPoolConcurrency(workers int) Option {
 // WithPoolCapacity Option sets the capacity of pool workers to handle server loadOIDC.
 // By default this is 100
 func WithPoolCapacity(capacity int) Option {
-	return func(s *Service) {
+	return func(ctx context.Context, s *Service) {
 		s.poolCapacity = capacity
 	}
 }

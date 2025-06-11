@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/pitabwire/util"
 	"gorm.io/gorm"
 	"os"
 	"path/filepath"
@@ -23,7 +24,7 @@ type MigrationPatch struct {
 
 type migrator struct {
 	pool   *Pool
-	logger *LogEntry
+	logger *util.LogEntry
 }
 
 func (m *migrator) DB(ctx context.Context) *gorm.DB {

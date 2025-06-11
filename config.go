@@ -16,9 +16,9 @@ import (
 
 const ctxKeyConfiguration = contextKey("configurationKey")
 
-// Config Option that helps to specify or override the configuration object of our service.
-func Config(config any) Option {
-	return func(s *Service) {
+// WithConfig Option that helps to specify or override the configuration object of our service.
+func WithConfig(config any) Option {
+	return func(ctx context.Context, s *Service) {
 		s.configuration = config
 	}
 }

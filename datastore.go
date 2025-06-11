@@ -370,13 +370,13 @@ func (s *Service) DBWithName(ctx context.Context, name string, readOnly bool) *g
 	return store.DB(ctx, readOnly)
 }
 
-// DatastoreConnection Option method to store a connection that will be utilized when connecting to the database
-func DatastoreConnection(ctx context.Context, postgresqlConnection string, readOnly bool) Option {
-	return DatastoreConnectionWithName(ctx, defaultStoreName, postgresqlConnection, readOnly)
+// WithDatastoreConnection Option method to store a connection that will be utilized when connecting to the database
+func WithDatastoreConnection(postgresqlConnection string, readOnly bool) Option {
+	return WithDatastoreConnectionWithName(defaultStoreName, postgresqlConnection, readOnly)
 }
-func DatastoreConnectionWithName(ctx context.Context, name string, postgresqlConnection string, readOnly bool) Option {
+func WithDatastoreConnectionWithName(name string, postgresqlConnection string, readOnly bool) Option {
 
-	return func(s *Service) {
+	return func(ctx context.Context, s *Service) {
 
 		cleanedPostgresqlDSN, err := cleanPostgresDSN(postgresqlConnection)
 		if err != nil {
@@ -443,8 +443,8 @@ func DatastoreConnectionWithName(ctx context.Context, name string, postgresqlCon
 	}
 }
 
-func Datastore(ctx context.Context) Option {
-	return func(s *Service) {
+func WithDatastore() Option {
+	return func(ctx context.Context, s *Service) {
 
 		config, ok := s.Config().(ConfigurationDatabase)
 		if !ok {
@@ -453,13 +453,13 @@ func Datastore(ctx context.Context) Option {
 		}
 
 		for _, primaryDbURL := range config.GetDatabasePrimaryHostURL() {
-			primaryDatabase := DatastoreConnection(ctx, primaryDbURL, false)
-			primaryDatabase(s)
+			primaryDatabase := WithDatastoreConnection(primaryDbURL, false)
+			primaryDatabase(ctx, s)
 		}
 
 		for _, replicaDbURL := range config.GetDatabaseReplicaHostURL() {
-			replicaDatabase := DatastoreConnection(ctx, replicaDbURL, true)
-			replicaDatabase(s)
+			replicaDatabase := WithDatastoreConnection(replicaDbURL, true)
+			replicaDatabase(ctx, s)
 		}
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"github.com/improbable-eng/grpc-web/go/grpcweb"
+	"github.com/pitabwire/util"
 	"golang.org/x/net/http2"
 	"google.golang.org/grpc"
 	"net"
@@ -23,7 +24,7 @@ func (t *noopDriver) Shutdown(_ context.Context) error {
 
 type defaultDriver struct {
 	ctx        context.Context
-	log        *LogEntry
+	log        *util.LogEntry
 	port       string
 	httpServer *http.Server
 	listener   net.Listener
@@ -235,53 +236,53 @@ func (gd *grpcDriver) Shutdown(ctx context.Context) error {
 	return nil
 }
 
-// GrpcServer Option to specify an instantiated grpc server
+// WithGrpcServer Option to specify an instantiated grpc server
 // with an implementation that can be utilized to handle incoming requests.
-func GrpcServer(grpcServer *grpc.Server) Option {
-	return func(c *Service) {
+func WithGrpcServer(grpcServer *grpc.Server) Option {
+	return func(ctx context.Context, c *Service) {
 		c.grpcServer = grpcServer
 	}
 }
 
-func EnableGrpcServerReflection() Option {
-	return func(c *Service) {
+func WithEnableGrpcServerReflection() Option {
+	return func(ctx context.Context, c *Service) {
 		c.grpcServerEnableReflection = true
 	}
 }
 
-// ServerListener Option to specify user preferred priListener instead of the default provided one.
-func ServerListener(listener net.Listener) Option {
-	return func(c *Service) {
+// WithServerListener Option to specify user preferred priListener instead of the default provided one.
+func WithServerListener(listener net.Listener) Option {
+	return func(ctx context.Context, c *Service) {
 		c.priListener = listener
 	}
 }
 
-// GrpcServerListener Option to specify user preferred grpcListener instead of the default
+// WithGrpcServerListener Option to specify user preferred grpcListener instead of the default
 // provided one. This one is mostly useful when grpc is being utilised
-func GrpcServerListener(listener net.Listener) Option {
-	return func(c *Service) {
+func WithGrpcServerListener(listener net.Listener) Option {
+	return func(ctx context.Context, c *Service) {
 		c.secListener = listener
 	}
 }
 
-// GrpcPort Option to specify the grpc port for server to bind to
-func GrpcPort(port string) Option {
-	return func(c *Service) {
+// WithGrpcPort Option to specify the grpc port for server to bind to
+func WithGrpcPort(port string) Option {
+	return func(ctx context.Context, c *Service) {
 		c.grpcPort = port
 	}
 }
 
-// HttpHandler Option to specify an http handler that can be used to handle inbound http requests
-func HttpHandler(h http.Handler) Option {
-	return func(c *Service) {
+// WithHttpHandler Option to specify an http handler that can be used to handle inbound http requests
+func WithHttpHandler(h http.Handler) Option {
+	return func(ctx context.Context, c *Service) {
 		c.handler = h
 	}
 }
 
-// NoopDriver Option to force the underlying http driver to not listen on a port.
+// WithNoopDriver Option to force the underlying http driver to not listen on a port.
 // This is mostly useful when writing tests especially against the frame service
-func NoopDriver() Option {
-	return func(c *Service) {
+func WithNoopDriver() Option {
+	return func(ctx context.Context, c *Service) {
 		c.driver = &noopDriver{}
 	}
 }

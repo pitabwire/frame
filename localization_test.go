@@ -8,7 +8,7 @@ import (
 
 func TestTranslations(t *testing.T) {
 
-	translations := frame.Translations("tests_runner/localization", "en", "sw")
+	translations := frame.WithTranslations("tests_runner/localization", "en", "sw")
 	_, srv := frame.NewService("Test Localization Srv", translations)
 
 	bundle := srv.Bundle()
@@ -57,7 +57,7 @@ func TestTranslations(t *testing.T) {
 
 func TestTranslationsHelpers(t *testing.T) {
 
-	translations := frame.Translations("tests_runner/localization", "en", "sw")
+	translations := frame.WithTranslations("tests_runner/localization", "en", "sw")
 	ctx, srv := frame.NewService("Test Localization Srv", translations)
 
 	englishVersion := srv.Translate(ctx, "en", "Example")

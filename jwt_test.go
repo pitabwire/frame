@@ -12,7 +12,7 @@ func TestService_RegisterForJwtWithParams(t *testing.T) {
 	clientName := "Testing CLI"
 	clientSecret := "topS3cret"
 
-	ctx, srv := NewService("Test Srv", Config(&ConfigurationDefault{
+	ctx, srv := NewService("Test Srv", WithConfig(&ConfigurationDefault{
 		Oauth2ServiceAdminURI: oauthServiceURL,
 	}))
 

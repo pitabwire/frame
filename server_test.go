@@ -82,7 +82,7 @@ func TestServiceGrpcHealthServer(t *testing.T) {
 		return
 	}
 	defConf.ServerPort = ":40489"
-	ctx, srv := NewService("Testing Service Grpc", GrpcServer(gsrv), GrpcServerListener(listener), Config(&defConf))
+	ctx, srv := NewService("Testing Service Grpc", WithGrpcServer(gsrv), WithGrpcServerListener(listener), WithConfig(&defConf))
 
 	go func(t *testing.T, srv *Service) {
 		err = srv.Run(ctx, "")
@@ -119,7 +119,7 @@ func TestServiceGrpcServer(t *testing.T) {
 		t.Errorf("Could not processFunc test configurations %v", err)
 		return
 	}
-	ctx, srv := NewService("Testing Service Grpc", GrpcServer(gsrv), GrpcServerListener(listener), Config(&defConf))
+	ctx, srv := NewService("Testing Service Grpc", WithGrpcServer(gsrv), WithGrpcServerListener(listener), WithConfig(&defConf))
 
 	go func() {
 		err = srv.Run(ctx, "")
@@ -157,7 +157,7 @@ func TestServiceGrpcTLSServer(t *testing.T) {
 
 	defConf.SetTLSCertAndKeyPath("tests_runner/server-cert.pem", "tests_runner/server-key.pem")
 
-	ctx, srv := NewService("Testing Service Grpc", Config(&defConf), ServerListener(priListener))
+	ctx, srv := NewService("Testing Service Grpc", WithConfig(&defConf), WithServerListener(priListener))
 
 	//tlsCreds, err := credentials.NewServerTLSFromFile(defConf.TLSCertPath(), defConf.TLSCertKeyPath())
 	//if err != nil {
@@ -168,7 +168,7 @@ func TestServiceGrpcTLSServer(t *testing.T) {
 	gsrv := grpc.NewServer()
 	grpcping.RegisterFramePingServer(gsrv, &grpcServer{})
 
-	srv.Init(GrpcServer(gsrv), GrpcPort(":50053"))
+	srv.Init(ctx, WithGrpcServer(gsrv), WithGrpcPort(":50053"))
 
 	go func() {
 		err = srv.Run(ctx, "")
@@ -269,7 +269,7 @@ func clientInvokeGrpcHealth(ctx context.Context, conn *grpc.ClientConn) error {
 func TestService_Run(t *testing.T) {
 
 	listener := bufconn.Listen(1024 * 1024)
-	ctx2, srv2 := NewService("Testing", ServerListener(listener))
+	ctx2, srv2 := NewService("Testing", WithServerListener(listener))
 
 	go func() {
 		if err := srv2.Run(ctx2, ":"); err != nil {

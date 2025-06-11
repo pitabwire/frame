@@ -112,8 +112,8 @@ func TestBackGroundConsumer(t *testing.T) {
 	listener := bufconn.Listen(1024 * 1024)
 
 	ctx, srv := frame.NewService("Test Srv",
-		frame.ServerListener(listener),
-		frame.BackGroundConsumer(func(ctx context.Context) error {
+		frame.WithServerListener(listener),
+		frame.WithBackGroundConsumer(func(ctx context.Context) error {
 			return nil
 		}))
 
@@ -122,7 +122,7 @@ func TestBackGroundConsumer(t *testing.T) {
 		t.Errorf("could not start a background consumer peacefully : %v", err)
 	}
 
-	ctx, srv = frame.NewService("Test Srv", frame.BackGroundConsumer(func(ctx context.Context) error {
+	ctx, srv = frame.NewService("Test Srv", frame.WithBackGroundConsumer(func(ctx context.Context) error {
 		return errors.New("background errors in the system")
 	}))
 
@@ -138,7 +138,7 @@ func TestServiceExitByOSSignal(t *testing.T) {
 	listener := bufconn.Listen(1024 * 1024)
 
 	ctx, srv := frame.NewService("Test Srv",
-		frame.ServerListener(listener))
+		frame.WithServerListener(listener))
 
 	go func(srv *frame.Service) {
 		err := srv.Run(ctx, ":")
@@ -194,10 +194,10 @@ func TestHealthCheckEndpoints(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 
-			opts := []frame.Option{frame.NoopDriver(), frame.HealthCheckPath(test.healthPath)}
+			opts := []frame.Option{frame.WithNoopDriver(), frame.WithHealthCheckPath(test.healthPath)}
 
 			if test.handler != nil {
-				opts = append(opts, frame.HttpHandler(test.handler))
+				opts = append(opts, frame.WithHttpHandler(test.handler))
 			}
 
 			ctx, srv := frame.NewService("Test Srv", opts...)

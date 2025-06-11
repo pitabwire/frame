@@ -144,9 +144,9 @@ func (p *publisher) Stop(ctx context.Context) error {
 	return nil
 }
 
-// RegisterPublisher Option to register publishing path referenced within the system
-func RegisterPublisher(reference string, queueURL string) Option {
-	return func(s *Service) {
+// WithRegisterPublisher Option to register publishing path referenced within the system
+func WithRegisterPublisher(reference string, queueURL string) Option {
+	return func(ctx context.Context, s *Service) {
 		s.queue.publishQueueMap.Store(reference, &publisher{
 			reference: reference,
 			url:       queueURL,
@@ -367,10 +367,10 @@ func (s *subscriber) listen(ctx context.Context, _ JobResultPipe[*pubsub.Message
 	}
 }
 
-// RegisterSubscriber Option to register a new subscription handler
-func RegisterSubscriber(reference string, queueURL string,
+// WithRegisterSubscriber Option to register a new subscription handler
+func WithRegisterSubscriber(reference string, queueURL string,
 	handler ...SubscribeWorker) Option {
-	return func(s *Service) {
+	return func(ctx context.Context, s *Service) {
 
 		subs := subscriber{
 			service:   s,
@@ -470,10 +470,10 @@ func (s *Service) initPubsub(ctx context.Context) error {
 			return errors.New("could not cast config to ConfigurationEvents")
 		}
 
-		eventsQueue := RegisterSubscriber(config.GetEventsQueueName(), config.GetEventsQueueUrl(), &eventsQueueHandler)
-		eventsQueue(s)
-		eventsQueueP := RegisterPublisher(config.GetEventsQueueName(), config.GetEventsQueueUrl())
-		eventsQueueP(s)
+		eventsQueue := WithRegisterSubscriber(config.GetEventsQueueName(), config.GetEventsQueueUrl(), &eventsQueueHandler)
+		eventsQueue(ctx, s)
+		eventsQueueP := WithRegisterPublisher(config.GetEventsQueueName(), config.GetEventsQueueUrl())
+		eventsQueueP(ctx, s)
 	}
 
 	if s.queue == nil {

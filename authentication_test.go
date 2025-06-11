@@ -29,7 +29,7 @@ func TestAuthenticationFromContext(t *testing.T) {
 }
 
 func TestSimpleAuthenticate(t *testing.T) {
-	ctx, srv := frame.NewService("Test Srv", frame.Config(
+	ctx, srv := frame.NewService("Test Srv", frame.WithConfig(
 		&frame.ConfigurationDefault{Oauth2WellKnownJwkData: sampleWellKnownJwk}))
 
 	ctx2, err := srv.Authenticate(ctx, sampleAccessKey, "", "")
@@ -45,7 +45,7 @@ func TestSimpleAuthenticate(t *testing.T) {
 }
 
 func TestSimpleAuthenticateWithAudience(t *testing.T) {
-	ctx, srv := frame.NewService("Test Srv", frame.Config(
+	ctx, srv := frame.NewService("Test Srv", frame.WithConfig(
 		&frame.ConfigurationDefault{Oauth2WellKnownJwkData: sampleWellKnownJwk}))
 
 	ctx2, err := srv.Authenticate(ctx, sampleAccessKey, "c2f4j7au6s7f91uqnokg", "")
@@ -62,7 +62,7 @@ func TestSimpleAuthenticateWithAudience(t *testing.T) {
 }
 
 func TestSimpleAuthenticateWithIssuer(t *testing.T) {
-	ctx, srv := frame.NewService("Test Srv", frame.Config(
+	ctx, srv := frame.NewService("Test Srv", frame.WithConfig(
 		&frame.ConfigurationDefault{Oauth2WellKnownJwkData: sampleWellKnownJwk}))
 
 	ctx2, err := srv.Authenticate(ctx, sampleAccessKey, "", "http://127.0.0.1:4444/")
@@ -102,7 +102,7 @@ func TestAuthenticateWithTenantClaims(t *testing.T) {
 
 	tenantAccessKey := "eyJhbGciOiJSUzI1NiIsImtpZCI6ImI0NTIwMGFkLTU2ZDQtNGM0ZS1iYzFhLWRlMjE4MWRlZGRiZSIsInR5cCI6IkpXVCJ9.eyJhdWQiOlsic2VydmljZV9jaGF0X2VuZ2luZSIsInNlcnZpY2VfcHJvZmlsZSIsInNlcnZpY2Vfc3Rhd2lfYXBpIiwic2VydmljZV9maWxlcyJdLCJjbGllbnRfaWQiOiI0NzUxZWEzZC1lNGU0LTQyZmUtOWIwMC0xMGFlYTVmZTk5ZmEiLCJleHAiOjE3MDU4OTc1MTAsImV4dCI6eyJhY2Nlc3NfaWQiOiJjbHQwcGUxbzc0dHM3M2J0cnVtMCIsImFjY2Vzc19zdGF0ZSI6IkNSRUFURUQiLCJwYXJ0aXRpb25faWQiOiI5YnN2MHMwaGlqamcwMnFrczZpMCIsInBhcnRpdGlvbl9zdGF0ZSI6IkNSRUFURUQiLCJyb2xlIjoidXNlciIsInRlbmFudF9pZCI6Ijlic3YwczBoaWpqZzAycWtzNmRnIn0sImlhdCI6MTcwNTg5MzkxMCwiaXNzIjoiaHR0cHM6Ly9vYXV0aDIuc3Rhd2kuaW8vIiwianRpIjoiZWVhNmZkNGItMWFiMS00NDFmLThlY2QtMWIxYjQxYmMwZWI4Iiwic2NwIjpbIm9wZW5pZCIsInByb2ZpbGUiLCJjb250YWN0Iiwib2ZmbGluZV9hY2Nlc3MiXSwic3ViIjoiY2x0MHA5dmlvcGZjNzNmZG9hZzAifQ.VuUw35N9HghZecYqR-L4bQJqZxAoyDj8b9e01bTGgP9ppM7kT5FHNHfaXP3vLQg8lRym8u_AA7XkL2IyG0EKcqmNCJCLeVpzp9aOx1TLm8Zu-b4aRBnkjEQ8gNEfOfl_7c1voK_e2EKkO6E_CE2qfxwESs-b6FmcxY-AvgX8S-IT9eYjSEPLKpEV0l8JhzdJj3i7YdetCQVtmm3uum3jAIMoWUkszURERGyG80ZSr2NE0H1V_OUPWTwE1ysML_YpwDrCtEb6BT2B-3cRnRFjJkyR0D5Dr62GEUOV3w82InbfrQwa09m3zViYX4AYMmE6Oj6ZqHoU2GVRhTdaQXxzeZOyecKDojfeEov_qro9nzJR8olJE_VlHYIpho2AlKu1DFqy7-OTHoO_9N3KvEgTcVW8wi7-ojbI_sJILkn4EVH1Ua-uOPNhAPgpSFrkgehsse4AEhK5n7lGHrj1D1QGhc97gxsSuG5Ybjd-DKascnZMcXZ6G0wXw16JCy6rHOn5iDhD6Nh4GYKF7MUDMgj-S-sgldl5FSM2tHXBAA0mxEXG5f8kz90j63eUTtYobDRj6zYfRsdidoD8R3sW5ELhbP1tFuxZGZGt-La_QF_73Xa62UoI5rliKvsDRMabAsEmnn1cGj-UAersuw9loT75GKlrB8311Ye_ODejVzVQnGc"
 
-	ctx, srv := frame.NewService("Tenant Srv", frame.Config(
+	ctx, srv := frame.NewService("Tenant Srv", frame.WithConfig(
 		&frame.ConfigurationDefault{Oauth2WellKnownJwkData: tenantWellKnownJwk}))
 
 	ctx2, err := srv.Authenticate(ctx, tenantAccessKey, "", "https://oauth2.stawi.io/")

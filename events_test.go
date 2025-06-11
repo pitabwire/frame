@@ -44,9 +44,9 @@ func TestService_RegisterEventsWorks(t *testing.T) {
 		t.Errorf("could not processFunc configs %s", err)
 		return
 	}
-	events := frame.RegisterEvents(&MessageToTest{})
+	events := frame.WithRegisterEvents(&MessageToTest{})
 
-	ctx, srv := frame.NewService("Test Srv", events, frame.Config(&cfg), frame.NoopDriver())
+	ctx, srv := frame.NewService("Test Srv", events, frame.WithConfig(&cfg), frame.WithNoopDriver())
 
 	subs, _ := srv.GetSubscriber(cfg.EventsQueueName)
 	if subs != nil && subs.Initiated() {
@@ -74,12 +74,12 @@ func TestService_EventsPublishingWorks(t *testing.T) {
 		return
 	}
 
-	ctx, srv := frame.NewService("Test Srv", frame.Config(&cfg), frame.NoopDriver())
+	ctx, srv := frame.NewService("Test Srv", frame.WithConfig(&cfg), frame.WithNoopDriver())
 
 	testEvent := MessageToTest{Service: srv, Count: 50}
-	events := frame.RegisterEvents(&testEvent)
+	events := frame.WithRegisterEvents(&testEvent)
 
-	srv.Init(events)
+	srv.Init(ctx, events)
 	if err = srv.Run(ctx, ""); err != nil {
 		t.Errorf("We somehow fail to instantiate subscription %s", err)
 	}

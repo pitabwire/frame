@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/lmittmann/tint"
+	"github.com/pitabwire/util"
 	glogger "gorm.io/gorm/logger"
 	"log/slog"
 	"strconv"
@@ -30,7 +31,7 @@ func datbaseLogger(ctx context.Context, s *Service) glogger.Interface {
 }
 
 type dbLogger struct {
-	log           *LogEntry
+	log           *util.LogEntry
 	logQueries    bool
 	slowThreshold time.Duration
 }

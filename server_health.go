@@ -84,9 +84,9 @@ func writeHealthy(w http.ResponseWriter) {
 	}
 }
 
-// HealthCheckPath Option checks that the system is up and running
-func HealthCheckPath(path string) Option {
-	return func(s *Service) {
+// WithHealthCheckPath Option checks that the system is up and running
+func WithHealthCheckPath(path string) Option {
+	return func(ctx context.Context, s *Service) {
 		s.healthCheckPath = path
 	}
 }

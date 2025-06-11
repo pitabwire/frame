@@ -46,16 +46,16 @@ func (s *Service) initTracer(ctx context.Context) error {
 	return nil
 }
 
-// TraceExporter Option that specify the trace exporter to use
-func TraceExporter(exporter sdktrace.SpanExporter) Option {
-	return func(s *Service) {
+// WithTraceExporter Option that specify the trace exporter to use
+func WithTraceExporter(exporter sdktrace.SpanExporter) Option {
+	return func(ctx context.Context, s *Service) {
 		s.traceExporter = exporter
 	}
 }
 
-// TraceSampler Option that specify the trace sampler to use
-func TraceSampler(sampler sdktrace.Sampler) Option {
-	return func(s *Service) {
+// WithTraceSampler Option that specify the trace sampler to use
+func WithTraceSampler(sampler sdktrace.Sampler) Option {
+	return func(ctx context.Context, s *Service) {
 		s.traceSampler = sampler
 	}
 }

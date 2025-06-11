@@ -55,8 +55,8 @@ func TestJobImpl_Process(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 
 			ctx, srv := frame.NewService(tt.name,
-				frame.NoopDriver(),
-				frame.BackGroundConsumer(func(ctx context.Context) error {
+				frame.WithNoopDriver(),
+				frame.WithBackGroundConsumer(func(ctx context.Context) error {
 					return nil
 				}))
 
@@ -111,8 +111,8 @@ func TestService_NewJobWithRetry(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 
 			ctx, srv := frame.NewService(tt.name,
-				frame.NoopDriver(),
-				frame.BackGroundConsumer(func(ctx context.Context) error {
+				frame.WithNoopDriver(),
+				frame.WithBackGroundConsumer(func(ctx context.Context) error {
 					return nil
 				}))
 
@@ -167,8 +167,8 @@ func TestService_NewJobWithBufferAndRetry(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 
 			ctx, srv := frame.NewService(tt.name,
-				frame.NoopDriver(),
-				frame.BackGroundConsumer(func(ctx context.Context) error {
+				frame.WithNoopDriver(),
+				frame.WithBackGroundConsumer(func(ctx context.Context) error {
 					return nil
 				}))
 

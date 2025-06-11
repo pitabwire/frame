@@ -20,7 +20,7 @@ func TestService_RegisterPublisherNotSet(t *testing.T) {
 }
 
 func TestService_RegisterPublisherNotInitialized(t *testing.T) {
-	opt := frame.RegisterPublisher("test", "mem://topicA")
+	opt := frame.WithRegisterPublisher("test", "mem://topicA")
 	ctx, srv := frame.NewService("Test Srv", opt)
 
 	err := srv.Publish(ctx, "random", []byte(""))
@@ -33,9 +33,9 @@ func TestService_RegisterPublisherNotInitialized(t *testing.T) {
 
 func TestService_RegisterPublisher(t *testing.T) {
 
-	opt := frame.RegisterPublisher("test", "mem://topicA")
+	opt := frame.WithRegisterPublisher("test", "mem://topicA")
 
-	ctx, srv := frame.NewService("Test Srv", opt, frame.NoopDriver())
+	ctx, srv := frame.NewService("Test Srv", opt, frame.WithNoopDriver())
 
 	err := srv.Run(ctx, "")
 	if err != nil {
@@ -57,10 +57,10 @@ func TestService_RegisterPublisherMultiple(t *testing.T) {
 	topicRef := "test-multiple-publisher"
 	topicRef2 := "test-multiple-publisher-2"
 
-	opt := frame.RegisterPublisher(topicRef, "mem://topicA")
-	opt1 := frame.RegisterPublisher(topicRef2, "mem://topicB")
+	opt := frame.WithRegisterPublisher(topicRef, "mem://topicA")
+	opt1 := frame.WithRegisterPublisher(topicRef2, "mem://topicB")
 
-	ctx, srv := frame.NewService("Test Srv", opt, opt1, frame.NoopDriver())
+	ctx, srv := frame.NewService("Test Srv", opt, opt1, frame.WithNoopDriver())
 
 	err := srv.Run(ctx, "")
 	if err != nil {
@@ -109,10 +109,10 @@ func (m *handlerWithError) Handle(_ context.Context, metadata map[string]string,
 func TestService_RegisterSubscriber(t *testing.T) {
 	regSubTopic := "test-reg-sub-topic"
 
-	optTopic := frame.RegisterPublisher(regSubTopic, "mem://topicA")
-	opt := frame.RegisterSubscriber(regSubTopic, "mem://topicA", &messageHandler{})
+	optTopic := frame.WithRegisterPublisher(regSubTopic, "mem://topicA")
+	opt := frame.WithRegisterSubscriber(regSubTopic, "mem://topicA", &messageHandler{})
 
-	ctx, srv := frame.NewService("Test Srv", optTopic, opt, frame.NoopDriver())
+	ctx, srv := frame.NewService("Test Srv", optTopic, opt, frame.WithNoopDriver())
 
 	err := srv.Run(ctx, ":")
 	if err != nil {
@@ -141,10 +141,10 @@ func TestService_RegisterSubscriber(t *testing.T) {
 func TestService_RegisterSubscriberWithError(t *testing.T) {
 
 	regSubT := "reg_s_wit-error"
-	opt := frame.RegisterSubscriber(regSubT, "mem://topicErrors", &handlerWithError{})
-	optTopic := frame.RegisterPublisher(regSubT, "mem://topicErrors")
+	opt := frame.WithRegisterSubscriber(regSubT, "mem://topicErrors", &handlerWithError{})
+	optTopic := frame.WithRegisterPublisher(regSubT, "mem://topicErrors")
 
-	ctx, srv := frame.NewService("Test Srv", opt, optTopic, frame.NoopDriver())
+	ctx, srv := frame.NewService("Test Srv", opt, optTopic, frame.WithNoopDriver())
 
 	err := srv.Run(ctx, "")
 	if err != nil {
@@ -163,10 +163,10 @@ func TestService_RegisterSubscriberWithError(t *testing.T) {
 
 func TestService_RegisterSubscriberInvalid(t *testing.T) {
 
-	opt := frame.RegisterSubscriber("test", "memt+://topicA",
+	opt := frame.WithRegisterSubscriber("test", "memt+://topicA",
 		&messageHandler{})
 
-	ctx, srv := frame.NewService("Test Srv", opt, frame.NoopDriver())
+	ctx, srv := frame.NewService("Test Srv", opt, frame.WithNoopDriver())
 
 	defer srv.Stop(ctx)
 
@@ -177,11 +177,11 @@ func TestService_RegisterSubscriberInvalid(t *testing.T) {
 
 func TestService_RegisterSubscriberContextCancelWorks(t *testing.T) {
 
-	optTopic := frame.RegisterPublisher("test", "mem://topicA")
-	opt := frame.RegisterSubscriber("test", "mem://topicA",
+	optTopic := frame.WithRegisterPublisher("test", "mem://topicA")
+	opt := frame.WithRegisterSubscriber("test", "mem://topicA",
 		&messageHandler{})
 
-	ctx, srv := frame.NewService("Test Srv", opt, optTopic, frame.NoopDriver())
+	ctx, srv := frame.NewService("Test Srv", opt, optTopic, frame.WithNoopDriver())
 	defer srv.Stop(ctx)
 
 	subs, err := srv.GetSubscriber("test")
@@ -206,7 +206,7 @@ func TestService_RegisterSubscriberContextCancelWorks(t *testing.T) {
 }
 
 func TestService_AddPublisher(t *testing.T) {
-	ctx, srv := frame.NewService("Test Srv", frame.NoopDriver())
+	ctx, srv := frame.NewService("Test Srv", frame.WithNoopDriver())
 	defer srv.Stop(ctx)
 
 	if err := srv.Run(ctx, ""); err != nil {
@@ -260,7 +260,7 @@ func TestService_AddPublisher(t *testing.T) {
 
 func TestService_AddPublisher_InvalidURL(t *testing.T) {
 	// Test with an invalid URL scheme that should cause an error
-	ctx, srv := frame.NewService("Test Srv", frame.NoopDriver())
+	ctx, srv := frame.NewService("Test Srv", frame.WithNoopDriver())
 	defer srv.Stop(ctx)
 
 	if err := srv.Run(ctx, ""); err != nil {
@@ -279,7 +279,7 @@ func TestService_AddPublisher_InvalidURL(t *testing.T) {
 }
 
 func TestService_AddSubscriber(t *testing.T) {
-	ctx, srv := frame.NewService("Test Srv", frame.NoopDriver())
+	ctx, srv := frame.NewService("Test Srv", frame.WithNoopDriver())
 	defer srv.Stop(ctx)
 
 	if err := srv.Run(ctx, ""); err != nil {
@@ -292,8 +292,8 @@ func TestService_AddSubscriber(t *testing.T) {
 	handler := &messageHandler{}
 
 	// First register a publisher to create the topic
-	pubOpt := frame.RegisterPublisher(reference, queueURL)
-	pubOpt(srv)
+	pubOpt := frame.WithRegisterPublisher(reference, queueURL)
+	pubOpt(ctx, srv)
 
 	// Run the service to initialize the publisher
 	err := srv.Run(ctx, "")
@@ -329,9 +329,9 @@ func TestService_AddSubscriberWithoutHandler(t *testing.T) {
 	noHandlerRef := "no-handler-sub"
 	noHandlerURL := "mem://topicNoHandler"
 
-	optTopic := frame.RegisterPublisher(noHandlerRef, noHandlerURL)
+	optTopic := frame.WithRegisterPublisher(noHandlerRef, noHandlerURL)
 
-	ctx, srv := frame.NewService("Test Srv 2", optTopic, frame.NoopDriver())
+	ctx, srv := frame.NewService("Test Srv 2", optTopic, frame.WithNoopDriver())
 	defer srv.Stop(ctx)
 
 	if err := srv.Run(ctx, ""); err != nil {
@@ -366,7 +366,7 @@ func TestService_AddSubscriberWithoutHandler(t *testing.T) {
 
 func TestService_AddSubscriber_InvalidURL(t *testing.T) {
 	// Test with an invalid URL scheme that should cause an error
-	ctx, srv := frame.NewService("Test Srv", frame.NoopDriver())
+	ctx, srv := frame.NewService("Test Srv", frame.WithNoopDriver())
 	defer srv.Stop(ctx)
 
 	if err := srv.Run(ctx, ""); err != nil {

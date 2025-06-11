@@ -114,7 +114,7 @@ func Test_ConfigCastingIssues(t *testing.T) {
 		return
 	}
 
-	_, srv := frame.NewService("Test Srv", frame.Config(&conf))
+	_, srv := frame.NewService("Test Srv", frame.WithConfig(&conf))
 
 	_, ok := srv.Config().(frame.ConfigurationOAUTH2)
 	if !ok {

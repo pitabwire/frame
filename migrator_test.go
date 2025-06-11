@@ -10,8 +10,8 @@ func TestSaveNewMigrations(t *testing.T) {
 	testDBURL := GetEnv("TEST_DATABASE_URL", "postgres://frame:secret@localhost:5431/framedatabase?sslmode=disable")
 	ctx, svc := NewService("Test Migrations Srv")
 
-	mainDB := DatastoreConnection(ctx, testDBURL, false)
-	svc.Init(mainDB)
+	mainDB := WithDatastoreConnection(testDBURL, false)
+	svc.Init(ctx, mainDB)
 
 	svc.DB(ctx, false).Session(&gorm.Session{AllowGlobalUpdate: true}).Unscoped().Delete(&Migration{})
 
@@ -88,10 +88,10 @@ func TestApplyMigrations(t *testing.T) {
 	defConf.DatabaseTraceQueries = true
 	defConf.LogLevel = "debug"
 
-	ctx, svc := NewService("Test Migrations Srv", Config(&defConf))
+	ctx, svc := NewService("Test Migrations Srv", WithConfig(&defConf))
 
-	mainDB := DatastoreConnection(ctx, testDBURL, false)
-	svc.Init(mainDB)
+	mainDB := WithDatastoreConnection(testDBURL, false)
+	svc.Init(ctx, mainDB)
 
 	svc.DB(ctx, false).Session(&gorm.Session{AllowGlobalUpdate: true}).Unscoped().Delete(&Migration{})
 
@@ -151,8 +151,8 @@ func TestService_MigrateDatastore(t *testing.T) {
 
 	ctx, srv := NewService("Test Migrations Srv")
 
-	mainDB := DatastoreConnection(ctx, testDBURL, false)
-	srv.Init(mainDB)
+	mainDB := WithDatastoreConnection(testDBURL, false)
+	srv.Init(ctx, mainDB)
 
 	srv.DB(ctx, false).Session(&gorm.Session{AllowGlobalUpdate: true}).Unscoped().Delete(&Migration{})
 
@@ -171,8 +171,8 @@ func TestService_MigrateDatastoreIdempotency(t *testing.T) {
 
 	ctx, srv := NewService("Test Migrations Srv")
 
-	mainDB := DatastoreConnection(ctx, testDBURL, false)
-	srv.Init(mainDB)
+	mainDB := WithDatastoreConnection(testDBURL, false)
+	srv.Init(ctx, mainDB)
 
 	srv.DB(ctx, false).Session(&gorm.Session{AllowGlobalUpdate: true}).Unscoped().Delete(&Migration{})
 

@@ -29,10 +29,10 @@ type EventI interface {
 	Execute(ctx context.Context, payload any) error
 }
 
-// RegisterEvents Option to write an event or list of events into the service registry for future use.
+// WithRegisterEvents Option to write an event or list of events into the service registry for future use.
 // All events are unique and shouldn't share a name otherwise the last one registered will take presedence
-func RegisterEvents(events ...EventI) Option {
-	return func(s *Service) {
+func WithRegisterEvents(events ...EventI) Option {
+	return func(ctx context.Context, s *Service) {
 
 		if s.eventRegistry == nil {
 			s.eventRegistry = make(map[string]EventI)

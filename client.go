@@ -47,24 +47,18 @@ func (s *Service) InvokeRestService(ctx context.Context,
 	if err != nil {
 		return 0, nil, err
 	}
+	defer resp.Body.Close()
 
 	respDump, _ := httputil.DumpResponse(resp, true)
 	s.Log(ctx).WithField("response", string(respDump)).Debug("response in")
-
-	defer func(Body io.ReadCloser) {
-		err0 := Body.Close()
-		if err0 != nil {
-			s.Log(ctx).WithError(err0).Error("could not close response body")
-		}
-	}(resp.Body)
 
 	response, err := io.ReadAll(resp.Body)
 
 	return resp.StatusCode, response, err
 }
 
-// InvokeRestServiceUrlEncoded convenience method to call a http endpoint and utilize the raw results.
-func (s *Service) InvokeRestServiceUrlEncoded(ctx context.Context,
+// InvokeRestServiceURLEncoded sends an HTTP request to the specified endpoint with a URL-encoded payload.
+func (s *Service) InvokeRestServiceURLEncoded(ctx context.Context,
 	method string, endpointURL string, payload url.Values,
 	headers map[string]string) (int, []byte, error) {
 	if headers == nil {
@@ -91,16 +85,10 @@ func (s *Service) InvokeRestServiceUrlEncoded(ctx context.Context,
 	if err != nil {
 		return 0, nil, err
 	}
+	defer resp.Body.Close()
 
 	respDump, _ := httputil.DumpResponse(resp, true)
 	s.Log(ctx).WithField("response", string(respDump)).Info("response in")
-
-	defer func(Body io.ReadCloser) {
-		err = Body.Close()
-		if err != nil {
-			logger.WithError(err).Warn("issue closing body")
-		}
-	}(resp.Body)
 
 	response, err := io.ReadAll(resp.Body)
 

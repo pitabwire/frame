@@ -1,10 +1,9 @@
 package frame_test
 
 import (
-	"fmt"
 	"testing"
 
-	"github.com/pitabwire/frame"
+	frame "github.com/pitabwire/frame"
 )
 
 const sampleAccessKey = "eyJhbGciOiJSUzI1NiIsImtpZCI6InB1YmxpYzpmODg2ZDBmNy0zYmY0LTQzMzgtOGU4Yy01ZjhjNmVlNGM3MWQiLCJ0eXAiOiJKV1QifQ.eyJhdF9oYXNoIjoicUdqdV91YnRuUkRyaGZ6WEppVzl3dyIsImF1ZCI6WyJjMmY0ajdhdTZzN2Y5MXVxbm9rZyJdLCJhdXRoX3RpbWUiOjE2MjIzMDk0OTUsImV4cCI6MTgwMjMwOTQ5OSwiaWF0IjoxNjIyMzA5NDk5LCJpc3MiOiJodHRwOi8vMTI3LjAuMC4xOjQ0NDQvIiwianRpIjoiZjM5ZGIzYTEtMmU3Ni00YzQyLWEyMmItMTg5NThiYTg3MjM1Iiwibm9uY2UiOiIiLCJyYXQiOjE2MjIzMDk0ODgsInNpZCI6ImNhNmM2NmE3LTg3MDItNDRjZS1hMTllLWRkZDJkYzQ4Y2E3MiIsInN1YiI6ImMyb2hoYzNuZGJtMGI2Y2g5dGUwIn0.BKh_m7fXaMlqXNLGisQ7vBtubgfws7h-oo9L_HXuUuY9mPs20dZ7HlQp_s-jxbdh1oDFxzRsoklbgmHglHCHBimDT3hkFPiZUmsqHtGM5P2neRBXD5ogWTjPBY_piIxu7JoB_GbFF1mZiy7Q7Lw_NpObvtLT3VC-wMMJ0fZDkyQY0hiFzLaUXVjJ96X0y0Vs0ExrcSQPnuT8CYQlhkO3qaRbKOM8p8C8IzHrmJg3N96IiZc8Vy9H9cbkmCfNlIvHx1zTIZbwyPbTjp43kI_Eo8fMmbdK_XkTnxouGtArVWoW1jjG6t4UgYafm42QJPJJvwIY2uwAg0x6B-1KwC9GgoxCGGWXRiWt9vL9ALxMpDRIxYqo2sh0OcVObvYsCTFKF8ekl5RSrvlAeu8QSkVXLvdBlaCHfvxHm2po32s6j7zvzXeuczxuiAj54Gd_7QWPwHu-2TW2gnG3oa5nbTofcmNb7Qm2QoGptIgx80gMJiCVGLCfv2UUwqZRoLzF9XkWiXKWRCq6dM4QYEIa6dyxT4BRb04W1Qcq_90Y8IsmWsXm3AQptILtDfEok93UIfnT5YnyDhAh4QmVlwCgzwokNlyd9vGtauKUZyIIKLyZ8GPCldou75GD7t4ZByUcRdHStuTvJEqJ98Fe85VolW8rubqIiN_uEzTNq5vWdFT5boo"
@@ -87,8 +86,8 @@ func TestSimpleAuthenticateWithOIDC(t *testing.T) {
 		t.Error(err)
 	}
 
-	fmt.Println("Configuration  : ", cfg.GetOauth2UserInfoEndpoint())
-	fmt.Println("Configuration JWK: ", cfg.GetOauth2WellKnownJwkData())
+	t.Logf("Configuration  : %s", cfg.GetOauth2UserInfoEndpoint())
+	t.Logf("Configuration JWK: %s", cfg.GetOauth2WellKnownJwkData())
 }
 
 func TestAuthenticateWithTenantClaims(t *testing.T) {
@@ -111,15 +110,15 @@ func TestAuthenticateWithTenantClaims(t *testing.T) {
 		t.Errorf("supplied context should contain authentication claims")
 	}
 
-	if claims.GetTenantId() == "" {
+	if claims.GetTenantID() == "" {
 		t.Errorf("auth claim has no tenant Id")
 	}
 
-	if claims.GetPartitionId() == "" {
+	if claims.GetPartitionID() == "" {
 		t.Errorf("auth claim has no partition Id")
 	}
 
-	if claims.GetAccessId() == "" {
+	if claims.GetAccessID() == "" {
 		t.Errorf("auth claim has no access Id")
 	}
 

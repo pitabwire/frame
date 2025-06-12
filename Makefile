@@ -47,6 +47,9 @@ docker-stop: ## stops all docker containers
 	docker compose -f tests_runner/docker-compose.yml down
 
 
+goimports:
+	find . -name \*.go -not -path .git -exec goimports -w {} \;
+
 
 # this command will run all tests in the repo
 # INTEGRATION_TEST_SUITE_PATH is used to run specific tests in Golang,

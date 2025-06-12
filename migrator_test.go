@@ -175,7 +175,7 @@ func TestService_MigrateDatastore(t *testing.T) {
 	}
 }
 
-func TestService_MigrateDatastoreIdempotency(t *testing.T) {
+func TestService_MigrateDatastoreIDempotency(t *testing.T) {
 	testDBURL := frame.GetEnv(
 		"TEST_DATABASE_URL",
 		"postgres://frame:secret@localhost:5431/framedatabase?sslmode=disable",

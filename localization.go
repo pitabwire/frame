@@ -18,25 +18,25 @@ func (s *Service) Bundle() *i18n.Bundle {
 }
 
 // Translate performs a quick translation based on the supplied message id.
-func (s *Service) Translate(ctx context.Context, request any, messageId string) string {
-	return s.TranslateWithMap(ctx, request, messageId, map[string]any{})
+func (s *Service) Translate(ctx context.Context, request any, messageID string) string {
+	return s.TranslateWithMap(ctx, request, messageID, map[string]any{})
 }
 
 // TranslateWithMap performs a translation with variables based on the supplied message id.
 func (s *Service) TranslateWithMap(
 	ctx context.Context,
 	request any,
-	messageId string,
+	messageID string,
 	variables map[string]any,
 ) string {
-	return s.TranslateWithMapAndCount(ctx, request, messageId, variables, 1)
+	return s.TranslateWithMapAndCount(ctx, request, messageID, variables, 1)
 }
 
 // TranslateWithMapAndCount performs a translation with variables based on the supplied message id and can pluralize.
 func (s *Service) TranslateWithMapAndCount(
 	ctx context.Context,
 	request any,
-	messageId string,
+	messageID string,
 	variables map[string]any,
 	count int,
 ) string {
@@ -45,7 +45,7 @@ func (s *Service) TranslateWithMapAndCount(
 	switch v := request.(type) {
 	case *http.Request:
 
-		languageSlice = extractLanguageFromHttpRequest(v)
+		languageSlice = extractLanguageFromHTTPRequest(v)
 
 	case context.Context:
 		languageSlice = extractLanguageFromGrpcRequest(v)
@@ -57,16 +57,16 @@ func (s *Service) TranslateWithMapAndCount(
 		languageSlice = v
 
 	default:
-		logger := s.Log(ctx).WithField("messageId", messageId).WithField("variables", variables)
+		logger := s.Log(ctx).WithField("messageID", messageID).WithField("variables", variables)
 		logger.Warn("TranslateWithMapAndCount -- no valid request object found, use string, []string, context or http.Request")
-		return messageId
+		return messageID
 	}
 
 	localizer := i18n.NewLocalizer(s.Bundle(), languageSlice...)
 
 	transVersion, err := localizer.Localize(&i18n.LocalizeConfig{
-		MessageID:      messageId,
-		DefaultMessage: &i18n.Message{ID: messageId},
+		MessageID:      messageID,
+		DefaultMessage: &i18n.Message{ID: messageID},
 		TemplateData:   variables,
 		PluralCount:    count,
 	})
@@ -79,7 +79,7 @@ func (s *Service) TranslateWithMapAndCount(
 	return transVersion
 }
 
-func extractLanguageFromHttpRequest(req *http.Request) []string {
+func extractLanguageFromHTTPRequest(req *http.Request) []string {
 	lang := req.FormValue("lang")
 	acceptLanguageHeader := req.Header.Get("Accept-Language")
 	acceptedLang := strings.Split(acceptLanguageHeader, ",")

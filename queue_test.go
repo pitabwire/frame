@@ -4,8 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"testing"
+
+	"github.com/pitabwire/util"
 
 	"github.com/pitabwire/frame"
 )
@@ -89,16 +90,18 @@ func TestService_RegisterPublisherMultiple(t *testing.T) {
 type messageHandler struct {
 }
 
-func (m *messageHandler) Handle(_ context.Context, metadata map[string]string, message []byte) error {
-	log.Printf(" A nice message to handle: %v with headers [%v]", string(message), metadata)
+func (m *messageHandler) Handle(ctx context.Context, metadata map[string]string, message []byte) error {
+	log := util.Log(ctx)
+	log.Info("A nice message to handle", "message", string(message), "metadata", metadata)
 	return nil
 }
 
 type handlerWithError struct {
 }
 
-func (m *handlerWithError) Handle(_ context.Context, metadata map[string]string, message []byte) error {
-	log.Printf(" A dreadful message to handle: %v with headers [%v]", string(message), metadata)
+func (m *handlerWithError) Handle(ctx context.Context, metadata map[string]string, message []byte) error {
+	log := util.Log(ctx)
+	log.Info("A dreadful message to handle", "message", string(message), "metadata", metadata)
 	return errors.New("throwing an error for tests")
 }
 
@@ -117,7 +120,7 @@ func TestService_RegisterSubscriber(t *testing.T) {
 	}
 
 	for i := range make([]int, 30) {
-		err := srv.Publish(ctx, regSubTopic, []byte(fmt.Sprintf(" testing message %d", i)))
+		err = srv.Publish(ctx, regSubTopic, []byte(fmt.Sprintf(" testing message %d", i)))
 		if err != nil {
 			t.Errorf("We could not publish to a registered topic %d : %s ", i, err)
 			return
@@ -187,7 +190,7 @@ func TestService_RegisterSubscriberContextCancelWorks(t *testing.T) {
 		t.Fatalf("Subscription is invalid yet it should be ok")
 	}
 
-	if err := srv.Run(ctx, ""); err != nil {
+	if err = srv.Run(ctx, ""); err != nil {
 		t.Errorf("We somehow fail to instantiate subscription ")
 	}
 

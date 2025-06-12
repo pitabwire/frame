@@ -20,8 +20,8 @@ func authorizationControlListWrite(ctx context.Context, writeServerURL string, a
 	}
 
 	payload := map[string]any{
-		"namespace":  authClaims.GetTenantId(),
-		"object":     authClaims.GetPartitionId(),
+		"namespace":  authClaims.GetTenantID(),
+		"object":     authClaims.GetPartitionID(),
 		"relation":   action,
 		"subject_id": subject,
 	}

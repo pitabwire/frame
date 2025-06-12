@@ -3,6 +3,7 @@ package frame
 import (
 	"context"
 	"crypto/tls"
+	"errors"
 	"net"
 	"net/http"
 
@@ -35,9 +36,11 @@ func (dd *defaultDriver) Context() context.Context {
 	return dd.ctx
 }
 
+var ErrTLSPathsNotProvided = errors.New("TLS certificate path or key path not provided")
+
 func (dd *defaultDriver) tlsConfig(certPath, certKeyPath string) (*tls.Config, error) {
 	if certPath == "" || certKeyPath == "" {
-		return nil, nil
+		return nil, ErrTLSPathsNotProvided
 	}
 
 	cert, err := tls.LoadX509KeyPair(certPath, certKeyPath)
@@ -48,6 +51,7 @@ func (dd *defaultDriver) tlsConfig(certPath, certKeyPath string) (*tls.Config, e
 	return &tls.Config{
 		Certificates: []tls.Certificate{cert},
 		NextProtos:   []string{http2.NextProtoTLS, "http/1.1"},
+		MinVersion:   tls.VersionTLS12,
 	}, nil
 }
 
@@ -143,7 +147,7 @@ func (gd *grpcDriver) ListenAndServe(addr string, h http.Handler) error {
 	})
 
 	grpcweb.WrapHandler(
-		h, grpcweb.WithOriginFunc(func(origin string) bool { return true }),
+		h, grpcweb.WithOriginFunc(func(_ string) bool { return true }),
 	)
 
 	err := http2.ConfigureServer(gd.httpServer, nil)
@@ -187,7 +191,7 @@ func (gd *grpcDriver) ListenAndServeTLS(addr, certFile, certKeyFile string, h ht
 	})
 
 	grpcweb.WrapHandler(
-		h, grpcweb.WithOriginFunc(func(origin string) bool { return true }),
+		h, grpcweb.WithOriginFunc(func(_ string) bool { return true }),
 	)
 
 	err := http2.ConfigureServer(gd.httpServer, nil)
@@ -232,49 +236,49 @@ func (gd *grpcDriver) Shutdown(ctx context.Context) error {
 	return nil
 }
 
-// WithGrpcServer Option to specify an instantiated grpc server
-// with an implementation that can be utilized to handle incoming requests.
-func WithGrpcServer(grpcServer *grpc.Server) Option {
+// WithGRPCServer specifies an instantiated gRPC server with an implementation that can be utilized to handle incoming requests.
+func WithGRPCServer(grpcServer *grpc.Server) Option {
 	return func(_ context.Context, c *Service) {
 		c.grpcServer = grpcServer
 	}
 }
 
-func WithEnableGrpcServerReflection() Option {
+// WithEnableGRPCServerReflection enables gRPC server reflection.
+func WithEnableGRPCServerReflection() Option {
 	return func(_ context.Context, c *Service) {
 		c.grpcServerEnableReflection = true
 	}
 }
 
-// WithServerListener Option to specify user preferred priListener instead of the default provided one.
+// WithServerListener specifies a user-preferred listener instead of the default provided one.
 func WithServerListener(listener net.Listener) Option {
 	return func(_ context.Context, c *Service) {
 		c.priListener = listener
 	}
 }
 
-// WithGrpcServerListener provided one. This one is mostly useful when grpc is being utilised.
-func WithGrpcServerListener(listener net.Listener) Option {
+// WithGRPCServerListener specifies a user-preferred gRPC listener instead of the default provided one.
+func WithGRPCServerListener(listener net.Listener) Option {
 	return func(_ context.Context, c *Service) {
 		c.secListener = listener
 	}
 }
 
-// WithGrpcPort Option to specify the grpc port for server to bind to.
-func WithGrpcPort(port string) Option {
+// WithGRPCPort specifies the gRPC port for the server to bind to.
+func WithGRPCPort(port string) Option {
 	return func(_ context.Context, c *Service) {
 		c.grpcPort = port
 	}
 }
 
-// WithHttpHandler Option to specify an http handler that can be used to handle inbound http requests.
-func WithHttpHandler(h http.Handler) Option {
+// WithHTTPHandler specifies an HTTP handler that can be used to handle inbound HTTP requests.
+func WithHTTPHandler(h http.Handler) Option {
 	return func(_ context.Context, c *Service) {
 		c.handler = h
 	}
 }
 
-// WithNoopDriver This is mostly useful when writing tests especially against the frame service.
+// WithNoopDriver uses a no-op driver, mostly useful when writing tests against the frame service.
 func WithNoopDriver() Option {
 	return func(_ context.Context, c *Service) {
 		c.driver = &noopDriver{}

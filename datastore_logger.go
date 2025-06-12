@@ -12,9 +12,17 @@ import (
 	glogger "gorm.io/gorm/logger"
 )
 
+const (
+	tintAttrCodeDuration = 214
+	tintAttrCodeRows     = 12
+	tintAttrCodeQuery    = 2
+
+	DefaultSlowQueryThreshold = 200 * time.Millisecond
+)
+
 func datbaseLogger(ctx context.Context, s *Service) glogger.Interface {
 	logQueries := false
-	slowQueryThreshold := 200 * time.Millisecond
+	slowQueryThreshold := DefaultSlowQueryThreshold
 	if s.Config() != nil {
 		config, ok := s.Config().(ConfigurationDatabase)
 		if ok {
@@ -65,9 +73,9 @@ func (l *dbLogger) Trace(ctx context.Context, begin time.Time, fc func() (string
 	rowsAffected := strconv.FormatInt(rows, 10)
 
 	log := l.log.WithContext(ctx).
-		WithAttr(tint.Attr(214, slog.Any("duration", elapsed.String()))).
-		WithAttr(tint.Attr(12, slog.Any("rows", rowsAffected))).
-		WithAttr(tint.Attr(2, slog.Any("query", sql)))
+		WithAttr(tint.Attr(tintAttrCodeDuration, slog.Any("duration", elapsed.String()))).
+		WithAttr(tint.Attr(tintAttrCodeRows, slog.Any("rows", rowsAffected))).
+		WithAttr(tint.Attr(tintAttrCodeQuery, slog.Any("query", sql)))
 
 	queryIsSlow := false
 	if elapsed > l.slowThreshold && l.slowThreshold != 0 {

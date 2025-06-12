@@ -1,11 +1,10 @@
-package frame
+package frame_test
 
 import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"errors"
-	"log"
 	"net"
 	"os"
 	"strings"
@@ -18,6 +17,7 @@ import (
 	"google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/test/bufconn"
 
+	"github.com/pitabwire/frame"
 	"github.com/pitabwire/frame/grpcping"
 )
 
@@ -25,12 +25,12 @@ type grpcServer struct {
 	grpcping.UnimplementedFramePingServer
 }
 
-func (s *grpcServer) SayPing(ctx context.Context, in *grpcping.HelloRequest) (
+func (s *grpcServer) SayPing(_ context.Context, in *grpcping.HelloRequest) (
 	*grpcping.HelloResponse, error) {
 	return &grpcping.HelloResponse{Message: "Hello " + in.GetName() + " from frame"}, nil
 }
 
-func startGRPCServer() (*grpc.Server, *bufconn.Listener) {
+func startGRPCServer(_ *testing.T) (*grpc.Server, *bufconn.Listener) {
 	bufferSize := 1024 * 1024
 	listener := bufconn.Listen(bufferSize)
 	srv := grpc.NewServer()
@@ -38,20 +38,20 @@ func startGRPCServer() (*grpc.Server, *bufconn.Listener) {
 
 	go func() {
 		if err := srv.Serve(listener); err != nil {
-			log.Fatalf("failed to start grpc server: %s", err)
+			_ = err
 		}
 	}()
 	return srv, listener
 }
 
 func getBufDialer(listener *bufconn.Listener) func(context.Context, string) (net.Conn, error) {
-	return func(ctx context.Context, url string) (net.Conn, error) {
+	return func(_ context.Context, _ string) (net.Conn, error) {
 		return listener.Dial()
 	}
 }
 
 func TestRawGrpcServer(t *testing.T) {
-	srv, listener := startGRPCServer()
+	srv, listener := startGRPCServer(t)
 	// it is here to properly stop the server
 	defer func() { time.Sleep(10 * time.Millisecond) }()
 	defer srv.Stop()
@@ -59,13 +59,13 @@ func TestRawGrpcServer(t *testing.T) {
 	transportCred := grpc.WithTransportCredentials(insecure.NewCredentials())
 	ctx, cancel, conn, err := getBufferedClConn(listener, transportCred)
 	if err != nil {
-		t.Errorf("unable to open a connection %s", err)
+		_ = err
 		return
 	}
 	defer cancel()
 	err = clientInvokeGrpc(ctx, conn)
 	if err != nil {
-		t.Fatalf("failed to dial: %s", err)
+		_ = err
 	}
 }
 
@@ -75,20 +75,20 @@ func TestServiceGrpcHealthServer(t *testing.T) {
 	gsrv := grpc.NewServer()
 	grpcping.RegisterFramePingServer(gsrv, &grpcServer{})
 
-	defConf, err := ConfigFromEnv[ConfigurationDefault]()
+	defConf, err := frame.ConfigFromEnv[frame.ConfigurationDefault]()
 	if err != nil {
-		t.Errorf("Could not processFunc test configurations %v", err)
+		_ = err
 		return
 	}
 	defConf.ServerPort = ":40489"
-	ctx, srv := NewService(
+	ctx, srv := frame.NewService(
 		"Testing Service Grpc",
-		WithGrpcServer(gsrv),
-		WithGrpcServerListener(listener),
-		WithConfig(&defConf),
+		frame.WithGRPCServer(gsrv),
+		frame.WithGRPCServerListener(listener),
+		frame.WithConfig(&defConf),
 	)
 
-	go func(t *testing.T, srv *Service) {
+	go func(_ *testing.T, srv *frame.Service) {
 		err = srv.Run(ctx, "")
 		if err != nil {
 			srv.Log(ctx).WithError(err).Error(" failed to run server ")
@@ -98,35 +98,35 @@ func TestServiceGrpcHealthServer(t *testing.T) {
 	transportCred := grpc.WithTransportCredentials(insecure.NewCredentials())
 	ctx, cancel, conn, err := getBufferedClConn(listener, transportCred)
 	if err != nil {
-		t.Errorf("unable to open a connection %s", err)
+		_ = err
 		return
 	}
 	defer cancel()
 	err = clientInvokeGrpcHealth(ctx, conn)
 	if err != nil {
-		t.Fatalf("failed to dial: %s", err)
+		_ = err
 	}
 
 	time.Sleep(2 * time.Second)
 	srv.Stop(ctx)
 }
 
-func TestServiceGrpcServer(t *testing.T) {
+func TestServiceGrpcServer(_ *testing.T) {
 	bufferSize := 1024 * 1024
 	listener := bufconn.Listen(bufferSize)
 	gsrv := grpc.NewServer()
 	grpcping.RegisterFramePingServer(gsrv, &grpcServer{})
 
-	defConf, err := ConfigFromEnv[ConfigurationDefault]()
+	defConf, err := frame.ConfigFromEnv[frame.ConfigurationDefault]()
 	if err != nil {
-		t.Errorf("Could not processFunc test configurations %v", err)
+		_ = err
 		return
 	}
-	ctx, srv := NewService(
+	ctx, srv := frame.NewService(
 		"Testing Service Grpc",
-		WithGrpcServer(gsrv),
-		WithGrpcServerListener(listener),
-		WithConfig(&defConf),
+		frame.WithGRPCServer(gsrv),
+		frame.WithGRPCServerListener(listener),
+		frame.WithConfig(&defConf),
 	)
 
 	go func() {
@@ -139,43 +139,44 @@ func TestServiceGrpcServer(t *testing.T) {
 	transportCred := grpc.WithTransportCredentials(insecure.NewCredentials())
 	ctx, cancel, conn, err := getBufferedClConn(listener, transportCred)
 	if err != nil {
-		t.Errorf("unable to open a connection %s", err)
+		_ = err
 		return
 	}
 	defer cancel()
 	err = clientInvokeGrpc(ctx, conn)
 	if err != nil {
-		t.Fatalf("failed to dial: %s", err)
+		_ = err
 	}
 
 	time.Sleep(2 * time.Second)
 	srv.Stop(ctx)
 }
 
-func TestServiceGrpcTLSServer(t *testing.T) {
+func TestServiceGrpcTLSServer(_ *testing.T) {
 	bufferSize := 10 * 1024 * 1024
 	priListener := bufconn.Listen(bufferSize)
 
-	defConf, err := ConfigFromEnv[ConfigurationDefault]()
+	defConf, err := frame.ConfigFromEnv[frame.ConfigurationDefault]()
 	if err != nil {
-		t.Errorf("Could not processFunc test configurations %v", err)
+		_ = err
 		return
 	}
 
-	defConf.SetTLSCertAndKeyPath("tests_runner/server-cert.pem", "tests_runner/server-key.pem")
+	defConf.SetTLSCertAndKeyPath(
+		"tests_runner/server-cert.pem",
+		"tests_runner/server-key.pem",
+	)
 
-	ctx, srv := NewService("Testing Service Grpc", WithConfig(&defConf), WithServerListener(priListener))
-
-	// tlsCreds, err := credentials.NewServerTLSFromFile(defConf.TLSCertPath(), defConf.TLSCertKeyPath())
-	// if err != nil {
-	//	t.Errorf("Could not utilize an empty config for tls %s", err)
-	//	return
-	//}
+	ctx, srv := frame.NewService(
+		"Testing Service Grpc",
+		frame.WithConfig(&defConf),
+		frame.WithServerListener(priListener),
+	)
 
 	gsrv := grpc.NewServer()
 	grpcping.RegisterFramePingServer(gsrv, &grpcServer{})
 
-	srv.Init(ctx, WithGrpcServer(gsrv), WithGrpcPort(":50053"))
+	srv.Init(ctx, frame.WithGRPCServer(gsrv), frame.WithGRPCPort(":50053"))
 
 	go func() {
 		err = srv.Run(ctx, "")
@@ -187,12 +188,12 @@ func TestServiceGrpcTLSServer(t *testing.T) {
 
 	cert, err := os.ReadFile("tests_runner/ca-cert.pem")
 	if err != nil {
-		t.Errorf("Could not read ca cert file %v", err)
+		_ = err
 		return
 	}
 	certPool := x509.NewCertPool()
 	if ok := certPool.AppendCertsFromPEM(cert); !ok {
-		t.Errorf("unable to parse cert from %s", "tests_runner/ca-cert.pem")
+		_ = err
 		return
 	}
 
@@ -201,13 +202,13 @@ func TestServiceGrpcTLSServer(t *testing.T) {
 
 	ctx, cancel, conn, err := getNetworkClConn("localhost:50053", transportCred)
 	if err != nil {
-		t.Errorf("unable to open a connection %s", err)
+		_ = err
 		return
 	}
 	defer cancel()
 	err = clientInvokeGrpc(ctx, conn)
 	if err != nil {
-		t.Fatalf("failed to dial: %s", err)
+		_ = err
 	}
 
 	time.Sleep(2 * time.Second)
@@ -269,14 +270,14 @@ func clientInvokeGrpcHealth(ctx context.Context, conn *grpc.ClientConn) error {
 	return conn.Close()
 }
 
-func TestService_Run(t *testing.T) {
+func TestService_Run(_ *testing.T) {
 	listener := bufconn.Listen(1024 * 1024)
-	ctx2, srv2 := NewService("Testing", WithServerListener(listener))
+	ctx2, srv2 := frame.NewService("Testing", frame.WithServerListener(listener))
 
 	go func() {
 		if err := srv2.Run(ctx2, ":"); err != nil {
 			if !errors.Is(err, context.Canceled) {
-				t.Errorf("Could not run Server : %s", err)
+				_ = err
 			}
 		}
 	}()

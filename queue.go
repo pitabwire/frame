@@ -16,7 +16,7 @@ import (
 
 	"gocloud.dev/pubsub"
 
-	_ "github.com/pitabwire/natspubsub"
+	_ "github.com/pitabwire/natspubsub" // required for NATS pubsub driver registration
 	_ "gocloud.dev/pubsub/mempubsub"
 )
 
@@ -118,6 +118,8 @@ func (p *publisher) Initiated() bool {
 	return p.isInit.Load()
 }
 
+const defaultPublisherShutdownTimeoutSeconds = 30
+
 func (p *publisher) Stop(ctx context.Context) error {
 	// TODO: incooporate trace information in shutdown context
 	var sctx context.Context
@@ -130,7 +132,7 @@ func (p *publisher) Stop(ctx context.Context) error {
 		sctx = ctx
 	}
 
-	sctx, cancelFunc = context.WithTimeout(sctx, time.Second*30)
+	sctx, cancelFunc = context.WithTimeout(sctx, time.Second*defaultPublisherShutdownTimeoutSeconds)
 	defer cancelFunc()
 
 	p.isInit.Store(false)
@@ -145,7 +147,7 @@ func (p *publisher) Stop(ctx context.Context) error {
 
 // WithRegisterPublisher Option to register publishing path referenced within the system.
 func WithRegisterPublisher(reference string, queueURL string) Option {
-	return func(ctx context.Context, s *Service) {
+	return func(_ context.Context, s *Service) {
 		s.queue.publishQueueMap.Store(reference, &publisher{
 			reference: reference,
 			url:       queueURL,
@@ -188,7 +190,11 @@ func (s *Service) GetPublisher(reference string) (Publisher, error) {
 	if !ok {
 		return nil, fmt.Errorf("publisher %s not found", reference)
 	}
-	return pub.(*publisher), nil
+	pVal, ok := pub.(*publisher)
+	if !ok {
+		return nil, fmt.Errorf("publisher %s is not of type *publisher", reference)
+	}
+	return pVal, nil
 }
 
 type Subscriber interface {
@@ -301,6 +307,46 @@ func (s *subscriber) Stop(ctx context.Context) error {
 	return nil
 }
 
+func (s *subscriber) processReceivedMessage(ctx context.Context, msg *pubsub.Message) error {
+	logger := s.service.Log(ctx).
+		WithField("name", s.reference).
+		WithField("function", "processReceivedMessage").
+		WithField("url", s.url)
+
+	job := NewJob(func(jobCtx context.Context, _ JobResultPipe[*pubsub.Message]) error {
+		authClaim := ClaimsFromMap(msg.Metadata)
+		var processedCtx context.Context
+		if authClaim != nil {
+			processedCtx = authClaim.ClaimsToContext(jobCtx)
+		} else {
+			processedCtx = jobCtx
+		}
+
+		handleErr := s.handler.Handle(processedCtx, msg.Metadata, msg.Body)
+		if handleErr != nil {
+			logger.WithError(handleErr).Warn("could not handle message")
+			if msg.Nackable() {
+				msg.Nack()
+			}
+			return handleErr // Propagate handler error to the job runner
+		}
+		msg.Ack()
+		return nil
+	})
+
+	submitErr := SubmitJob(ctx, s.service, job) // Use the original listen context for submitting the job
+	if submitErr != nil {
+		// This error means the job submission itself failed, which is more critical.
+		logger.WithError(submitErr).Error("failed to submit message processing job")
+		// If job submission fails, the message might not have been acked/nacked properly
+		// depending on where SubmitJob failed. Consider if nack is appropriate here
+		// if the job func (and thus ack/nack) never ran.
+		// However, Receive() would likely fetch it again if it's not acked.
+		return submitErr
+	}
+	return nil
+}
+
 func (s *subscriber) listen(ctx context.Context, _ JobResultPipe[*pubsub.Message]) error {
 	logger := s.service.Log(ctx).
 		WithField("name", s.reference).
@@ -319,43 +365,24 @@ func (s *subscriber) listen(ctx context.Context, _ JobResultPipe[*pubsub.Message
 			return ctx.Err()
 
 		default:
-
 			msg, err := s.Receive(ctx)
 			if err != nil {
 				if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+					// Context cancelled or deadline exceeded, loop again to check ctx.Done()
 					continue
 				}
-
-				logger.WithError(err).Error(" could not pull message")
-				return err
+				// Other errors from Receive are critical for the listener.
+				logger.WithError(err).Error("could not pull message")
+				return err // Exit listen loop
 			}
 
-			job := NewJob(func(ctx context.Context, _ JobResultPipe[*pubsub.Message]) error {
-				authClaim := ClaimsFromMap(msg.Metadata)
-
-				var ctx2 context.Context
-				if nil != authClaim {
-					ctx2 = authClaim.ClaimsToContext(ctx)
-				} else {
-					ctx2 = ctx
-				}
-
-				err0 := s.handler.Handle(ctx2, msg.Metadata, msg.Body)
-				if err0 != nil {
-					logger.WithError(err0).Warn(" could not handle message")
-					if msg.Nackable() {
-						msg.Nack()
-					}
-					return err0
-				}
-				msg.Ack()
-				return nil
-			})
-
-			err = SubmitJob(ctx, s.service, job)
-			if err != nil {
-				logger.WithError(err).Warn(" Ignoring handle error message")
-				return err
+			// Process the received message. Errors from processing (like job submission failure)
+			// will be logged by processReceivedMessage. If it's a critical submission error,
+			// it will be returned and will stop the listener.
+			if procErr := s.processReceivedMessage(ctx, msg); procErr != nil {
+				// processReceivedMessage already logs details. This error is for critical failures.
+				logger.WithError(procErr).Error("critical error processing message, stopping listener")
+				return procErr
 			}
 		}
 	}
@@ -364,7 +391,7 @@ func (s *subscriber) listen(ctx context.Context, _ JobResultPipe[*pubsub.Message
 // WithRegisterSubscriber Option to register a new subscription handler.
 func WithRegisterSubscriber(reference string, queueURL string,
 	handler ...SubscribeWorker) Option {
-	return func(ctx context.Context, s *Service) {
+	return func(_ context.Context, s *Service) {
 		subs := subscriber{
 			service:   s,
 			reference: reference,
@@ -426,7 +453,11 @@ func (s *Service) GetSubscriber(reference string) (Subscriber, error) {
 	if !ok {
 		return nil, fmt.Errorf("subscriber %s not found", reference)
 	}
-	return sub.(*subscriber), nil
+	sVal, ok := sub.(*subscriber)
+	if !ok {
+		return nil, fmt.Errorf("subscriber %s is not of type *subscriber", reference)
+	}
+	return sVal, nil
 }
 
 // Publish Queue method to write a new message into the queue pre initialized with the supplied reference.
@@ -451,62 +482,118 @@ func (s *Service) initSubscriber(ctx context.Context, sub Subscriber) error {
 	return sub.Init(ctx)
 }
 
-func (s *Service) initPubsub(ctx context.Context) error {
-	// Whenever the registry is not empty the events queue is automatically initiated
-	if len(s.eventRegistry) > 0 {
-		eventsQueueHandler := eventQueueHandler{
-			service: s,
-		}
-
-		config, ok := s.Config().(ConfigurationEvents)
-		if !ok {
-			s.Log(ctx).Warn("configuration object not of type : ConfigurationDefault")
-			return errors.New("could not cast config to ConfigurationEvents")
-		}
-
-		eventsQueue := WithRegisterSubscriber(
-			config.GetEventsQueueName(),
-			config.GetEventsQueueUrl(),
-			&eventsQueueHandler,
-		)
-		eventsQueue(ctx, s)
-		eventsQueueP := WithRegisterPublisher(config.GetEventsQueueName(), config.GetEventsQueueUrl())
-		eventsQueueP(ctx, s)
-	}
-
-	if s.queue == nil {
+// setupEventsQueueIfNeeded sets up the default events queue publisher and subscriber
+// if an event registry is configured for the service.
+func (s *Service) setupEventsQueueIfNeeded(ctx context.Context) error {
+	if len(s.eventRegistry) == 0 {
 		return nil
 	}
 
-	var publishers []*publisher
+	eventsQueueHandler := eventQueueHandler{
+		service: s,
+	}
 
+	config, ok := s.Config().(ConfigurationEvents)
+	if !ok {
+		errMsg := "configuration object does not implement ConfigurationEvents, cannot setup events queue"
+		s.Log(ctx).Error(errMsg)
+		return errors.New(errMsg)
+	}
+
+	eventsQueueSubscriberOpt := WithRegisterSubscriber(
+		config.GetEventsQueueName(),
+		config.GetEventsQueueURL(),
+		&eventsQueueHandler,
+	)
+	eventsQueueSubscriberOpt(ctx, s) // This registers the subscriber
+
+	eventsQueuePublisherOpt := WithRegisterPublisher(config.GetEventsQueueName(), config.GetEventsQueueURL())
+	eventsQueuePublisherOpt(ctx, s) // This registers the publisher
+
+	// Note: Actual initialization of this specific subscriber and publisher
+	// will happen in initializeRegisteredPublishers and initializeRegisteredSubscribers.
+	return nil
+}
+
+// initializeRegisteredPublishers iterates over and initializes all registered publishers.
+func (s *Service) initializeRegisteredPublishers(ctx context.Context) error {
+	var initErrors []error
 	s.queue.publishQueueMap.Range(func(key, value any) bool {
-		pub := value.(*publisher)
-		publishers = append(publishers, pub)
+		pub, ok := value.(*publisher)
+		if !ok {
+			s.Log(ctx).WithField("key", key).
+				WithField("actual_type", fmt.Sprintf("%T", value)).
+				Warn("Item in publishQueueMap is not of type *publisher, skipping initialization.")
+			return true // continue to next item
+		}
+		if err := pub.Init(ctx); err != nil {
+			s.Log(ctx).WithError(err).
+				WithField("publisher_ref", pub.Ref()).
+				WithField("publisher_url", pub.url).
+				Error("Failed to initialize publisher")
+			initErrors = append(initErrors, fmt.Errorf("publisher %s: %w", pub.Ref(), err))
+		}
 		return true
 	})
 
-	for _, pub := range publishers {
-		err := pub.Init(ctx)
-		if err != nil {
-			return err
-		}
+	if len(initErrors) > 0 {
+		// Consider how to aggregate multiple errors. For now, return the first one.
+		// Or use a multierror package if available/preferred.
+		return fmt.Errorf("failed to initialize one or more publishers: %w", initErrors[0])
 	}
+	return nil
+}
 
-	var subscribers []*subscriber
-
+// initializeRegisteredSubscribers iterates over and initializes all registered subscribers.
+func (s *Service) initializeRegisteredSubscribers(ctx context.Context) error {
+	var initErrors []error
 	s.queue.subscriptionQueueMap.Range(func(key, value any) bool {
-		sub := value.(*subscriber)
-		subscribers = append(subscribers, sub)
+		sub, ok := value.(*subscriber)
+		if !ok {
+			s.Log(ctx).WithField("key", key).
+				WithField("actual_type", fmt.Sprintf("%T", value)).
+				Warn("Item in subscriptionQueueMap is not of type *subscriber, skipping initialization.")
+			return true // continue to next item
+		}
+		if err := s.initSubscriber(ctx, sub); err != nil {
+			s.Log(ctx).WithError(err).
+				WithField("subscriber_ref", sub.Ref()).
+				WithField("subscriber_url", sub.URI()).
+				Error("Failed to initialize subscriber")
+			initErrors = append(initErrors, fmt.Errorf("subscriber %s: %w", sub.Ref(), err))
+		}
 		return true
 	})
 
-	for _, sub := range subscribers {
-		err := s.initSubscriber(ctx, sub)
-		if err != nil {
-			return err
-		}
+	if len(initErrors) > 0 {
+		return fmt.Errorf("failed to initialize one or more subscribers: %w", initErrors[0])
+	}
+	return nil
+}
+
+func (s *Service) initPubsub(ctx context.Context) error {
+	if err := s.setupEventsQueueIfNeeded(ctx); err != nil {
+		// Error already logged by helper
+		return fmt.Errorf("failed to setup events queue: %w", err)
 	}
 
+	if s.queue == nil {
+		s.Log(ctx).Debug(
+			"No generic queue backend configured (s.queue is nil), skipping further pub/sub initialization.",
+		)
+		return nil
+	}
+
+	if err := s.initializeRegisteredPublishers(ctx); err != nil {
+		// Errors logged by helper
+		return fmt.Errorf("failed during publisher initialization: %w", err)
+	}
+
+	if err := s.initializeRegisteredSubscribers(ctx); err != nil {
+		// Errors logged by helper
+		return fmt.Errorf("failed during subscriber initialization: %w", err)
+	}
+
+	s.Log(ctx).Info("Pub/Sub system initialized successfully.")
 	return nil
 }

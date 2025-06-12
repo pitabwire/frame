@@ -23,7 +23,7 @@ func (event *MessageToTest) PayloadType() any {
 	return &pType
 }
 
-func (event *MessageToTest) Validate(ctx context.Context, payload any) error {
+func (event *MessageToTest) Validate(_ context.Context, payload any) error {
 	if _, ok := payload.(*string); !ok {
 		return fmt.Errorf(" payload is %T not of type %T", payload, event.PayloadType())
 	}
@@ -35,7 +35,7 @@ func (event *MessageToTest) Execute(ctx context.Context, payload any) error {
 	message := payload.(*string)
 	logger := event.Service.Log(ctx).WithField("payload", message).WithField("type", event.Name())
 	logger.Info("handling event")
-	event.Count = event.Count + 1
+	event.Count++
 	return nil
 }
 

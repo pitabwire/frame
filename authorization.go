@@ -23,8 +23,8 @@ func AuthHasAccess(ctx context.Context, action string, subject string) (bool, er
 	}
 
 	payload := map[string]any{
-		"namespace":  authClaims.GetTenantId(),
-		"object":     authClaims.GetPartitionId(),
+		"namespace":  authClaims.GetTenantID(),
+		"object":     authClaims.GetPartitionID(),
 		"relation":   action,
 		"subject_id": subject,
 	}
@@ -45,8 +45,10 @@ func AuthHasAccess(ctx context.Context, action string, subject string) (bool, er
 		return false, err
 	}
 
-	if val, ok := response["allowed"]; ok && val.(bool) {
-		return true, nil
+	if val, allowedExists := response["allowed"]; allowedExists {
+		if boolVal, typeOK := val.(bool); typeOK && boolVal {
+			return true, nil
+		}
 	}
 	return false, nil
 }

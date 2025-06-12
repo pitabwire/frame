@@ -24,6 +24,7 @@ import (
 )
 
 const defaultStoreName = "__default__"
+const defaultPingRetryWaitMilliseconds = 250
 
 type Pool struct {
 	ctx context.Context
@@ -143,7 +144,7 @@ func (s *Pool) cleanup(_ context.Context) {
 
 func (s *Pool) pingWithTimeoutAndRetry(ctx context.Context, readOnly bool, db *gorm.DB) error {
 	var timer *time.Timer
-	wait := 250 * time.Millisecond
+	wait := defaultPingRetryWaitMilliseconds * time.Millisecond
 	const maxWait = 30 * time.Second
 
 	defer func() {
@@ -224,7 +225,7 @@ func (s *Pool) selectOne(pool []*gorm.DB, idx *uint64) *gorm.DB {
 		return nil
 	}
 	pos := atomic.AddUint64(idx, 1)
-	return pool[int(pos-1)%len(pool)]
+	return pool[int(pos-1)%len(pool)] //nolint:gosec // G115: index is result of (val % len), always < len and fits in int.
 }
 
 // SetPoolConfig updates pool sizes and connection lifetimes at runtime for all DBs.
@@ -261,7 +262,7 @@ func tenantPartition(ctx context.Context) func(db *gorm.DB) *gorm.DB {
 			return db
 		}
 
-		return db.Where("tenant_id = ? AND partition_id = ?", authClaim.GetTenantId(), authClaim.GetPartitionId())
+		return db.Where("tenant_id = ? AND partition_id = ?", authClaim.GetTenantID(), authClaim.GetPartitionID())
 	}
 }
 
@@ -283,10 +284,20 @@ func DBPropertiesToMap(props datatypes.JSONMap) map[string]string {
 		case bool:
 			payload[k] = strconv.FormatBool(v)
 		case int, int64, int32, int16, int8:
-			payload[k] = strconv.FormatInt(int64(val.(int)), 10)
+			iVal, ok := val.(int)
+			if !ok {
+				payload[k] = fmt.Sprintf("%v", val)
+				continue
+			}
+			payload[k] = strconv.FormatInt(int64(iVal), 10)
 
 		case float32, float64:
-			payload[k] = strconv.FormatFloat(val.(float64), 'g', -1, 64)
+			fVal, ok := val.(float64)
+			if !ok {
+				payload[k] = fmt.Sprintf("%v", val)
+				continue
+			}
+			payload[k] = strconv.FormatFloat(fVal, 'g', -1, 64)
 		default:
 
 			marVal, err1 := json.Marshal(val)
@@ -344,10 +355,14 @@ func (s *Service) DBPool(name ...string) *Pool {
 		return nil
 	}
 
-	return v.(*Pool)
+	pVal, ok := v.(*Pool)
+	if !ok {
+		return nil // Or log an error, depending on desired behavior
+	}
+	return pVal
 }
 
-// to specify if you want write or read only db connection.
+// DB returns the database connection for the service.
 func (s *Service) DB(ctx context.Context, readOnly bool) *gorm.DB {
 	return s.DBWithName(ctx, defaultStoreName, readOnly)
 }
@@ -395,29 +410,27 @@ func WithDatastoreConnectionWithName(name string, postgresqlConnection string, r
 			return
 		}
 
-		gormDB, _ := gorm.Open(
+		gormDB, err := gorm.Open(
 			postgres.New(postgres.Config{
 				Conn:                 conn,
 				PreferSimpleProtocol: preferSimpleProtocol,
 			}),
 			&gorm.Config{
+				Logger:                 datbaseLogger(ctx, s),
 				SkipDefaultTransaction: skipDefaultTransaction,
-				NowFunc: func() time.Time {
-					utc, _ := time.LoadLocation("")
-					return time.Now().In(utc)
-				},
-				Logger: datbaseLogger(ctx, s),
 			},
 		)
 
-		var store *Pool
-		v, ok := s.dataStores.Load(name)
-		if ok {
-			store = v.(*Pool)
-		} else {
-			store = newStore(ctx, s)
+		if err != nil {
+			s.Log(ctx).WithError(err).WithField("dsn", postgresqlConnection).Error("could not connect to gorm now")
+			return
 		}
 
+		store := s.DBPool(name)
+		if store == nil { // Pool not found or was of an incompatible type
+			store = newStore(ctx, s)
+			s.dataStores.Store(name, store) // Register the new store
+		}
 		store.addNewConnection(gormDB, readOnly)
 
 		s.dataStores.Store(name, store)
@@ -441,13 +454,13 @@ func WithDatastore() Option {
 			return
 		}
 
-		for _, primaryDbURL := range config.GetDatabasePrimaryHostURL() {
-			primaryDatabase := WithDatastoreConnection(primaryDbURL, false)
+		for _, primaryDBURL := range config.GetDatabasePrimaryHostURL() {
+			primaryDatabase := WithDatastoreConnection(primaryDBURL, false)
 			primaryDatabase(ctx, s)
 		}
 
-		for _, replicaDbURL := range config.GetDatabaseReplicaHostURL() {
-			replicaDatabase := WithDatastoreConnection(replicaDbURL, true)
+		for _, replicaDBURL := range config.GetDatabaseReplicaHostURL() {
+			replicaDatabase := WithDatastoreConnection(replicaDBURL, true)
 			replicaDatabase(ctx, s)
 		}
 	}

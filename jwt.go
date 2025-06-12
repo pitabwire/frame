@@ -35,7 +35,7 @@ func (s *Service) RegisterForJwt(ctx context.Context) error {
 	return nil
 }
 
-// This is useful for situations where one may need to register external applications for access token generation.
+// RegisterForJwtWithParams registers for JWT with the given parameters. This is useful for situations where one may need to register external applications for access token generation.
 func (s *Service) RegisterForJwtWithParams(ctx context.Context,
 	oauth2ServiceAdminHost string, clientName string, clientSecret string,
 	scope string, audienceList []string, metadata map[string]string) (map[string]any, error) {

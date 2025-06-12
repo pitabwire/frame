@@ -29,9 +29,9 @@ type EventI interface {
 	Execute(ctx context.Context, payload any) error
 }
 
-// All events are unique and shouldn't share a name otherwise the last one registered will take presedence.
+// WithRegisterEvents registers events for the service. All events are unique and shouldn't share a name otherwise the last one registered will take precedence.
 func WithRegisterEvents(events ...EventI) Option {
-	return func(ctx context.Context, s *Service) {
+	return func(_ context.Context, s *Service) {
 		if s.eventRegistry == nil {
 			s.eventRegistry = make(map[string]EventI)
 		}
@@ -72,7 +72,7 @@ type eventQueueHandler struct {
 	service *Service
 }
 
-func (eq *eventQueueHandler) Handle(ctx context.Context, header map[string]string, payload []byte) error {
+func (eq *eventQueueHandler) Handle(ctx context.Context, _ map[string]string, payload []byte) error {
 	evtPyl := &eventPayload{}
 	err := json.Unmarshal(payload, evtPyl)
 	if err != nil {

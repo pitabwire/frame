@@ -18,6 +18,8 @@ import (
 	"github.com/nicksnyder/go-i18n/v2/i18n"
 	"github.com/panjf2000/ants/v2"
 	"go.opentelemetry.io/otel/sdk/trace"
+
+	// Automatically set GOMAXPROCS to match Linux container CPU quota.
 	_ "go.uber.org/automaxprocs"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health/grpc_health_v1"
@@ -32,7 +34,14 @@ func (c contextKey) String() string {
 	return "frame/" + string(c)
 }
 
-const ctxKeyService = contextKey("serviceKey")
+const (
+	ctxKeyService                  = contextKey("serviceKey")
+	defaultCPUFactorForWorkerCount = 10
+	defaultPoolCapacity            = 100
+	defaultHTTPReadTimeoutSeconds  = 15
+	defaultHTTPWriteTimeoutSeconds = 15
+	defaultHTTPIdleTimeoutSeconds  = 60
+)
 
 // Service framework struct to hold together all application components
 // An instance of this type scoped to stay for the lifetime of the application.
@@ -92,7 +101,7 @@ func NewServiceWithContext(ctx context.Context, name string, opts ...Option) (co
 		syscall.SIGTERM,
 		syscall.SIGQUIT)
 
-	concurrency := runtime.NumCPU() * 10
+	concurrency := runtime.NumCPU() * defaultCPUFactorForWorkerCount
 
 	q := newQueue(ctx)
 
@@ -103,7 +112,7 @@ func NewServiceWithContext(ctx context.Context, name string, opts ...Option) (co
 		client:          &http.Client{},
 		queue:           q,
 		poolWorkerCount: concurrency,
-		poolCapacity:    100,
+		poolCapacity:    defaultPoolCapacity,
 	}
 
 	opts = append(opts, WithLogger())
@@ -164,13 +173,13 @@ func (s *Service) SetJwtClient(jwtCli map[string]any) {
 	s.jwtClient = jwtCli
 }
 
-// JwtClientID gets the authenticated jwt client if configured at startup.
+// JwtClientID gets the authenticated JWT client ID if configured at startup.
 func (s *Service) JwtClientID() string {
-	clientId, ok := s.jwtClient["client_id"].(string)
+	clientID, ok := s.jwtClient["client_id"].(string)
 	if !ok {
 		return ""
 	}
-	return clientId
+	return clientID
 }
 
 // JwtClientSecret gets the authenticated jwt client if configured at startup.
@@ -228,7 +237,7 @@ func (s *Service) AddHealthCheck(checker Checker) {
 	s.healthCheckers = append(s.healthCheckers, checker)
 }
 
-// keep them useful by handling incoming requests.
+// Run keeps the service useful by handling incoming requests.
 func (s *Service) Run(ctx context.Context, address string) error {
 	err := s.initPubsub(ctx)
 	if err != nil {
@@ -265,6 +274,108 @@ func (s *Service) Run(ctx context.Context, address string) error {
 	}
 }
 
+func (s *Service) determineHTTPPort(currentPort string) string {
+	if currentPort != "" {
+		return currentPort
+	}
+
+	config, ok := s.Config().(ConfigurationPorts)
+	if !ok {
+		// Assuming s.TLSEnabled() checks if TLS cert/key paths are configured.
+		// This part might need adjustment if s.TLSEnabled() is not available
+		// or if direct check on ConfigurationTLS is preferred.
+		tlsConfig, tlsOk := s.Config().(ConfigurationTLS)
+		if tlsOk && tlsConfig.TLSCertPath() != "" && tlsConfig.TLSCertKeyPath() != "" {
+			return ":https"
+		}
+		return "http" // Existing logic; consider ":http" or a default port like ":8080"
+	}
+	return config.HTTPPort()
+}
+
+func (s *Service) determineGRPCPort(currentPort string) string {
+	if currentPort != "" {
+		return currentPort
+	}
+
+	config, ok := s.Config().(ConfigurationPorts)
+	if !ok {
+		return ":50051" // Default gRPC port
+	}
+	return config.GrpcPort()
+}
+
+func (s *Service) createAndConfigureMux(_ context.Context) *http.ServeMux {
+	mux := http.NewServeMux()
+
+	applicationHandler := s.handler
+	if applicationHandler == nil {
+		applicationHandler = http.DefaultServeMux
+	}
+
+	mux.HandleFunc(s.healthCheckPath, s.HandleHealth)
+	mux.Handle("/", applicationHandler)
+	return mux
+}
+
+func (s *Service) applyCORSIfEnabled(_ context.Context, muxToWrap http.Handler) http.Handler {
+	config, ok := s.Config().(ConfigurationCORS)
+	if ok && config.IsCORSEnabled() {
+		corsOptions := []ghandler.CORSOption{
+			ghandler.AllowedHeaders(config.GetCORSAllowedHeaders()),
+			ghandler.ExposedHeaders(config.GetCORSExposedHeaders()),
+			ghandler.AllowedOrigins(config.GetCORSAllowedOrigins()),
+			ghandler.AllowedMethods(config.GetCORSAllowedMethods()),
+			ghandler.MaxAge(config.GetCORSMaxAge()),
+		}
+
+		if config.IsCORSAllowCredentials() {
+			corsOptions = append(corsOptions, ghandler.AllowCredentials())
+		}
+		return ghandler.CORS(corsOptions...)(muxToWrap)
+	}
+	return muxToWrap
+}
+
+func (s *Service) initializeServerDrivers(ctx context.Context, httpPort string) {
+	defaultServer := defaultDriver{
+		ctx:  ctx,
+		log:  s.Log(ctx),
+		port: httpPort,
+		httpServer: &http.Server{
+			Handler: s.handler, // s.handler is the (potentially CORS-wrapped) mux
+			BaseContext: func(_ net.Listener) context.Context {
+				return ctx
+			},
+			ReadTimeout:  defaultHTTPReadTimeoutSeconds * time.Second,
+			WriteTimeout: defaultHTTPWriteTimeoutSeconds * time.Second,
+			IdleTimeout:  defaultHTTPIdleTimeoutSeconds * time.Second,
+		},
+	}
+
+	// If grpc server is setup, configure the grpcDriver.
+	if s.grpcServer != nil {
+		grpcHS := NewGrpcHealthServer(s)
+		grpc_health_v1.RegisterHealthServer(s.grpcServer, grpcHS)
+
+		if s.grpcServerEnableReflection {
+			reflection.Register(s.grpcServer)
+		}
+
+		s.driver = &grpcDriver{
+			defaultDriver: defaultServer, // Embed the fully configured defaultServer
+			grpcPort:      s.grpcPort,
+			grpcServer:    s.grpcServer,
+			grpcListener:  s.priListener, // Use the primary listener established for gRPC
+		}
+	}
+
+	// If no specific driver (like grpcDriver) was set, use the defaultServer.
+	if s.driver == nil {
+		s.driver = &defaultServer
+	}
+}
+
 func (s *Service) initServer(ctx context.Context, httpPort string) error {
 	err := s.initTracer(ctx)
 	if err != nil {
@@ -272,112 +383,32 @@ func (s *Service) initServer(ctx context.Context, httpPort string) error {
 	}
 
 	if s.healthCheckPath == "" ||
-		s.healthCheckPath == "/" && s.handler != nil {
+		(s.healthCheckPath == "/" && s.handler != nil) {
 		s.healthCheckPath = "/healthz"
 	}
 
-	if httpPort == "" {
-		config, ok := s.Config().(ConfigurationPorts)
-		if !ok {
-			if s.TLSEnabled() {
-				httpPort = ":https"
-			} else {
-				httpPort = "http"
-			}
-		} else {
-			httpPort = config.HttpPort()
-		}
-	}
+	httpPort = s.determineHTTPPort(httpPort)
 
 	if s.grpcServer != nil {
-		if s.grpcPort == "" {
-			config, ok := s.Config().(ConfigurationPorts)
-			if !ok {
-				s.grpcPort = ":50051"
-			}
+		s.grpcPort = s.determineGRPCPort(s.grpcPort)
 
-			s.grpcPort = config.GrpcPort()
+		var listenErr error
+		s.priListener, listenErr = net.Listen("tcp", s.grpcPort)
+		if listenErr != nil {
+			return fmt.Errorf("failed to listen on gRPC port %s: %w", s.grpcPort, listenErr)
 		}
 
 		if httpPort == s.grpcPort {
+			// Close the listener if we're erroring out to prevent resource leak.
+			_ = s.priListener.Close()
 			return fmt.Errorf("HTTP PORT %s and GRPC PORT %s can not be same", httpPort, s.grpcPort)
 		}
 	}
 
 	s.startOnce.Do(func() {
-		mux := http.NewServeMux()
-
-		applicationHandler := s.handler
-		if applicationHandler == nil {
-			applicationHandler = http.DefaultServeMux
-		}
-
-		mux.HandleFunc(s.healthCheckPath, s.HandleHealth)
-
-		mux.Handle("/", applicationHandler)
-
-		config, ok := s.Config().(ConfigurationCORS)
-		if ok && config.IsCORSEnabled() {
-			corsOptions := []ghandler.CORSOption{
-				ghandler.AllowedHeaders(config.GetCORSAllowedHeaders()),
-				ghandler.ExposedHeaders(config.GetCORSExposedHeaders()),
-				ghandler.AllowedOrigins(config.GetCORSAllowedOrigins()),
-				ghandler.AllowedMethods(config.GetCORSAllowedMethods()),
-				ghandler.MaxAge(config.GetCORSMaxAge()),
-			}
-
-			if config.IsCORSAllowCredentials() {
-				corsOptions = append(corsOptions, ghandler.AllowCredentials())
-			}
-
-			s.handler = ghandler.CORS(corsOptions...)(mux)
-		} else {
-			s.handler = mux
-		}
-
-		defaultServer := defaultDriver{
-			ctx:  ctx,
-			log:  s.Log(ctx),
-			port: httpPort,
-			httpServer: &http.Server{
-				BaseContext: func(listener net.Listener) context.Context {
-					return ctx
-				},
-				ReadTimeout:  5 * time.Second,
-				WriteTimeout: 10 * time.Second,
-				IdleTimeout:  120 * time.Second,
-			},
-		}
-
-		// If grpc server is setup we should use the correct driver
-		if s.grpcServer != nil {
-			if s.grpcPort == "" {
-				config, ok := s.Config().(ConfigurationPorts)
-				if !ok {
-					s.grpcPort = ":50051"
-				}
-
-				s.grpcPort = config.GrpcPort()
-			}
-
-			grpcHS := NewGrpcHealthServer(s)
-			grpc_health_v1.RegisterHealthServer(s.grpcServer, grpcHS)
-
-			if s.grpcServerEnableReflection {
-				reflection.Register(s.grpcServer)
-			}
-
-			s.driver = &grpcDriver{
-				defaultDriver: defaultServer,
-				grpcPort:      s.grpcPort,
-				grpcServer:    s.grpcServer,
-				grpcListener:  s.secListener,
-			}
-		}
-
-		if s.driver == nil {
-			s.driver = &defaultServer
-		}
+		baseMux := s.createAndConfigureMux(ctx)
+		s.handler = s.applyCORSIfEnabled(ctx, baseMux)
+		s.initializeServerDrivers(ctx, httpPort)
 	})
 
 	if s.startup != nil {
@@ -385,20 +416,22 @@ func (s *Service) initServer(ctx context.Context, httpPort string) error {
 	}
 
 	if s.TLSEnabled() {
-		config, _ := s.Config().(ConfigurationTLS)
-
+		config, ok := s.Config().(ConfigurationTLS)
+		if !ok {
+			return errors.New("TLS is enabled but configuration does not implement ConfigurationTLS")
+		}
 		tlsServer, ok := s.driver.(internal.TLSServer)
 		if !ok {
-			return errors.New("tls server has to be of type internal.TLSServer")
+			return errors.New("driver does not implement internal.TLSServer for TLS mode")
 		}
 		return tlsServer.ListenAndServeTLS(httpPort, config.TLSCertPath(), config.TLSCertKeyPath(), s.handler)
 	}
 
-	nonTlsServer, ok := s.driver.(internal.Server)
+	nonTLSServer, ok := s.driver.(internal.Server)
 	if !ok {
-		return errors.New("server has to be of type internal.Server")
+		return errors.New("driver does not implement internal.Server for non-TLS mode")
 	}
-	return nonTlsServer.ListenAndServe(httpPort, s.handler)
+	return nonTLSServer.ListenAndServe(httpPort, s.handler)
 }
 
 // Stop Used to gracefully run clean up methods ensuring all requests that
@@ -447,3 +480,5 @@ func (s *Service) sendStopError(ctx context.Context, err error) {
 		s.errorChannel <- err
 	}
 }
+
+// TLSEnabled checks if the service is configured to run with TLS.

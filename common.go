@@ -48,16 +48,16 @@ func (model *BaseModel) GenID(ctx context.Context) {
 		return
 	}
 
-	if model.AccessID == "" && authClaim.GetAccessId() != "" {
-		model.AccessID = authClaim.GetAccessId()
+	if model.AccessID == "" && authClaim.GetAccessID() != "" {
+		model.AccessID = authClaim.GetAccessID()
 	}
 
-	if model.PartitionID == "" && authClaim.GetPartitionId() != "" {
-		model.PartitionID = authClaim.GetPartitionId()
+	if model.PartitionID == "" && authClaim.GetPartitionID() != "" {
+		model.PartitionID = authClaim.GetPartitionID()
 	}
 
-	if model.TenantID == "" && authClaim.GetTenantId() != "" {
-		model.TenantID = authClaim.GetTenantId()
+	if model.TenantID == "" && authClaim.GetTenantID() != "" {
+		model.TenantID = authClaim.GetTenantID()
 	}
 }
 
@@ -88,9 +88,9 @@ func (model *BaseModel) BeforeCreate(db *gorm.DB) error {
 }
 
 // BeforeUpdate Updates time stamp every time we update status of a migration.
-func (model *BaseModel) BeforeUpdate(db *gorm.DB) error {
+func (model *BaseModel) BeforeUpdate(_ *gorm.DB) error {
 	model.ModifiedAt = time.Now()
-	model.Version += 1
+	model.Version++
 	return nil
 }
 
@@ -120,14 +120,14 @@ func GenerateID(_ context.Context) string {
 	return xid.New().String()
 }
 
-// GetIp convenience method to extract the remote ip address from our inbound request.
-func GetIp(r *http.Request) string {
-	sourceIp := r.Header.Get("X-Forwarded-For")
-	if sourceIp == "" {
-		sourceIp, _, _ = net.SplitHostPort(r.RemoteAddr)
+// GetIP convenience method to extract the remote ip address from our inbound request.
+func GetIP(r *http.Request) string {
+	sourceIP := r.Header.Get("X-Forwarded-For")
+	if sourceIP == "" {
+		sourceIP, _, _ = net.SplitHostPort(r.RemoteAddr)
 	}
 
-	return sourceIp
+	return sourceIP
 }
 
 // GetEnv Obtains the environment key or returns the default value.
@@ -148,7 +148,8 @@ func GetLocalIP() string {
 		if ipnet, ok := address.(*net.IPNet); ok && !ipnet.IP.IsLoopback() {
 			currentIP = ipnet.IP.String()
 			break
-		} else {
+		}
+		if ipnet, ok := address.(*net.IPNet); ok {
 			currentIP = ipnet.IP.String()
 		}
 	}

@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -61,11 +60,11 @@ func TestService_AddCleanupMethod(t *testing.T) {
 
 	a := 30
 
-	srv.AddCleanupMethod(func(ctx context.Context) {
+	srv.AddCleanupMethod(func(_ context.Context) {
 		a++
 	})
 
-	srv.AddCleanupMethod(func(ctx context.Context) {
+	srv.AddCleanupMethod(func(_ context.Context) {
 		a++
 	})
 
@@ -108,7 +107,7 @@ func TestBackGroundConsumer(t *testing.T) {
 
 	ctx, srv := frame.NewService("Test Srv",
 		frame.WithServerListener(listener),
-		frame.WithBackGroundConsumer(func(ctx context.Context) error {
+		frame.WithBackgroundConsumer(func(_ context.Context) error {
 			return nil
 		}))
 
@@ -117,7 +116,7 @@ func TestBackGroundConsumer(t *testing.T) {
 		t.Errorf("could not start a background consumer peacefully : %v", err)
 	}
 
-	ctx, srv = frame.NewService("Test Srv", frame.WithBackGroundConsumer(func(ctx context.Context) error {
+	ctx, srv = frame.NewService("Test Srv", frame.WithBackgroundConsumer(func(_ context.Context) error {
 		return errors.New("background errors in the system")
 	}))
 
@@ -149,7 +148,7 @@ func TestServiceExitByOSSignal(t *testing.T) {
 
 func getTestHealthHandler() http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/", func(w http.ResponseWriter, request *http.Request) {
+	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Length", strconv.Itoa(4))
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		w.Header().Set("X-Content-Type-Options", "nosniff")
@@ -223,7 +222,7 @@ func TestHealthCheckEndpoints(t *testing.T) {
 			opts := []frame.Option{frame.WithNoopDriver(), frame.WithHealthCheckPath(test.healthPath)}
 
 			if test.handler != nil {
-				opts = append(opts, frame.WithHttpHandler(test.handler))
+				opts = append(opts, frame.WithHTTPHandler(test.handler))
 			}
 
 			ctx, srv := frame.NewService("Test Srv", opts...)
@@ -239,8 +238,7 @@ func TestHealthCheckEndpoints(t *testing.T) {
 
 			resp, err := http.Get(fmt.Sprintf("%s%s", ts.URL, test.path))
 			if err != nil {
-				t.Errorf("could not invoke server %v", err)
-				log.Fatal(err)
+				t.Fatalf("could not invoke server %v", err)
 			}
 
 			body, _ := io.ReadAll(resp.Body)
@@ -249,7 +247,7 @@ func TestHealthCheckEndpoints(t *testing.T) {
 				t.Errorf("%v : expected status code %v is not %v", test.name, test.statusCode, resp.StatusCode)
 			}
 
-			fmt.Println(string(body))
+			t.Logf("%s", string(body))
 		})
 	}
 }

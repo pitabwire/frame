@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"math/big"
 	"net/http"
 	"strings"
@@ -22,6 +23,13 @@ const ctxKeyAuthenticationClaim = contextKey("authenticationClaimKey")
 const ctxKeySkipTenancyCheckOnClaim = contextKey("skipTenancyCheckOnClaimKey")
 const ctxKeyAuthenticationJwt = contextKey("authenticationJwtKey")
 
+const (
+	bearerScheme         = "Bearer"
+	bearerTokenParts     = 2
+	grpcAuthHeader       = "authorization"
+	grpcAuthSchemeBearer = "bearer"
+)
+
 // JwtToContext adds authentication jwt to the current supplied context.
 func jwtToContext(ctx context.Context, jwt string) context.Context {
 	return context.WithValue(ctx, ctxKeyAuthenticationJwt, jwt)
@@ -37,7 +45,8 @@ func JwtFromContext(ctx context.Context) string {
 	return jwtString
 }
 
-// We add jwt.StandardClaims as an embedded type, to provide fields like expiry time.
+// AuthenticationClaims defines the structure for JWT claims, embedding jwt.StandardClaims
+// to include standard fields like expiry time, and adding custom claims.
 type AuthenticationClaims struct {
 	Ext         map[string]any `json:"ext,omitempty"`
 	TenantID    string         `json:"tenant_id,omitempty"`
@@ -50,7 +59,7 @@ type AuthenticationClaims struct {
 	jwt.RegisteredClaims
 }
 
-func (a *AuthenticationClaims) GetTenantId() string {
+func (a *AuthenticationClaims) GetTenantID() string {
 	result := a.TenantID
 	if result != "" {
 		return result
@@ -68,7 +77,7 @@ func (a *AuthenticationClaims) GetTenantId() string {
 	return result
 }
 
-func (a *AuthenticationClaims) GetPartitionId() string {
+func (a *AuthenticationClaims) GetPartitionID() string {
 	result := a.PartitionID
 	if result != "" {
 		return result
@@ -86,7 +95,7 @@ func (a *AuthenticationClaims) GetPartitionId() string {
 	return result
 }
 
-func (a *AuthenticationClaims) GetAccessId() string {
+func (a *AuthenticationClaims) GetAccessID() string {
 	result := a.AccessID
 	if result != "" {
 		return result
@@ -104,7 +113,7 @@ func (a *AuthenticationClaims) GetAccessId() string {
 	return result
 }
 
-func (a *AuthenticationClaims) GetContactId() string {
+func (a *AuthenticationClaims) GetContactID() string {
 	result := a.ContactID
 	if result != "" {
 		return result
@@ -122,7 +131,7 @@ func (a *AuthenticationClaims) GetContactId() string {
 	return result
 }
 
-func (a *AuthenticationClaims) GetDeviceId() string {
+func (a *AuthenticationClaims) GetDeviceID() string {
 	result := a.DeviceID
 	if result != "" {
 		return result
@@ -195,11 +204,11 @@ func (a *AuthenticationClaims) isInternalSystem() bool {
 func (a *AuthenticationClaims) AsMetadata() map[string]string {
 	m := make(map[string]string)
 	m["sub"] = a.Subject
-	m["tenant_id"] = a.GetTenantId()
-	m["partition_id"] = a.GetPartitionId()
-	m["access_id"] = a.GetAccessId()
-	m["contact_id"] = a.GetContactId()
-	m["device_id"] = a.GetDeviceId()
+	m["tenant_id"] = a.GetTenantID()
+	m["partition_id"] = a.GetPartitionID()
+	m["access_id"] = a.GetAccessID()
+	m["contact_id"] = a.GetContactID()
+	m["device_id"] = a.GetDeviceID()
 	m["roles"] = strings.Join(a.GetRoles(), ",")
 	return m
 }
@@ -312,45 +321,46 @@ func (s *Service) Authenticate(ctx context.Context,
 
 func (s *Service) systemPadPartitionInfo(
 	ctx context.Context,
-	tenantId, partitionId, accessId, contactId, deviceId, roles string,
+	tenantID, partitionID, accessID, contactID, deviceID, roles string,
 ) context.Context {
 	claims := ClaimsFromContext(ctx)
 
-	if claims != nil && claims.isInternalSystem() {
-		val := claims.GetTenantId()
-		if val == "" {
-			claims.TenantID = tenantId
-		}
-
-		val = claims.GetPartitionId()
-		if val == "" {
-			claims.PartitionID = partitionId
-		}
-
-		val = claims.GetAccessId()
-		if val == "" {
-			claims.AccessID = accessId
-		}
-
-		val = claims.GetContactId()
-		if val == "" {
-			claims.ContactID = contactId
-		}
-
-		val = claims.GetDeviceId()
-		if val == "" {
-			claims.DeviceID = deviceId
-		}
-
-		valRoles := claims.GetRoles()
-		if len(valRoles) == 0 {
-			claims.Roles = strings.Split(roles, ",")
-		}
-
-		ctx = claims.ClaimsToContext(ctx)
+	// If no claims or not an internal system, no padding is needed.
+	if claims == nil || !claims.isInternalSystem() {
+		return ctx
 	}
 
-	return ctx
+	val := claims.GetTenantID()
+	if val == "" {
+		claims.TenantID = tenantID
+	}
+
+	val = claims.GetPartitionID()
+	if val == "" {
+		claims.PartitionID = partitionID
+	}
+
+	val = claims.GetAccessID()
+	if val == "" {
+		claims.AccessID = accessID
+	}
+
+	val = claims.GetContactID()
+	if val == "" {
+		claims.ContactID = contactID
+	}
+
+	val = claims.GetDeviceID()
+	if val == "" {
+		claims.DeviceID = deviceID
+	}
+
+	claimRoles := claims.GetRoles()
+	if len(claimRoles) == 0 {
+		claims.Roles = strings.Split(roles, ",")
+	}
+
+	return claims.ClaimsToContext(ctx)
 }
 
 func (s *Service) getPemCert(token *jwt.Token) (any, error) {
@@ -391,7 +401,12 @@ func (s *Service) getPemCert(token *jwt.Token) (any, error) {
 			//
 			// According to RFC 7517, these numbers are in big-endian format.
 			// https://tools.ietf.org/html/rfc7517#appendix-A.1
-			publicKey.E = int(big.NewInt(0).SetBytes(exponent).Uint64())
+			expUint64 := big.NewInt(0).SetBytes(exponent).Uint64()
+			// Check for potential overflow before converting to int. int(^uint(0) >> 1) is math.MaxInt.
+			if expUint64 > uint64(int(^uint(0)>>1)) {
+				return nil, fmt.Errorf("exponent value %d from token is too large to fit in int type", expUint64)
+			}
+			publicKey.E = int(expUint64)
 
 			// Turn the modulus into a *big.Int.
 			publicKey.N = big.NewInt(0).SetBytes(modulus)
@@ -403,7 +418,8 @@ func (s *Service) getPemCert(token *jwt.Token) (any, error) {
 	return nil, errors.New("unable to find appropriate key")
 }
 
-// to verify and extract authentication data supplied in a jwt as authorization bearer token.
+// AuthenticationMiddleware is an HTTP middleware that verifies and extracts authentication
+// data supplied in a JWT as an Authorization bearer token.
 func (s *Service) AuthenticationMiddleware(next http.Handler, audience string, issuer string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		rawConfig := s.Config()
@@ -431,7 +447,7 @@ func (s *Service) AuthenticationMiddleware(next http.Handler, audience string, i
 
 		extractedJwtToken := strings.Split(authorizationHeader, " ")
 
-		if len(extractedJwtToken) != 2 {
+		if len(extractedJwtToken) != bearerTokenParts {
 			logger.Debug(" AuthenticationMiddleware -- token format is not valid")
 			http.Error(w, "Malformed Authorization header", http.StatusBadRequest)
 			return
@@ -498,7 +514,7 @@ func getGrpcMetadata(ctx context.Context, key string) string {
 // UnaryAuthInterceptor Simple grpc interceptor to extract the jwt supplied via authorization bearer token and verify the authentication claims in the token.
 func (s *Service) UnaryAuthInterceptor(audience string, issuer string) grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req any,
-		info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
+		_ *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
 		rawConfig := s.Config()
 		runsSecurely := true
 		config, ok := rawConfig.(ConfigurationSecurity)
@@ -539,41 +555,69 @@ func (s *serverStreamWrapper) Context() context.Context {
 	return s.ctx
 }
 
+// ensureAuthenticatedStreamContext checks if the stream context already has authentication claims.
+// If not, and if the service is configured to run securely, it attempts to extract and
+// authenticate a JWT from the stream's context. It returns a (potentially wrapped)
+// grpc.ServerStream with an updated context and any error encountered.
+func (s *Service) ensureAuthenticatedStreamContext(
+	ss grpc.ServerStream,
+	audience string,
+	issuer string,
+) (grpc.ServerStream, error) {
+	// If claims are already in the context, use the original stream.
+	if ClaimsFromContext(ss.Context()) != nil {
+		return ss, nil
+	}
+
+	ctx := ss.Context() // Original context from the incoming stream.
+	newCtx := ctx       // Initialize newCtx with the original context; it will be updated if authentication succeeds.
+
+	runsSecurely := true // Default to secure operation.
+	if rawConfig := s.Config(); rawConfig != nil {
+		if config, ok := rawConfig.(ConfigurationSecurity); ok {
+			runsSecurely = config.IsRunSecurely()
+		}
+	}
+
+	if runsSecurely {
+		jwtToken, err := grpcJwtTokenExtractor(ctx)
+		if err != nil {
+			// If token extraction fails, it's an error for secure mode.
+			return ss, err // Return original stream and the error.
+		}
+
+		// Attempt to authenticate and get an updated context.
+		authenticatedCtx, err := s.Authenticate(ctx, jwtToken, audience, issuer)
+		if err != nil {
+			logger := s.Log(ctx).WithError(err).WithField("jwtToken", jwtToken)
+			logger.Info("ensureAuthenticatedStreamContext -- could not authenticate token")
+			// Return original stream and the authentication error.
+			return ss, status.Error(codes.Unauthenticated, err.Error())
+		}
+		newCtx = authenticatedCtx // Update newCtx with the context from successful authentication.
+
+		// Pad partition info if authentication was successful and service runs securely.
+		newCtx = s.systemPadPartitionInfo(newCtx, // Use the authenticated context
+			getGrpcMetadata(ss.Context(), "tenant_id"), // Extract metadata from original stream context
+			getGrpcMetadata(ss.Context(), "partition_id"),
+			getGrpcMetadata(ss.Context(), "access_id"),
+			getGrpcMetadata(ss.Context(), "contact_id"),
+			getGrpcMetadata(ss.Context(), "device_id"),
+			getGrpcMetadata(ss.Context(), "roles"))
+	}
+
+	// Wrap the original stream with newCtx (which is original ctx if not secure or auth failed/skipped, or authenticated ctx if successful).
+	// This ensures the handler always receives a stream from which it can get the correct context.
+	return &serverStreamWrapper{newCtx, ss}, nil
+}
+
 // StreamAuthInterceptor An authentication claims extractor that will always verify the information flowing in the streams as true jwt claims.
 func (s *Service) StreamAuthInterceptor(audience string, issuer string) grpc.StreamServerInterceptor {
-	return func(srv any, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
-		localServerStream := ss
-		authClaim := ClaimsFromContext(localServerStream.Context())
-		if authClaim == nil {
-			ctx := ss.Context()
-
-			rawConfig := s.Config()
-			runsSecurely := true
-			config, ok := rawConfig.(ConfigurationSecurity)
-			if ok {
-				runsSecurely = config.IsRunSecurely()
-			}
-
-			if runsSecurely {
-				jwtToken, err := grpcJwtTokenExtractor(ctx)
-				if err != nil {
-					return err
-				}
-
-				ctx, err = s.Authenticate(ctx, jwtToken, audience, issuer)
-				if err != nil {
-					logger := s.Log(ctx).WithError(err).WithField("jwtToken", jwtToken)
-					logger.Info(" StreamAuthInterceptor -- could not authenticate token")
-					return status.Error(codes.Unauthenticated, err.Error())
-				}
-
-				ctx = s.systemPadPartitionInfo(ctx, getGrpcMetadata(ctx, "tenant_id"),
-					getGrpcMetadata(ctx, "partition_id"), getGrpcMetadata(ctx, "access_id"),
-					getGrpcMetadata(ctx, "contact_id"), getGrpcMetadata(ctx, "device_id"),
-					getGrpcMetadata(ctx, "roles"))
-			}
-			localServerStream = &serverStreamWrapper{ctx, ss}
+	return func(srv any, ss grpc.ServerStream, _ *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
+		authenticatedStream, err := s.ensureAuthenticatedStreamContext(ss, audience, issuer)
+		if err != nil {
+			return err
 		}
-		return handler(srv, localServerStream)
+		return handler(srv, authenticatedStream)
 	}
 }

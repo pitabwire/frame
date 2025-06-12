@@ -14,25 +14,25 @@ type BaseRepositoryI interface {
 }
 
 type BaseRepository struct {
-	readDb          *gorm.DB
-	writeDb         *gorm.DB
+	readDB          *gorm.DB
+	writeDB         *gorm.DB
 	instanceCreator func() BaseModelI
 }
 
-func NewBaseRepository(readDb *gorm.DB, writeDB *gorm.DB, instanceCreator func() BaseModelI) *BaseRepository {
+func NewBaseRepository(readDB *gorm.DB, writeDB *gorm.DB, instanceCreator func() BaseModelI) *BaseRepository {
 	return &BaseRepository{
-		readDb:          readDb,
-		writeDb:         writeDB,
+		readDB:          readDB,
+		writeDB:         writeDB,
 		instanceCreator: instanceCreator,
 	}
 }
 
 func (repo *BaseRepository) getReadDB() *gorm.DB {
-	return repo.readDb
+	return repo.readDB
 }
 
 func (repo *BaseRepository) getWriteDB() *gorm.DB {
-	return repo.writeDb
+	return repo.writeDB
 }
 
 func (repo *BaseRepository) Delete(id string) error {

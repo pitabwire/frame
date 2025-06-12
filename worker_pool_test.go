@@ -15,9 +15,9 @@ type fields struct {
 	counter   int
 }
 
-func (f *fields) process(ctx context.Context, _ frame.JobResultPipe[any]) error {
+func (f *fields) process(_ context.Context, _ frame.JobResultPipe[any]) error {
 	if f.test == "first error" {
-		f.counter += 1
+		f.counter++
 		f.test = "erred"
 		return errors.New("test error")
 	}
@@ -54,7 +54,7 @@ func TestJobImpl_Process(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			ctx, srv := frame.NewService(tt.name,
 				frame.WithNoopDriver(),
-				frame.WithBackGroundConsumer(func(ctx context.Context) error {
+				frame.WithBackgroundConsumer(func(_ context.Context) error {
 					return nil
 				}))
 
@@ -65,7 +65,7 @@ func TestJobImpl_Process(t *testing.T) {
 
 			job := frame.NewJob(tt.fields.process)
 
-			if err := frame.SubmitJob(ctx, srv, job); (err != nil) != tt.wantErr {
+			if err = frame.SubmitJob(ctx, srv, job); (err != nil) != tt.wantErr {
 				t.Errorf("Process() error = %v, wantErr %v", err, tt.wantErr)
 			}
 
@@ -107,7 +107,7 @@ func TestService_NewJobWithRetry(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			ctx, srv := frame.NewService(tt.name,
 				frame.WithNoopDriver(),
-				frame.WithBackGroundConsumer(func(ctx context.Context) error {
+				frame.WithBackgroundConsumer(func(_ context.Context) error {
 					return nil
 				}))
 
@@ -118,7 +118,7 @@ func TestService_NewJobWithRetry(t *testing.T) {
 
 			job := frame.NewJobWithRetry(tt.fields.process, 1)
 
-			if err := frame.SubmitJob(ctx, srv, job); (err != nil) != tt.wantErr {
+			if err = frame.SubmitJob(ctx, srv, job); (err != nil) != tt.wantErr {
 				t.Errorf("Process() error = %v, wantErr %v", err, tt.wantErr)
 			}
 
@@ -160,7 +160,7 @@ func TestService_NewJobWithBufferAndRetry(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			ctx, srv := frame.NewService(tt.name,
 				frame.WithNoopDriver(),
-				frame.WithBackGroundConsumer(func(ctx context.Context) error {
+				frame.WithBackgroundConsumer(func(_ context.Context) error {
 					return nil
 				}))
 

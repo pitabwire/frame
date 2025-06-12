@@ -15,11 +15,15 @@ import (
 	"github.com/caarlos0/env/v11"
 )
 
-const ctxKeyConfiguration = contextKey("configurationKey")
+const (
+	ctxKeyConfiguration = contextKey("configurationKey")
+	httpStatusOKClass   = 2
+	// DefaultSlowQueryThresholdMilliseconds is defined in datastore_logger.go.
+)
 
 // WithConfig Option that helps to specify or override the configuration object of our service.
 func WithConfig(config any) Option {
-	return func(ctx context.Context, s *Service) {
+	return func(_ context.Context, s *Service) {
 		s.configuration = config
 	}
 }
@@ -39,8 +43,9 @@ func Cfg(ctx context.Context) any {
 }
 
 // ConfigLoadWithOIDC convenience method to process configs.
-func ConfigLoadWithOIDC[T any](ctx context.Context) (cfg T, err error) {
-	cfg, err = ConfigFromEnv[T]()
+func ConfigLoadWithOIDC[T any](ctx context.Context) (T, error) {
+	var cfg T
+	cfg, err := ConfigFromEnv[T]()
 	if err != nil {
 		return cfg, err
 	}
@@ -61,13 +66,8 @@ func ConfigLoadWithOIDC[T any](ctx context.Context) (cfg T, err error) {
 }
 
 // ConfigFromEnv convenience method to process configs.
-func ConfigFromEnv[T any]() (cfg T, err error) {
+func ConfigFromEnv[T any]() (T, error) {
 	return env.ParseAs[T]()
-}
-
-// ConfigFillFromEnv convenience method to process configs.
-func ConfigFillFromEnv(cfg any) error {
-	return env.Parse(cfg)
 }
 
 type ConfigurationDefault struct {
@@ -79,7 +79,7 @@ type ConfigurationDefault struct {
 	RunServiceSecurely bool   `envDefault:"true"                      env:"RUN_SERVICE_SECURELY" yaml:"run_service_securely"`
 
 	ServerPort     string `envDefault:":7000"  env:"PORT"      yaml:"server_port"`
-	HttpServerPort string `envDefault:":8080"  env:"HTTP_PORT" yaml:"http_server_port"`
+	HTTPServerPort string `envDefault:":8080"  env:"HTTP_PORT" yaml:"http_server_port"`
 	GrpcServerPort string `envDefault:":50051" env:"GRPC_PORT" yaml:"grpc_server_port"`
 
 	CORSEnabled          bool     `envDefault:"false"                     env:"CORS_ENABLED"           yaml:"cors_enabled"`
@@ -120,7 +120,7 @@ type ConfigurationDefault struct {
 	DatabaseSlowQueryLogThreshold string `envDefault:"200ms" env:"DATABASE_SLOW_QUERY_THRESHOLD" yaml:"database_slow_query_threshold"`
 
 	EventsQueueName string `envDefault:"frame.events.internal_._queue"       env:"EVENTS_QUEUE_NAME" yaml:"events_queue_name"`
-	EventsQueueUrl  string `envDefault:"mem://frame.events.internal_._queue" env:"EVENTS_QUEUE_URL"  yaml:"events_queue_url"`
+	EventsQueueURL  string `envDefault:"mem://frame.events.internal_._queue" env:"EVENTS_QUEUE_URL"  yaml:"events_queue_url"`
 
 	oidcMap OIDCMap `env:"-" yaml:"-"`
 }
@@ -172,7 +172,7 @@ func (c *ConfigurationDefault) LoggingLevelIsDebug() bool {
 
 type ConfigurationPorts interface {
 	Port() string
-	HttpPort() string
+	HTTPPort() string
 	GrpcPort() string
 }
 
@@ -183,23 +183,23 @@ func (c *ConfigurationDefault) Port() string {
 		return fmt.Sprintf(":%s", strings.TrimSpace(c.ServerPort))
 	}
 
-	if strings.HasPrefix(":", c.ServerPort) || strings.Contains(c.ServerPort, ":") {
+	if strings.HasPrefix(c.ServerPort, ":") || strings.Contains(c.ServerPort, ":") {
 		return c.ServerPort
 	}
 
 	return ":80"
 }
 
-func (c *ConfigurationDefault) HttpPort() string {
-	if i, err := strconv.Atoi(c.HttpServerPort); err == nil && i > 0 {
-		return fmt.Sprintf(":%s", strings.TrimSpace(c.HttpServerPort))
+func (c *ConfigurationDefault) HTTPPort() string {
+	if i, err := strconv.Atoi(c.HTTPServerPort); err == nil && i > 0 {
+		return fmt.Sprintf(":%s", strings.TrimSpace(c.HTTPServerPort))
 	}
 
-	if strings.HasPrefix(":", c.HttpServerPort) || strings.Contains(c.HttpServerPort, ":") {
-		return c.HttpServerPort
+	if strings.HasPrefix(c.HTTPServerPort, ":") || strings.Contains(c.HTTPServerPort, ":") {
+		return c.HTTPServerPort
 	}
 
-	return c.Port()
+	return ":8080"
 }
 
 func (c *ConfigurationDefault) GrpcPort() string {
@@ -207,7 +207,7 @@ func (c *ConfigurationDefault) GrpcPort() string {
 		return fmt.Sprintf(":%s", strings.TrimSpace(c.GrpcServerPort))
 	}
 
-	if strings.HasPrefix(":", c.GrpcServerPort) || strings.Contains(c.GrpcServerPort, ":") {
+	if strings.HasPrefix(c.GrpcServerPort, ":") || strings.Contains(c.GrpcServerPort, ":") {
 		return c.GrpcServerPort
 	}
 
@@ -295,7 +295,13 @@ func (c *ConfigurationDefault) GetOauth2WellKnownJwk() string {
 	if !ok {
 		return ""
 	}
-	return val.(string)
+	sVal, typeOk := val.(string)
+	if !typeOk {
+		// Optionally log an error here if the type is unexpectedly different
+		// c.Log(ctx).Warnf("OIDC map value for 'jwks_uri' is not a string: %T", val)
+		return ""
+	}
+	return sVal
 }
 func (c *ConfigurationDefault) GetOauth2WellKnownJwkData() string {
 	return c.Oauth2WellKnownJwkData
@@ -305,49 +311,77 @@ func (c *ConfigurationDefault) GetOauth2Issuer() string {
 	if !ok {
 		return ""
 	}
-	return val.(string)
+	sVal, ok := val.(string)
+	if !ok {
+		return ""
+	}
+	return sVal
 }
 func (c *ConfigurationDefault) GetOauth2AuthorizationEndpoint() string {
 	val, ok := c.oidcMap["authorization_endpoint"]
 	if !ok {
 		return ""
 	}
-	return val.(string)
+	sVal, ok := val.(string)
+	if !ok {
+		return ""
+	}
+	return sVal
 }
 func (c *ConfigurationDefault) GetOauth2RegistrationEndpoint() string {
 	val, ok := c.oidcMap["registration_endpoint"]
 	if !ok {
 		return ""
 	}
-	return val.(string)
+	sVal, ok := val.(string)
+	if !ok {
+		return ""
+	}
+	return sVal
 }
 func (c *ConfigurationDefault) GetOauth2TokenEndpoint() string {
 	val, ok := c.oidcMap["token_endpoint"]
 	if !ok {
 		return ""
 	}
-	return val.(string)
+	sVal, ok := val.(string)
+	if !ok {
+		return ""
+	}
+	return sVal
 }
 func (c *ConfigurationDefault) GetOauth2UserInfoEndpoint() string {
 	val, ok := c.oidcMap["userinfo_endpoint"]
 	if !ok {
 		return ""
 	}
-	return val.(string)
+	sVal, ok := val.(string)
+	if !ok {
+		return ""
+	}
+	return sVal
 }
 func (c *ConfigurationDefault) GetOauth2RevocationEndpoint() string {
 	val, ok := c.oidcMap["revocation_endpoint"]
 	if !ok {
 		return ""
 	}
-	return val.(string)
+	sVal, ok := val.(string)
+	if !ok {
+		return ""
+	}
+	return sVal
 }
 func (c *ConfigurationDefault) GetOauth2EndSessionEndpoint() string {
 	val, ok := c.oidcMap["end_session_endpoint"]
 	if !ok {
 		return ""
 	}
-	return val.(string)
+	sVal, ok := val.(string)
+	if !ok {
+		return ""
+	}
+	return sVal
 }
 
 func (c *ConfigurationDefault) GetOauth2ServiceURI() string {
@@ -438,14 +472,14 @@ func (c *ConfigurationDefault) CanDatabaseTraceQueries() bool {
 func (c *ConfigurationDefault) GetDatabaseSlowQueryLogThreshold() time.Duration {
 	threshold, err := time.ParseDuration(c.DatabaseSlowQueryLogThreshold)
 	if err != nil {
-		threshold = 200 * time.Millisecond
+		threshold = DefaultSlowQueryThreshold
 	}
 	return threshold
 }
 
 type ConfigurationEvents interface {
 	GetEventsQueueName() string
-	GetEventsQueueUrl() string
+	GetEventsQueueURL() string
 }
 
 var _ ConfigurationEvents = new(ConfigurationDefault)
@@ -454,8 +488,8 @@ func (c *ConfigurationDefault) GetEventsQueueName() string {
 	return c.EventsQueueName
 }
 
-func (c *ConfigurationDefault) GetEventsQueueUrl() string {
-	return c.EventsQueueUrl
+func (c *ConfigurationDefault) GetEventsQueueURL() string {
+	return c.EventsQueueURL
 }
 
 type ConfigurationTLS interface {
@@ -491,11 +525,9 @@ func (oid *OIDCMap) loadOIDC(ctx context.Context, url string) error {
 	if err != nil {
 		return err
 	}
-	defer func(Body io.ReadCloser) {
-		_ = Body.Close()
-	}(hresp.Body)
+	defer hresp.Body.Close()
 
-	if hresp.StatusCode/100 != 2 {
+	if hresp.StatusCode/100 != httpStatusOKClass {
 		return fmt.Errorf("OIDC discovery request %q failed: %d %s", url, hresp.StatusCode, hresp.Status)
 	}
 
@@ -531,11 +563,9 @@ func (oid *OIDCMap) loadJWKData(ctx context.Context, url string) (string, error)
 	if err != nil {
 		return "", err
 	}
-	defer func(Body io.ReadCloser) {
-		_ = Body.Close()
-	}(hresp.Body)
+	defer hresp.Body.Close()
 
-	if hresp.StatusCode/100 != 2 {
+	if hresp.StatusCode/100 != httpStatusOKClass {
 		return "", fmt.Errorf("JWKs data request %q failed: %d %s", url, hresp.StatusCode, hresp.Status)
 	}
 

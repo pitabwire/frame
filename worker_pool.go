@@ -3,11 +3,14 @@ package frame
 import (
 	"context"
 	"errors"
+	"fmt"
 	"runtime/debug"
 	"sync"
 
 	"github.com/rs/xid"
 )
+
+const defaultJobResultBufferSize = 10
 
 type JobResult[J any] interface {
 	IsError() bool
@@ -87,7 +90,7 @@ func (ji *JobImpl[J]) IncreaseRuns() {
 	ji.resultMu.Lock()
 	defer ji.resultMu.Unlock()
 
-	ji.runs = ji.runs + 1
+	ji.runs++
 }
 
 func (ji *JobImpl[J]) ResultBufferSize() int {
@@ -126,7 +129,7 @@ func (ji *JobImpl[J]) IsClosed() bool {
 }
 
 func NewJob[J any](process func(ctx context.Context, result JobResultPipe[J]) error) Job[J] {
-	return NewJobWithBufferAndRetry[J](process, 10, 0)
+	return NewJobWithBufferAndRetry[J](process, defaultJobResultBufferSize, 0)
 }
 
 func NewJobWithBuffer[J any](process func(ctx context.Context, result JobResultPipe[J]) error, buffer int) Job[J] {
@@ -134,7 +137,7 @@ func NewJobWithBuffer[J any](process func(ctx context.Context, result JobResultP
 }
 
 func NewJobWithRetry[J any](process func(ctx context.Context, result JobResultPipe[J]) error, retries int) Job[J] {
-	return NewJobWithBufferAndRetry(process, 10, retries)
+	return NewJobWithBufferAndRetry(process, defaultJobResultBufferSize, retries)
 }
 
 func NewJobWithBufferAndRetry[J any](
@@ -150,24 +153,72 @@ func NewJobWithBufferAndRetry[J any](
 	}
 }
 
-// all stop functioning.
-func WithBackGroundConsumer(deque func(ctx context.Context) error) Option {
-	return func(ctx context.Context, s *Service) {
+// WithBackgroundConsumer sets a background consumer function for the worker pool.
+func WithBackgroundConsumer(deque func(_ context.Context) error) Option {
+	return func(_ context.Context, s *Service) {
 		s.backGroundClient = deque
 	}
 }
 
-// By default this is count of CPU + 1.
+// WithPoolConcurrency sets the number of worker pool concurrency.
 func WithPoolConcurrency(workers int) Option {
-	return func(ctx context.Context, s *Service) {
+	return func(_ context.Context, s *Service) {
 		s.poolWorkerCount = workers
 	}
 }
 
-// By default this is 100.
+// WithPoolCapacity sets the capacity of the worker pool.
 func WithPoolCapacity(capacity int) Option {
-	return func(ctx context.Context, s *Service) {
+	return func(_ context.Context, s *Service) {
 		s.poolCapacity = capacity
+	}
+}
+
+// createJobExecutionTask creates a new task function that encapsulates job execution, error handling, and retry logic.
+func createJobExecutionTask[J any](ctx context.Context, s *Service, job Job[J]) func() {
+	return func() {
+		defer job.Close()
+
+		if job.F() == nil {
+			s.Log(ctx).WithField("job_id", job.ID()).Error("Job function (job.F()) is nil")
+			_ = job.WriteError(ctx, errors.New("job function (job.F()) is nil"))
+			return
+		}
+
+		job.IncreaseRuns()
+		executionErr := job.F()(ctx, job)
+
+		// Handle successful execution first and return early
+		if executionErr == nil {
+			s.Log(ctx).WithField("job_id", job.ID()).Debug("Job executed successfully")
+			_ = job.WriteError(ctx, nil) // Report success (nil error)
+			return
+		}
+
+		// At this point, executionErr != nil, so handle the error case.
+		logger := s.Log(ctx).WithError(executionErr).
+			WithField("job", job.ID()).
+			WithField("retry", job.Retries())
+
+		if job.CanRun() { // Check if job can be retried
+			logger.Info("Job failed, attempting retry")
+			resubmitErr := SubmitJob(ctx, s, job) // Recursive call to SubmitJob for retry
+			if resubmitErr != nil {
+				logger.WithError(resubmitErr).
+					WithField("stacktrace", string(debug.Stack())).
+					Error("Failed to resubmit job for retry. Reporting original execution error.")
+				// If resubmission fails, the original error of this attempt should be reported.
+				_ = job.WriteError(ctx, executionErr)
+			} else {
+				logger.Debug("Job successfully resubmitted for retry")
+				// If successfully resubmitted, do not write current executionErr to job's channel;
+				// the next attempt will handle its own outcome.
+			}
+		} else {
+			// Job failed and cannot be retried (e.g., retries exhausted).
+			logger.Error("Job failed; retries exhausted or job cannot run further. Reporting final error.")
+			_ = job.WriteError(ctx, executionErr)
+		}
 	}
 }
 
@@ -183,52 +234,23 @@ func SubmitJob[J any](ctx context.Context, s *Service, job Job[J]) error {
 		return errors.New("pool is closed")
 	}
 
-	for {
-		select {
-		case <-ctx.Done():
-			return errors.New("pool is closed")
-		default:
-
-			if !job.CanRun() {
-				return nil
-			}
-
-			return p.Submit(
-				func() {
-					defer job.Close()
-
-					if job.F() == nil {
-						err := job.WriteError(ctx, errors.New("implement this function"))
-						if err != nil {
-							return
-						}
-						return
-					}
-
-					job.IncreaseRuns()
-					err := job.F()(ctx, job)
-					if err != nil {
-						logger := s.Log(ctx).WithError(err).
-							WithField("job", job.ID()).
-							WithField("retry", job.Retries())
-
-						if job.CanRun() {
-							err1 := SubmitJob(ctx, s, job)
-							if err1 != nil {
-								logger.
-									WithError(err1).
-									WithField("stacktrace", string(debug.Stack())).
-									Info("could not resubmit job for retry")
-								return
-							}
-							logger.Debug("job resubmitted for retry")
-							return
-
-						}
-					}
-				},
-			)
+	// This select block makes the submission attempt itself cancellable by ctx.
+	// It attempts to submit once.
+	select {
+	case <-ctx.Done():
+		// Use ctx.Err() to provide a more specific error about context cancellation.
+		return fmt.Errorf("context cancelled before job submission: %w", ctx.Err())
+	default:
+		// If job cannot run initially (e.g., retries already exhausted or other conditions),
+		// the original code returned nil, implying not to attempt submission.
+		if !job.CanRun() {
+			s.Log(ctx).WithField("job_id", job.ID()).Info("Job cannot run (initial check), not submitting.")
+			return nil
 		}
+
+		// Create the actual task to be executed by a worker.
+		task := createJobExecutionTask(ctx, s, job)
+		return p.Submit(task)
 	}
 }
 

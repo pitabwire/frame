@@ -313,7 +313,7 @@ func (s *subscriber) processReceivedMessage(ctx context.Context, msg *pubsub.Mes
 		WithField("function", "processReceivedMessage").
 		WithField("url", s.url)
 
-	job := NewJob(func(jobCtx context.Context, _ JobResultPipe[*pubsub.Message]) error {
+	job := NewJob(func(jobCtx context.Context, _ JobResultPipe) error {
 		authClaim := ClaimsFromMap(msg.Metadata)
 		var processedCtx context.Context
 		if authClaim != nil {
@@ -347,7 +347,7 @@ func (s *subscriber) processReceivedMessage(ctx context.Context, msg *pubsub.Mes
 	return nil
 }
 
-func (s *subscriber) listen(ctx context.Context, _ JobResultPipe[*pubsub.Message]) error {
+func (s *subscriber) listen(ctx context.Context, _ JobResultPipe) error {
 	logger := s.service.Log(ctx).
 		WithField("name", s.reference).
 		WithField("function", "subscription").

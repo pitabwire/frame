@@ -6,6 +6,7 @@ import (
 	"crypto/x509"
 	"errors"
 	"net"
+	"net/http"
 	"os"
 	"strings"
 	"testing"
@@ -88,30 +89,44 @@ func TestServiceGrpcHealthServer(t *testing.T) {
 		frame.WithConfig(&defConf),
 	)
 
-	go func(_ *testing.T, srv *frame.Service) {
-		err = srv.Run(ctx, "")
-		if err != nil {
-			srv.Log(ctx).WithError(err).Error(" failed to run server ")
+	// Start the service in a goroutine.
+	go func(ctx context.Context, srv *frame.Service) {
+		runErr := srv.Run(ctx, "") // Changed srv.Start to srv.Run, empty port for bufconn
+		if runErr != nil && !errors.Is(runErr, context.Canceled) && !errors.Is(runErr, http.ErrServerClosed) {
+			t.Errorf("TestServiceGrpcHealthServer: srv.Run failed: %v", runErr)
 		}
-	}(t, srv)
+	}(ctx, srv)
+	defer func() {
+		srv.Stop(ctx) // Ensure service is stopped
+	}()
 
+	// Add a delay to allow the server goroutine to start and listen.
+	time.Sleep(100 * time.Millisecond)
+	// Create a client connection using the bufconn listener.
+	// The context returned by getBufferedClConn is for the client connection's lifecycle.
 	transportCred := grpc.WithTransportCredentials(insecure.NewCredentials())
 	ctx, cancel, conn, err := getBufferedClConn(listener, transportCred)
 	if err != nil {
-		_ = err
+		t.Fatalf("TestServiceGrpcHealthServer: getBufferedClConn failed: %v", err)
 		return
 	}
 	defer cancel()
+	defer conn.Close()
+
+	// Diagnostic delay
+	time.Sleep(100 * time.Millisecond)
+
+	// Invoke the gRPC health check.
 	err = clientInvokeGrpcHealth(ctx, conn)
 	if err != nil {
-		_ = err
+		t.Fatalf("TestServiceGrpcHealthServer: clientInvokeGrpcHealth failed: %v", err)
 	}
 
-	time.Sleep(2 * time.Second)
-	srv.Stop(ctx)
+	// Stop the service and check for errors.
+	srv.Stop(ctx) // srv.Stop does not return an error
 }
 
-func TestServiceGrpcServer(_ *testing.T) {
+func TestServiceGrpcServer(t *testing.T) {
 	bufferSize := 1024 * 1024
 	listener := bufconn.Listen(bufferSize)
 	gsrv := grpc.NewServer()
@@ -132,20 +147,19 @@ func TestServiceGrpcServer(_ *testing.T) {
 	go func() {
 		err = srv.Run(ctx, "")
 		if err != nil {
-			srv.Log(ctx).WithError(err).Error(" failed to run server ")
+			t.Logf(" failed to run server : %+v", err)
 		}
 	}()
 
 	transportCred := grpc.WithTransportCredentials(insecure.NewCredentials())
 	ctx, cancel, conn, err := getBufferedClConn(listener, transportCred)
 	if err != nil {
-		_ = err
-		return
+		t.Errorf("could not get buffered connection : %+v", err)
 	}
 	defer cancel()
 	err = clientInvokeGrpc(ctx, conn)
 	if err != nil {
-		_ = err
+		t.Errorf("there was an error invoking client : %+v", err)
 	}
 
 	time.Sleep(2 * time.Second)

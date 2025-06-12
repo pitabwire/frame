@@ -4,50 +4,257 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"runtime/debug"
-	"sync"
+	"runtime"
+	"sync/atomic"
+	"time"
 
+	"github.com/panjf2000/ants/v2"
+	"github.com/pitabwire/util"
 	"github.com/rs/xid"
 )
 
-const defaultJobResultBufferSize = 10
+const (
+	defaultCPUFactorForWorkerCount = 10
+	defaultPoolCapacity            = 100
+	defaultPoolCount               = 1
+	defaultPoolExpiryDuration      = 1 * time.Second
+)
 
-type JobResult[J any] interface {
-	IsError() bool
-	Error() error
-	Item() J
+var ErrWorkerPoolResultChannelIsClosed = errors.New("worker job is already closed")
+
+// WorkerPoolOptions defines configurable options for the service's internal worker pool.
+type WorkerPoolOptions struct {
+	PoolCount          int
+	SinglePoolCapacity int
+	Concurrency        int
+	ExpiryDuration     time.Duration
+	Nonblocking        bool
+	PreAlloc           bool
+	PanicHandler       func(interface{})
+	Logger             *util.LogEntry
+	DisablePurge       bool
 }
 
-type jobResult[J any] struct {
-	item  J
+// WorkerPoolOption defines a function that configures worker pool options.
+type WorkerPoolOption func(*WorkerPoolOptions)
+
+// WithPoolCount sets the number of worker pools.
+func WithPoolCount(count int) WorkerPoolOption {
+	return func(opts *WorkerPoolOptions) {
+		opts.PoolCount = count
+	}
+}
+
+// WithSinglePoolCapacity sets the capacity for a single worker pool.
+func WithSinglePoolCapacity(capacity int) WorkerPoolOption {
+	return func(opts *WorkerPoolOptions) {
+		opts.SinglePoolCapacity = capacity
+	}
+}
+
+// WithConcurrency sets the concurrency for the worker pool.
+func WithConcurrency(concurrency int) WorkerPoolOption {
+	return func(opts *WorkerPoolOptions) {
+		opts.Concurrency = concurrency
+	}
+}
+
+// WithPoolExpiryDuration sets the expiry duration for workers.
+func WithPoolExpiryDuration(duration time.Duration) WorkerPoolOption {
+	return func(opts *WorkerPoolOptions) {
+		opts.ExpiryDuration = duration
+	}
+}
+
+// WithPoolNonblocking sets the non-blocking option for the pool.
+func WithPoolNonblocking(nonblocking bool) WorkerPoolOption {
+	return func(opts *WorkerPoolOptions) {
+		opts.Nonblocking = nonblocking
+	}
+}
+
+// WithPoolPreAlloc pre-allocates memory for the pool.
+func WithPoolPreAlloc(preAlloc bool) WorkerPoolOption {
+	return func(opts *WorkerPoolOptions) {
+		opts.PreAlloc = preAlloc
+	}
+}
+
+// WithPoolPanicHandler sets a panic handler for the pool.
+func WithPoolPanicHandler(handler func(interface{})) WorkerPoolOption {
+	return func(opts *WorkerPoolOptions) {
+		opts.PanicHandler = handler
+	}
+}
+
+// WithPoolLogger sets a logger for the pool.
+func WithPoolLogger(logger *util.LogEntry) WorkerPoolOption {
+	return func(opts *WorkerPoolOptions) {
+		opts.Logger = logger
+	}
+}
+
+// WithPoolDisablePurge disables the purge mechanism in the pool.
+func WithPoolDisablePurge(disable bool) WorkerPoolOption {
+	return func(opts *WorkerPoolOptions) {
+		opts.DisablePurge = disable
+	}
+}
+
+// WithWorkerPoolOptions provides a way to set custom options for the ants worker pool.
+// Renamed from WithAntsOptions and changed parameter type.
+func WithWorkerPoolOptions(options ...WorkerPoolOption) Option {
+	return func(ctx context.Context, s *Service) {
+		for _, opt := range options {
+			opt(s.poolOptions)
+		}
+
+		log := util.Log(ctx)
+
+		if s.pool != nil {
+			s.pool.Shutdown()
+			s.pool = nil
+		}
+
+		var err error
+		s.pool, err = setupWorkerPool(ctx, s.poolOptions)
+		if err != nil {
+			log.WithError(err).Panic("could not create a default worker pool")
+		}
+	}
+}
+
+// WorkerPool defines the common methods for worker pool operations.
+// This allows the Service to hold either a single ants.Pool or an ants.MultiPool.
+type WorkerPool interface {
+	Submit(ctx context.Context, task func()) error
+	Shutdown()
+}
+
+func defaultWorkerPoolOpts(log *util.LogEntry) *WorkerPoolOptions {
+	return &WorkerPoolOptions{
+		Concurrency:        runtime.NumCPU() * defaultCPUFactorForWorkerCount,
+		SinglePoolCapacity: defaultPoolCapacity,
+		PoolCount:          defaultPoolCount,
+		ExpiryDuration:     defaultPoolExpiryDuration,
+		Nonblocking:        true,
+		PreAlloc:           false,
+		PanicHandler:       nil,
+		Logger:             log,
+		DisablePurge:       false,
+	}
+}
+
+func setupWorkerPool(_ context.Context, wopts *WorkerPoolOptions) (WorkerPool, error) {
+	var antsOpts []ants.Option
+	if wopts.ExpiryDuration > 0 {
+		antsOpts = append(antsOpts, ants.WithExpiryDuration(wopts.ExpiryDuration))
+	}
+	antsOpts = append(antsOpts, ants.WithNonblocking(wopts.Nonblocking))
+	if wopts.PreAlloc {
+		antsOpts = append(antsOpts, ants.WithPreAlloc(wopts.PreAlloc))
+	}
+	if wopts.Concurrency > 0 {
+		antsOpts = append(antsOpts, ants.WithMaxBlockingTasks(wopts.Concurrency))
+	}
+	if wopts.PanicHandler != nil {
+		antsOpts = append(antsOpts, ants.WithPanicHandler(wopts.PanicHandler))
+	}
+
+	antsOpts = append(antsOpts, ants.WithLogger(wopts.Logger))
+
+	antsOpts = append(antsOpts, ants.WithDisablePurge(wopts.DisablePurge))
+	var err error
+
+	if wopts.PoolCount == 1 {
+		var p *ants.Pool
+		p, err = ants.NewPool(wopts.SinglePoolCapacity, antsOpts...)
+		if err != nil {
+			return nil, err
+		}
+		return &singlePoolWrapper{pool: p}, nil
+	}
+
+	var mp *ants.MultiPool
+	mp, err = ants.NewMultiPool(wopts.PoolCount, wopts.SinglePoolCapacity, ants.LeastTasks, antsOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return &multiPoolWrapper{multiPool: mp}, nil
+}
+
+// singlePoolWrapper adapts *ants.Pool to the WorkerPool interface.
+type singlePoolWrapper struct {
+	pool *ants.Pool
+}
+
+func (w *singlePoolWrapper) Submit(ctx context.Context, task func()) error {
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+
+	return w.pool.Submit(task)
+}
+
+func (w *singlePoolWrapper) Shutdown() {
+	w.pool.Release()
+}
+
+// multiPoolWrapper adapts *ants.MultiPool to the WorkerPool interface.
+type multiPoolWrapper struct {
+	multiPool *ants.MultiPool
+}
+
+func (w *multiPoolWrapper) Submit(ctx context.Context, task func()) error {
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+
+	return w.multiPool.Submit(task)
+}
+
+func (w *multiPoolWrapper) Shutdown() {
+	w.multiPool.Free()
+}
+
+const defaultJobResultBufferSize = 10
+const defaultJobRetryCount = 0
+
+type JobResult interface {
+	IsError() bool
+	Error() error
+	Item() any
+}
+
+type jobResult struct {
+	item  any
 	error error
 }
 
-func (j *jobResult[J]) IsError() bool {
+func (j *jobResult) IsError() bool {
 	return j.error != nil
 }
 
-func (j *jobResult[J]) Error() error {
+func (j *jobResult) Error() error {
 	return j.error
 }
 
-func (j *jobResult[J]) Item() J {
+func (j *jobResult) Item() any {
 	return j.item
 }
 
-type JobResultPipe[J any] interface {
+type JobResultPipe interface {
 	ResultBufferSize() int
-	ResultChan() <-chan JobResult[J]
+	ResultChan() <-chan JobResult
 	WriteError(ctx context.Context, val error) error
-	WriteResult(ctx context.Context, val J) error
-	ReadResult(ctx context.Context) (JobResult[J], bool)
-	IsClosed() bool
+	WriteResult(ctx context.Context, val any) error
+	ReadResult(ctx context.Context) (JobResult, bool)
 	Close()
 }
 
-type Job[J any] interface {
-	JobResultPipe[J]
-	F() func(ctx context.Context, result JobResultPipe[J]) error
+type Job interface {
+	JobResultPipe
+	F() func(ctx context.Context, result JobResultPipe) error
 	ID() string
 	CanRun() bool
 	Retries() int
@@ -55,101 +262,98 @@ type Job[J any] interface {
 	IncreaseRuns()
 }
 
-type JobImpl[J any] struct {
+type JobImpl struct {
 	id               string
-	runs             int
+	runs             atomic.Int64
 	retries          int
 	resultBufferSize int
-	resultChan       chan JobResult[J]
-	resultMu         sync.Mutex
-	resultChanDone   bool
-	processFunc      func(ctx context.Context, result JobResultPipe[J]) error
+	resultChan       chan JobResult
+	resultChanDone   atomic.Bool
+	processFunc      func(ctx context.Context, result JobResultPipe) error
 }
 
-func (ji *JobImpl[J]) ID() string {
+func (ji *JobImpl) ID() string {
 	return ji.id
 }
 
-func (ji *JobImpl[J]) F() func(ctx context.Context, result JobResultPipe[J]) error {
+func (ji *JobImpl) F() func(ctx context.Context, result JobResultPipe) error {
 	return ji.processFunc
 }
 
-func (ji *JobImpl[J]) CanRun() bool {
-	return ji.Retries() > (ji.Runs() - 1)
+func (ji *JobImpl) CanRun() bool {
+	return ji.Retries() >= ji.Runs()
 }
 
-func (ji *JobImpl[J]) Retries() int {
+func (ji *JobImpl) Retries() int {
 	return ji.retries
 }
 
-func (ji *JobImpl[J]) Runs() int {
-	return ji.runs
+func (ji *JobImpl) Runs() int {
+	return int(ji.runs.Load())
 }
 
-func (ji *JobImpl[J]) IncreaseRuns() {
-	ji.resultMu.Lock()
-	defer ji.resultMu.Unlock()
-
-	ji.runs++
+func (ji *JobImpl) IncreaseRuns() {
+	ji.runs.Add(1)
 }
 
-func (ji *JobImpl[J]) ResultBufferSize() int {
+func (ji *JobImpl) ResultBufferSize() int {
 	return ji.resultBufferSize
 }
 
-func (ji *JobImpl[J]) ResultChan() <-chan JobResult[J] {
+func (ji *JobImpl) ResultChan() <-chan JobResult {
 	return ji.resultChan
 }
 
-func (ji *JobImpl[J]) ReadResult(ctx context.Context) (JobResult[J], bool) {
+func (ji *JobImpl) ReadResult(ctx context.Context) (JobResult, bool) {
 	return SafeChannelRead(ctx, ji.resultChan)
 }
 
-func (ji *JobImpl[J]) WriteError(ctx context.Context, val error) error {
-	return SafeChannelWrite(ctx, ji.resultChan, &jobResult[J]{error: val})
+func (ji *JobImpl) WriteError(ctx context.Context, val error) error {
+	if !ji.resultChanDone.Load() {
+		return ErrWorkerPoolResultChannelIsClosed
+	}
+	util.Log(ctx).Warn("Writing job error", "err", val)
+	return SafeChannelWrite(ctx, ji.resultChan, &jobResult{error: val})
 }
 
-func (ji *JobImpl[J]) WriteResult(ctx context.Context, val J) error {
-	return SafeChannelWrite(ctx, ji.resultChan, &jobResult[J]{item: val})
+func (ji *JobImpl) WriteResult(ctx context.Context, val any) error {
+	if !ji.resultChanDone.Load() {
+		return ErrWorkerPoolResultChannelIsClosed
+	}
+	util.Log(ctx).Warn("Writing job result", "item", val)
+	return SafeChannelWrite(ctx, ji.resultChan, &jobResult{item: val})
 }
 
-func (ji *JobImpl[J]) Close() {
-	ji.resultMu.Lock()
-	defer ji.resultMu.Unlock()
-	if !ji.resultChanDone {
+func (ji *JobImpl) Close() {
+	if ji.resultChanDone.CompareAndSwap(false, true) {
 		close(ji.resultChan)
-		ji.resultChanDone = true
 	}
 }
 
-func (ji *JobImpl[J]) IsClosed() bool {
-	ji.resultMu.Lock()
-	defer ji.resultMu.Unlock()
-	return ji.resultChanDone
+var _ Job = new(JobImpl)
+
+func NewJob(process func(ctx context.Context, result JobResultPipe) error) Job {
+	return NewJobWithBufferAndRetry(process, defaultJobResultBufferSize, defaultJobRetryCount)
 }
 
-func NewJob[J any](process func(ctx context.Context, result JobResultPipe[J]) error) Job[J] {
-	return NewJobWithBufferAndRetry[J](process, defaultJobResultBufferSize, 0)
-}
-
-func NewJobWithBuffer[J any](process func(ctx context.Context, result JobResultPipe[J]) error, buffer int) Job[J] {
+func NewJobWithBuffer(process func(ctx context.Context, result JobResultPipe) error, buffer int) Job {
 	return NewJobWithBufferAndRetry(process, buffer, 0)
 }
 
-func NewJobWithRetry[J any](process func(ctx context.Context, result JobResultPipe[J]) error, retries int) Job[J] {
+func NewJobWithRetry(process func(ctx context.Context, result JobResultPipe) error, retries int) Job {
 	return NewJobWithBufferAndRetry(process, defaultJobResultBufferSize, retries)
 }
 
-func NewJobWithBufferAndRetry[J any](
-	process func(ctx context.Context, result JobResultPipe[J]) error,
+func NewJobWithBufferAndRetry(
+	process func(ctx context.Context, result JobResultPipe) error,
 	resultBufferSize, retries int,
-) Job[J] {
-	return &JobImpl[J]{
+) Job {
+	return &JobImpl{
 		id:               xid.New().String(),
 		retries:          retries,
-		processFunc:      process,
 		resultBufferSize: resultBufferSize,
-		resultChan:       make(chan JobResult[J], resultBufferSize),
+		resultChan:       make(chan JobResult, resultBufferSize),
+		processFunc:      process,
 	}
 }
 
@@ -160,28 +364,18 @@ func WithBackgroundConsumer(deque func(_ context.Context) error) Option {
 	}
 }
 
-// WithPoolConcurrency sets the number of worker pool concurrency.
-func WithPoolConcurrency(workers int) Option {
-	return func(_ context.Context, s *Service) {
-		s.poolWorkerCount = workers
-	}
-}
-
-// WithPoolCapacity sets the capacity of the worker pool.
-func WithPoolCapacity(capacity int) Option {
-	return func(_ context.Context, s *Service) {
-		s.poolCapacity = capacity
-	}
-}
-
 // createJobExecutionTask creates a new task function that encapsulates job execution, error handling, and retry logic.
-func createJobExecutionTask[J any](ctx context.Context, s *Service, job Job[J]) func() {
+func createJobExecutionTask(ctx context.Context, s *Service, job Job) func() {
 	return func() {
-		defer job.Close()
+		// At this point, executionErr != nil, so handle the error case.
+		log := s.Log(ctx).
+			WithField("job", job.ID()).
+			WithField("run", job.Runs())
 
 		if job.F() == nil {
-			s.Log(ctx).WithField("job_id", job.ID()).Error("Job function (job.F()) is nil")
+			log.Error("Job function (job.F()) is nil")
 			_ = job.WriteError(ctx, errors.New("job function (job.F()) is nil"))
+			job.Close()
 			return
 		}
 
@@ -190,34 +384,27 @@ func createJobExecutionTask[J any](ctx context.Context, s *Service, job Job[J]) 
 
 		// Handle successful execution first and return early
 		if executionErr == nil {
-			s.Log(ctx).WithField("job_id", job.ID()).Debug("Job executed successfully")
-			_ = job.WriteError(ctx, nil) // Report success (nil error)
+			log.WithError(executionErr).WithField("job_id", job.ID()).Info("Job executed successfully")
+			job.Close()
 			return
 		}
 
-		// At this point, executionErr != nil, so handle the error case.
-		logger := s.Log(ctx).WithError(executionErr).
-			WithField("job", job.ID()).
-			WithField("retry", job.Retries())
-
-		if job.CanRun() { // Check if job can be retried
-			logger.Info("Job failed, attempting retry")
-			resubmitErr := SubmitJob(ctx, s, job) // Recursive call to SubmitJob for retry
-			if resubmitErr != nil {
-				logger.WithError(resubmitErr).
-					WithField("stacktrace", string(debug.Stack())).
-					Error("Failed to resubmit job for retry. Reporting original execution error.")
-				// If resubmission fails, the original error of this attempt should be reported.
-				_ = job.WriteError(ctx, executionErr)
-			} else {
-				logger.Debug("Job successfully resubmitted for retry")
-				// If successfully resubmitted, do not write current executionErr to job's channel;
-				// the next attempt will handle its own outcome.
-			}
-		} else {
+		if !job.CanRun() {
 			// Job failed and cannot be retried (e.g., retries exhausted).
-			logger.Error("Job failed; retries exhausted or job cannot run further. Reporting final error.")
+			log.Error("Job failed; retries exhausted or job cannot run further. Reporting final error.")
 			_ = job.WriteError(ctx, executionErr)
+			job.Close()
+		}
+
+		// Job can be retried to resolve error
+		log.Info("Job failed, attempting to retry it")
+		resubmitErr := SubmitJob(ctx, s, job) // Recursive call to SubmitJob for retry
+		if resubmitErr != nil {
+			log.WithError(resubmitErr).
+				Error("Failed to resubmit job for retry. Reporting original execution error.")
+			// If resubmission fails, the original error of this attempt should be reported.
+			_ = job.WriteError(ctx, executionErr)
+			job.Close()
 		}
 	}
 }
@@ -228,12 +415,7 @@ func createJobExecutionTask[J any](ctx context.Context, s *Service, job Job[J]) 
 // This is done by simply by listening to the jobs ErrChan. Be sure to also check for when its closed
 //
 //	err, ok := <- errChan
-func SubmitJob[J any](ctx context.Context, s *Service, job Job[J]) error {
-	p := s.pool
-	if p.IsClosed() {
-		return errors.New("pool is closed")
-	}
-
+func SubmitJob(ctx context.Context, s *Service, job Job) error {
 	// This select block makes the submission attempt itself cancellable by ctx.
 	// It attempts to submit once.
 	select {
@@ -241,21 +423,15 @@ func SubmitJob[J any](ctx context.Context, s *Service, job Job[J]) error {
 		// Use ctx.Err() to provide a more specific error about context cancellation.
 		return fmt.Errorf("context cancelled before job submission: %w", ctx.Err())
 	default:
-		// If job cannot run initially (e.g., retries already exhausted or other conditions),
-		// the original code returned nil, implying not to attempt submission.
-		if !job.CanRun() {
-			s.Log(ctx).WithField("job_id", job.ID()).Info("Job cannot run (initial check), not submitting.")
-			return nil
-		}
 
 		// Create the actual task to be executed by a worker.
 		task := createJobExecutionTask(ctx, s, job)
-		return p.Submit(task)
+		return s.pool.Submit(ctx, task)
 	}
 }
 
 // SafeChannelWrite writes a value to a channel, returning an error if the context is canceled.
-func SafeChannelWrite[J any](ctx context.Context, ch chan<- JobResult[J], value JobResult[J]) error {
+func SafeChannelWrite(ctx context.Context, ch chan<- JobResult, value JobResult) error {
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
@@ -264,11 +440,11 @@ func SafeChannelWrite[J any](ctx context.Context, ch chan<- JobResult[J], value 
 	}
 }
 
-func SafeChannelRead[J any](ctx context.Context, ch <-chan JobResult[J]) (JobResult[J], bool) {
+func SafeChannelRead(ctx context.Context, ch <-chan JobResult) (JobResult, bool) {
 	select {
 	case <-ctx.Done():
 		// Return context error without blocking
-		return &jobResult[J]{error: ctx.Err()}, false
+		return &jobResult{error: ctx.Err()}, false
 
 	case result, ok := <-ch:
 		// Channel read successfully or channel closed

@@ -3,11 +3,9 @@ package frame
 import (
 	"context"
 	"errors"
-	"fmt"
 	"net"
 	"net/http"
 	"os/signal"
-	"runtime"
 	"sync"
 	"syscall"
 	"time"
@@ -16,7 +14,6 @@ import (
 
 	ghandler "github.com/gorilla/handlers"
 	"github.com/nicksnyder/go-i18n/v2/i18n"
-	"github.com/panjf2000/ants/v2"
 	"go.opentelemetry.io/otel/sdk/trace"
 
 	// Automatically set GOMAXPROCS to match Linux container CPU quota.
@@ -35,9 +32,8 @@ func (c contextKey) String() string {
 }
 
 const (
-	ctxKeyService                  = contextKey("serviceKey")
-	defaultCPUFactorForWorkerCount = 10
-	defaultPoolCapacity            = 100
+	ctxKeyService = contextKey("serviceKey")
+
 	defaultHTTPReadTimeoutSeconds  = 15
 	defaultHTTPWriteTimeoutSeconds = 15
 	defaultHTTPIdleTimeoutSeconds  = 60
@@ -60,9 +56,8 @@ type Service struct {
 	errorChannelMutex          sync.Mutex
 	errorChannel               chan error
 	backGroundClient           func(ctx context.Context) error
-	poolWorkerCount            int
-	poolCapacity               int
-	pool                       *ants.MultiPool
+	pool                       WorkerPool
+	poolOptions                *WorkerPoolOptions
 	driver                     any
 	grpcServer                 *grpc.Server
 	grpcServerEnableReflection bool
@@ -95,41 +90,46 @@ func NewService(name string, opts ...Option) (context.Context, *Service) {
 // NewServiceWithContext creates a new instance of Service with context, name and supplied options
 // It is used together with the Init option to setup components of a service that is not yet running.
 func NewServiceWithContext(ctx context.Context, name string, opts ...Option) (context.Context, *Service) {
-	ctx, cancel := signal.NotifyContext(ctx,
+	// Create a new context that listens for OS signals for graceful shutdown.
+	ctx, signalCancelFunc := signal.NotifyContext(ctx,
 		syscall.SIGHUP,
 		syscall.SIGINT,
 		syscall.SIGTERM,
 		syscall.SIGQUIT)
 
-	concurrency := runtime.NumCPU() * defaultCPUFactorForWorkerCount
+	var err error
+	defaultLogger := util.Log(ctx)
+	ctx = util.ContextWithLogger(ctx, defaultLogger)
+
+	defaultPoolOpts := defaultWorkerPoolOpts(defaultLogger)
+	defaultPool, err := setupWorkerPool(ctx, defaultPoolOpts)
+	if err != nil {
+		defaultLogger.WithError(err).Panic("could not create a default worker pool")
+	}
 
 	q := newQueue(ctx)
 
 	service := &Service{
-		name:            name,
-		cancelFunc:      cancel,
-		errorChannel:    make(chan error, 1),
-		client:          &http.Client{},
-		queue:           q,
-		poolWorkerCount: concurrency,
-		poolCapacity:    defaultPoolCapacity,
+		name:         name,
+		cancelFunc:   signalCancelFunc, // Store its cancel function
+		errorChannel: make(chan error, 1),
+		client:       &http.Client{},
+		logger:       defaultLogger,
+
+		pool:        defaultPool,
+		poolOptions: defaultPoolOpts,
+
+		queue: q,
 	}
 
-	opts = append(opts, WithLogger())
+	opts = append(opts, WithLogger()) // Ensure logger is initialized early
 
-	service.Init(ctx, opts...)
+	service.Init(ctx, opts...) // Apply all options, using the signal-aware context
 
-	l := service.Log(ctx)
-	poolOptions := []ants.Option{
-		ants.WithLogger(l),
-		ants.WithNonblocking(true),
-	}
-
-	service.pool, _ = ants.NewMultiPool(service.poolWorkerCount, service.poolCapacity, ants.LeastTasks, poolOptions...)
-
+	// Prepare context to be returned, embedding service and config
 	ctx = SvcToContext(ctx, service)
 	ctx = ConfigToContext(ctx, service.Config())
-	ctx = util.ContextWithLogger(ctx, l)
+	ctx = util.ContextWithLogger(ctx, service.logger)
 	return ctx, service
 }
 
@@ -239,25 +239,23 @@ func (s *Service) AddHealthCheck(checker Checker) {
 
 // Run keeps the service useful by handling incoming requests.
 func (s *Service) Run(ctx context.Context, address string) error {
-	err := s.initPubsub(ctx)
-	if err != nil {
-		return err
+	pubSubErr := s.initPubsub(ctx)
+	if pubSubErr != nil {
+		return pubSubErr
 	}
 
 	// connect the background processor
 	if s.backGroundClient != nil {
 		go func() {
-			err = s.backGroundClient(ctx)
-			s.sendStopError(ctx, err)
+			bgErr := s.backGroundClient(ctx)
+			s.sendStopError(ctx, bgErr)
 		}()
 	}
 
-	go func() {
-		err = s.initServer(ctx, address)
-		if err != nil || s.backGroundClient == nil {
-			s.sendStopError(ctx, err)
-		}
-	}()
+	go func(ctx context.Context) {
+		srvErr := s.initServer(ctx, address)
+		s.sendStopError(ctx, srvErr)
+	}(ctx)
 
 	select {
 	case <-ctx.Done():
@@ -266,9 +264,10 @@ func (s *Service) Run(ctx context.Context, address string) error {
 		if err0 != nil {
 			s.Log(ctx).
 				WithError(err0).
-				Info("system exit in error")
+				Error("system exit in error")
+			s.Stop(ctx)
 		} else {
-			s.Log(ctx).Info("system exit without fuss")
+			s.Log(ctx).Info("system exit successfully")
 		}
 		return err0
 	}
@@ -354,6 +353,7 @@ func (s *Service) initializeServerDrivers(ctx context.Context, httpPort string) 
 	}
 
 	// If grpc server is setup, configure the grpcDriver.
+	// Always add the gRPC driver if it's configured.
 	if s.grpcServer != nil {
 		grpcHS := NewGrpcHealthServer(s)
 		grpc_health_v1.RegisterHealthServer(s.grpcServer, grpcHS)
@@ -366,7 +366,7 @@ func (s *Service) initializeServerDrivers(ctx context.Context, httpPort string) 
 			defaultDriver: defaultServer, // Embed the fully configured defaultServer
 			grpcPort:      s.grpcPort,
 			grpcServer:    s.grpcServer,
-			grpcListener:  s.priListener, // Use the primary listener established for gRPC
+			grpcListener:  s.secListener, // Use the primary listener established for gRPC
 		}
 	}
 
@@ -376,6 +376,7 @@ func (s *Service) initializeServerDrivers(ctx context.Context, httpPort string) 
 	}
 }
 
+// initServer starts the Service. It initializes server drivers (HTTP, gRPC).
 func (s *Service) initServer(ctx context.Context, httpPort string) error {
 	err := s.initTracer(ctx)
 	if err != nil {
@@ -391,18 +392,6 @@ func (s *Service) initServer(ctx context.Context, httpPort string) error {
 
 	if s.grpcServer != nil {
 		s.grpcPort = s.determineGRPCPort(s.grpcPort)
-
-		var listenErr error
-		s.priListener, listenErr = net.Listen("tcp", s.grpcPort)
-		if listenErr != nil {
-			return fmt.Errorf("failed to listen on gRPC port %s: %w", s.grpcPort, listenErr)
-		}
-
-		if httpPort == s.grpcPort {
-			// Close the listener if we're erroring out to prevent resource leak.
-			_ = s.priListener.Close()
-			return fmt.Errorf("HTTP PORT %s and GRPC PORT %s can not be same", httpPort, s.grpcPort)
-		}
 	}
 
 	s.startOnce.Do(func() {
@@ -442,18 +431,26 @@ func (s *Service) Stop(ctx context.Context) {
 	}
 	defer s.stopMutex.Unlock()
 
+	s.Log(ctx).Info("service stopping")
+
+	// Cancel the service's main context.
+	if s.cancelFunc != nil {
+		s.logger.Info("canceling service context")
+		s.cancelFunc()
+	}
+
+	// Call user-defined cleanup functions first.
 	if s.cleanup != nil {
 		s.cleanup(ctx)
 	}
 
+	// Release the worker pool.
 	if s.pool != nil {
-		s.pool.Free()
+		s.logger.Info("shutting down worker pool")
+		s.pool.Shutdown()
 	}
 
-	if s.cancelFunc != nil {
-		s.cancelFunc()
-	}
-
+	// Close the internal error channel to signal Run to exit if it's blocked on it.
 	s.errorChannelMutex.Lock()
 	select {
 	case _, ok := <-s.errorChannel:

@@ -10,12 +10,11 @@ import (
 )
 
 type fields struct {
-	sleepTime time.Duration
-	test      string
-	counter   int
+	test    string
+	counter int
 }
 
-func (f *fields) process(_ context.Context, _ frame.JobResultPipe[any]) error {
+func (f *fields) process(_ context.Context, _ frame.JobResultPipe) error {
 	if f.test == "first error" {
 		f.counter++
 		f.test = "erred"
@@ -34,17 +33,14 @@ func TestJobImpl_Process(t *testing.T) {
 		wantErr bool
 	}{
 		{
-			name: "Happy path",
-			fields: fields{
-				sleepTime: 1 * time.Second,
-			},
+			name:    "Happy path",
+			fields:  fields{},
 			runs:    1,
 			wantErr: false,
 		}, {
 			name: "Happy path 2",
 			fields: fields{
-				sleepTime: 1 * time.Second,
-				test:      "overriden",
+				test: "overriden",
 			},
 			runs:    1,
 			wantErr: false,
@@ -88,16 +84,14 @@ func TestService_NewJobWithRetry(t *testing.T) {
 		{
 			name: "Happy path",
 			fields: fields{
-				sleepTime: 1 * time.Second,
-				test:      "first error",
+				test: "first error",
 			},
 			runs:    2,
 			wantErr: false,
 		}, {
 			name: "Happy path no error",
 			fields: fields{
-				sleepTime: 1 * time.Second,
-				test:      "first error",
+				test: "first error",
 			},
 			runs:    2,
 			wantErr: false,
@@ -141,16 +135,14 @@ func TestService_NewJobWithBufferAndRetry(t *testing.T) {
 		{
 			name: "Happy path",
 			fields: fields{
-				sleepTime: 1 * time.Second,
-				test:      "first error",
+				test: "first error",
 			},
 			runs:    2,
 			wantErr: false,
 		}, {
 			name: "Happy path no error",
 			fields: fields{
-				sleepTime: 1 * time.Second,
-				test:      "first error",
+				test: "first error",
 			},
 			runs:    2,
 			wantErr: false,
@@ -171,20 +163,22 @@ func TestService_NewJobWithBufferAndRetry(t *testing.T) {
 
 			job := frame.NewJobWithBufferAndRetry(tt.fields.process, 4, 1)
 
-			if err = frame.SubmitJob(ctx, srv, job); (err != nil) != tt.wantErr {
+			err = frame.SubmitJob(ctx, srv, job)
+			if (err != nil) != tt.wantErr {
 				t.Errorf("Process() error = %v, wantErr %v", err, tt.wantErr)
 			}
 
 			select {
-			case <-job.ResultChan():
-				break
+			case _, ok := <-job.ResultChan():
+				if !ok {
+					t.Logf("result chan closed")
+				}
 			case <-time.Tick(500 * time.Millisecond):
-				t.Errorf("could not handle job within timelimit")
-				break
+				t.Fatalf("could not handle job within timelimit")
 			}
 
-			if tt.runs == job.Runs() {
-				t.Errorf("Test error could not retry for some reason")
+			if tt.runs != job.Runs() {
+				t.Errorf("Test retry count is not consistent: expected : %d got : %d ", tt.runs, job.Runs())
 			}
 		})
 	}

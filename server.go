@@ -65,7 +65,9 @@ func (dd *defaultDriver) getListener(
 
 	tlsConfig, err := dd.tlsConfig(certPath, certKeyPath)
 	if err != nil {
-		return nil, err
+		if !errors.Is(err, ErrTLSPathsNotProvided) {
+			return nil, err
+		}
 	}
 
 	if tlsConfig == nil {

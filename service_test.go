@@ -230,7 +230,7 @@ func TestHealthCheckEndpoints(t *testing.T) {
 
 			err := srv.Run(ctx, ":41576")
 			if err != nil {
-				t.Errorf("could not start a background consumer peacefully : %v", err)
+				t.Errorf("could notserver without error : %v", err)
 			}
 
 			ts := httptest.NewServer(srv.H())

@@ -8,7 +8,7 @@ import (
 	"net/http"
 )
 
-// AuthHasAccess binary check to confirm if subject can perform action specified
+// AuthHasAccess binary check to confirm if subject can perform action specified.
 func AuthHasAccess(ctx context.Context, action string, subject string) (bool, error) {
 	authClaims := ClaimsFromContext(ctx)
 	service := Svc(ctx)

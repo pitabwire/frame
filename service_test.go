@@ -4,8 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/pitabwire/frame"
-	"google.golang.org/grpc/test/bufconn"
 	"io"
 	"log"
 	"net/http"
@@ -15,10 +13,13 @@ import (
 	"syscall"
 	"testing"
 	"time"
+
+	"google.golang.org/grpc/test/bufconn"
+
+	"github.com/pitabwire/frame"
 )
 
 func TestDefaultService(t *testing.T) {
-
 	_, srv := frame.NewService("Test Srv")
 	if srv == nil {
 		t.Errorf("No default service could be instaniated")
@@ -31,7 +32,6 @@ func TestDefaultService(t *testing.T) {
 }
 
 func TestService(t *testing.T) {
-
 	_, srv := frame.NewService("Test")
 	if srv == nil {
 		t.Errorf("No default service could be instaniated")
@@ -39,8 +39,7 @@ func TestService(t *testing.T) {
 }
 
 func TestFromContext(t *testing.T) {
-
-	ctx := context.Background()
+	ctx := t.Context()
 
 	_, srv := frame.NewService("Test Srv")
 
@@ -55,11 +54,9 @@ func TestFromContext(t *testing.T) {
 	if valueSrv == nil {
 		t.Errorf("No default service was found in context")
 	}
-
 }
 
 func TestService_AddCleanupMethod(t *testing.T) {
-
 	ctx, srv := frame.NewService("Test Srv")
 
 	a := 30
@@ -91,7 +88,6 @@ func (h *testHC) CheckHealth() error {
 }
 
 func TestService_AddHealthCheck(t *testing.T) {
-
 	_, srv := frame.NewService("Test Srv")
 
 	healthChecker := new(testHC)
@@ -108,7 +104,6 @@ func TestService_AddHealthCheck(t *testing.T) {
 }
 
 func TestBackGroundConsumer(t *testing.T) {
-
 	listener := bufconn.Listen(1024 * 1024)
 
 	ctx, srv := frame.NewService("Test Srv",
@@ -130,11 +125,9 @@ func TestBackGroundConsumer(t *testing.T) {
 	if err == nil {
 		t.Errorf("could not propagate background consumer error correctly")
 	}
-
 }
 
 func TestServiceExitByOSSignal(t *testing.T) {
-
 	listener := bufconn.Listen(1024 * 1024)
 
 	ctx, srv := frame.NewService("Test Srv",
@@ -152,7 +145,6 @@ func TestServiceExitByOSSignal(t *testing.T) {
 	if err != nil {
 		return
 	}
-
 }
 
 func getTestHealthHandler() http.Handler {
@@ -166,7 +158,6 @@ func getTestHealthHandler() http.Handler {
 		if err != nil {
 			return
 		}
-
 	})
 	return mux
 }
@@ -184,16 +175,51 @@ func TestHealthCheckEndpoints(t *testing.T) {
 		{name: "Empty Unknown Path", healthPath: "", path: "/any/path", statusCode: 404},
 		{name: "Happy path", healthPath: "/healthz", path: "/healthz", statusCode: 200},
 		{name: "Unknown Path", healthPath: "/any/path", path: "/any/path", statusCode: 200},
-		{name: "Default Path with handler", healthPath: "", path: "/", statusCode: 202, handler: getTestHealthHandler()},
-		{name: "Health Path with handler", healthPath: "", path: "/healthz", statusCode: 200, handler: getTestHealthHandler()},
-		{name: "Random Path with handler", healthPath: "", path: "/any/path", statusCode: 202, handler: getTestHealthHandler()},
-		{name: "Unknown Path with handler", healthPath: "/", path: "/", statusCode: 202, handler: getTestHealthHandler()},
-		{name: "Unknown Path with handler", healthPath: "/", path: "/healthz", statusCode: 200, handler: getTestHealthHandler()},
-		{name: "Unknown Path with handler", healthPath: "/", path: "/any/path", statusCode: 202, handler: getTestHealthHandler()},
+		{
+			name:       "Default Path with handler",
+			healthPath: "",
+			path:       "/",
+			statusCode: 202,
+			handler:    getTestHealthHandler(),
+		},
+		{
+			name:       "Health Path with handler",
+			healthPath: "",
+			path:       "/healthz",
+			statusCode: 200,
+			handler:    getTestHealthHandler(),
+		},
+		{
+			name:       "Random Path with handler",
+			healthPath: "",
+			path:       "/any/path",
+			statusCode: 202,
+			handler:    getTestHealthHandler(),
+		},
+		{
+			name:       "Unknown Path with handler",
+			healthPath: "/",
+			path:       "/",
+			statusCode: 202,
+			handler:    getTestHealthHandler(),
+		},
+		{
+			name:       "Unknown Path with handler",
+			healthPath: "/",
+			path:       "/healthz",
+			statusCode: 200,
+			handler:    getTestHealthHandler(),
+		},
+		{
+			name:       "Unknown Path with handler",
+			healthPath: "/",
+			path:       "/any/path",
+			statusCode: 202,
+			handler:    getTestHealthHandler(),
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-
 			opts := []frame.Option{frame.WithNoopDriver(), frame.WithHealthCheckPath(test.healthPath)}
 
 			if test.handler != nil {
@@ -224,7 +250,6 @@ func TestHealthCheckEndpoints(t *testing.T) {
 			}
 
 			fmt.Println(string(body))
-
 		})
 	}
 }

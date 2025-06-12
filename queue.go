@@ -4,11 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"google.golang.org/protobuf/proto"
 	"maps"
 	"strings"
 	"sync"
 	"time"
+
+	"google.golang.org/protobuf/proto"
 
 	"encoding/json"
 	"sync/atomic"
@@ -54,7 +55,6 @@ func (p *publisher) Ref() string {
 }
 
 func (p *publisher) Publish(ctx context.Context, payload any, headers ...map[string]string) error {
-
 	var err error
 
 	metadata := make(map[string]string)
@@ -96,11 +96,9 @@ func (p *publisher) Publish(ctx context.Context, payload any, headers ...map[str
 		Body:     message,
 		Metadata: metadata,
 	})
-
 }
 
 func (p *publisher) Init(ctx context.Context) error {
-
 	if p.isInit.Load() && p.topic != nil {
 		return nil
 	}
@@ -121,8 +119,7 @@ func (p *publisher) Initiated() bool {
 }
 
 func (p *publisher) Stop(ctx context.Context) error {
-
-	//TODO: incooporate trace information in shutdown context
+	// TODO: incooporate trace information in shutdown context
 	var sctx context.Context
 	var cancelFunc context.CancelFunc
 
@@ -146,7 +143,7 @@ func (p *publisher) Stop(ctx context.Context) error {
 	return nil
 }
 
-// WithRegisterPublisher Option to register publishing path referenced within the system
+// WithRegisterPublisher Option to register publishing path referenced within the system.
 func WithRegisterPublisher(reference string, queueURL string) Option {
 	return func(ctx context.Context, s *Service) {
 		s.queue.publishQueueMap.Store(reference, &publisher{
@@ -157,7 +154,6 @@ func WithRegisterPublisher(reference string, queueURL string) Option {
 }
 
 func (s *Service) AddPublisher(ctx context.Context, reference string, queueURL string) error {
-
 	pub, _ := s.GetPublisher(reference)
 	if pub != nil {
 		return nil
@@ -177,7 +173,6 @@ func (s *Service) AddPublisher(ctx context.Context, reference string, queueURL s
 }
 
 func (s *Service) DiscardPublisher(ctx context.Context, reference string) error {
-
 	var err error
 	pub, _ := s.GetPublisher(reference)
 	if pub != nil {
@@ -251,15 +246,13 @@ func (s *subscriber) Init(ctx context.Context) error {
 	}
 
 	if !strings.HasPrefix(s.url, "http") {
-
 		subs, err := pubsub.OpenSubscription(ctx, s.url)
 		if err != nil {
-			return fmt.Errorf("could not open topic subscription: %s", err)
+			return fmt.Errorf("could not open topic subscription: %w", err)
 		}
 		s.subscription = subs
 
 		if s.handler != nil {
-
 			job := NewJob(s.listen)
 
 			err = SubmitJob(ctx, s.service, job)
@@ -284,8 +277,7 @@ func (s *subscriber) Idle() bool {
 }
 
 func (s *subscriber) Stop(ctx context.Context) error {
-
-	//TODO: incooporate trace information in shutdown context
+	// TODO: incooporate trace information in shutdown context
 	var sctx context.Context
 	var cancelFunc context.CancelFunc
 
@@ -310,11 +302,12 @@ func (s *subscriber) Stop(ctx context.Context) error {
 }
 
 func (s *subscriber) listen(ctx context.Context, _ JobResultPipe[*pubsub.Message]) error {
-
-	logger := s.service.Log(ctx).WithField("name", s.reference).WithField("function", "subscription").WithField("url", s.url)
+	logger := s.service.Log(ctx).
+		WithField("name", s.reference).
+		WithField("function", "subscription").
+		WithField("url", s.url)
 	logger.Debug("starting to listen for messages")
 	for {
-
 		select {
 		case <-ctx.Done():
 			err := s.Stop(ctx)
@@ -364,16 +357,14 @@ func (s *subscriber) listen(ctx context.Context, _ JobResultPipe[*pubsub.Message
 				logger.WithError(err).Warn(" Ignoring handle error message")
 				return err
 			}
-
 		}
 	}
 }
 
-// WithRegisterSubscriber Option to register a new subscription handler
+// WithRegisterSubscriber Option to register a new subscription handler.
 func WithRegisterSubscriber(reference string, queueURL string,
 	handler ...SubscribeWorker) Option {
 	return func(ctx context.Context, s *Service) {
-
 		subs := subscriber{
 			service:   s,
 			reference: reference,
@@ -388,8 +379,12 @@ func WithRegisterSubscriber(reference string, queueURL string,
 	}
 }
 
-func (s *Service) AddSubscriber(ctx context.Context, reference string, queueURL string, handler ...SubscribeWorker) error {
-
+func (s *Service) AddSubscriber(
+	ctx context.Context,
+	reference string,
+	queueURL string,
+	handler ...SubscribeWorker,
+) error {
 	subs0, _ := s.GetSubscriber(reference)
 	if subs0 != nil {
 		return nil
@@ -416,7 +411,6 @@ func (s *Service) AddSubscriber(ctx context.Context, reference string, queueURL 
 }
 
 func (s *Service) DiscardSubscriber(ctx context.Context, reference string) error {
-
 	var err error
 	sub, _ := s.GetSubscriber(reference)
 	if sub != nil {
@@ -435,9 +429,8 @@ func (s *Service) GetSubscriber(reference string) (Subscriber, error) {
 	return sub.(*subscriber), nil
 }
 
-// Publish Queue method to write a new message into the queue pre initialized with the supplied reference
+// Publish Queue method to write a new message into the queue pre initialized with the supplied reference.
 func (s *Service) Publish(ctx context.Context, reference string, payload any, headers ...map[string]string) error {
-
 	pub, err := s.GetPublisher(reference)
 	if err != nil {
 		return err
@@ -447,7 +440,6 @@ func (s *Service) Publish(ctx context.Context, reference string, payload any, he
 }
 
 func (s *Service) initSubscriber(ctx context.Context, sub Subscriber) error {
-
 	s.stopMutex.Lock()
 	defer s.stopMutex.Unlock()
 
@@ -472,7 +464,11 @@ func (s *Service) initPubsub(ctx context.Context) error {
 			return errors.New("could not cast config to ConfigurationEvents")
 		}
 
-		eventsQueue := WithRegisterSubscriber(config.GetEventsQueueName(), config.GetEventsQueueUrl(), &eventsQueueHandler)
+		eventsQueue := WithRegisterSubscriber(
+			config.GetEventsQueueName(),
+			config.GetEventsQueueUrl(),
+			&eventsQueueHandler,
+		)
 		eventsQueue(ctx, s)
 		eventsQueueP := WithRegisterPublisher(config.GetEventsQueueName(), config.GetEventsQueueUrl())
 		eventsQueueP(ctx, s)

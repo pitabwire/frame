@@ -2,6 +2,7 @@ package frame
 
 import (
 	"fmt"
+
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
@@ -26,11 +27,11 @@ func NewBaseRepository(readDb *gorm.DB, writeDB *gorm.DB, instanceCreator func()
 	}
 }
 
-func (repo *BaseRepository) getReadDb() *gorm.DB {
+func (repo *BaseRepository) getReadDB() *gorm.DB {
 	return repo.readDb
 }
 
-func (repo *BaseRepository) getWriteDb() *gorm.DB {
+func (repo *BaseRepository) getWriteDB() *gorm.DB {
 	return repo.writeDb
 }
 
@@ -41,17 +42,15 @@ func (repo *BaseRepository) Delete(id string) error {
 		return err
 	}
 
-	return repo.getWriteDb().Delete(deleteInstance).Error
-
+	return repo.getWriteDB().Delete(deleteInstance).Error
 }
 
 func (repo *BaseRepository) GetByID(id string, result BaseModelI) error {
-	return repo.getReadDb().Preload(clause.Associations).First(result, "id = ?", id).Error
+	return repo.getReadDB().Preload(clause.Associations).First(result, "id = ?", id).Error
 }
 
 func (repo *BaseRepository) GetLastestBy(properties map[string]any, result BaseModelI) error {
-
-	db := repo.getReadDb()
+	db := repo.getReadDB()
 
 	for key, value := range properties {
 		db.Where(fmt.Sprintf("%s = ?", key), value)
@@ -61,8 +60,7 @@ func (repo *BaseRepository) GetLastestBy(properties map[string]any, result BaseM
 }
 
 func (repo *BaseRepository) GetAllBy(properties map[string]any, result []BaseModelI) error {
-
-	db := repo.getReadDb()
+	db := repo.getReadDB()
 
 	for key, value := range properties {
 		db.Where(fmt.Sprintf("%s = ?", key), value)
@@ -72,8 +70,7 @@ func (repo *BaseRepository) GetAllBy(properties map[string]any, result []BaseMod
 }
 
 func (repo *BaseRepository) Search(query string, searchFields []string, result []BaseModelI) error {
-
-	db := repo.getReadDb()
+	db := repo.getReadDB()
 
 	for i, field := range searchFields {
 		if i == 0 {
@@ -87,15 +84,13 @@ func (repo *BaseRepository) Search(query string, searchFields []string, result [
 }
 
 func (repo *BaseRepository) Save(instance BaseModelI) error {
-
 	if instance.GetVersion() <= 0 {
-
-		err := repo.getWriteDb().Create(instance).Error
+		err := repo.getWriteDB().Create(instance).Error
 		if err != nil {
 			return err
 		}
 	} else {
-		return repo.getWriteDb().Save(instance).Error
+		return repo.getWriteDB().Save(instance).Error
 	}
 	return nil
 }

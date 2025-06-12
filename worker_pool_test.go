@@ -3,9 +3,10 @@ package frame_test
 import (
 	"context"
 	"errors"
-	"github.com/pitabwire/frame"
 	"testing"
 	"time"
+
+	"github.com/pitabwire/frame"
 )
 
 type fields struct {
@@ -15,7 +16,6 @@ type fields struct {
 }
 
 func (f *fields) process(ctx context.Context, _ frame.JobResultPipe[any]) error {
-
 	if f.test == "first error" {
 		f.counter += 1
 		f.test = "erred"
@@ -27,7 +27,6 @@ func (f *fields) process(ctx context.Context, _ frame.JobResultPipe[any]) error 
 }
 
 func TestJobImpl_Process(t *testing.T) {
-
 	tests := []struct {
 		name    string
 		fields  fields
@@ -53,7 +52,6 @@ func TestJobImpl_Process(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-
 			ctx, srv := frame.NewService(tt.name,
 				frame.WithNoopDriver(),
 				frame.WithBackGroundConsumer(func(ctx context.Context) error {
@@ -76,13 +74,11 @@ func TestJobImpl_Process(t *testing.T) {
 			if tt.runs != job.Runs() {
 				t.Errorf("Test error could not retry for some reason, expected %d runs got %d ", tt.runs, job.Runs())
 			}
-
 		})
 	}
 }
 
 func TestService_NewJobWithRetry(t *testing.T) {
-
 	tests := []struct {
 		name    string
 		fields  fields
@@ -109,7 +105,6 @@ func TestService_NewJobWithRetry(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-
 			ctx, srv := frame.NewService(tt.name,
 				frame.WithNoopDriver(),
 				frame.WithBackGroundConsumer(func(ctx context.Context) error {
@@ -132,13 +127,11 @@ func TestService_NewJobWithRetry(t *testing.T) {
 			if tt.runs != job.Runs() {
 				t.Errorf("Test error could not retry for some reason")
 			}
-
 		})
 	}
 }
 
 func TestService_NewJobWithBufferAndRetry(t *testing.T) {
-
 	tests := []struct {
 		name    string
 		fields  fields
@@ -165,7 +158,6 @@ func TestService_NewJobWithBufferAndRetry(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-
 			ctx, srv := frame.NewService(tt.name,
 				frame.WithNoopDriver(),
 				frame.WithBackGroundConsumer(func(ctx context.Context) error {

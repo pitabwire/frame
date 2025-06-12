@@ -1,13 +1,14 @@
 package frame_test
 
 import (
-	"github.com/nicksnyder/go-i18n/v2/i18n"
-	"github.com/pitabwire/frame"
 	"testing"
+
+	"github.com/nicksnyder/go-i18n/v2/i18n"
+
+	"github.com/pitabwire/frame"
 )
 
 func TestTranslations(t *testing.T) {
-
 	translations := frame.WithTranslations("tests_runner/localization", "en", "sw")
 	_, srv := frame.NewService("Test Localization Srv", translations)
 
@@ -29,7 +30,11 @@ func TestTranslations(t *testing.T) {
 	}
 
 	if englishVersion != "Air has nothing" {
-		t.Errorf("Localizations didn't quite work like they should, found : %s expected : %s", englishVersion, "Air has nothing")
+		t.Errorf(
+			"Localizations didn't quite work like they should, found : %s expected : %s",
+			englishVersion,
+			"Air has nothing",
+		)
 		return
 	}
 
@@ -49,33 +54,46 @@ func TestTranslations(t *testing.T) {
 	}
 
 	if swVersion != "Air haina chochote" {
-		t.Errorf("Localizations didn't quite work like they should, found : %s expected : %s", swVersion, "Air haina chochote")
+		t.Errorf(
+			"Localizations didn't quite work like they should, found : %s expected : %s",
+			swVersion,
+			"Air haina chochote",
+		)
 		return
 	}
-
 }
 
 func TestTranslationsHelpers(t *testing.T) {
-
 	translations := frame.WithTranslations("tests_runner/localization", "en", "sw")
 	ctx, srv := frame.NewService("Test Localization Srv", translations)
 
 	englishVersion := srv.Translate(ctx, "en", "Example")
 	if englishVersion != "<no value> has nothing" {
-		t.Errorf("Localizations didn't quite work like they should, found : %s expected : %s", englishVersion, "<no value> has nothing")
+		t.Errorf(
+			"Localizations didn't quite work like they should, found : %s expected : %s",
+			englishVersion,
+			"<no value> has nothing",
+		)
 		return
 	}
 
 	englishVersion = srv.TranslateWithMap(ctx, "en", "Example", map[string]any{"Name": "MapMan"})
 	if englishVersion != "MapMan has nothing" {
-		t.Errorf("Localizations didn't quite work like they should, found : %s expected : %s", englishVersion, "MapMan has nothing")
+		t.Errorf(
+			"Localizations didn't quite work like they should, found : %s expected : %s",
+			englishVersion,
+			"MapMan has nothing",
+		)
 		return
 	}
 
 	englishVersion = srv.TranslateWithMapAndCount(ctx, "en", "Example", map[string]any{"Name": "CountMen"}, 2)
 	if englishVersion != "CountMen have nothing" {
-		t.Errorf("Localizations didn't quite work like they should, found : %s expected : %s", englishVersion, "CountMen have nothing")
+		t.Errorf(
+			"Localizations didn't quite work like they should, found : %s expected : %s",
+			englishVersion,
+			"CountMen have nothing",
+		)
 		return
 	}
-
 }

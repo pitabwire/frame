@@ -3,16 +3,16 @@ package frame
 import (
 	"context"
 	"fmt"
-	"github.com/lmittmann/tint"
-	"github.com/pitabwire/util"
-	glogger "gorm.io/gorm/logger"
 	"log/slog"
 	"strconv"
 	"time"
+
+	"github.com/lmittmann/tint"
+	"github.com/pitabwire/util"
+	glogger "gorm.io/gorm/logger"
 )
 
 func datbaseLogger(ctx context.Context, s *Service) glogger.Interface {
-
 	logQueries := false
 	slowQueryThreshold := 200 * time.Millisecond
 	if s.Config() != nil {
@@ -36,30 +36,28 @@ type dbLogger struct {
 	slowThreshold time.Duration
 }
 
-// LogMode log mode
+// LogMode log mode.
 func (l *dbLogger) LogMode(_ glogger.LogLevel) glogger.Interface {
 	return l
 }
 
-// Info print info
+// Info print info.
 func (l *dbLogger) Info(ctx context.Context, msg string, data ...interface{}) {
-
 	l.log.WithContext(ctx).Info(msg, data...)
 }
 
-// Warn print warn messages
+// Warn print warn messages.
 func (l *dbLogger) Warn(ctx context.Context, msg string, data ...interface{}) {
 	l.log.WithContext(ctx).Warn(msg, data...)
 }
 
-// Error print error messages
+// Error print error messages.
 func (l *dbLogger) Error(ctx context.Context, msg string, data ...interface{}) {
 	l.log.WithContext(ctx).Error(msg, data...)
 }
 
-// Trace print sql message
+// Trace print sql message.
 func (l *dbLogger) Trace(ctx context.Context, begin time.Time, fc func() (string, int64), err error) {
-
 	elapsed := time.Since(begin)
 
 	sql, rows := fc()
@@ -99,5 +97,4 @@ func (l *dbLogger) Trace(ctx context.Context, begin time.Time, fc func() (string
 		}
 		return
 	}
-
 }

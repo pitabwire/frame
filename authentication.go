@@ -6,13 +6,14 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"math/big"
+	"net/http"
+	"strings"
+
 	"github.com/golang-jwt/jwt/v5"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"math/big"
-	"net/http"
-	"strings"
 
 	"google.golang.org/grpc/metadata"
 )
@@ -21,12 +22,12 @@ const ctxKeyAuthenticationClaim = contextKey("authenticationClaimKey")
 const ctxKeySkipTenancyCheckOnClaim = contextKey("skipTenancyCheckOnClaimKey")
 const ctxKeyAuthenticationJwt = contextKey("authenticationJwtKey")
 
-// JwtToContext adds authentication jwt to the current supplied context
+// JwtToContext adds authentication jwt to the current supplied context.
 func jwtToContext(ctx context.Context, jwt string) context.Context {
 	return context.WithValue(ctx, ctxKeyAuthenticationJwt, jwt)
 }
 
-// JwtFromContext extracts authentication jwt from the supplied context if any exist
+// JwtFromContext extracts authentication jwt from the supplied context if any exist.
 func JwtFromContext(ctx context.Context) string {
 	jwtString, ok := ctx.Value(ctxKeyAuthenticationJwt).(string)
 	if !ok {
@@ -36,8 +37,7 @@ func JwtFromContext(ctx context.Context) string {
 	return jwtString
 }
 
-// AuthenticationClaims Create a struct that will be encoded to a JWT.
-// We add jwt.StandardClaims as an embedded type, to provide fields like expiry time
+// We add jwt.StandardClaims as an embedded type, to provide fields like expiry time.
 type AuthenticationClaims struct {
 	Ext         map[string]any `json:"ext,omitempty"`
 	TenantID    string         `json:"tenant_id,omitempty"`
@@ -51,7 +51,6 @@ type AuthenticationClaims struct {
 }
 
 func (a *AuthenticationClaims) GetTenantId() string {
-
 	result := a.TenantID
 	if result != "" {
 		return result
@@ -70,7 +69,6 @@ func (a *AuthenticationClaims) GetTenantId() string {
 }
 
 func (a *AuthenticationClaims) GetPartitionId() string {
-
 	result := a.PartitionID
 	if result != "" {
 		return result
@@ -89,7 +87,6 @@ func (a *AuthenticationClaims) GetPartitionId() string {
 }
 
 func (a *AuthenticationClaims) GetAccessId() string {
-
 	result := a.AccessID
 	if result != "" {
 		return result
@@ -108,7 +105,6 @@ func (a *AuthenticationClaims) GetAccessId() string {
 }
 
 func (a *AuthenticationClaims) GetContactId() string {
-
 	result := a.ContactID
 	if result != "" {
 		return result
@@ -127,7 +123,6 @@ func (a *AuthenticationClaims) GetContactId() string {
 }
 
 func (a *AuthenticationClaims) GetDeviceId() string {
-
 	result := a.DeviceID
 	if result != "" {
 		return result
@@ -146,7 +141,6 @@ func (a *AuthenticationClaims) GetDeviceId() string {
 }
 
 func (a *AuthenticationClaims) GetRoles() []string {
-
 	var result = a.Roles
 	if len(result) > 0 {
 		return result
@@ -169,7 +163,6 @@ func (a *AuthenticationClaims) GetRoles() []string {
 }
 
 func (a *AuthenticationClaims) GetServiceName() string {
-
 	result := a.ServiceName
 	if result != "" {
 		return result
@@ -188,7 +181,6 @@ func (a *AuthenticationClaims) GetServiceName() string {
 }
 
 func (a *AuthenticationClaims) isInternalSystem() bool {
-
 	roles := a.GetRoles()
 	if len(roles) == 1 {
 		if strings.HasPrefix(roles[0], "system_internal") {
@@ -199,9 +191,8 @@ func (a *AuthenticationClaims) isInternalSystem() bool {
 	return false
 }
 
-// AsMetadata Creates a string map to be used as metadata in queue data
+// AsMetadata Creates a string map to be used as metadata in queue data.
 func (a *AuthenticationClaims) AsMetadata() map[string]string {
-
 	m := make(map[string]string)
 	m["sub"] = a.Subject
 	m["tenant_id"] = a.GetTenantId()
@@ -213,7 +204,7 @@ func (a *AuthenticationClaims) AsMetadata() map[string]string {
 	return m
 }
 
-// ClaimsToContext adds authentication claims to the current supplied context
+// ClaimsToContext adds authentication claims to the current supplied context.
 func (a *AuthenticationClaims) ClaimsToContext(ctx context.Context) context.Context {
 	ctx = context.WithValue(ctx, ctxKeyAuthenticationClaim, a)
 
@@ -224,7 +215,7 @@ func (a *AuthenticationClaims) ClaimsToContext(ctx context.Context) context.Cont
 	return ctx
 }
 
-// SkipTenancyChecksOnClaims removes authentication claims from the current supplied context
+// SkipTenancyChecksOnClaims removes authentication claims from the current supplied context.
 func SkipTenancyChecksOnClaims(ctx context.Context) context.Context {
 	return context.WithValue(ctx, ctxKeySkipTenancyCheckOnClaim, true)
 }
@@ -237,7 +228,7 @@ func IsTenancyChecksOnClaimSkipped(ctx context.Context) bool {
 	return isSkipped
 }
 
-// ClaimsFromContext extracts authentication claims from the supplied context if any exist
+// ClaimsFromContext extracts authentication claims from the supplied context if any exist.
 func ClaimsFromContext(ctx context.Context) *AuthenticationClaims {
 	authenticationClaims, ok := ctx.Value(ctxKeyAuthenticationClaim).(*AuthenticationClaims)
 	if !ok {
@@ -247,9 +238,8 @@ func ClaimsFromContext(ctx context.Context) *AuthenticationClaims {
 	return authenticationClaims
 }
 
-// ClaimsFromMap extracts authentication claims from the supplied map if they exist
+// ClaimsFromMap extracts authentication claims from the supplied map if they exist.
 func ClaimsFromMap(m map[string]string) *AuthenticationClaims {
-
 	// Extract required fields and return nil if any are missing
 	sub, okSubject := m["sub"]
 	tenantID, okTenant := m["tenant_id"]
@@ -318,15 +308,15 @@ func (s *Service) Authenticate(ctx context.Context,
 	ctx = claims.ClaimsToContext(ctx)
 
 	return ctx, nil
-
 }
 
-func (s *Service) systemPadPartitionInfo(ctx context.Context, tenantId, partitionId, accessId, contactId, deviceId, roles string) context.Context {
-
+func (s *Service) systemPadPartitionInfo(
+	ctx context.Context,
+	tenantId, partitionId, accessId, contactId, deviceId, roles string,
+) context.Context {
 	claims := ClaimsFromContext(ctx)
 
 	if claims != nil && claims.isInternalSystem() {
-
 		val := claims.GetTenantId()
 		if val == "" {
 			claims.TenantID = tenantId
@@ -413,11 +403,9 @@ func (s *Service) getPemCert(token *jwt.Token) (any, error) {
 	return nil, errors.New("unable to find appropriate key")
 }
 
-// AuthenticationMiddleware Simple http middleware function
-// to verify and extract authentication data supplied in a jwt as authorization bearer token
+// to verify and extract authentication data supplied in a jwt as authorization bearer token.
 func (s *Service) AuthenticationMiddleware(next http.Handler, audience string, issuer string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-
 		rawConfig := s.Config()
 		runsSecurely := true
 		config, ok := rawConfig.(ConfigurationSecurity)
@@ -435,7 +423,8 @@ func (s *Service) AuthenticationMiddleware(next http.Handler, audience string, i
 		logger := s.Log(r.Context()).WithField("authorization_header", authorizationHeader)
 
 		if authorizationHeader == "" || !strings.HasPrefix(authorizationHeader, "Bearer ") {
-			logger.WithField("available_headers", r.Header).Debug(" AuthenticationMiddleware -- could not authenticate missing token")
+			logger.WithField("available_headers", r.Header).
+				Debug(" AuthenticationMiddleware -- could not authenticate missing token")
 			http.Error(w, "An authorization header is required", http.StatusForbidden)
 			return
 		}
@@ -460,9 +449,9 @@ func (s *Service) AuthenticationMiddleware(next http.Handler, audience string, i
 		}
 
 		s.systemPadPartitionInfo(ctx,
-			r.Header.Get("tenant_id"), r.Header.Get("partition_id"),
-			r.Header.Get("access_id"), r.Header.Get("contact_id"),
-			r.Header.Get("device_id"), r.Header.Get("roles"))
+			r.Header.Get("Tenant_id"), r.Header.Get("Partition_id"),
+			r.Header.Get("Access_id"), r.Header.Get("Contact_id"),
+			r.Header.Get("Device_id"), r.Header.Get("Roles"))
 
 		r = r.WithContext(ctx)
 
@@ -506,11 +495,10 @@ func getGrpcMetadata(ctx context.Context, key string) string {
 	return vv[0]
 }
 
-// UnaryAuthInterceptor Simple grpc interceptor to extract the jwt supplied via authorization bearer token and verify the authentication claims in the token
+// UnaryAuthInterceptor Simple grpc interceptor to extract the jwt supplied via authorization bearer token and verify the authentication claims in the token.
 func (s *Service) UnaryAuthInterceptor(audience string, issuer string) grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req any,
 		info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
-
 		rawConfig := s.Config()
 		runsSecurely := true
 		config, ok := rawConfig.(ConfigurationSecurity)
@@ -519,7 +507,6 @@ func (s *Service) UnaryAuthInterceptor(audience string, issuer string) grpc.Unar
 		}
 
 		if runsSecurely {
-
 			jwtToken, err := grpcJwtTokenExtractor(ctx)
 			if err != nil {
 				return nil, err
@@ -541,18 +528,18 @@ func (s *Service) UnaryAuthInterceptor(audience string, issuer string) grpc.Unar
 	}
 }
 
-// serverStreamWrapper simple wrapper method that stores auth claims for the server stream context
+// serverStreamWrapper simple wrapper method that stores auth claims for the server stream context.
 type serverStreamWrapper struct {
 	ctx context.Context
 	grpc.ServerStream
 }
 
-// Context converts the stream wrappers claims to be contained in the stream context
+// Context converts the stream wrappers claims to be contained in the stream context.
 func (s *serverStreamWrapper) Context() context.Context {
 	return s.ctx
 }
 
-// StreamAuthInterceptor An authentication claims extractor that will always verify the information flowing in the streams as true jwt claims
+// StreamAuthInterceptor An authentication claims extractor that will always verify the information flowing in the streams as true jwt claims.
 func (s *Service) StreamAuthInterceptor(audience string, issuer string) grpc.StreamServerInterceptor {
 	return func(srv any, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
 		localServerStream := ss
@@ -568,7 +555,6 @@ func (s *Service) StreamAuthInterceptor(audience string, issuer string) grpc.Str
 			}
 
 			if runsSecurely {
-
 				jwtToken, err := grpcJwtTokenExtractor(ctx)
 				if err != nil {
 					return err

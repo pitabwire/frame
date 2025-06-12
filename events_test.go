@@ -3,9 +3,10 @@ package frame_test
 import (
 	"context"
 	"fmt"
-	"github.com/pitabwire/frame"
 	"testing"
 	"time"
+
+	"github.com/pitabwire/frame"
 )
 
 type MessageToTest struct {
@@ -64,7 +65,6 @@ func TestService_RegisterEventsWorks(t *testing.T) {
 	}
 
 	srv.Stop(ctx)
-
 }
 
 func TestService_EventsPublishingWorks(t *testing.T) {
@@ -94,5 +94,4 @@ func TestService_EventsPublishingWorks(t *testing.T) {
 	}
 
 	srv.Stop(ctx)
-
 }

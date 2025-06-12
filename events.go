@@ -16,7 +16,7 @@ type eventPayload struct {
 // and can also emit other events into the system or if they don't emit an event the processFunc is deemed complete.
 type EventI interface {
 	// Name represents the unique human readable id of the event that is used to pick it from the registry
-	//or route follow up processing for system to processFunc using this particular event
+	// or route follow up processing for system to processFunc using this particular event
 	Name() string
 
 	// PayloadType determines the type of payload the event uses. This is useful for decoding queue data.
@@ -29,11 +29,9 @@ type EventI interface {
 	Execute(ctx context.Context, payload any) error
 }
 
-// WithRegisterEvents Option to write an event or list of events into the service registry for future use.
-// All events are unique and shouldn't share a name otherwise the last one registered will take presedence
+// All events are unique and shouldn't share a name otherwise the last one registered will take presedence.
 func WithRegisterEvents(events ...EventI) Option {
 	return func(ctx context.Context, s *Service) {
-
 		if s.eventRegistry == nil {
 			s.eventRegistry = make(map[string]EventI)
 		}
@@ -41,13 +39,11 @@ func WithRegisterEvents(events ...EventI) Option {
 		for _, event := range events {
 			s.eventRegistry[event.Name()] = event
 		}
-
 	}
 }
 
-// Emit a simple method used to deploy
+// Emit a simple method used to deploy.
 func (s *Service) Emit(ctx context.Context, name string, payload any) error {
-
 	payloadBytes, err := json.Marshal(payload)
 
 	if err != nil {
@@ -77,7 +73,6 @@ type eventQueueHandler struct {
 }
 
 func (eq *eventQueueHandler) Handle(ctx context.Context, header map[string]string, payload []byte) error {
-
 	evtPyl := &eventPayload{}
 	err := json.Unmarshal(payload, evtPyl)
 	if err != nil {

@@ -17,12 +17,13 @@ package frame
 
 import (
 	"context"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/health/grpc_health_v1"
-	"google.golang.org/grpc/status"
 	"io"
 	"net/http"
 	"time"
+
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/health/grpc_health_v1"
+	"google.golang.org/grpc/status"
 )
 
 func (s *Service) HealthCheckers() []Checker {
@@ -84,7 +85,7 @@ func writeHealthy(w http.ResponseWriter) {
 	}
 }
 
-// WithHealthCheckPath Option checks that the system is up and running
+// WithHealthCheckPath Option checks that the system is up and running.
 func WithHealthCheckPath(path string) Option {
 	return func(ctx context.Context, s *Service) {
 		s.healthCheckPath = path
@@ -115,11 +116,12 @@ type grpcHealthServer struct {
 	service *Service
 }
 
-func (ghs *grpcHealthServer) Check(_ context.Context, _ *grpc_health_v1.HealthCheckRequest) (*grpc_health_v1.HealthCheckResponse, error) {
-
+func (ghs *grpcHealthServer) Check(
+	_ context.Context,
+	_ *grpc_health_v1.HealthCheckRequest,
+) (*grpc_health_v1.HealthCheckResponse, error) {
 	for _, c := range ghs.service.healthCheckers {
 		if err := c.CheckHealth(); err != nil {
-
 			return &grpc_health_v1.HealthCheckResponse{
 				Status: grpc_health_v1.HealthCheckResponse_NOT_SERVING,
 			}, nil
@@ -130,8 +132,11 @@ func (ghs *grpcHealthServer) Check(_ context.Context, _ *grpc_health_v1.HealthCh
 		Status: grpc_health_v1.HealthCheckResponse_SERVING,
 	}, nil
 }
-func (ghs *grpcHealthServer) Watch(_ *grpc_health_v1.HealthCheckRequest, stream grpc_health_v1.Health_WatchServer) error {
 
+func (ghs *grpcHealthServer) Watch(
+	_ *grpc_health_v1.HealthCheckRequest,
+	stream grpc_health_v1.Health_WatchServer,
+) error {
 	var lastSentStatus grpc_health_v1.HealthCheckResponse_ServingStatus = -1
 	for {
 		select {

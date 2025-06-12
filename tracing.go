@@ -2,6 +2,7 @@ package frame
 
 import (
 	"context"
+
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/propagation"
@@ -10,7 +11,7 @@ import (
 	semconv "go.opentelemetry.io/otel/semconv/v1.10.0"
 )
 
-func (s *Service) initTracer(ctx context.Context) error {
+func (s *Service) initTracer(_ context.Context) error {
 	if s.traceExporter != nil {
 		res, err := resource.Merge(
 			resource.Default(),
@@ -46,14 +47,14 @@ func (s *Service) initTracer(ctx context.Context) error {
 	return nil
 }
 
-// WithTraceExporter Option that specify the trace exporter to use
+// WithTraceExporter Option that specify the trace exporter to use.
 func WithTraceExporter(exporter sdktrace.SpanExporter) Option {
 	return func(ctx context.Context, s *Service) {
 		s.traceExporter = exporter
 	}
 }
 
-// WithTraceSampler Option that specify the trace sampler to use
+// WithTraceSampler Option that specify the trace sampler to use.
 func WithTraceSampler(sampler sdktrace.Sampler) Option {
 	return func(ctx context.Context, s *Service) {
 		s.traceSampler = sampler

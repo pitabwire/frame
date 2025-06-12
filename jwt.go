@@ -9,9 +9,8 @@ import (
 	"strings"
 )
 
-// RegisterForJwt function hooks in jwt client registration to make sure service is authenticated
+// RegisterForJwt function hooks in jwt client registration to make sure service is authenticated.
 func (s *Service) RegisterForJwt(ctx context.Context) error {
-
 	oauth2Config, ok := s.Config().(ConfigurationOAUTH2)
 	if ok {
 		oauth2ServiceAdminHost := oauth2Config.GetOauth2ServiceAdminURI()
@@ -36,8 +35,7 @@ func (s *Service) RegisterForJwt(ctx context.Context) error {
 	return nil
 }
 
-// RegisterForJwtWithParams registers the supplied details for ability to generate access tokens.
-// This is useful for situations where one may need to register external applications for access token generation
+// This is useful for situations where one may need to register external applications for access token generation.
 func (s *Service) RegisterForJwtWithParams(ctx context.Context,
 	oauth2ServiceAdminHost string, clientName string, clientSecret string,
 	scope string, audienceList []string, metadata map[string]string) (map[string]any, error) {
@@ -110,10 +108,9 @@ func (s *Service) RegisterForJwtWithParams(ctx context.Context,
 	return newClient, nil
 }
 
-// UnRegisterForJwt utilizing client id we de register external applications for access token generation
+// UnRegisterForJwt utilizing client id we de register external applications for access token generation.
 func (s *Service) UnRegisterForJwt(ctx context.Context,
 	oauth2ServiceAdminHost string, clientID string) error {
-
 	oauth2AdminURI := fmt.Sprintf("%s%s/%s", oauth2ServiceAdminHost, "/admin/clients", clientID)
 
 	status, result, err := s.InvokeRestService(ctx, http.MethodDelete, oauth2AdminURI, make(map[string]any), nil)

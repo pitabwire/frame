@@ -3,9 +3,10 @@ package frame
 import (
 	"context"
 	"errors"
-	"github.com/rs/xid"
 	"runtime/debug"
 	"sync"
+
+	"github.com/rs/xid"
 )
 
 type JobResult[J any] interface {
@@ -110,7 +111,6 @@ func (ji *JobImpl[J]) WriteResult(ctx context.Context, val J) error {
 }
 
 func (ji *JobImpl[J]) Close() {
-
 	ji.resultMu.Lock()
 	defer ji.resultMu.Unlock()
 	if !ji.resultChanDone {
@@ -137,7 +137,10 @@ func NewJobWithRetry[J any](process func(ctx context.Context, result JobResultPi
 	return NewJobWithBufferAndRetry(process, 10, retries)
 }
 
-func NewJobWithBufferAndRetry[J any](process func(ctx context.Context, result JobResultPipe[J]) error, resultBufferSize, retries int) Job[J] {
+func NewJobWithBufferAndRetry[J any](
+	process func(ctx context.Context, result JobResultPipe[J]) error,
+	resultBufferSize, retries int,
+) Job[J] {
 	return &JobImpl[J]{
 		id:               xid.New().String(),
 		retries:          retries,
@@ -147,25 +150,21 @@ func NewJobWithBufferAndRetry[J any](process func(ctx context.Context, result Jo
 	}
 }
 
-// WithBackGroundConsumer Option to register a background processing function that is initialized before running servers
-// this function is maintained alive using the same error group as the servers so that if any exit earlier due to error
-// all stop functioning
+// all stop functioning.
 func WithBackGroundConsumer(deque func(ctx context.Context) error) Option {
 	return func(ctx context.Context, s *Service) {
 		s.backGroundClient = deque
 	}
 }
 
-// WithPoolConcurrency Option sets the count of pool workers to handle server loadOIDC.
-// By default this is count of CPU + 1
+// By default this is count of CPU + 1.
 func WithPoolConcurrency(workers int) Option {
 	return func(ctx context.Context, s *Service) {
 		s.poolWorkerCount = workers
 	}
 }
 
-// WithPoolCapacity Option sets the capacity of pool workers to handle server loadOIDC.
-// By default this is 100
+// By default this is 100.
 func WithPoolCapacity(capacity int) Option {
 	return func(ctx context.Context, s *Service) {
 		s.poolCapacity = capacity
@@ -179,7 +178,6 @@ func WithPoolCapacity(capacity int) Option {
 //
 //	err, ok := <- errChan
 func SubmitJob[J any](ctx context.Context, s *Service, job Job[J]) error {
-
 	p := s.pool
 	if p.IsClosed() {
 		return errors.New("pool is closed")
@@ -197,7 +195,6 @@ func SubmitJob[J any](ctx context.Context, s *Service, job Job[J]) error {
 
 			return p.Submit(
 				func() {
-
 					defer job.Close()
 
 					if job.F() == nil {
@@ -216,7 +213,6 @@ func SubmitJob[J any](ctx context.Context, s *Service, job Job[J]) error {
 							WithField("retry", job.Retries())
 
 						if job.CanRun() {
-
 							err1 := SubmitJob(ctx, s, job)
 							if err1 != nil {
 								logger.
@@ -224,10 +220,10 @@ func SubmitJob[J any](ctx context.Context, s *Service, job Job[J]) error {
 									WithField("stacktrace", string(debug.Stack())).
 									Info("could not resubmit job for retry")
 								return
-							} else {
-								logger.Debug("job resubmitted for retry")
-								return
 							}
+							logger.Debug("job resubmitted for retry")
+							return
+
 						}
 					}
 				},
@@ -247,7 +243,6 @@ func SafeChannelWrite[J any](ctx context.Context, ch chan<- JobResult[J], value 
 }
 
 func SafeChannelRead[J any](ctx context.Context, ch <-chan JobResult[J]) (JobResult[J], bool) {
-
 	select {
 	case <-ctx.Done():
 		// Return context error without blocking

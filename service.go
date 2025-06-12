@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/pitabwire/util"
 	"net"
 	"net/http"
 	"os/signal"
@@ -13,15 +12,18 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/pitabwire/util"
+
 	ghandler "github.com/gorilla/handlers"
 	"github.com/nicksnyder/go-i18n/v2/i18n"
 	"github.com/panjf2000/ants/v2"
-	"github.com/pitabwire/frame/internal"
 	"go.opentelemetry.io/otel/sdk/trace"
 	_ "go.uber.org/automaxprocs"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/reflection"
+
+	"github.com/pitabwire/frame/internal"
 )
 
 type contextKey string
@@ -84,7 +86,6 @@ func NewService(name string, opts ...Option) (context.Context, *Service) {
 // NewServiceWithContext creates a new instance of Service with context, name and supplied options
 // It is used together with the Init option to setup components of a service that is not yet running.
 func NewServiceWithContext(ctx context.Context, name string, opts ...Option) (context.Context, *Service) {
-
 	ctx, cancel := signal.NotifyContext(ctx,
 		syscall.SIGHUP,
 		syscall.SIGINT,
@@ -153,12 +154,17 @@ func (s *Service) Environment() string {
 	return s.environment
 }
 
-// JwtClient gets the authenticated jwt client if configured at startup
+// JwtClient gets the authenticated jwt client if configured at startup.
 func (s *Service) JwtClient() map[string]any {
 	return s.jwtClient
 }
 
-// JwtClientID gets the authenticated jwt client if configured at startup
+// SetJwtClient sets the authenticated jwt client.
+func (s *Service) SetJwtClient(jwtCli map[string]any) {
+	s.jwtClient = jwtCli
+}
+
+// JwtClientID gets the authenticated jwt client if configured at startup.
 func (s *Service) JwtClientID() string {
 	clientId, ok := s.jwtClient["client_id"].(string)
 	if !ok {
@@ -167,7 +173,7 @@ func (s *Service) JwtClientID() string {
 	return clientId
 }
 
-// JwtClientSecret gets the authenticated jwt client if configured at startup
+// JwtClientSecret gets the authenticated jwt client if configured at startup.
 func (s *Service) JwtClientSecret() string {
 	return s.jwtClientSecret
 }
@@ -176,7 +182,7 @@ func (s *Service) H() http.Handler {
 	return s.handler
 }
 
-// Init evaluates the options provided as arguments and supplies them to the service object
+// Init evaluates the options provided as arguments and supplies them to the service object.
 func (s *Service) Init(ctx context.Context, opts ...Option) {
 	for _, opt := range opts {
 		opt(ctx, s)
@@ -222,23 +228,19 @@ func (s *Service) AddHealthCheck(checker Checker) {
 	s.healthCheckers = append(s.healthCheckers, checker)
 }
 
-// Run is used to actually instantiate the initialised components and
-// keep them useful by handling incoming requests
+// keep them useful by handling incoming requests.
 func (s *Service) Run(ctx context.Context, address string) error {
-
 	err := s.initPubsub(ctx)
 	if err != nil {
 		return err
 	}
 
-	//connect the background processor
+	// connect the background processor
 	if s.backGroundClient != nil {
 		go func() {
 			err = s.backGroundClient(ctx)
 			s.sendStopError(ctx, err)
-
 		}()
-
 	}
 
 	go func() {
@@ -246,7 +248,6 @@ func (s *Service) Run(ctx context.Context, address string) error {
 		if err != nil || s.backGroundClient == nil {
 			s.sendStopError(ctx, err)
 		}
-
 	}()
 
 	select {
@@ -262,7 +263,6 @@ func (s *Service) Run(ctx context.Context, address string) error {
 		}
 		return err0
 	}
-
 }
 
 func (s *Service) initServer(ctx context.Context, httpPort string) error {
@@ -287,30 +287,24 @@ func (s *Service) initServer(ctx context.Context, httpPort string) error {
 		} else {
 			httpPort = config.HttpPort()
 		}
-
 	}
 
 	if s.grpcServer != nil {
-
 		if s.grpcPort == "" {
-
 			config, ok := s.Config().(ConfigurationPorts)
 			if !ok {
 				s.grpcPort = ":50051"
 			}
 
 			s.grpcPort = config.GrpcPort()
-
 		}
 
 		if httpPort == s.grpcPort {
 			return fmt.Errorf("HTTP PORT %s and GRPC PORT %s can not be same", httpPort, s.grpcPort)
 		}
-
 	}
 
 	s.startOnce.Do(func() {
-
 		mux := http.NewServeMux()
 
 		applicationHandler := s.handler
@@ -324,7 +318,6 @@ func (s *Service) initServer(ctx context.Context, httpPort string) error {
 
 		config, ok := s.Config().(ConfigurationCORS)
 		if ok && config.IsCORSEnabled() {
-
 			corsOptions := []ghandler.CORSOption{
 				ghandler.AllowedHeaders(config.GetCORSAllowedHeaders()),
 				ghandler.ExposedHeaders(config.GetCORSExposedHeaders()),
@@ -358,16 +351,13 @@ func (s *Service) initServer(ctx context.Context, httpPort string) error {
 
 		// If grpc server is setup we should use the correct driver
 		if s.grpcServer != nil {
-
 			if s.grpcPort == "" {
-
 				config, ok := s.Config().(ConfigurationPorts)
 				if !ok {
 					s.grpcPort = ":50051"
 				}
 
 				s.grpcPort = config.GrpcPort()
-
 			}
 
 			grpcHS := NewGrpcHealthServer(s)
@@ -395,7 +385,6 @@ func (s *Service) initServer(ctx context.Context, httpPort string) error {
 	}
 
 	if s.TLSEnabled() {
-
 		config, _ := s.Config().(ConfigurationTLS)
 
 		tlsServer, ok := s.driver.(internal.TLSServer)
@@ -410,13 +399,11 @@ func (s *Service) initServer(ctx context.Context, httpPort string) error {
 		return errors.New("server has to be of type internal.Server")
 	}
 	return nonTlsServer.ListenAndServe(httpPort, s.handler)
-
 }
 
 // Stop Used to gracefully run clean up methods ensuring all requests that
 // were being handled are completed well without interuptions.
 func (s *Service) Stop(ctx context.Context) {
-
 	if !s.stopMutex.TryLock() {
 		return
 	}
@@ -444,11 +431,9 @@ func (s *Service) Stop(ctx context.Context) {
 	}
 	close(s.errorChannel)
 	defer s.errorChannelMutex.Unlock()
-
 }
 
 func (s *Service) sendStopError(ctx context.Context, err error) {
-
 	s.errorChannelMutex.Lock()
 	defer s.errorChannelMutex.Unlock()
 

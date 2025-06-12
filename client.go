@@ -11,11 +11,10 @@ import (
 	"strings"
 )
 
-// InvokeRestService convenience method to call a http endpoint and utilize the raw results
+// InvokeRestService convenience method to call a http endpoint and utilize the raw results.
 func (s *Service) InvokeRestService(ctx context.Context,
 	method string, endpointURL string, payload map[string]any,
 	headers map[string][]string) (int, []byte, error) {
-
 	if headers == nil {
 		headers = map[string][]string{
 			"Content-Type": {"application/json"},
@@ -62,14 +61,12 @@ func (s *Service) InvokeRestService(ctx context.Context,
 	response, err := io.ReadAll(resp.Body)
 
 	return resp.StatusCode, response, err
-
 }
 
-// InvokeRestServiceUrlEncoded convenience method to call a http endpoint and utilize the raw results
+// InvokeRestServiceUrlEncoded convenience method to call a http endpoint and utilize the raw results.
 func (s *Service) InvokeRestServiceUrlEncoded(ctx context.Context,
 	method string, endpointURL string, payload url.Values,
 	headers map[string]string) (int, []byte, error) {
-
 	if headers == nil {
 		headers = map[string]string{
 			"Content-Type": "application/x-www-form-urlencoded",
@@ -108,5 +105,4 @@ func (s *Service) InvokeRestServiceUrlEncoded(ctx context.Context,
 	response, err := io.ReadAll(resp.Body)
 
 	return resp.StatusCode, response, err
-
 }

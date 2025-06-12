@@ -2,18 +2,18 @@ package frame
 
 import (
 	"context"
+	"log/slog"
+	"runtime/debug"
+
 	"github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/logging"
 	"github.com/pitabwire/util"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"log/slog"
-	"runtime/debug"
 )
 
-// WithLogger Option that helps with initialization of our internal dbLogger
+// WithLogger Option that helps with initialization of our internal dbLogger.
 func WithLogger() Option {
 	return func(ctx context.Context, s *Service) {
-
 		opts := util.DefaultLogOptions()
 
 		if s.Config() != nil {
@@ -54,8 +54,13 @@ func GetLoggingOptions() []logging.Option {
 			case codes.NotFound, codes.Canceled, codes.InvalidArgument, codes.Unauthenticated:
 				return logging.LevelInfo
 
-			case codes.DeadlineExceeded, codes.PermissionDenied, codes.ResourceExhausted, codes.FailedPrecondition, codes.Aborted,
-				codes.OutOfRange, codes.Unavailable:
+			case codes.DeadlineExceeded,
+				codes.PermissionDenied,
+				codes.ResourceExhausted,
+				codes.FailedPrecondition,
+				codes.Aborted,
+				codes.OutOfRange,
+				codes.Unavailable:
 				return logging.LevelWarn
 
 			case codes.Unknown, codes.Unimplemented, codes.Internal, codes.DataLoss:
@@ -70,7 +75,6 @@ func GetLoggingOptions() []logging.Option {
 }
 
 func RecoveryHandlerFun(ctx context.Context, p interface{}) error {
-
 	s := Svc(ctx)
 	s.Log(ctx).WithField("trigger", p).Error("recovered from panic %s", debug.Stack())
 

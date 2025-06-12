@@ -1,18 +1,19 @@
-package frame
+package frame_test
 
 import (
 	"testing"
+
+	"github.com/pitabwire/frame"
 )
 
 func TestService_RegisterForJwtWithParams(t *testing.T) {
-
 	t.Skip("Only run this test manually by uncommenting line")
 
 	oauthServiceURL := "http://localhost:4447"
 	clientName := "Testing CLI"
 	clientSecret := "topS3cret"
 
-	ctx, srv := NewService("Test Srv", WithConfig(&ConfigurationDefault{
+	ctx, srv := frame.NewService("Test Srv", frame.WithConfig(&frame.ConfigurationDefault{
 		Oauth2ServiceAdminURI: oauthServiceURL,
 	}))
 
@@ -24,7 +25,7 @@ func TestService_RegisterForJwtWithParams(t *testing.T) {
 		return
 	}
 
-	srv.jwtClient = response
+	srv.SetJwtClient(response)
 
 	srv.Log(ctx).WithField("client id", response).Info("successfully registered for Jwt")
 

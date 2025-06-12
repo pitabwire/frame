@@ -4,9 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/pitabwire/frame"
 	"log"
 	"testing"
+
+	"github.com/pitabwire/frame"
 )
 
 func TestService_RegisterPublisherNotSet(t *testing.T) {
@@ -28,11 +29,9 @@ func TestService_RegisterPublisherNotInitialized(t *testing.T) {
 	if err == nil {
 		t.Errorf("We shouldn't be able to publish when no topic was registered")
 	}
-
 }
 
 func TestService_RegisterPublisher(t *testing.T) {
-
 	opt := frame.WithRegisterPublisher("test", "mem://topicA")
 
 	ctx, srv := frame.NewService("Test Srv", opt, frame.WithNoopDriver())
@@ -49,11 +48,9 @@ func TestService_RegisterPublisher(t *testing.T) {
 	}
 
 	srv.Stop(ctx)
-
 }
 
 func TestService_RegisterPublisherMultiple(t *testing.T) {
-
 	topicRef := "test-multiple-publisher"
 	topicRef2 := "test-multiple-publisher-2"
 
@@ -103,7 +100,6 @@ type handlerWithError struct {
 func (m *handlerWithError) Handle(_ context.Context, metadata map[string]string, message []byte) error {
 	log.Printf(" A dreadful message to handle: %v with headers [%v]", string(message), metadata)
 	return errors.New("throwing an error for tests")
-
 }
 
 func TestService_RegisterSubscriber(t *testing.T) {
@@ -135,11 +131,9 @@ func TestService_RegisterSubscriber(t *testing.T) {
 	}
 
 	srv.Stop(ctx)
-
 }
 
 func TestService_RegisterSubscriberWithError(t *testing.T) {
-
 	regSubT := "reg_s_wit-error"
 	opt := frame.WithRegisterSubscriber(regSubT, "mem://topicErrors", &handlerWithError{})
 	optTopic := frame.WithRegisterPublisher(regSubT, "mem://topicErrors")
@@ -162,7 +156,6 @@ func TestService_RegisterSubscriberWithError(t *testing.T) {
 }
 
 func TestService_RegisterSubscriberInvalid(t *testing.T) {
-
 	opt := frame.WithRegisterSubscriber("test", "memt+://topicA",
 		&messageHandler{})
 
@@ -176,7 +169,6 @@ func TestService_RegisterSubscriberInvalid(t *testing.T) {
 }
 
 func TestService_RegisterSubscriberContextCancelWorks(t *testing.T) {
-
 	optTopic := frame.WithRegisterPublisher("test", "mem://topicA")
 	opt := frame.WithRegisterSubscriber("test", "mem://topicA",
 		&messageHandler{})
@@ -202,7 +194,6 @@ func TestService_RegisterSubscriberContextCancelWorks(t *testing.T) {
 	if !subs.Initiated() {
 		t.Fatalf("Subscription is valid yet it should not be ok")
 	}
-
 }
 
 func TestService_AddPublisher(t *testing.T) {
@@ -255,7 +246,6 @@ func TestService_AddPublisher(t *testing.T) {
 	if err != nil {
 		t.Errorf("Failed to publish with initialized publisher: %v", err)
 	}
-
 }
 
 func TestService_AddPublisher_InvalidURL(t *testing.T) {
@@ -322,10 +312,8 @@ func TestService_AddSubscriber(t *testing.T) {
 	if err != nil {
 		t.Errorf("Expected no error when adding an existing subscriber, got: %v", err)
 	}
-
 }
 func TestService_AddSubscriberWithoutHandler(t *testing.T) {
-
 	noHandlerRef := "no-handler-sub"
 	noHandlerURL := "mem://topicNoHandler"
 
@@ -361,7 +349,6 @@ func TestService_AddSubscriberWithoutHandler(t *testing.T) {
 	}
 
 	// Clean up
-
 }
 
 func TestService_AddSubscriber_InvalidURL(t *testing.T) {

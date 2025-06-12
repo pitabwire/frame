@@ -1,17 +1,21 @@
 package frame_test
 
 import (
-	"github.com/pitabwire/frame"
-	"gorm.io/datatypes"
 	"os"
 	"reflect"
 	"strconv"
 	"testing"
+
+	"gorm.io/datatypes"
+
+	"github.com/pitabwire/frame"
 )
 
 func TestService_Datastore(t *testing.T) {
-
-	testDBURL := frame.GetEnv("TEST_DATABASE_URL", "postgres://frame:secret@localhost:5431/framedatabase?sslmode=disable")
+	testDBURL := frame.GetEnv(
+		"TEST_DATABASE_URL",
+		"postgres://frame:secret@localhost:5431/framedatabase?sslmode=disable",
+	)
 
 	ctx, srv := frame.NewService("Test Srv", frame.WithNoopDriver())
 
@@ -40,7 +44,6 @@ func TestService_Datastore(t *testing.T) {
 	}
 
 	srv.Stop(ctx)
-
 }
 
 func TestService_DatastoreSet(t *testing.T) {
@@ -67,11 +70,8 @@ func TestService_DatastoreSet(t *testing.T) {
 }
 
 func TestService_DatastoreRunQuery(t *testing.T) {
-	err := os.Setenv("DATABASE_URL", "postgres://frame:secret@localhost:5431/framedatabase?sslmode=disable")
-	if err != nil {
-		t.Errorf("Could not set database url to ENV %v", err)
-		return
-	}
+	t.Setenv("DATABASE_URL", "postgres://frame:secret@localhost:5431/framedatabase?sslmode=disable")
+
 	defConf, err := frame.ConfigFromEnv[frame.ConfigurationDefault]()
 	if err != nil {
 		t.Errorf("Could not processFunc test configurations %v", err)
@@ -96,7 +96,10 @@ func TestService_DatastoreRunQuery(t *testing.T) {
 }
 
 func TestService_DatastoreRead(t *testing.T) {
-	testDBURL := frame.GetEnv("TEST_DATABASE_URL", "postgres://frame:secret@localhost:5431/framedatabase?sslmode=disable")
+	testDBURL := frame.GetEnv(
+		"TEST_DATABASE_URL",
+		"postgres://frame:secret@localhost:5431/framedatabase?sslmode=disable",
+	)
 
 	ctx, srv := frame.NewService("Test Srv")
 
@@ -119,7 +122,6 @@ func TestService_DatastoreRead(t *testing.T) {
 }
 
 func TestService_DatastoreNotSet(t *testing.T) {
-
 	ctx, srv := frame.NewService("Test Srv")
 
 	if w := srv.DB(ctx, false); w != nil {
@@ -128,7 +130,6 @@ func TestService_DatastoreNotSet(t *testing.T) {
 }
 
 func TestDBPropertiesFromMap(t *testing.T) {
-
 	tests := []struct {
 		name     string
 		propsMap map[string]string
@@ -184,7 +185,6 @@ func compareMapsByValue(map1, map2 map[string]interface{}) bool {
 
 // compareValues compares two interface{} values, handling basic types, slices, nested maps, and numeric comparisons.
 func compareValues(val1, val2 interface{}) bool {
-
 	// Handle other types including slices and nested maps
 	switch v1 := val1.(type) {
 	case string:

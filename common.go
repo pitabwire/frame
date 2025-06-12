@@ -4,13 +4,14 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"github.com/rs/xid"
-	"gorm.io/gorm"
 	"net"
 	"net/http"
 	"os"
 	"strings"
 	"time"
+
+	"github.com/rs/xid"
+	"gorm.io/gorm"
 )
 
 type BaseModelI interface {
@@ -18,7 +19,7 @@ type BaseModelI interface {
 	GetVersion() uint
 }
 
-// BaseModel base table struct to be extended by other models
+// BaseModel base table struct to be extended by other models.
 type BaseModel struct {
 	ID          string `gorm:"type:varchar(50);primary_key"`
 	CreatedAt   time.Time
@@ -34,9 +35,8 @@ func (model *BaseModel) GetID() string {
 	return model.ID
 }
 
-// GenID creates a new id for model if its not existent
+// GenID creates a new id for model if its not existent.
 func (model *BaseModel) GenID(ctx context.Context) {
-
 	if model.ID != "" {
 		return
 	}
@@ -61,7 +61,7 @@ func (model *BaseModel) GenID(ctx context.Context) {
 	}
 }
 
-// ValidXID Validates that the supplied string is an xid
+// ValidXID Validates that the supplied string is an xid.
 func (model *BaseModel) ValidXID(id string) bool {
 	_, err := xid.FromString(id)
 	return err == nil
@@ -71,13 +71,12 @@ func (model *BaseModel) GetVersion() uint {
 	return model.Version
 }
 
-// BeforeSave Ensures we update a migrations time stamps
+// BeforeSave Ensures we update a migrations time stamps.
 func (model *BaseModel) BeforeSave(db *gorm.DB) error {
 	return model.BeforeCreate(db)
 }
 
 func (model *BaseModel) BeforeCreate(db *gorm.DB) error {
-
 	if model.Version <= 0 {
 		model.CreatedAt = time.Now()
 		model.ModifiedAt = time.Now()
@@ -88,7 +87,7 @@ func (model *BaseModel) BeforeCreate(db *gorm.DB) error {
 	return nil
 }
 
-// BeforeUpdate Updates time stamp every time we update status of a migration
+// BeforeUpdate Updates time stamp every time we update status of a migration.
 func (model *BaseModel) BeforeUpdate(db *gorm.DB) error {
 	model.ModifiedAt = time.Now()
 	model.Version += 1
@@ -96,7 +95,6 @@ func (model *BaseModel) BeforeUpdate(db *gorm.DB) error {
 }
 
 func (model *BaseModel) CopyPartitionInfo(parent *BaseModel) {
-
 	if parent == nil {
 		return
 	}
@@ -108,7 +106,7 @@ func (model *BaseModel) CopyPartitionInfo(parent *BaseModel) {
 	}
 }
 
-// Migration Our simple table holding all the migration data
+// Migration Our simple table holding all the migration data.
 type Migration struct {
 	BaseModel
 
@@ -122,9 +120,9 @@ func GenerateID(_ context.Context) string {
 	return xid.New().String()
 }
 
-// GetIp convenience method to extract the remote ip address from our inbound request
+// GetIp convenience method to extract the remote ip address from our inbound request.
 func GetIp(r *http.Request) string {
-	sourceIp := r.Header.Get("X-FORWARDED-FOR")
+	sourceIp := r.Header.Get("X-Forwarded-For")
 	if sourceIp == "" {
 		sourceIp, _, _ = net.SplitHostPort(r.RemoteAddr)
 	}
@@ -132,7 +130,7 @@ func GetIp(r *http.Request) string {
 	return sourceIp
 }
 
-// GetEnv Obtains the environment key or returns the default value
+// GetEnv Obtains the environment key or returns the default value.
 func GetEnv(key, fallback string) string {
 	if value, ok := os.LookupEnv(key); ok {
 		return value
@@ -140,9 +138,8 @@ func GetEnv(key, fallback string) string {
 	return fallback
 }
 
-// GetLocalIP convenince method that obtains the non localhost ip address for machine running app
+// GetLocalIP convenince method that obtains the non localhost ip address for machine running app.
 func GetLocalIP() string {
-
 	addrs, _ := net.InterfaceAddrs()
 
 	currentIP := ""
@@ -157,12 +154,10 @@ func GetLocalIP() string {
 	}
 
 	return currentIP
-
 }
 
 // GetMacAddress convenience method to get some unique address based on the network interfaces the application is running on.
 func GetMacAddress() string {
-
 	currentIP := GetLocalIP()
 
 	interfaces, _ := net.Interfaces()

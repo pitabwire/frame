@@ -3,12 +3,13 @@ package frame
 import (
 	"context"
 	"crypto/tls"
+	"net"
+	"net/http"
+
 	"github.com/improbable-eng/grpc-web/go/grpcweb"
 	"github.com/pitabwire/util"
 	"golang.org/x/net/http2"
 	"google.golang.org/grpc"
-	"net"
-	"net/http"
 )
 
 type noopDriver struct {
@@ -35,7 +36,6 @@ func (dd *defaultDriver) Context() context.Context {
 }
 
 func (dd *defaultDriver) tlsConfig(certPath, certKeyPath string) (*tls.Config, error) {
-
 	if certPath == "" || certKeyPath == "" {
 		return nil, nil
 	}
@@ -51,7 +51,10 @@ func (dd *defaultDriver) tlsConfig(certPath, certKeyPath string) (*tls.Config, e
 	}, nil
 }
 
-func (dd *defaultDriver) getListener(address, certPath, certKeyPath string, listener net.Listener) (net.Listener, error) {
+func (dd *defaultDriver) getListener(
+	address, certPath, certKeyPath string,
+	listener net.Listener,
+) (net.Listener, error) {
 	if listener != nil {
 		return listener, nil
 	}
@@ -92,7 +95,6 @@ func (dd *defaultDriver) ListenAndServe(addr string, h http.Handler) error {
 }
 
 func (dd *defaultDriver) ListenAndServeTLS(addr, certPath, certKeyPath string, h http.Handler) error {
-
 	dd.httpServer.Addr = addr
 	dd.httpServer.Handler = h
 
@@ -109,7 +111,6 @@ func (dd *defaultDriver) ListenAndServeTLS(addr, certPath, certKeyPath string, h
 	dd.log.Info("http server port is : %s", addr)
 
 	return dd.httpServer.Serve(ln)
-
 }
 
 func (dd *defaultDriver) Shutdown(ctx context.Context) error {
@@ -129,7 +130,6 @@ type grpcDriver struct {
 }
 
 func (gd *grpcDriver) ListenAndServe(addr string, h http.Handler) error {
-
 	gd.httpServer.Addr = addr
 
 	gd.httpServer.Handler = http.HandlerFunc(func(resp http.ResponseWriter, req *http.Request) {
@@ -152,7 +152,6 @@ func (gd *grpcDriver) ListenAndServe(addr string, h http.Handler) error {
 	}
 
 	go func(address string) {
-
 		ln, err2 := gd.getListener(address, "", "", gd.grpcListener)
 		if err2 != nil {
 			gd.errorChannel <- err2
@@ -178,7 +177,6 @@ func (gd *grpcDriver) ListenAndServe(addr string, h http.Handler) error {
 }
 
 func (gd *grpcDriver) ListenAndServeTLS(addr, certFile, certKeyFile string, h http.Handler) error {
-
 	gd.httpServer.Addr = addr
 	gd.httpServer.Handler = http.HandlerFunc(func(resp http.ResponseWriter, req *http.Request) {
 		if gd.wrappedGrpcServer.IsGrpcWebRequest(req) {
@@ -198,7 +196,6 @@ func (gd *grpcDriver) ListenAndServeTLS(addr, certFile, certKeyFile string, h ht
 	}
 
 	go func(address, certPath, certKeyPath string) {
-
 		ln, err2 := gd.getListener(address, certPath, certKeyPath, gd.grpcListener)
 		if err2 != nil {
 			gd.errorChannel <- err2
@@ -222,7 +219,6 @@ func (gd *grpcDriver) ListenAndServeTLS(addr, certFile, certKeyFile string, h ht
 	gd.log.Info("http server port is : %s", addr)
 
 	return gd.httpServer.Serve(httpListener)
-
 }
 
 func (gd *grpcDriver) Shutdown(ctx context.Context) error {
@@ -239,50 +235,48 @@ func (gd *grpcDriver) Shutdown(ctx context.Context) error {
 // WithGrpcServer Option to specify an instantiated grpc server
 // with an implementation that can be utilized to handle incoming requests.
 func WithGrpcServer(grpcServer *grpc.Server) Option {
-	return func(ctx context.Context, c *Service) {
+	return func(_ context.Context, c *Service) {
 		c.grpcServer = grpcServer
 	}
 }
 
 func WithEnableGrpcServerReflection() Option {
-	return func(ctx context.Context, c *Service) {
+	return func(_ context.Context, c *Service) {
 		c.grpcServerEnableReflection = true
 	}
 }
 
 // WithServerListener Option to specify user preferred priListener instead of the default provided one.
 func WithServerListener(listener net.Listener) Option {
-	return func(ctx context.Context, c *Service) {
+	return func(_ context.Context, c *Service) {
 		c.priListener = listener
 	}
 }
 
-// WithGrpcServerListener Option to specify user preferred grpcListener instead of the default
-// provided one. This one is mostly useful when grpc is being utilised
+// WithGrpcServerListener provided one. This one is mostly useful when grpc is being utilised.
 func WithGrpcServerListener(listener net.Listener) Option {
-	return func(ctx context.Context, c *Service) {
+	return func(_ context.Context, c *Service) {
 		c.secListener = listener
 	}
 }
 
-// WithGrpcPort Option to specify the grpc port for server to bind to
+// WithGrpcPort Option to specify the grpc port for server to bind to.
 func WithGrpcPort(port string) Option {
-	return func(ctx context.Context, c *Service) {
+	return func(_ context.Context, c *Service) {
 		c.grpcPort = port
 	}
 }
 
-// WithHttpHandler Option to specify an http handler that can be used to handle inbound http requests
+// WithHttpHandler Option to specify an http handler that can be used to handle inbound http requests.
 func WithHttpHandler(h http.Handler) Option {
-	return func(ctx context.Context, c *Service) {
+	return func(_ context.Context, c *Service) {
 		c.handler = h
 	}
 }
 
-// WithNoopDriver Option to force the underlying http driver to not listen on a port.
-// This is mostly useful when writing tests especially against the frame service
+// WithNoopDriver This is mostly useful when writing tests especially against the frame service.
 func WithNoopDriver() Option {
-	return func(ctx context.Context, c *Service) {
+	return func(_ context.Context, c *Service) {
 		c.driver = &noopDriver{}
 	}
 }

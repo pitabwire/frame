@@ -6,13 +6,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"gorm.io/driver/postgres"
 	"net/url"
 	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"gorm.io/driver/postgres"
 
 	"github.com/XSAM/otelsql"
 
@@ -84,7 +85,6 @@ func (s *Pool) markHealthy(readOnly bool, db *gorm.DB, isHealthy bool, err error
 
 // CheckHealth iterates all known DBs, pings them, and updates pool membership accordingly.
 func (s *Pool) CheckHealth() error {
-
 	healthCheckError := ""
 
 	if s.DB(s.ctx, true) == nil {
@@ -96,7 +96,6 @@ func (s *Pool) CheckHealth() error {
 
 	now := time.Now()
 	if s.lastHealthCheckTime.IsZero() || now.Sub(s.lastHealthCheckTime) > 5*time.Minute {
-
 		ctx, cancel := context.WithCancel(s.ctx)
 		s.healthCheckCancel = cancel
 		stopped := make(chan struct{})
@@ -113,7 +112,6 @@ func (s *Pool) CheckHealth() error {
 				_ = s.pingWithTimeoutAndRetry(ctx, true, db)
 			}
 			s.lastHealthCheckTime = now
-
 		}(ctx)
 	}
 	if healthCheckError != "" {
@@ -124,7 +122,6 @@ func (s *Pool) CheckHealth() error {
 }
 
 func (s *Pool) cleanup(_ context.Context) {
-
 	if s.healthCheckCancel != nil {
 		s.healthCheckCancel()
 		<-s.healthCheckStopped
@@ -185,7 +182,7 @@ func (s *Pool) pingWithTimeoutAndRetry(ctx context.Context, readOnly bool, db *g
 	}
 }
 
-// DB Returns a random item from the slice, or an error if the slice is empty
+// DB Returns a random item from the slice, or an error if the slice is empty.
 func (s *Pool) DB(ctx context.Context, readOnly bool) *gorm.DB {
 	var pool []*gorm.DB
 	var idx *uint64
@@ -254,7 +251,6 @@ func (s *Pool) CanMigrate() bool {
 
 func tenantPartition(ctx context.Context) func(db *gorm.DB) *gorm.DB {
 	return func(db *gorm.DB) *gorm.DB {
-
 		authClaim := ClaimsFromContext(ctx)
 		if authClaim == nil {
 			return db
@@ -269,9 +265,8 @@ func tenantPartition(ctx context.Context) func(db *gorm.DB) *gorm.DB {
 	}
 }
 
-// DBPropertiesToMap converts the supplied db json content into a golang map
+// DBPropertiesToMap converts the supplied db json content into a golang map.
 func DBPropertiesToMap(props datatypes.JSONMap) map[string]string {
-
 	if props == nil {
 		return make(map[string]string, len(props))
 	}
@@ -279,7 +274,6 @@ func DBPropertiesToMap(props datatypes.JSONMap) map[string]string {
 	payload := make(map[string]string, len(props))
 
 	for k, val := range props {
-
 		switch v := val.(type) {
 		case nil:
 			payload[k] = ""
@@ -307,7 +301,7 @@ func DBPropertiesToMap(props datatypes.JSONMap) map[string]string {
 	return payload
 }
 
-// DBPropertiesFromMap converts a map into a JSONMap object
+// DBPropertiesFromMap converts a map into a JSONMap object.
 func DBPropertiesFromMap(propsMap map[string]string) datatypes.JSONMap {
 	jsonMap := make(datatypes.JSONMap)
 
@@ -316,7 +310,6 @@ func DBPropertiesFromMap(propsMap map[string]string) datatypes.JSONMap {
 	}
 
 	for k, val := range propsMap {
-
 		jsonMap[k] = val
 
 		if !strings.HasPrefix(val, "{") && !strings.HasPrefix(val, "[") {
@@ -335,13 +328,12 @@ func DBPropertiesFromMap(propsMap map[string]string) datatypes.JSONMap {
 	return jsonMap
 }
 
-// ErrorIsNoRows validate if supplied error is because of record missing in DB
+// ErrorIsNoRows validate if supplied error is because of record missing in DB.
 func ErrorIsNoRows(err error) bool {
 	return errors.Is(err, gorm.ErrRecordNotFound) || errors.Is(err, sql.ErrNoRows)
 }
 
 func (s *Service) DBPool(name ...string) *Pool {
-
 	dbPoolName := defaultStoreName
 	if len(name) > 0 {
 		dbPoolName = name[0]
@@ -355,14 +347,12 @@ func (s *Service) DBPool(name ...string) *Pool {
 	return v.(*Pool)
 }
 
-// DB obtains an already instantiated db connection with the option
-// to specify if you want write or read only db connection
+// to specify if you want write or read only db connection.
 func (s *Service) DB(ctx context.Context, readOnly bool) *gorm.DB {
 	return s.DBWithName(ctx, defaultStoreName, readOnly)
 }
 
 func (s *Service) DBWithName(ctx context.Context, name string, readOnly bool) *gorm.DB {
-
 	store := s.DBPool(name)
 	if store == nil {
 		return nil
@@ -370,17 +360,18 @@ func (s *Service) DBWithName(ctx context.Context, name string, readOnly bool) *g
 	return store.DB(ctx, readOnly)
 }
 
-// WithDatastoreConnection Option method to store a connection that will be utilized when connecting to the database
+// WithDatastoreConnection Option method to store a connection that will be utilized when connecting to the database.
 func WithDatastoreConnection(postgresqlConnection string, readOnly bool) Option {
 	return WithDatastoreConnectionWithName(defaultStoreName, postgresqlConnection, readOnly)
 }
 func WithDatastoreConnectionWithName(name string, postgresqlConnection string, readOnly bool) Option {
-
 	return func(ctx context.Context, s *Service) {
-
 		cleanedPostgresqlDSN, err := cleanPostgresDSN(postgresqlConnection)
 		if err != nil {
-			s.Log(ctx).WithError(err).WithField("dsn", postgresqlConnection).Fatal("could not get a clean postgresql dsn")
+			s.Log(ctx).
+				WithError(err).
+				WithField("dsn", postgresqlConnection).
+				Fatal("could not get a clean postgresql dsn")
 			return
 		}
 
@@ -439,13 +430,11 @@ func WithDatastoreConnectionWithName(name string, postgresqlConnection string, r
 				dbConfig.GetMaxConnectionLifeTimeInSeconds(),
 			)
 		}
-
 	}
 }
 
 func WithDatastore() Option {
 	return func(ctx context.Context, s *Service) {
-
 		config, ok := s.Config().(ConfigurationDatabase)
 		if !ok {
 			s.Log(ctx).Warn("configuration object not of type : ConfigurationDatabase")
@@ -469,7 +458,8 @@ func cleanPostgresDSN(pgString string) (string, error) {
 	trimmed := strings.TrimSpace(pgString)
 	// Heuristic: if it contains '=' and does not start with postgres:// or postgresql://, treat as DSN
 	lower := strings.ToLower(trimmed)
-	if strings.Contains(trimmed, "=") && !strings.HasPrefix(lower, "postgres://") && !strings.HasPrefix(lower, "postgresql://") {
+	if strings.Contains(trimmed, "=") && !strings.HasPrefix(lower, "postgres://") &&
+		!strings.HasPrefix(lower, "postgresql://") {
 		return trimmed, nil
 	}
 

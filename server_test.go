@@ -5,18 +5,20 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"errors"
-	"github.com/pitabwire/frame/grpcping"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials"
-	"google.golang.org/grpc/credentials/insecure"
-	"google.golang.org/grpc/health/grpc_health_v1"
-	"google.golang.org/grpc/test/bufconn"
 	"log"
 	"net"
 	"os"
 	"strings"
 	"testing"
 	"time"
+
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/health/grpc_health_v1"
+	"google.golang.org/grpc/test/bufconn"
+
+	"github.com/pitabwire/frame/grpcping"
 )
 
 type grpcServer struct {
@@ -25,8 +27,7 @@ type grpcServer struct {
 
 func (s *grpcServer) SayPing(ctx context.Context, in *grpcping.HelloRequest) (
 	*grpcping.HelloResponse, error) {
-
-	return &grpcping.HelloResponse{Message: "Hello " + in.Name + " from frame"}, nil
+	return &grpcping.HelloResponse{Message: "Hello " + in.GetName() + " from frame"}, nil
 }
 
 func startGRPCServer() (*grpc.Server, *bufconn.Listener) {
@@ -50,7 +51,6 @@ func getBufDialer(listener *bufconn.Listener) func(context.Context, string) (net
 }
 
 func TestRawGrpcServer(t *testing.T) {
-
 	srv, listener := startGRPCServer()
 	// it is here to properly stop the server
 	defer func() { time.Sleep(10 * time.Millisecond) }()
@@ -70,7 +70,6 @@ func TestRawGrpcServer(t *testing.T) {
 }
 
 func TestServiceGrpcHealthServer(t *testing.T) {
-
 	bufferSize := 1024 * 1024
 	listener := bufconn.Listen(bufferSize)
 	gsrv := grpc.NewServer()
@@ -82,7 +81,12 @@ func TestServiceGrpcHealthServer(t *testing.T) {
 		return
 	}
 	defConf.ServerPort = ":40489"
-	ctx, srv := NewService("Testing Service Grpc", WithGrpcServer(gsrv), WithGrpcServerListener(listener), WithConfig(&defConf))
+	ctx, srv := NewService(
+		"Testing Service Grpc",
+		WithGrpcServer(gsrv),
+		WithGrpcServerListener(listener),
+		WithConfig(&defConf),
+	)
 
 	go func(t *testing.T, srv *Service) {
 		err = srv.Run(ctx, "")
@@ -108,7 +112,6 @@ func TestServiceGrpcHealthServer(t *testing.T) {
 }
 
 func TestServiceGrpcServer(t *testing.T) {
-
 	bufferSize := 1024 * 1024
 	listener := bufconn.Listen(bufferSize)
 	gsrv := grpc.NewServer()
@@ -119,7 +122,12 @@ func TestServiceGrpcServer(t *testing.T) {
 		t.Errorf("Could not processFunc test configurations %v", err)
 		return
 	}
-	ctx, srv := NewService("Testing Service Grpc", WithGrpcServer(gsrv), WithGrpcServerListener(listener), WithConfig(&defConf))
+	ctx, srv := NewService(
+		"Testing Service Grpc",
+		WithGrpcServer(gsrv),
+		WithGrpcServerListener(listener),
+		WithConfig(&defConf),
+	)
 
 	go func() {
 		err = srv.Run(ctx, "")
@@ -145,7 +153,6 @@ func TestServiceGrpcServer(t *testing.T) {
 }
 
 func TestServiceGrpcTLSServer(t *testing.T) {
-
 	bufferSize := 10 * 1024 * 1024
 	priListener := bufconn.Listen(bufferSize)
 
@@ -159,8 +166,8 @@ func TestServiceGrpcTLSServer(t *testing.T) {
 
 	ctx, srv := NewService("Testing Service Grpc", WithConfig(&defConf), WithServerListener(priListener))
 
-	//tlsCreds, err := credentials.NewServerTLSFromFile(defConf.TLSCertPath(), defConf.TLSCertKeyPath())
-	//if err != nil {
+	// tlsCreds, err := credentials.NewServerTLSFromFile(defConf.TLSCertPath(), defConf.TLSCertKeyPath())
+	// if err != nil {
 	//	t.Errorf("Could not utilize an empty config for tls %s", err)
 	//	return
 	//}
@@ -209,14 +216,12 @@ func TestServiceGrpcTLSServer(t *testing.T) {
 
 func getBufferedClConn(listener *bufconn.Listener, opts ...grpc.DialOption) (
 	context.Context, context.CancelFunc, *grpc.ClientConn, error) {
-
 	ctx, cancel := context.WithCancel(context.Background())
 
 	opts = append(opts, grpc.WithContextDialer(getBufDialer(listener)))
 	conn, err := grpc.NewClient("passthrough://bufnet", opts...)
 
 	return ctx, cancel, conn, err
-
 }
 
 func getNetworkClConn(address string, opts ...grpc.DialOption) (
@@ -229,7 +234,6 @@ func getNetworkClConn(address string, opts ...grpc.DialOption) (
 }
 
 func clientInvokeGrpc(ctx context.Context, conn *grpc.ClientConn) error {
-
 	cli := grpcping.NewFramePingClient(conn)
 
 	req := grpcping.HelloRequest{
@@ -241,14 +245,13 @@ func clientInvokeGrpc(ctx context.Context, conn *grpc.ClientConn) error {
 		return err
 	}
 
-	if !strings.Contains(resp.Message, "frame") {
+	if !strings.Contains(resp.GetMessage(), "frame") {
 		return errors.New("The response message should contain the word frame ")
 	}
 	return conn.Close()
 }
 
 func clientInvokeGrpcHealth(ctx context.Context, conn *grpc.ClientConn) error {
-
 	cli := grpc_health_v1.NewHealthClient(conn)
 
 	req := grpc_health_v1.HealthCheckRequest{
@@ -267,7 +270,6 @@ func clientInvokeGrpcHealth(ctx context.Context, conn *grpc.ClientConn) error {
 }
 
 func TestService_Run(t *testing.T) {
-
 	listener := bufconn.Listen(1024 * 1024)
 	ctx2, srv2 := NewService("Testing", WithServerListener(listener))
 

@@ -3,12 +3,13 @@ package frame_test
 
 import (
 	"bytes"
-	"github.com/pitabwire/frame"
 	"net/http"
 	"os"
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/pitabwire/frame"
 )
 
 func TestGetLocalIP(t *testing.T) {

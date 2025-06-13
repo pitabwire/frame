@@ -76,9 +76,12 @@ func (l *dbLogger) Trace(ctx context.Context, begin time.Time, fc func() (string
 	rowsAffected := strconv.FormatInt(rows, 10)
 
 	log := l.baseLogger.WithContext(ctx).
-		WithAttr(tint.Attr(tintAttrCodeDuration, slog.Any("duration", elapsed.String()))).
-		WithAttr(tint.Attr(tintAttrCodeRows, slog.Any("rows", rowsAffected))).
-		WithAttr(tint.Attr(tintAttrCodeQuery, slog.Any("query", sql)))
+		With(
+			tint.Attr(tintAttrCodeDuration, slog.Any("duration", elapsed.String())),
+			tint.Attr(tintAttrCodeRows, slog.Any("rows", rowsAffected)),
+			tint.Attr(tintAttrCodeQuery, slog.Any("query", sql)),
+		)
+	defer log.Release()
 
 	queryIsSlow := false
 	if elapsed > l.slowThreshold && l.slowThreshold != 0 {

@@ -32,14 +32,14 @@ func datbaseLogger(ctx context.Context, s *Service) glogger.Interface {
 	}
 
 	return &dbLogger{
-		log:           s.Log(ctx),
 		logQueries:    logQueries,
 		slowThreshold: slowQueryThreshold,
+		baseLogger:    util.NewLogger(ctx, util.DefaultLogOptions()),
 	}
 }
 
 type dbLogger struct {
-	log           *util.LogEntry
+	baseLogger    *util.LogEntry // Base logger to clone for each query to avoid attribute accumulation
 	logQueries    bool
 	slowThreshold time.Duration
 }
@@ -51,17 +51,20 @@ func (l *dbLogger) LogMode(_ glogger.LogLevel) glogger.Interface {
 
 // Info print info.
 func (l *dbLogger) Info(ctx context.Context, msg string, data ...interface{}) {
-	l.log.WithContext(ctx).Info(msg, data...)
+	log := l.baseLogger.WithContext(ctx)
+	log.Info(msg, data...)
 }
 
 // Warn print warn messages.
 func (l *dbLogger) Warn(ctx context.Context, msg string, data ...interface{}) {
-	l.log.WithContext(ctx).Warn(msg, data...)
+	log := l.baseLogger.WithContext(ctx)
+	log.Warn(msg, data...)
 }
 
 // Error print error messages.
 func (l *dbLogger) Error(ctx context.Context, msg string, data ...interface{}) {
-	l.log.WithContext(ctx).Error(msg, data...)
+	log := l.baseLogger.WithContext(ctx)
+	log.Error(msg, data...)
 }
 
 // Trace print sql message.
@@ -72,7 +75,7 @@ func (l *dbLogger) Trace(ctx context.Context, begin time.Time, fc func() (string
 
 	rowsAffected := strconv.FormatInt(rows, 10)
 
-	log := l.log.WithContext(ctx).
+	log := l.baseLogger.WithContext(ctx).
 		WithAttr(tint.Attr(tintAttrCodeDuration, slog.Any("duration", elapsed.String()))).
 		WithAttr(tint.Attr(tintAttrCodeRows, slog.Any("rows", rowsAffected))).
 		WithAttr(tint.Attr(tintAttrCodeQuery, slog.Any("query", sql)))
@@ -97,6 +100,7 @@ func (l *dbLogger) Trace(ctx context.Context, begin time.Time, fc func() (string
 		if l.logQueries {
 			log.Info("query executed ")
 		}
+		return
 	}
 
 	if log.LevelEnabled(ctx, slog.LevelWarn) {

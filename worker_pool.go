@@ -309,7 +309,7 @@ func (ji *JobImpl) ReadResult(ctx context.Context) (JobResult, bool) {
 }
 
 func (ji *JobImpl) WriteError(ctx context.Context, val error) error {
-	if !ji.resultChanDone.Load() {
+	if ji.resultChanDone.Load() {
 		return ErrWorkerPoolResultChannelIsClosed
 	}
 	util.Log(ctx).Warn("Writing job error", "err", val)
@@ -317,7 +317,7 @@ func (ji *JobImpl) WriteError(ctx context.Context, val error) error {
 }
 
 func (ji *JobImpl) WriteResult(ctx context.Context, val any) error {
-	if !ji.resultChanDone.Load() {
+	if ji.resultChanDone.Load() {
 		return ErrWorkerPoolResultChannelIsClosed
 	}
 	util.Log(ctx).Warn("Writing job result", "item", val)

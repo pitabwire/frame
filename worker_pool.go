@@ -384,24 +384,24 @@ func createJobExecutionTask(ctx context.Context, s *Service, job Job) func() {
 
 		// Handle successful execution first and return early
 		if executionErr == nil {
-			log.WithError(executionErr).WithField("job_id", job.ID()).Info("Job executed successfully")
 			job.Close()
 			return
 		}
 
+		log = log.WithError(executionErr).WithField("can retry", job.CanRun())
 		if !job.CanRun() {
 			// Job failed and cannot be retried (e.g., retries exhausted).
-			log.Error("Job failed; retries exhausted or job cannot run further. Reporting final error.")
+			log.Error("Job failed; retries exhausted.")
 			_ = job.WriteError(ctx, executionErr)
 			job.Close()
 		}
 
 		// Job can be retried to resolve error
-		log.Info("Job failed, attempting to retry it")
+		log.Warn("Job failed, attempting to retry it")
 		resubmitErr := SubmitJob(ctx, s, job) // Recursive call to SubmitJob for retry
 		if resubmitErr != nil {
 			log.WithError(resubmitErr).
-				Error("Failed to resubmit job for retry. Reporting original execution error.")
+				Error("Failed to resubmit job for retry.")
 			// If resubmission fails, the original error of this attempt should be reported.
 			_ = job.WriteError(ctx, executionErr)
 			job.Close()

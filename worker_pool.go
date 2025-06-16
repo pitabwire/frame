@@ -383,7 +383,7 @@ func createJobExecutionTask(ctx context.Context, s *Service, job Job) func() {
 		executionErr := job.F()(ctx, job)
 
 		// Handle successful execution first and return early
-		if executionErr == nil {
+		if executionErr == nil || errors.Is(executionErr, context.Canceled) {
 			job.Close()
 			return
 		}

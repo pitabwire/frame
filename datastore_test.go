@@ -13,7 +13,7 @@ import (
 func TestService_Datastore(t *testing.T) {
 	testDBURL := frame.GetEnv(
 		"TEST_DATABASE_URL",
-		"postgres://frame:secret@localhost:5431/framedatabase?sslmode=disable",
+		"postgres://frame:secret@localhost:5435/framedatabase?sslmode=disable",
 	)
 
 	ctx, srv := frame.NewService("Test Srv", frame.WithNoopDriver())
@@ -46,7 +46,7 @@ func TestService_Datastore(t *testing.T) {
 }
 
 func TestService_DatastoreSet(t *testing.T) {
-	t.Setenv("DATABASE_URL", "postgres://frame:secret@localhost:5431/framedatabase?sslmode=disable")
+	t.Setenv("DATABASE_URL", "postgres://frame:secret@localhost:5435/framedatabase?sslmode=disable")
 	defConf, err := frame.ConfigFromEnv[frame.ConfigurationDefault]()
 	if err != nil {
 		t.Errorf("Could not processFunc test configurations %v", err)
@@ -65,7 +65,7 @@ func TestService_DatastoreSet(t *testing.T) {
 }
 
 func TestService_DatastoreRunQuery(t *testing.T) {
-	t.Setenv("DATABASE_URL", "postgres://frame:secret@localhost:5431/framedatabase?sslmode=disable")
+	t.Setenv("DATABASE_URL", "postgres://frame:secret@localhost:5435/framedatabase?sslmode=disable")
 
 	defConf, err := frame.ConfigFromEnv[frame.ConfigurationDefault]()
 	if err != nil {
@@ -93,7 +93,7 @@ func TestService_DatastoreRunQuery(t *testing.T) {
 func TestService_DatastoreRead(t *testing.T) {
 	testDBURL := frame.GetEnv(
 		"TEST_DATABASE_URL",
-		"postgres://frame:secret@localhost:5431/framedatabase?sslmode=disable",
+		"postgres://frame:secret@localhost:5435/framedatabase?sslmode=disable",
 	)
 
 	ctx, srv := frame.NewService("Test Srv")

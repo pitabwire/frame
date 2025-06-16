@@ -12,7 +12,7 @@ import (
 func TestSaveNewMigrations(t *testing.T) {
 	testDBURL := frame.GetEnv(
 		"TEST_DATABASE_URL",
-		"postgres://frame:secret@localhost:5431/framedatabase?sslmode=disable",
+		"postgres://frame:secret@localhost:5435/framedatabase?sslmode=disable",
 	)
 	ctx, svc := frame.NewService("Test Migrations Srv")
 
@@ -85,7 +85,7 @@ func TestSaveNewMigrations(t *testing.T) {
 func TestApplyMigrations(t *testing.T) {
 	testDBURL := frame.GetEnv(
 		"TEST_DATABASE_URL",
-		"postgres://frame:secret@localhost:5431/framedatabase?sslmode=disable",
+		"postgres://frame:secret@localhost:5435/framedatabase?sslmode=disable",
 	)
 
 	defConf, err := frame.ConfigFromEnv[frame.ConfigurationDefault]()
@@ -157,7 +157,7 @@ func TestApplyMigrations(t *testing.T) {
 func TestService_MigrateDatastore(t *testing.T) {
 	testDBURL := frame.GetEnv(
 		"TEST_DATABASE_URL",
-		"postgres://frame:secret@localhost:5431/framedatabase?sslmode=disable",
+		"postgres://frame:secret@localhost:5435/framedatabase?sslmode=disable",
 	)
 
 	ctx, srv := frame.NewService("Test Migrations Srv")
@@ -178,7 +178,7 @@ func TestService_MigrateDatastore(t *testing.T) {
 func TestService_MigrateDatastoreIDempotency(t *testing.T) {
 	testDBURL := frame.GetEnv(
 		"TEST_DATABASE_URL",
-		"postgres://frame:secret@localhost:5431/framedatabase?sslmode=disable",
+		"postgres://frame:secret@localhost:5435/framedatabase?sslmode=disable",
 	)
 
 	ctx, srv := frame.NewService("Test Migrations Srv")

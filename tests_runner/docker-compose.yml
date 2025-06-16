@@ -8,9 +8,20 @@ services:
       - POSTGRES_PASSWORD=secret
       - POSTGRES_DB=framedatabase
     ports:
-      - "5431:5432"
+      - "5435:5432"
 
-
+  natsd:
+    container_name: frame_nats
+    image: nats:2.11
+    restart: always
+    ports:
+      - "4225:4222"
+    command: [
+      "--js",
+      "-DVV",
+      "--user", "frame",
+      "--pass", "s3cr3t"
+    ]
 
   keto-migrate:
     container_name: frame_keto_migration

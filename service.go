@@ -267,7 +267,7 @@ func (s *Service) Run(ctx context.Context, address string) error {
 				Error("system exit in error")
 			s.Stop(ctx)
 		} else {
-			s.Log(ctx).Info("system exit successfully")
+			s.Log(ctx).Debug("system exit")
 		}
 		return err0
 	}

@@ -5,7 +5,7 @@ SHELL := /bin/bash
 .DEFAULT_GOAL := help
 
 ENV_LOCAL_TEST=\
-  TEST_DATABASE_URL=postgres://frame:secret@localhost:5431/framedatabase?sslmode=disable \
+  TEST_DATABASE_URL=postgres://frame:secret@localhost:5435/framedatabase?sslmode=disable \
   POSTGRES_PASSWORD=secret \
   POSTGRES_DB=service_notification \
   POSTGRES_HOST=notification_db \

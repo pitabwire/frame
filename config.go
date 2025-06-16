@@ -70,6 +70,11 @@ func ConfigFromEnv[T any]() (T, error) {
 	return env.ParseAs[T]()
 }
 
+// ConfigFillEnv convenience method to fill a config object with environment data.
+func ConfigFillEnv(v any) error {
+	return env.Parse(v)
+}
+
 type ConfigurationDefault struct {
 	LogLevel           string `envDefault:"info"                      env:"LOG_LEVEL"            yaml:"log_level"`
 	LogFormat          string `envDefault:"info"                      env:"LOG_FORMAT"           yaml:"log_format"`

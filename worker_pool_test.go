@@ -30,73 +30,75 @@ func (f *fields) process(_ context.Context, _ frame.JobResultPipe) error {
 // handle closed channels as fixed in the related bug.
 func TestJobImpl_ChannelOperations(t *testing.T) {
 	t.Run("WriteError and WriteResult should handle closed channels", func(t *testing.T) {
-		ctx := context.Background()
-		
+		ctx := t.Context()
+
 		// Create a job
-		job := frame.NewJob(func(ctx context.Context, result frame.JobResultPipe) error {
+		job := frame.NewJob(func(_ context.Context, _ frame.JobResultPipe) error {
 			return nil
 		})
-		
+
 		// First verify we can write to the channel
 		err := job.WriteResult(ctx, "test result")
 		if err != nil {
 			t.Errorf("WriteResult to open channel failed: %v", err)
 		}
-		
+
 		err = job.WriteError(ctx, errors.New("test error"))
 		if err != nil {
 			t.Errorf("WriteError to open channel failed: %v", err)
 		}
-		
+
 		// Now close the channel
 		job.Close()
-		
+
 		// Verify we get an error when trying to write to a closed channel
 		err = job.WriteResult(ctx, "after close")
 		if err == nil {
 			t.Error("WriteResult should return an error when channel is closed")
-		} else if err != frame.ErrWorkerPoolResultChannelIsClosed {
+		} else if !errors.Is(err, frame.ErrWorkerPoolResultChannelIsClosed) {
 			t.Errorf("Expected ErrWorkerPoolResultChannelIsClosed but got: %v", err)
 		}
-		
+
 		err = job.WriteError(ctx, errors.New("after close"))
 		if err == nil {
 			t.Error("WriteError should return an error when channel is closed")
-		} else if err != frame.ErrWorkerPoolResultChannelIsClosed {
+		} else if !errors.Is(err, frame.ErrWorkerPoolResultChannelIsClosed) {
 			t.Errorf("Expected ErrWorkerPoolResultChannelIsClosed but got: %v", err)
 		}
-		
+
 		// Drain the channel first
-		for range job.ResultChan() {
+		for res := range job.ResultChan() {
 			// Just drain any existing messages
+			t.Logf("res: %+v", res)
 		}
 	})
 }
 
-// TestJobImpl_ConcurrentOperations tests the JobImpl under concurrent operations
-// to ensure it properly handles multiple goroutines writing and reading
-func TestJobImpl_ConcurrentOperations(t *testing.T) {
+func writeIntRangeAsResult(ctx context.Context, t *testing.T, job frame.Job, count int) {
+	for i := range count {
+		if err := job.WriteResult(ctx, i); err != nil {
+			t.Errorf("Failed to write result: %v", err)
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	job.Close() // Close channel when done writing
+}
+
+// to ensure it properly handles multiple goroutines writing and reading.
+func TestJobImpl_SafeConcurrentOperations(t *testing.T) {
 	t.Run("Concurrent reads and writes should be safe", func(t *testing.T) {
-		ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+		ctx, cancel := context.WithTimeout(t.Context(), 500*time.Millisecond)
 		defer cancel()
-		
-		job := frame.NewJobWithBuffer(func(ctx context.Context, result frame.JobResultPipe) error {
+
+		job := frame.NewJobWithBuffer(func(_ context.Context, _ frame.JobResultPipe) error {
 			return nil
 		}, 10)
-		
+
 		// Writer goroutine
-		go func() {
-			for i := 0; i < 5; i++ {
-				if err := job.WriteResult(ctx, i); err != nil {
-					t.Errorf("Failed to write result: %v", err)
-					return
-				}
-				time.Sleep(10 * time.Millisecond)
-			}
-			
-			job.Close() // Close channel when done writing
-		}()
-		
+		go writeIntRangeAsResult(ctx, t, job, 5)
+
 		// Reader goroutine
 		count := 0
 		for {
@@ -105,41 +107,43 @@ func TestJobImpl_ConcurrentOperations(t *testing.T) {
 				// Channel closed or context canceled
 				break
 			}
-			
+
 			if result.IsError() {
 				t.Errorf("Unexpected error: %v", result.Error())
 			} else {
 				count++
 			}
 		}
-		
+
 		if count == 0 {
 			t.Error("Should have read at least one result")
 		}
 	})
+}
 
+func TestJobImpl_ChaoticConcurrentOperations(t *testing.T) {
 	t.Run("Close should prevent further writes but allow reads", func(t *testing.T) {
-		ctx := context.Background()
-		job := frame.NewJobWithBuffer(func(ctx context.Context, result frame.JobResultPipe) error {
+		ctx := t.Context()
+		job := frame.NewJobWithBuffer(func(_ context.Context, _ frame.JobResultPipe) error {
 			return nil
 		}, 5)
-		
+
 		// Write some data
-		for i := 0; i < 3; i++ {
+		for i := range 3 {
 			if err := job.WriteResult(ctx, i); err != nil {
 				t.Fatalf("Failed to write result: %v", err)
 			}
 		}
-		
+
 		// Close the channel
 		job.Close()
-		
+
 		// Attempt to write should fail
 		err := job.WriteResult(ctx, "should fail")
 		if err == nil {
 			t.Error("Write after close should fail")
 		}
-		
+
 		// Should still be able to read existing data
 		count := 0
 		for {
@@ -152,33 +156,32 @@ func TestJobImpl_ConcurrentOperations(t *testing.T) {
 				t.Errorf("Unexpected error result: %v", result.Error())
 			}
 		}
-		
+
 		if count != 3 {
 			t.Errorf("Expected to read 3 items, got %d", count)
 		}
 	})
 }
 
-// TestJobImpl_ResultChannelDoneFlag tests that the resultChanDone flag 
-// correctly tracks the closed state of the channel
+// correctly tracks the closed state of the channel.
 func TestJobImpl_ResultChannelDoneFlag(t *testing.T) {
 	t.Run("resultChanDone flag should properly indicate closed state", func(t *testing.T) {
-		ctx := context.Background()
-		job := frame.NewJob(func(ctx context.Context, result frame.JobResultPipe) error {
+		ctx := t.Context()
+		job := frame.NewJob(func(_ context.Context, _ frame.JobResultPipe) error {
 			return nil
 		})
-		
+
 		// Should be able to write before closing
 		if err := job.WriteResult(ctx, "test"); err != nil {
 			t.Errorf("Write before close failed: %v", err)
 		}
-		
+
 		// Close multiple times should be safe
 		job.Close()
 		job.Close() // Should be idempotent
-		
+
 		// Write after closing should fail with the specific error
-		if err := job.WriteError(ctx, errors.New("test")); err != frame.ErrWorkerPoolResultChannelIsClosed {
+		if err := job.WriteError(ctx, errors.New("test")); !errors.Is(err, frame.ErrWorkerPoolResultChannelIsClosed) {
 			t.Errorf("Expected ErrWorkerPoolResultChannelIsClosed but got: %v", err)
 		}
 	})
@@ -188,27 +191,27 @@ func TestJobImpl_ResultChannelDoneFlag(t *testing.T) {
 // to ensure they properly handle context cancellation and closed channels.
 func TestJobImpl_SafeChannelOperations(t *testing.T) {
 	t.Run("Channel operations should respect context cancellation", func(t *testing.T) {
-		ctx, cancel := context.WithCancel(context.Background())
-		job := frame.NewJobWithBuffer(func(ctx context.Context, result frame.JobResultPipe) error {
+		ctx, cancel := context.WithCancel(t.Context())
+		job := frame.NewJobWithBuffer(func(_ context.Context, _ frame.JobResultPipe) error {
 			return nil
 		}, 1)
-		
+
 		// Write something to the channel first
 		err := job.WriteResult(ctx, "test value")
 		if err != nil {
 			t.Fatalf("Failed to write to channel: %v", err)
 		}
-		
+
 		// Now cancel the context
 		cancel()
-		
+
 		// Attempt to write after context cancellation
 		err = job.WriteResult(ctx, "should fail")
 		if err == nil {
 			t.Error("Writing after context cancellation should fail")
 		}
-		
-		// Attempt to read after context cancellation 
+
+		// Attempt to read after context cancellation
 		_, ok := job.ReadResult(ctx)
 		if ok {
 			t.Error("Reading after context cancellation should return false")

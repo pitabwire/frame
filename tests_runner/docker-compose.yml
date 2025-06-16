@@ -10,6 +10,8 @@ services:
     ports:
       - "5431:5432"
 
+
+
   keto-migrate:
     container_name: frame_keto_migration
     image: oryd/keto:v0.12.0-alpha.0

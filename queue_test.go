@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/pitabwire/util"
 
@@ -87,13 +88,12 @@ func TestService_RegisterPublisherMultiple(t *testing.T) {
 	srv.Stop(ctx)
 }
 
-type messageHandler struct {
+type msgHandler struct {
+	f func(ctx context.Context, metadata map[string]string, message []byte) error
 }
 
-func (m *messageHandler) Handle(ctx context.Context, metadata map[string]string, message []byte) error {
-	log := util.Log(ctx)
-	log.Info("A nice message to handle", "message", string(message), "metadata", metadata)
-	return nil
+func (h *msgHandler) Handle(ctx context.Context, metadata map[string]string, message []byte) error {
+	return h.f(ctx, metadata, message)
 }
 
 type handlerWithError struct {
@@ -109,7 +109,14 @@ func TestService_RegisterSubscriber(t *testing.T) {
 	regSubTopic := "test-reg-sub-topic"
 
 	optTopic := frame.WithRegisterPublisher(regSubTopic, "mem://topicA")
-	opt := frame.WithRegisterSubscriber(regSubTopic, "mem://topicA", &messageHandler{})
+	opt := frame.WithRegisterSubscriber(
+		regSubTopic,
+		"mem://topicA",
+		&msgHandler{f: func(ctx context.Context, metadata map[string]string, message []byte) error {
+			util.Log(ctx).WithField("metadata", metadata).WithField("message", string(message)).Info("Received message")
+			return nil
+		}},
+	)
 
 	ctx, srv := frame.NewService("Test Srv", optTopic, opt, frame.WithNoopDriver())
 
@@ -136,6 +143,55 @@ func TestService_RegisterSubscriber(t *testing.T) {
 	srv.Stop(ctx)
 }
 
+func TestService_RegisterSubscriberValidateMessages(t *testing.T) {
+	regSubTopic := "test-reg-sub-pub-topic"
+
+	receivedMsgs := make(chan string, 1)
+	handler := &msgHandler{f: func(ctx context.Context, metadata map[string]string, message []byte) error {
+		util.Log(ctx).WithField("metadata", metadata).WithField("message", string(message)).Info("Received message")
+		receivedMsgs <- string(message)
+
+		return nil
+	}}
+
+	optTopic := frame.WithRegisterPublisher(regSubTopic, "mem://topicB")
+	opt := frame.WithRegisterSubscriber(regSubTopic, "mem://topicB", handler)
+
+	ctx, srv := frame.NewService("Test Srv", optTopic, opt, frame.WithNoopDriver())
+	defer srv.Stop(ctx)
+
+	err := srv.Run(ctx, ":")
+	if err != nil {
+		t.Errorf("We couldn't instantiate queue  %s", err)
+		return
+	}
+
+	for i := range 30 {
+		err = srv.Publish(ctx, regSubTopic, []byte(fmt.Sprintf(" testing message %d", i)))
+		if err != nil {
+			t.Errorf("We could not publish to a registered topic %d : %s ", i, err)
+			return
+		}
+	}
+
+	collectedMsgs := 0
+	timer := time.NewTimer(time.Second * 2)
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-timer.C:
+			t.Errorf("We did not receive all messages on time")
+			return
+		case <-receivedMsgs:
+			collectedMsgs++
+			if collectedMsgs == 30 {
+				return
+			}
+		}
+	}
+}
+
 func TestService_RegisterSubscriberWithError(t *testing.T) {
 	regSubT := "reg_s_wit-error"
 	opt := frame.WithRegisterSubscriber(regSubT, "mem://topicErrors", &handlerWithError{})
@@ -160,7 +216,10 @@ func TestService_RegisterSubscriberWithError(t *testing.T) {
 
 func TestService_RegisterSubscriberInvalid(t *testing.T) {
 	opt := frame.WithRegisterSubscriber("test", "memt+://topicA",
-		&messageHandler{})
+		&msgHandler{f: func(ctx context.Context, metadata map[string]string, message []byte) error {
+			util.Log(ctx).WithField("metadata", metadata).WithField("message", string(message)).Info("Received message")
+			return nil
+		}})
 
 	ctx, srv := frame.NewService("Test Srv", opt, frame.WithNoopDriver())
 
@@ -174,7 +233,10 @@ func TestService_RegisterSubscriberInvalid(t *testing.T) {
 func TestService_RegisterSubscriberContextCancelWorks(t *testing.T) {
 	optTopic := frame.WithRegisterPublisher("test", "mem://topicA")
 	opt := frame.WithRegisterSubscriber("test", "mem://topicA",
-		&messageHandler{})
+		&msgHandler{f: func(ctx context.Context, metadata map[string]string, message []byte) error {
+			util.Log(ctx).WithField("metadata", metadata).WithField("message", string(message)).Info("Received message")
+			return nil
+		}})
 
 	ctx, srv := frame.NewService("Test Srv", opt, optTopic, frame.WithNoopDriver())
 	defer srv.Stop(ctx)
@@ -282,7 +344,10 @@ func TestService_AddSubscriber(t *testing.T) {
 	// Test case 1: Add a new subscriber
 	reference := "new-subscriber"
 	queueURL := "mem://topicS"
-	handler := &messageHandler{}
+	handler := &msgHandler{f: func(ctx context.Context, metadata map[string]string, message []byte) error {
+		util.Log(ctx).WithField("metadata", metadata).WithField("message", string(message)).Info("Received message")
+		return nil
+	}}
 
 	// First register a publisher to create the topic
 	pubOpt := frame.WithRegisterPublisher(reference, queueURL)
@@ -317,7 +382,7 @@ func TestService_AddSubscriber(t *testing.T) {
 	}
 }
 func TestService_AddSubscriberWithoutHandler(t *testing.T) {
-	noHandlerRef := "no-handler-sub"
+	noHandlerRef := "no-handlers-sub"
 	noHandlerURL := "mem://topicNoHandler"
 
 	optTopic := frame.WithRegisterPublisher(noHandlerRef, noHandlerURL)
@@ -339,7 +404,7 @@ func TestService_AddSubscriberWithoutHandler(t *testing.T) {
 	// Now add the subscriber
 	err = srv.AddSubscriber(ctx, noHandlerRef, noHandlerURL)
 	if err != nil {
-		t.Errorf("Failed to add subscriber without handler: %v", err)
+		t.Errorf("Failed to add subscriber without handlers: %v", err)
 	}
 
 	// Verify it was added
@@ -348,7 +413,7 @@ func TestService_AddSubscriberWithoutHandler(t *testing.T) {
 		t.Errorf("Failed to get subscriber: %v", err)
 	}
 	if sub == nil {
-		t.Error("Subscriber without handler was not added successfully")
+		t.Error("Subscriber without handlers was not added successfully")
 	}
 
 	// Clean up
@@ -366,7 +431,10 @@ func TestService_AddSubscriber_InvalidURL(t *testing.T) {
 	// Attempt to add a subscriber with an invalid URL scheme
 	reference := "invalid-sub"
 	queueURL := "invalid://topic" // This scheme is not registered
-	handler := &messageHandler{}
+	handler := &msgHandler{f: func(ctx context.Context, metadata map[string]string, message []byte) error {
+		util.Log(ctx).WithField("metadata", metadata).WithField("message", string(message)).Info("Received message")
+		return nil
+	}}
 
 	// This should fail because the invalid URL can't be initialized
 	err := srv.AddSubscriber(ctx, reference, queueURL, handler)

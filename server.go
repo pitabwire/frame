@@ -77,7 +77,7 @@ func (dd *defaultDriver) getListener(
 	return tls.Listen("tcp", address, tlsConfig)
 }
 
-// ListenAndServe sets the address and handler on DefaultDriver's http.Server,
+// ListenAndServe sets the address and handlers on DefaultDriver's http.Server,
 // then calls ListenAndServe on it.
 func (dd *defaultDriver) ListenAndServe(addr string, h http.Handler) error {
 	var ln net.Listener
@@ -273,7 +273,7 @@ func WithGRPCPort(port string) Option {
 	}
 }
 
-// WithHTTPHandler specifies an HTTP handler that can be used to handle inbound HTTP requests.
+// WithHTTPHandler specifies an HTTP handlers that can be used to handle inbound HTTP requests.
 func WithHTTPHandler(h http.Handler) Option {
 	return func(_ context.Context, c *Service) {
 		c.handler = h

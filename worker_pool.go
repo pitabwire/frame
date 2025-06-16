@@ -80,7 +80,7 @@ func WithPoolPreAlloc(preAlloc bool) WorkerPoolOption {
 	}
 }
 
-// WithPoolPanicHandler sets a panic handler for the pool.
+// WithPoolPanicHandler sets a panic handlers for the pool.
 func WithPoolPanicHandler(handler func(interface{})) WorkerPoolOption {
 	return func(opts *WorkerPoolOptions) {
 		opts.PanicHandler = handler

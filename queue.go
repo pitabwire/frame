@@ -218,7 +218,7 @@ type subscriber struct {
 
 	reference    string
 	url          string
-	handler      SubscribeWorker
+	handlers     []SubscribeWorker
 	subscription *pubsub.Subscription
 	isInit       atomic.Bool
 	isIdle       atomic.Bool
@@ -243,7 +243,7 @@ func (s *subscriber) Receive(ctx context.Context) (*pubsub.Message, error) {
 		return nil, err
 	}
 	s.isIdle.Store(false)
-	return msg, err
+	return msg, nil
 }
 
 func (s *subscriber) Init(ctx context.Context) error {
@@ -258,7 +258,7 @@ func (s *subscriber) Init(ctx context.Context) error {
 		}
 		s.subscription = subs
 
-		if s.handler != nil {
+		if s.handlers != nil {
 			job := NewJob(s.listen)
 
 			err = SubmitJob(ctx, s.service, job)
@@ -308,11 +308,6 @@ func (s *subscriber) Stop(ctx context.Context) error {
 }
 
 func (s *subscriber) processReceivedMessage(ctx context.Context, msg *pubsub.Message) error {
-	logger := s.service.Log(ctx).
-		WithField("name", s.reference).
-		WithField("function", "processReceivedMessage").
-		WithField("url", s.url)
-
 	job := NewJob(func(jobCtx context.Context, _ JobResultPipe) error {
 		authClaim := ClaimsFromMap(msg.Metadata)
 		var processedCtx context.Context
@@ -322,13 +317,19 @@ func (s *subscriber) processReceivedMessage(ctx context.Context, msg *pubsub.Mes
 			processedCtx = jobCtx
 		}
 
-		handleErr := s.handler.Handle(processedCtx, msg.Metadata, msg.Body)
-		if handleErr != nil {
-			logger.WithError(handleErr).Warn("could not handle message")
-			if msg.Nackable() {
-				msg.Nack()
+		for _, worker := range s.handlers {
+			handleErr := worker.Handle(processedCtx, msg.Metadata, msg.Body)
+			if handleErr != nil {
+				logger := s.service.Log(ctx).
+					WithField("name", s.reference).
+					WithField("function", "processReceivedMessage").
+					WithField("url", s.url)
+				logger.WithError(handleErr).Warn("could not handle message")
+				if msg.Nackable() {
+					msg.Nack()
+				}
+				return handleErr // Propagate handlers error to the job runner
 			}
-			return handleErr // Propagate handler error to the job runner
 		}
 		msg.Ack()
 		return nil
@@ -336,6 +337,10 @@ func (s *subscriber) processReceivedMessage(ctx context.Context, msg *pubsub.Mes
 
 	submitErr := SubmitJob(ctx, s.service, job) // Use the original listen context for submitting the job
 	if submitErr != nil {
+		logger := s.service.Log(ctx).
+			WithField("name", s.reference).
+			WithField("function", "processReceivedMessage").
+			WithField("url", s.url)
 		// This error means the job submission itself failed, which is more critical.
 		logger.WithError(submitErr).Error("failed to submit message processing job")
 		// If job submission fails, the message might not have been acked/nacked properly
@@ -388,9 +393,9 @@ func (s *subscriber) listen(ctx context.Context, _ JobResultPipe) error {
 	}
 }
 
-// WithRegisterSubscriber Option to register a new subscription handler.
+// WithRegisterSubscriber Option to register a new subscription handlers.
 func WithRegisterSubscriber(reference string, queueURL string,
-	handler ...SubscribeWorker) Option {
+	handlers ...SubscribeWorker) Option {
 	return func(_ context.Context, s *Service) {
 		subs := subscriber{
 			service:   s,
@@ -398,9 +403,7 @@ func WithRegisterSubscriber(reference string, queueURL string,
 			url:       queueURL,
 		}
 
-		if len(handler) > 0 {
-			subs.handler = handler[0]
-		}
+		subs.handlers = handlers
 
 		s.queue.subscriptionQueueMap.Store(reference, &subs)
 	}
@@ -410,7 +413,7 @@ func (s *Service) AddSubscriber(
 	ctx context.Context,
 	reference string,
 	queueURL string,
-	handler ...SubscribeWorker,
+	handlers ...SubscribeWorker,
 ) error {
 	subs0, _ := s.GetSubscriber(reference)
 	if subs0 != nil {
@@ -423,9 +426,7 @@ func (s *Service) AddSubscriber(
 		url:       queueURL,
 	}
 
-	if len(handler) > 0 {
-		subs.handler = handler[0]
-	}
+	subs.handlers = handlers
 
 	err := s.initSubscriber(ctx, &subs)
 	if err != nil {

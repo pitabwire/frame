@@ -342,7 +342,7 @@ func (s *Service) initializeServerDrivers(ctx context.Context, httpPort string) 
 		log:  s.Log(ctx),
 		port: httpPort,
 		httpServer: &http.Server{
-			Handler: s.handler, // s.handler is the (potentially CORS-wrapped) mux
+			Handler: s.handler, // s.handlers is the (potentially CORS-wrapped) mux
 			BaseContext: func(_ net.Listener) context.Context {
 				return ctx
 			},

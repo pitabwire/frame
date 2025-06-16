@@ -607,7 +607,7 @@ func (s *Service) ensureAuthenticatedStreamContext(
 	}
 
 	// Wrap the original stream with newCtx (which is original ctx if not secure or auth failed/skipped, or authenticated ctx if successful).
-	// This ensures the handler always receives a stream from which it can get the correct context.
+	// This ensures the handlers always receives a stream from which it can get the correct context.
 	return &serverStreamWrapper{newCtx, ss}, nil
 }
 

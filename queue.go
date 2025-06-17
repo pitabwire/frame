@@ -9,6 +9,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pitabwire/util"
+
 	"google.golang.org/protobuf/proto"
 
 	"encoding/json"
@@ -246,8 +248,8 @@ func (s *subscriber) Receive(ctx context.Context) (*pubsub.Message, error) {
 	return msg, nil
 }
 
-func (s *subscriber) Init(ctx context.Context) error {
-	if s.isInit.Load() && s.subscription != nil {
+func (s *subscriber) createSubscription(ctx context.Context) error {
+	if s.subscription != nil {
 		return nil
 	}
 
@@ -257,14 +259,31 @@ func (s *subscriber) Init(ctx context.Context) error {
 			return fmt.Errorf("could not open topic subscription: %w", err)
 		}
 		s.subscription = subs
+	}
 
+	return nil
+}
+
+func (s *subscriber) Init(ctx context.Context) error {
+	if s.isInit.Load() && s.subscription != nil {
+		return nil
+	}
+
+	err := s.createSubscription(ctx)
+	if err != nil {
+		return err
+	}
+
+	if !strings.HasPrefix(s.url, "http") {
 		if s.handlers != nil {
 			job := NewJob(s.listen)
 
 			err = SubmitJob(ctx, s.service, job)
 			if err != nil {
-				s.service.Log(ctx).WithField("subscriber", s.reference).WithField("url", s.url).
-					WithError(err).WithField("subscriber", subs).Error(" could not listen or subscribe for messages")
+				s.service.Log(ctx).WithError(err).
+					WithField("subscriber", s.reference).
+					WithField("url", s.url).
+					Error(" could not listen or subscribe for messages")
 				return err
 			}
 		}
@@ -272,6 +291,31 @@ func (s *subscriber) Init(ctx context.Context) error {
 
 	s.isInit.Store(true)
 	return nil
+}
+
+func (s *subscriber) recreateSubscription(ctx context.Context) {
+	log := util.Log(ctx).WithField("subscriber", s.reference)
+
+	if !s.isInit.Load() {
+		log.Error("only initialised subscriptions can be recreated")
+	}
+
+	log.Warn("recreating subscription")
+
+	if s.subscription != nil {
+		err := s.subscription.Shutdown(ctx)
+		if err != nil {
+			log.WithError(err).Error("could not recreate subscription, stopping listener")
+			s.service.sendStopError(ctx, err)
+		}
+		s.subscription = nil
+	}
+
+	err := s.createSubscription(ctx)
+	if err != nil {
+		log.WithError(err).Error("could not recreate subscription, stopping listener")
+		s.service.sendStopError(ctx, err)
+	}
 }
 
 func (s *subscriber) Initiated() bool {
@@ -378,16 +422,19 @@ func (s *subscriber) listen(ctx context.Context, _ JobResultPipe) error {
 				}
 				// Other errors from Receive are critical for the listener.
 				logger.WithError(err).Error("could not pull message")
-				return err // Exit listen loop
+
+				// Recreate subscription
+				s.recreateSubscription(ctx)
 			}
 
 			// Process the received message. Errors from processing (like job submission failure)
 			// will be logged by processReceivedMessage. If it's a critical submission error,
-			// it will be returned and will stop the listener.
+			// it will be returned and will stop the whole application.
 			if procErr := s.processReceivedMessage(ctx, msg); procErr != nil {
 				// processReceivedMessage already logs details. This error is for critical failures.
 				logger.WithError(procErr).Error("critical error processing message, stopping listener")
-				return procErr
+				s.service.sendStopError(ctx, procErr) // procErr
+				return nil                            // Exit listen loop
 			}
 		}
 	}

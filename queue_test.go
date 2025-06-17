@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"sync"
 	"testing"
 	"time"
@@ -150,7 +151,7 @@ func TestService_RegisterSubscriberValidateMessages(t *testing.T) {
 
 	var wg sync.WaitGroup
 	receivedMessages := sync.Map{}
-	
+
 	handler := &msgHandler{f: func(ctx context.Context, metadata map[string]string, message []byte) error {
 		msgStr := string(message)
 		util.Log(ctx).WithField("metadata", metadata).WithField("message", msgStr).Info("Received message")
@@ -180,7 +181,7 @@ func TestService_RegisterSubscriberValidateMessages(t *testing.T) {
 	messages := []any{json.RawMessage("badjson"), emptyAny}
 	expectedMsgs := map[string]bool{
 		"badjson": false,
-		"{}": false,
+		"{}":      false,
 	}
 
 	for i := range 30 {
@@ -188,7 +189,7 @@ func TestService_RegisterSubscriberValidateMessages(t *testing.T) {
 		messages = append(messages, msgStr)
 		expectedMsgs[msgStr] = false
 	}
-	
+
 	wg.Add(len(messages))
 
 	// Add a small delay between publishes to ensure all messages are properly committed to Jetstream
@@ -222,15 +223,15 @@ func TestService_RegisterSubscriberValidateMessages(t *testing.T) {
 				missingMsgs = append(missingMsgs, msg)
 			}
 		}
-		
+
 		// Count received messages
 		receivedCount := 0
 		receivedMessages.Range(func(_, _ any) bool {
 			receivedCount++
 			return true
 		})
-		
-		t.Errorf("We did not receive all %d messages, only %d on time. Missing: %v", 
+
+		t.Errorf("We did not receive all %d messages, only %d on time. Missing: %v",
 			len(messages), receivedCount, missingMsgs)
 	case <-waitCh:
 		// All messages received successfully
@@ -240,19 +241,19 @@ func TestService_RegisterSubscriberValidateMessages(t *testing.T) {
 
 func TestService_SubscriberValidateJetstreamMessages(t *testing.T) {
 	regSubTopic := "test-reg-sub-pub-topic"
-	
+
 	// Create unique identifiers for this test instance
-	testID := fmt.Sprintf("%d", time.Now().UnixNano())
+	testID := strconv.FormatInt(time.Now().UnixNano(), 10)
 	streamName := "frametest-" + testID
 	subjectName := "frametest-" + testID
 	durableName := "durableframe-" + testID
 
 	receivedMessages := make(chan string, 1)
-	
+
 	handler := &msgHandler{f: func(ctx context.Context, metadata map[string]string, message []byte) error {
 		msgStr := string(message)
 		util.Log(ctx).WithField("metadata", metadata).WithField("message", msgStr).Debug("Received message")
-		
+
 		// Only decrement the WaitGroup for new (unique) messages to avoid negative WaitGroup counter
 		receivedMessages <- msgStr
 
@@ -266,11 +267,21 @@ func TestService_SubscriberValidateJetstreamMessages(t *testing.T) {
 	// 4. Memory storage - faster processing for tests
 	// 5. Higher ack wait time - gives subscriber more time to process and acknowledge
 	// 6. MaxAckPending matches message count - prevent flow control from limiting delivery
-	streamOpt := fmt.Sprintf("nats://frame:s3cr3t@localhost:4225?jetstream=true&subject=%s&stream_name=%s&stream_retention=workqueue&stream_storage=memory&stream_subjects=%s", 
-		subjectName, streamName, subjectName)
-	consumerOpt := fmt.Sprintf("nats://frame:s3cr3t@localhost:4225?consumer_ack_policy=explicit&consumer_ack_wait=10s&consumer_deliver_policy=all&consumer_durable_name=%s&consumer_filter_subject=%s&consumer_max_ack_pending=32&consumer_max_deliver=5&jetstream=true&stream_name=%s&stream_retention=workqueue&stream_storage=memory&stream_subjects=%s&subject=%s", 
-		durableName, subjectName, streamName, subjectName, subjectName)
-	
+	streamOpt := fmt.Sprintf(
+		"nats://frame:s3cr3t@localhost:4225?jetstream=true&subject=%s&stream_name=%s&stream_retention=workqueue&stream_storage=memory&stream_subjects=%s",
+		subjectName,
+		streamName,
+		subjectName,
+	)
+	consumerOpt := fmt.Sprintf(
+		"nats://frame:s3cr3t@localhost:4225?consumer_ack_policy=explicit&consumer_ack_wait=10s&consumer_deliver_policy=all&consumer_durable_name=%s&consumer_filter_subject=%s&consumer_max_ack_pending=32&consumer_max_deliver=5&jetstream=true&stream_name=%s&stream_retention=workqueue&stream_storage=memory&stream_subjects=%s&subject=%s",
+		durableName,
+		subjectName,
+		streamName,
+		subjectName,
+		subjectName,
+	)
+
 	optTopic := frame.WithRegisterPublisher(regSubTopic, streamOpt)
 	opt := frame.WithRegisterSubscriber(regSubTopic, consumerOpt, handler)
 
@@ -295,7 +306,7 @@ func TestService_SubscriberValidateJetstreamMessages(t *testing.T) {
 		msgStr := fmt.Sprintf("{\"id\": %d}", i)
 		messages = append(messages, msgStr)
 	}
-	
+
 	// Add a longer delay between publishes to ensure proper JetStream commit
 	for _, msg := range messages {
 		err = srv.Publish(ctx, regSubTopic, msg)
@@ -319,12 +330,16 @@ func TestService_SubscriberValidateJetstreamMessages(t *testing.T) {
 				return
 			}
 
-
 		case <-ctx.Done():
 			// Count final state of messages
 			return
 		case <-ticker.C:
-			t.Errorf("We did not receive all %d messages, only %d on time. Missing: %v", len(messages), receivedCount, len(messages)-receivedCount)
+			t.Errorf(
+				"We did not receive all %d messages, only %d on time. Missing: %v",
+				len(messages),
+				receivedCount,
+				len(messages)-receivedCount,
+			)
 			return
 		}
 	}

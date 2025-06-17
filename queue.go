@@ -425,6 +425,7 @@ func (s *subscriber) listen(ctx context.Context, _ JobResultPipe) error {
 
 				// Recreate subscription
 				s.recreateSubscription(ctx)
+				continue
 			}
 
 			// Process the received message. Errors from processing (like job submission failure)

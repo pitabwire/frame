@@ -235,6 +235,11 @@ func (s *subscriber) URI() string {
 }
 
 func (s *subscriber) Receive(ctx context.Context) (*pubsub.Message, error) {
+
+	if !s.Initiated() {
+		return nil, fmt.Errorf("only initialised subscriptions can pull messages")
+	}
+
 	msg, err := s.subscription.Receive(ctx)
 	if err != nil {
 		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {

@@ -348,9 +348,11 @@ func (s *subscriber) Stop(ctx context.Context) error {
 
 	s.isInit.Store(false)
 
-	err := s.subscription.Shutdown(sctx)
-	if err != nil {
-		return err
+	if s.subscription != nil {
+		err := s.subscription.Shutdown(sctx)
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil

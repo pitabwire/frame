@@ -236,7 +236,7 @@ func (s *subscriber) URI() string {
 
 func (s *subscriber) Receive(ctx context.Context) (*pubsub.Message, error) {
 
-	if !s.Initiated() {
+	if s.subscription == nil {
 		return nil, fmt.Errorf("only initialised subscriptions can pull messages")
 	}
 

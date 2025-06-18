@@ -37,7 +37,7 @@ type SubscriberMetrics struct {
 
 // IsIdle and is in waiting state.
 func (m *SubscriberMetrics) IsIdle(state SubscriberState) bool {
-	return state == SubscriberStateWaiting && m.ActiveMessages.Load() == 0
+	return state == SubscriberStateWaiting && m.ActiveMessages.Load() <= 0
 }
 
 // IdleTime returns the duration since last activity if the subscriber is idle.

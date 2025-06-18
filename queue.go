@@ -340,16 +340,7 @@ func (s *subscriber) Init(ctx context.Context) error {
 
 	if !strings.HasPrefix(s.url, "http") {
 		if s.handlers != nil {
-			job := NewJob(s.listen)
-
-			err = SubmitJob(ctx, s.service, job)
-			if err != nil {
-				s.service.Log(ctx).WithError(err).
-					WithField("subscriber", s.reference).
-					WithField("url", s.url).
-					Error(" could not listen or subscribe for messages")
-				return err
-			}
+			go s.listen(ctx)
 		}
 	}
 
@@ -471,7 +462,7 @@ func (s *subscriber) processReceivedMessage(ctx context.Context, msg *pubsub.Mes
 	return nil
 }
 
-func (s *subscriber) listen(ctx context.Context, _ JobResultPipe) error {
+func (s *subscriber) listen(ctx context.Context) {
 	logger := s.service.Log(ctx).
 		WithField("name", s.reference).
 		WithField("function", "subscription").
@@ -483,10 +474,10 @@ func (s *subscriber) listen(ctx context.Context, _ JobResultPipe) error {
 			err := s.Stop(ctx)
 			if err != nil {
 				logger.WithError(err).Error("could not stop subscription")
-				return err
+				return
 			}
 			logger.Debug("exiting due to canceled context")
-			return ctx.Err()
+			return
 
 		default:
 			msg, err := s.Receive(ctx)
@@ -510,7 +501,7 @@ func (s *subscriber) listen(ctx context.Context, _ JobResultPipe) error {
 				// processReceivedMessage already logs details. This error is for critical failures.
 				logger.WithError(procErr).Error("critical error processing message, stopping listener")
 				s.service.sendStopError(ctx, procErr) // procErr
-				return nil                            // Exit listen loop
+				return                                // Exit listen loop
 			}
 		}
 	}

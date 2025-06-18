@@ -435,12 +435,23 @@ func SafeChannelWrite(ctx context.Context, ch chan<- JobResult, value JobResult)
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
-	case ch <- value:
-		return nil
+	default:
 	}
+
+	ch <- value
+	return nil
 }
 
 func SafeChannelRead(ctx context.Context, ch <-chan JobResult) (JobResult, bool) {
+	// First check if the context is already done
+	select {
+	case <-ctx.Done():
+		return &jobResult{error: ctx.Err()}, false
+	default:
+		// Context is not canceled, proceed with reading
+	}
+
+	// Now do the actual read, still respecting potential context cancellation
 	select {
 	case <-ctx.Done():
 		// Return context error without blocking

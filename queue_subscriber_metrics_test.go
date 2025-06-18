@@ -122,7 +122,7 @@ func TestSubscriberMetrics_AverageProcessingTime(t *testing.T) {
 
 	// Test average calculation
 	avgTime = metrics.AverageProcessingTime()
-	expected := time.Duration(100 * time.Millisecond)
+	expected := 100 * time.Millisecond
 	if avgTime != expected {
 		t.Errorf("AverageProcessingTime() = %v, expected %v", avgTime, expected)
 	}
@@ -144,12 +144,12 @@ func TestSubscriberMetrics_ConcurrentAccess(t *testing.T) {
 	var wg sync.WaitGroup
 	wg.Add(numGoroutines)
 
-	for i := 0; i < numGoroutines; i++ {
+	for range numGoroutines {
 		go func() {
 			defer wg.Done()
 
 			// Simulate message processing operations
-			for j := 0; j < numOperationsPerGoroutine; j++ {
+			for j := range numOperationsPerGoroutine {
 				// Increment active messages
 				metrics.ActiveMessages.Add(1)
 
@@ -202,7 +202,7 @@ func TestSubscriberMetrics_IntegrationWithSubscriber(t *testing.T) {
 	var messageProcessingTime int64
 
 	// Create a handler that tracks metrics
-	handler := &msgHandler{f: func(ctx context.Context, metadata map[string]string, message []byte) error {
+	handler := &msgHandler{f: func(_ context.Context, metadata map[string]string, message []byte) error {
 		// Simulate some work
 		time.Sleep(10 * time.Millisecond)
 		atomic.AddInt64(&successfulMessages, 1)
@@ -241,7 +241,7 @@ func TestSubscriberMetrics_IntegrationWithSubscriber(t *testing.T) {
 
 	// Publish messages
 	numMessages := 10
-	for i := 0; i < numMessages; i++ {
+	for range numMessages {
 		err = srv.Publish(ctx, regSubTopic, []byte("metrics test message"))
 		if err != nil {
 			t.Errorf("Failed to publish message: %v", err)

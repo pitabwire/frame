@@ -432,15 +432,12 @@ func (s *subscriber) processReceivedMessage(ctx context.Context, msg *pubsub.Mes
 		for _, worker := range s.handlers {
 			err = worker.Handle(processedCtx, msg.Metadata, msg.Body)
 			if err != nil {
-				logger := s.service.Log(ctx).
+				logger := s.service.Log(processedCtx).
 					WithField("name", s.reference).
 					WithField("function", "processReceivedMessage").
 					WithField("url", s.url)
 				logger.WithError(err).Warn("could not handle message")
-				if msg.Nackable() {
-					msg.Nack()
-				}
-
+				msg.Nack()
 				return err // Propagate handlers error to the job runner
 			}
 		}
@@ -450,6 +447,7 @@ func (s *subscriber) processReceivedMessage(ctx context.Context, msg *pubsub.Mes
 
 	submitErr := SubmitJob(ctx, s.service, job)
 	if submitErr != nil {
+		msg.Nack()
 		logger := s.service.Log(ctx).
 			WithField("name", s.reference).
 			WithField("function", "processReceivedMessage").

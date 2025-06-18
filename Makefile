@@ -2,7 +2,7 @@ SHELL := /bin/bash
 
 .PHONY: help clean build
 
-.DEFAULT_GOAL := help
+default: format build
 
 ENV_LOCAL_TEST=\
   TEST_DATABASE_URL=postgres://frame:secret@localhost:5435/framedatabase?sslmode=disable \
@@ -23,11 +23,13 @@ help:   ## show this help
 	@echo 'targets:'
 	@egrep '^(.+)\:\ .*##\ (.+)' ${MAKEFILE_LIST} | sed 's/:.*##/#/' | column -t -c 2 -s '#'
 
-clean:  ## go clean
-	go clean
+format:
 	find . -name '*.go' -not -path './.git/*' -exec sed -i '/^import (/,/^)/{/^$$/d}' {} +
 	find . -name '*.go' -not -path './.git/*' -exec goimports -w {} +
 	golangci-lint run --fix
+
+clean:  ## go clean
+	go clean
 
 fmt:    ## format the go source files
 	go fmt ./...

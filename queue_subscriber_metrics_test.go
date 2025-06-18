@@ -202,7 +202,7 @@ func TestSubscriberMetrics_IntegrationWithSubscriber(t *testing.T) {
 	var messageProcessingTime int64
 
 	// Create a handler that tracks metrics
-	handler := &msgHandler{f: func(_ context.Context, metadata map[string]string, message []byte) error {
+	handler := &msgHandler{f: func(_ context.Context, _ map[string]string, _ []byte) error {
 		// Simulate some work
 		time.Sleep(10 * time.Millisecond)
 		atomic.AddInt64(&successfulMessages, 1)

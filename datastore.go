@@ -13,13 +13,11 @@ import (
 	"sync/atomic"
 	"time"
 
-	"gorm.io/driver/postgres"
-
 	"github.com/XSAM/otelsql"
-
 	"go.opentelemetry.io/otel/attribute"
 	semconv "go.opentelemetry.io/otel/semconv/v1.30.0"
 	"gorm.io/datatypes"
+	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
 

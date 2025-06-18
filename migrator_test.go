@@ -4,9 +4,9 @@ import (
 	"os"
 	"testing"
 
-	"github.com/pitabwire/frame"
-
 	"gorm.io/gorm"
+
+	"github.com/pitabwire/frame"
 )
 
 func TestSaveNewMigrations(t *testing.T) {

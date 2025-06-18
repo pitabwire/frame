@@ -2,25 +2,79 @@ package frame
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"maps"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
-	"github.com/pitabwire/util"
-
-	"google.golang.org/protobuf/proto"
-
-	"encoding/json"
-	"sync/atomic"
-
-	"gocloud.dev/pubsub"
-
 	_ "github.com/pitabwire/natspubsub" // required for NATS pubsub driver registration
-	_ "gocloud.dev/pubsub/mempubsub"
+	"github.com/pitabwire/util"
+	"gocloud.dev/pubsub"
+	_ "gocloud.dev/pubsub/mempubsub" // required for in-memory pubsub driver registration
+	"google.golang.org/protobuf/proto"
 )
+
+type SubscriberState int
+
+const (
+	SubscriberStateWaiting SubscriberState = iota
+	SubscriberStateProcessing
+	SubscriberStateInError
+)
+
+// SubscriberMetrics tracks operational metrics for a subscriber.
+type SubscriberMetrics struct {
+	ActiveMessages *atomic.Int64 // Currently active messages being processed
+	LastActivity   *atomic.Int64 // Last activity timestamp in UnixNano
+	ProcessingTime *atomic.Int64 // Total processing time in nanoseconds
+	MessageCount   *atomic.Int64 // Total messages processed
+	ErrorCount     *atomic.Int64 // Total number of errors encountered
+}
+
+// IsIdle and is in waiting state.
+func (m *SubscriberMetrics) IsIdle(state SubscriberState) bool {
+	return state == SubscriberStateWaiting && m.ActiveMessages.Load() == 0
+}
+
+// IdleTime returns the duration since last activity if the subscriber is idle.
+func (m *SubscriberMetrics) IdleTime(state SubscriberState) time.Duration {
+	if !m.IsIdle(state) {
+		return 0
+	}
+
+	lastActivity := m.LastActivity.Load()
+	if lastActivity == 0 {
+		return 0
+	}
+
+	return time.Since(time.Unix(0, lastActivity))
+}
+
+// AverageProcessingTime returns the average time spent processing messages.
+func (m *SubscriberMetrics) AverageProcessingTime() time.Duration {
+	count := m.MessageCount.Load()
+	if count == 0 {
+		return 0
+	}
+
+	return time.Duration(m.ProcessingTime.Load() / count)
+}
+
+func (m *SubscriberMetrics) closeMessage(startTime time.Time, err error) {
+	if err != nil {
+		m.ErrorCount.Add(1)
+	}
+
+	// Update metrics after processing
+	m.ProcessingTime.Add(time.Since(startTime).Nanoseconds())
+	m.MessageCount.Add(1)
+	m.ActiveMessages.Add(-1)
+	m.LastActivity.Store(time.Now().UnixNano())
+}
 
 type queue struct {
 	publishQueueMap      *sync.Map
@@ -78,7 +132,6 @@ func (p *publisher) Publish(ctx context.Context, payload any, headers ...map[str
 	case string:
 		message = []byte(v)
 	default:
-
 		protoMsg, ok := payload.(proto.Message)
 		if ok {
 			message, err = proto.Marshal(protoMsg)
@@ -204,7 +257,9 @@ type Subscriber interface {
 
 	URI() string
 	Initiated() bool
-	Idle() bool
+	State() SubscriberState
+	Metrics() *SubscriberMetrics
+	IsIdle() bool
 
 	Init(ctx context.Context) error
 	Receive(ctx context.Context) (*pubsub.Message, error)
@@ -223,7 +278,8 @@ type subscriber struct {
 	handlers     []SubscribeWorker
 	subscription *pubsub.Subscription
 	isInit       atomic.Bool
-	isIdle       atomic.Bool
+	state        SubscriberState
+	metrics      *SubscriberMetrics
 }
 
 func (s *subscriber) Ref() string {
@@ -235,21 +291,24 @@ func (s *subscriber) URI() string {
 }
 
 func (s *subscriber) Receive(ctx context.Context) (*pubsub.Message, error) {
-
 	if s.subscription == nil {
-		return nil, fmt.Errorf("only initialised subscriptions can pull messages")
+		return nil, errors.New("only initialised subscriptions can pull messages")
 	}
+
+	s.state = SubscriberStateWaiting
+	s.metrics.LastActivity.Store(time.Now().UnixNano())
 
 	msg, err := s.subscription.Receive(ctx)
 	if err != nil {
 		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-			s.isIdle.Store(true)
-		} else {
-			s.isInit.Store(false)
+			return nil, err
 		}
+		s.state = SubscriberStateInError
+		s.metrics.ErrorCount.Add(1)
 		return nil, err
 	}
-	s.isIdle.Store(false)
+	s.state = SubscriberStateProcessing
+	s.metrics.ActiveMessages.Add(1)
 	return msg, nil
 }
 
@@ -327,8 +386,16 @@ func (s *subscriber) Initiated() bool {
 	return s.isInit.Load()
 }
 
-func (s *subscriber) Idle() bool {
-	return s.isIdle.Load()
+func (s *subscriber) State() SubscriberState {
+	return s.state
+}
+
+func (s *subscriber) Metrics() *SubscriberMetrics {
+	return s.metrics
+}
+
+func (s *subscriber) IsIdle() bool {
+	return s.metrics.IsIdle(s.state)
 }
 
 func (s *subscriber) Stop(ctx context.Context) error {
@@ -360,6 +427,9 @@ func (s *subscriber) Stop(ctx context.Context) error {
 
 func (s *subscriber) processReceivedMessage(ctx context.Context, msg *pubsub.Message) error {
 	job := NewJob(func(jobCtx context.Context, _ JobResultPipe) error {
+		var err error
+		defer s.metrics.closeMessage(time.Now(), err)
+
 		authClaim := ClaimsFromMap(msg.Metadata)
 		var processedCtx context.Context
 		if authClaim != nil {
@@ -369,37 +439,35 @@ func (s *subscriber) processReceivedMessage(ctx context.Context, msg *pubsub.Mes
 		}
 
 		for _, worker := range s.handlers {
-			handleErr := worker.Handle(processedCtx, msg.Metadata, msg.Body)
-			if handleErr != nil {
+			err = worker.Handle(processedCtx, msg.Metadata, msg.Body)
+			if err != nil {
 				logger := s.service.Log(ctx).
 					WithField("name", s.reference).
 					WithField("function", "processReceivedMessage").
 					WithField("url", s.url)
-				logger.WithError(handleErr).Warn("could not handle message")
+				logger.WithError(err).Warn("could not handle message")
 				if msg.Nackable() {
 					msg.Nack()
 				}
-				return handleErr // Propagate handlers error to the job runner
+
+				return err // Propagate handlers error to the job runner
 			}
 		}
 		msg.Ack()
 		return nil
 	})
 
-	submitErr := SubmitJob(ctx, s.service, job) // Use the original listen context for submitting the job
+	submitErr := SubmitJob(ctx, s.service, job)
 	if submitErr != nil {
 		logger := s.service.Log(ctx).
 			WithField("name", s.reference).
 			WithField("function", "processReceivedMessage").
 			WithField("url", s.url)
-		// This error means the job submission itself failed, which is more critical.
-		logger.WithError(submitErr).Error("failed to submit message processing job")
-		// If job submission fails, the message might not have been acked/nacked properly
-		// depending on where SubmitJob failed. Consider if nack is appropriate here
-		// if the job func (and thus ack/nack) never ran.
-		// However, Receive() would likely fetch it again if it's not acked.
+		logger.WithError(submitErr).Error("could not process message, failed to submit job")
+		s.metrics.closeMessage(time.Now(), submitErr)
 		return submitErr
 	}
+
 	return nil
 }
 
@@ -448,19 +516,28 @@ func (s *subscriber) listen(ctx context.Context, _ JobResultPipe) error {
 	}
 }
 
+func newSubscriber(s *Service, reference string, queueURL string, handlers ...SubscribeWorker) *subscriber {
+	return &subscriber{
+		service:   s,
+		reference: reference,
+		url:       queueURL,
+		handlers:  handlers,
+		metrics: &SubscriberMetrics{
+			ActiveMessages: &atomic.Int64{},
+			LastActivity:   &atomic.Int64{},
+			ProcessingTime: &atomic.Int64{},
+			MessageCount:   &atomic.Int64{},
+			ErrorCount:     &atomic.Int64{},
+		},
+	}
+}
+
 // WithRegisterSubscriber Option to register a new subscription handlers.
 func WithRegisterSubscriber(reference string, queueURL string,
 	handlers ...SubscribeWorker) Option {
 	return func(_ context.Context, s *Service) {
-		subs := subscriber{
-			service:   s,
-			reference: reference,
-			url:       queueURL,
-		}
-
-		subs.handlers = handlers
-
-		s.queue.subscriptionQueueMap.Store(reference, &subs)
+		subs := newSubscriber(s, reference, queueURL, handlers...)
+		s.queue.subscriptionQueueMap.Store(reference, subs)
 	}
 }
 
@@ -475,20 +552,13 @@ func (s *Service) AddSubscriber(
 		return nil
 	}
 
-	subs := subscriber{
-		service:   s,
-		reference: reference,
-		url:       queueURL,
-	}
-
-	subs.handlers = handlers
-
-	err := s.initSubscriber(ctx, &subs)
+	subs := newSubscriber(s, reference, queueURL, handlers...)
+	err := s.initSubscriber(ctx, subs)
 	if err != nil {
 		return err
 	}
 
-	s.queue.subscriptionQueueMap.Store(reference, &subs)
+	s.queue.subscriptionQueueMap.Store(reference, subs)
 
 	return nil
 }

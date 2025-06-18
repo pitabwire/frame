@@ -25,6 +25,9 @@ help:   ## show this help
 
 clean:  ## go clean
 	go clean
+	find . -name '*.go' -not -path './.git/*' -exec sed -i '/^import (/,/^)/{/^$$/d}' {} +
+	find . -name '*.go' -not -path './.git/*' -exec goimports -w {} +
+	golangci-lint run --fix
 
 fmt:    ## format the go source files
 	go fmt ./...
@@ -46,9 +49,6 @@ docker-setup: ## sets up docker container images
 docker-stop: ## stops all docker containers
 	docker compose -f tests_runner/docker-compose.yml down
 
-
-goimports:
-	find . -name \*.go -not -path .git -exec goimports -w {} \;
 
 
 # this command will run all tests in the repo

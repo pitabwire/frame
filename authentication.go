@@ -14,9 +14,8 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
-
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/status"
 )
 
 const ctxKeyAuthenticationClaim = contextKey("authenticationClaimKey")

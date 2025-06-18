@@ -10,14 +10,11 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/pitabwire/util"
-
 	ghandler "github.com/gorilla/handlers"
 	"github.com/nicksnyder/go-i18n/v2/i18n"
+	"github.com/pitabwire/util"
 	"go.opentelemetry.io/otel/sdk/trace"
-
-	// Automatically set GOMAXPROCS to match Linux container CPU quota.
-	_ "go.uber.org/automaxprocs"
+	_ "go.uber.org/automaxprocs" // Automatically set GOMAXPROCS to match Linux container CPU quota.
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/reflection"

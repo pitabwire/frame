@@ -1,4 +1,4 @@
-# frame        [![Build Status](https://github.com/pitabwire/frame/actions/workflows/run_tests.yml/badge.svg?branch=main)](https://github.com/pitabwire/frame/actions/workflows/run_tests.yml)
+# frame        [![Build Status](https://github.com/pitabwire/frame/actions/workflows/run_tests.yml/badge.svg?branch=main)](https://github.com/pitabwire/frame/actions/workflows/run_tests.yml)   [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/pitabwire/frame)
 
 A simple frame for quickly setting up api servers based on [gocloud](https://github.com/google/go-cloud) framework.
 

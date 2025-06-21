@@ -589,11 +589,6 @@ func (s *Service) initSubscriber(ctx context.Context, sub Subscriber) error {
 	s.stopMutex.Lock()
 	defer s.stopMutex.Unlock()
 
-	err := s.AddPublisher(ctx, sub.Ref(), sub.URI())
-	if err != nil {
-		return err
-	}
-
 	return sub.Init(ctx)
 }
 

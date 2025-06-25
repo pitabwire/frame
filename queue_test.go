@@ -320,13 +320,18 @@ func TestService_SubscriberValidateJetstreamMessages(t *testing.T) {
 	ticker := time.NewTicker(2 * time.Second)
 	defer ticker.Stop()
 
-	receivedCount := 0
+	receiveCount := 0
+	var received []string
 	for {
 		select {
-		case <-receivedMessages:
-			receivedCount++
-			if len(messages) == receivedCount {
-				t.Log("All messages successfully received!")
+		case v, ok := <-receivedMessages:
+
+			receiveCount++
+			received = append(received, v)
+			t.Logf("message received! : %d val ok : %t", receiveCount, ok)
+
+			if len(messages) <= receiveCount {
+				t.Logf("All messages successfully handled : %v", received)
 				return
 			}
 
@@ -337,8 +342,8 @@ func TestService_SubscriberValidateJetstreamMessages(t *testing.T) {
 			t.Errorf(
 				"We did not receive all %d messages, only %d on time. Missing: %v",
 				len(messages),
-				receivedCount,
-				len(messages)-receivedCount,
+				len(received),
+				len(messages)-len(received),
 			)
 			return
 		}

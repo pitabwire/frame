@@ -13,7 +13,7 @@ require (
 	github.com/lmittmann/tint v1.1.2
 	github.com/nicksnyder/go-i18n/v2 v2.6.0
 	github.com/panjf2000/ants/v2 v2.11.3
-	github.com/pitabwire/natspubsub v0.6.6
+	github.com/pitabwire/natspubsub v0.6.8
 	github.com/pitabwire/util v0.2.5
 	github.com/rs/xid v1.6.0
 	go.opentelemetry.io/otel v1.37.0

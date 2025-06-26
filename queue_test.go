@@ -249,14 +249,10 @@ func TestService_SubscriberValidateJetstreamMessages(t *testing.T) {
 	durableName := "durableframe-" + testID
 
 	receivedMessages := make(chan string, 1)
+	defer close(receivedMessages)
 
-	handler := &msgHandler{f: func(ctx context.Context, metadata map[string]string, message []byte) error {
-		msgStr := string(message)
-		util.Log(ctx).WithField("metadata", metadata).WithField("message", msgStr).Debug("Received message")
-
-		// Only decrement the WaitGroup for new (unique) messages to avoid negative WaitGroup counter
-		receivedMessages <- msgStr
-
+	handler := &msgHandler{f: func(_ context.Context, _ map[string]string, message []byte) error {
+		receivedMessages <- string(message)
 		return nil
 	}}
 
@@ -274,7 +270,7 @@ func TestService_SubscriberValidateJetstreamMessages(t *testing.T) {
 		subjectName,
 	)
 	consumerOpt := fmt.Sprintf(
-		"nats://frame:s3cr3t@localhost:4225?consumer_ack_policy=explicit&consumer_ack_wait=10s&consumer_deliver_policy=all&consumer_durable_name=%s&consumer_filter_subject=%s&consumer_max_ack_pending=32&consumer_max_deliver=5&jetstream=true&stream_name=%s&stream_retention=workqueue&stream_storage=memory&stream_subjects=%s&subject=%s",
+		"nats://frame:s3cr3t@localhost:4225?consumer_ack_policy=explicit&consumer_ack_wait=10s&consumer_deliver_policy=all&consumer_durable_name=%s&consumer_filter_subject=%s&jetstream=true&stream_name=%s&stream_retention=workqueue&stream_storage=memory&stream_subjects=%s&subject=%s",
 		durableName,
 		subjectName,
 		streamName,
@@ -317,20 +313,26 @@ func TestService_SubscriberValidateJetstreamMessages(t *testing.T) {
 	}
 
 	// Track missing messages for logging/debugging
-	ticker := time.NewTicker(2 * time.Second)
+	ticker := time.NewTicker(10 * time.Second)
 	defer ticker.Stop()
 
-	receiveCount := 0
 	var received []string
 	for {
 		select {
 		case v, ok := <-receivedMessages:
 
-			receiveCount++
-			received = append(received, v)
-			t.Logf("message received! : %d val ok : %t", receiveCount, ok)
+			if !ok {
+				t.Errorf("We did not receive all %d messages, only %d on time. Missing: %v",
+					len(messages),
+					len(received),
+					len(messages)-len(received),
+				)
+				return
+			}
 
-			if len(messages) <= receiveCount {
+			received = append(received, v)
+
+			if len(messages) == len(received) {
 				t.Logf("All messages successfully handled : %v", received)
 				return
 			}

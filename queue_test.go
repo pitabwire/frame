@@ -333,7 +333,7 @@ func TestService_SubscriberValidateJetstreamMessages(t *testing.T) {
 			received = append(received, v)
 
 			if len(messages) == len(received) {
-				t.Logf("All messages successfully handled : %v", received)
+				t.Logf("All messages successfully handled")
 				return
 			}
 

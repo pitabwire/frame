@@ -80,7 +80,7 @@ func createToken(user *User) (string, error) {
 }
 
 func validateToken(tokenString string) (*jwt.Token, error) {
-    return jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+    return jwt.Parse(tokenString, func(token *jwt.Token) (any, error) {
         if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
             return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
         }
@@ -181,7 +181,7 @@ type ResourcePolicy struct {
 }
 
 type Condition interface {
-    Evaluate(ctx context.Context, resource interface{}) bool
+    Evaluate(ctx context.Context, resource any) bool
 }
 
 func authorizeResource(ctx context.Context, resource string, action string) error {
@@ -253,7 +253,7 @@ type Session struct {
     ID        string
     UserID    string
     ExpiresAt time.Time
-    Data      map[string]interface{}
+    Data      map[string]any
 }
 
 func createSession(userID string) (*Session, error) {
@@ -261,7 +261,7 @@ func createSession(userID string) (*Session, error) {
         ID:        uuid.New().String(),
         UserID:    userID,
         ExpiresAt: time.Now().Add(24 * time.Hour),
-        Data:      make(map[string]interface{}),
+        Data:      make(map[string]any),
     }
     
     return session, saveSession(session)

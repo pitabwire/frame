@@ -30,7 +30,7 @@ type WorkerPoolOptions struct {
 	ExpiryDuration     time.Duration
 	Nonblocking        bool
 	PreAlloc           bool
-	PanicHandler       func(interface{})
+	PanicHandler       func(any)
 	Logger             *util.LogEntry
 	DisablePurge       bool
 }
@@ -81,7 +81,7 @@ func WithPoolPreAlloc(preAlloc bool) WorkerPoolOption {
 }
 
 // WithPoolPanicHandler sets a panic handlers for the pool.
-func WithPoolPanicHandler(handler func(interface{})) WorkerPoolOption {
+func WithPoolPanicHandler(handler func(any)) WorkerPoolOption {
 	return func(opts *WorkerPoolOptions) {
 		opts.PanicHandler = handler
 	}

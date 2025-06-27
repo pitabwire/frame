@@ -123,6 +123,11 @@ func (p *publisher) Publish(ctx context.Context, payload any, headers ...map[str
 		maps.Copy(metadata, authClaim.AsMetadata())
 	}
 
+	language := LanguageFromContext(ctx)
+	if len(language) > 0 {
+		metadata = LanguageToMap(metadata, language)
+	}
+
 	var message []byte
 	switch v := payload.(type) {
 	case []byte:
@@ -427,6 +432,11 @@ func (s *subscriber) processReceivedMessage(ctx context.Context, msg *pubsub.Mes
 			processedCtx = authClaim.ClaimsToContext(jobCtx)
 		} else {
 			processedCtx = jobCtx
+		}
+
+		languages := LanguageFromMap(msg.Metadata)
+		if len(languages) > 0 {
+			processedCtx = LangugageToContext(processedCtx, languages)
 		}
 
 		for _, worker := range s.handlers {

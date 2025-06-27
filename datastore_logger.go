@@ -50,19 +50,19 @@ func (l *dbLogger) LogMode(_ glogger.LogLevel) glogger.Interface {
 }
 
 // Info print info.
-func (l *dbLogger) Info(ctx context.Context, msg string, data ...interface{}) {
+func (l *dbLogger) Info(ctx context.Context, msg string, data ...any) {
 	log := l.baseLogger.WithContext(ctx)
 	log.Info(msg, data...)
 }
 
 // Warn print warn messages.
-func (l *dbLogger) Warn(ctx context.Context, msg string, data ...interface{}) {
+func (l *dbLogger) Warn(ctx context.Context, msg string, data ...any) {
 	log := l.baseLogger.WithContext(ctx)
 	log.Warn(msg, data...)
 }
 
 // Error print error messages.
-func (l *dbLogger) Error(ctx context.Context, msg string, data ...interface{}) {
+func (l *dbLogger) Error(ctx context.Context, msg string, data ...any) {
 	log := l.baseLogger.WithContext(ctx)
 	log.Error(msg, data...)
 }

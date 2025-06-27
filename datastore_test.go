@@ -160,7 +160,7 @@ func TestDBPropertiesFromMap(t *testing.T) {
 }
 
 // compareMapsByValue compares two maps only by their values, with special handling for numeric values.
-func compareMapsByValue(map1, map2 map[string]interface{}) bool {
+func compareMapsByValue(map1, map2 map[string]any) bool {
 	if len(map1) != len(map2) {
 		return false
 	}
@@ -178,14 +178,14 @@ func compareMapsByValue(map1, map2 map[string]interface{}) bool {
 	return true
 }
 
-// compareValues compares two interface{} values, handling basic types, slices, nested maps, and numeric comparisons.
-func compareValues(val1, val2 interface{}) bool {
+// compareValues compares two any values, handling basic types, slices, nested maps, and numeric comparisons.
+func compareValues(val1, val2 any) bool {
 	// Handle other types including slices and nested maps
 	switch v1 := val1.(type) {
 	case string:
 		return val1 == val2
-	case []interface{}:
-		v2, ok := val2.([]interface{})
+	case []any:
+		v2, ok := val2.([]any)
 		if !ok || len(v1) != len(v2) {
 			return false
 		}
@@ -195,8 +195,8 @@ func compareValues(val1, val2 interface{}) bool {
 			}
 		}
 		return true
-	case map[string]interface{}:
-		v2, ok := val2.(map[string]interface{})
+	case map[string]any:
+		v2, ok := val2.(map[string]any)
 		if !ok {
 			return false
 		}
@@ -213,8 +213,8 @@ func compareValues(val1, val2 interface{}) bool {
 	}
 }
 
-// toFloat64 attempts to convert an interface{} to float64, returning the value and whether it was successful.
-func toFloat64(val interface{}) (float64, bool) {
+// toFloat64 attempts to convert an any to float64, returning the value and whether it was successful.
+func toFloat64(val any) (float64, bool) {
 	switch v := val.(type) {
 	case float64:
 		return v, true

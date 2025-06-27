@@ -9,8 +9,82 @@ import (
 	"github.com/BurntSushi/toml"
 	"github.com/nicksnyder/go-i18n/v2/i18n"
 	"golang.org/x/text/language"
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 )
+
+const ctxKeyLanguage = contextKey("languageKey")
+
+// LangugageToContext adds language to the current supplied context.
+func LangugageToContext(ctx context.Context, lang []string) context.Context {
+	return context.WithValue(ctx, ctxKeyLanguage, lang)
+}
+
+// LanguageFromContext extracts language from the supplied context if any exist.
+func LanguageFromContext(ctx context.Context) []string {
+	languages, ok := ctx.Value(ctxKeyLanguage).([]string)
+	if !ok {
+		return nil
+	}
+
+	return languages
+}
+
+func LanguageToMap(m map[string]string, lang []string) map[string]string {
+	m["lang"] = strings.Join(lang, ",")
+	return m
+}
+
+func LanguageFromMap(m map[string]string) []string {
+	lang, ok := m["lang"]
+	if !ok {
+		return nil
+	}
+	return strings.Split(lang, ",")
+}
+
+// LanguageHTTPMiddleware is an HTTP middleware that extracts language information and sets it in the context.
+func (s *Service) LanguageHTTPMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		l := extractLanguageFromHTTPRequest(r)
+
+		ctx := LangugageToContext(r.Context(), l)
+		r = r.WithContext(ctx)
+
+		next.ServeHTTP(w, r)
+	})
+}
+
+// LanguageUnaryInterceptor Simple grpc interceptor to extract the language supplied via metadata.
+func (s *Service) LanguageUnaryInterceptor() grpc.UnaryServerInterceptor {
+	return func(ctx context.Context, req any,
+		_ *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
+		l := LanguageFromGrpcRequest(ctx)
+		if l != nil {
+			ctx = LangugageToContext(ctx, l)
+		}
+
+		return handler(ctx, req)
+	}
+}
+
+// LanguageStreamInterceptor A language extractor that will extract .
+func (s *Service) LanguageStreamInterceptor() grpc.StreamServerInterceptor {
+	return func(srv any, ss grpc.ServerStream, _ *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
+		ctx := ss.Context()
+		l := LanguageFromGrpcRequest(ctx)
+		if l == nil {
+			return handler(srv, ss)
+		}
+
+		ctx = LangugageToContext(ctx, l)
+
+		// Wrap the original stream with ctx this ensures the handlers always receives a stream from which it can get the correct context.
+		languageStream := &serverStreamWrapper{ctx, ss}
+
+		return handler(srv, languageStream)
+	}
+}
 
 // Bundle Access the translation bundle instatiated in the system.
 func (s *Service) Bundle() *i18n.Bundle {
@@ -48,7 +122,7 @@ func (s *Service) TranslateWithMapAndCount(
 		languageSlice = extractLanguageFromHTTPRequest(v)
 
 	case context.Context:
-		languageSlice = extractLanguageFromGrpcRequest(v)
+		languageSlice = LanguageFromGrpcRequest(v)
 
 	case string:
 		languageSlice = []string{v}
@@ -84,10 +158,15 @@ func extractLanguageFromHTTPRequest(req *http.Request) []string {
 	acceptLanguageHeader := req.Header.Get("Accept-Language")
 	acceptedLang := strings.Split(acceptLanguageHeader, ",")
 
-	return append([]string{lang}, acceptedLang...)
+	var lanugages []string
+	if lang != "" {
+		lanugages = append(lanugages, lang)
+	}
+
+	return append(lanugages, acceptedLang...)
 }
 
-func extractLanguageFromGrpcRequest(ctx context.Context) []string {
+func LanguageFromGrpcRequest(ctx context.Context) []string {
 	md, ok := metadata.FromIncomingContext(ctx)
 	if !ok {
 		return []string{}

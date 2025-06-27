@@ -77,7 +77,7 @@ func RegisterFramePingServer(s grpc.ServiceRegistrar, srv FramePingServer) {
 	s.RegisterService(&FramePing_ServiceDesc, srv)
 }
 
-func _FramePing_SayPing_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _FramePing_SayPing_Handler(srv any, ctx context.Context, dec func(any) error, interceptor grpc.UnaryServerInterceptor) (any, error) {
 	in := new(HelloRequest)
 	if err := dec(in); err != nil {
 		return nil, err
@@ -89,7 +89,7 @@ func _FramePing_SayPing_Handler(srv interface{}, ctx context.Context, dec func(i
 		Server:     srv,
 		FullMethod: FramePing_SayPing_FullMethodName,
 	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, req any) (any, error) {
 		return srv.(FramePingServer).SayPing(ctx, req.(*HelloRequest))
 	}
 	return interceptor(ctx, in, info, handler)

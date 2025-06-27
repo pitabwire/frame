@@ -74,7 +74,7 @@ func GetLoggingOptions() []logging.Option {
 	}
 }
 
-func RecoveryHandlerFun(ctx context.Context, p interface{}) error {
+func RecoveryHandlerFun(ctx context.Context, p any) error {
 	s := Svc(ctx)
 	s.Log(ctx).WithField("trigger", p).Error("recovered from panic %s", debug.Stack())
 

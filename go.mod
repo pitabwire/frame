@@ -24,20 +24,17 @@ require (
 	golang.org/x/text v0.26.0
 	google.golang.org/grpc v1.73.0
 	google.golang.org/protobuf v1.36.6
-	gorm.io/datatypes v1.2.5
 	gorm.io/driver/postgres v1.6.0
 	gorm.io/gorm v1.30.0
 
 )
 
 require (
-	filippo.io/edwards25519 v1.1.0 // indirect
 	github.com/cenkalti/backoff/v4 v4.2.1 // indirect
 	github.com/desertbit/timer v0.0.0-20180107155436-c41aec40b27f // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
-	github.com/go-sql-driver/mysql v1.9.1 // indirect
 	github.com/golang/groupcache v0.0.0-20241129210726-2c02b8208cf8 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/googleapis/gax-go/v2 v2.14.1 // indirect
@@ -66,7 +63,5 @@ require (
 	google.golang.org/api v0.228.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20250324211829-b45e905df463 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
-	gorm.io/driver/mysql v1.5.7 // indirect
-	gorm.io/driver/sqlite v1.5.0 // indirect
 	nhooyr.io/websocket v1.8.7 // indirect
 )

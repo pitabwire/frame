@@ -5,8 +5,6 @@ import (
 	"strconv"
 	"testing"
 
-	"gorm.io/datatypes"
-
 	"github.com/pitabwire/frame"
 )
 
@@ -128,7 +126,7 @@ func TestDBPropertiesFromMap(t *testing.T) {
 	tests := []struct {
 		name     string
 		propsMap map[string]string
-		want     datatypes.JSONMap
+		want     frame.JSONMap
 	}{
 		{
 			name: "happy case",
@@ -140,7 +138,7 @@ func TestDBPropertiesFromMap(t *testing.T) {
 				"e": "[23, 35, 37, 55]",
 				"f": "{\"x\": \"t\", \"y\": \"g\" }",
 			},
-			want: datatypes.JSONMap{
+			want: frame.JSONMap{
 				"a": "a",
 				"b": "751",
 				"c": "23.5",
@@ -231,7 +229,7 @@ func toFloat64(val any) (float64, bool) {
 func TestDBPropertiesToMap(t *testing.T) {
 	tests := []struct {
 		name    string
-		dbProps datatypes.JSONMap
+		dbProps frame.JSONMap
 		want    map[string]string
 	}{
 		{
@@ -244,7 +242,7 @@ func TestDBPropertiesToMap(t *testing.T) {
 				"e": "[23,35,37,55]",
 				"f": "{\"x\":\"t\",\"y\":\"g\"}",
 			},
-			dbProps: datatypes.JSONMap{
+			dbProps: frame.JSONMap{
 				"a": "a",
 				"b": "751",
 				"c": "23.5",

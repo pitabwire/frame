@@ -16,7 +16,6 @@ import (
 	"github.com/XSAM/otelsql"
 	"go.opentelemetry.io/otel/attribute"
 	semconv "go.opentelemetry.io/otel/semconv/v1.30.0"
-	"gorm.io/datatypes"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
@@ -265,7 +264,7 @@ func tenantPartition(ctx context.Context) func(db *gorm.DB) *gorm.DB {
 }
 
 // DBPropertiesToMap converts the supplied db json content into a golang map.
-func DBPropertiesToMap(props datatypes.JSONMap) map[string]string {
+func DBPropertiesToMap(props JSONMap) map[string]string {
 	if props == nil {
 		return make(map[string]string, len(props))
 	}
@@ -311,8 +310,8 @@ func DBPropertiesToMap(props datatypes.JSONMap) map[string]string {
 }
 
 // DBPropertiesFromMap converts a map into a JSONMap object.
-func DBPropertiesFromMap(propsMap map[string]string) datatypes.JSONMap {
-	jsonMap := make(datatypes.JSONMap)
+func DBPropertiesFromMap(propsMap map[string]string) JSONMap {
+	jsonMap := make(JSONMap)
 
 	if propsMap == nil {
 		return jsonMap

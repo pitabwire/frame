@@ -1,4 +1,4 @@
-package database
+package postgres
 
 import (
 	"context"
@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"github.com/pitabwire/frame/tests/definitions"
 	"net/url"
 	"os"
 	"strings"
@@ -19,7 +20,6 @@ import (
 	"github.com/testcontainers/testcontainers-go/wait"
 
 	"github.com/pitabwire/frame"
-	"github.com/pitabwire/frame/tests"
 )
 
 const (
@@ -51,11 +51,11 @@ type PostgreSQLDependancy struct {
 	postgresContainer *tcPostgres.PostgresContainer
 }
 
-func NewPGDep() tests.Dependancy {
+func NewPGDep() definitions.Dependancy {
 	return NewPGDepWithCred(PostgresqlDBImage, DBUser, DBPassword, DBName)
 }
 
-func NewPGDepWithCred(pgImage, pgUserName, pgPassword, pgDBName string) tests.Dependancy {
+func NewPGDepWithCred(pgImage, pgUserName, pgPassword, pgDBName string) definitions.Dependancy {
 	return &PostgreSQLDependancy{
 		image:    pgImage,
 		username: pgUserName,
@@ -65,7 +65,7 @@ func NewPGDepWithCred(pgImage, pgUserName, pgPassword, pgDBName string) tests.De
 }
 
 // Setup creates a PostgreSQL testcontainer and sets the container.
-func (pg *PostgreSQLDependancy) Setup(ctx context.Context) error {
+func (pgd *PostgreSQLDependancy) Setup(ctx context.Context) error {
 	log := util.Log(ctx)
 
 	log.Info("Setting up PostgreSQL container...")
@@ -83,31 +83,31 @@ func (pg *PostgreSQLDependancy) Setup(ctx context.Context) error {
 		return fmt.Errorf("failed to start postgres container: %w", err)
 	}
 
-	conn, err := pg.postgresContainer.ConnectionString(ctx)
+	conn, err := pgd.postgresContainer.ConnectionString(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to get connection string for postgres container: %w", err)
 	}
 
-	pg.conn = frame.DataSource(conn)
+	pgd.conn = frame.DataSource(conn)
 
-	pg.postgresContainer = pgContainer
+	pgd.postgresContainer = pgContainer
 
 	return nil
 }
 
-func (pg *PostgreSQLDependancy) GetDS() frame.DataSource {
-	return pg.conn
+func (pgd *PostgreSQLDependancy) GetDS() frame.DataSource {
+	return pgd.conn
 }
 
 // GetPrefixedDS Prepare a postgres connection string for testing.
 // Returns the connection string to use and a close function which must be called when the test finishes.
 // Calling this function twice will return the same database, which will have data from previous tests
 // unless close() is called.
-func (pg *PostgreSQLDependancy) GetPrefixedDS(
+func (pgd *PostgreSQLDependancy) GetPrefixedDS(
 	ctx context.Context,
 	randomisedPrefix string,
 ) (frame.DataSource, func(context.Context), error) {
-	parsedPostgresURI, err := pg.conn.ToURI()
+	parsedPostgresURI, err := pgd.conn.ToURI()
 	if err != nil {
 		return "", func(_ context.Context) {}, err
 	}
@@ -128,11 +128,11 @@ func (pg *PostgreSQLDependancy) GetPrefixedDS(
 	}, nil
 }
 
-func (pg *PostgreSQLDependancy) Cleanup(ctx context.Context) {
-	if pg.postgresContainer != nil {
-		if err := pg.postgresContainer.Terminate(ctx); err != nil {
+func (pgd *PostgreSQLDependancy) Cleanup(ctx context.Context) {
+	if pgd.postgresContainer != nil {
+		if err := pgd.postgresContainer.Terminate(ctx); err != nil {
 			log := util.Log(ctx)
-			log.Error("Failed to terminate postgres container", "error", err)
+			log.WithError(err).Error("Failed to terminate postgres container")
 		}
 	}
 }

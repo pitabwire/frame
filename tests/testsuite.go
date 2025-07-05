@@ -2,6 +2,8 @@ package tests
 
 import (
 	"context"
+	"github.com/pitabwire/frame/tests/definitions"
+	"testing"
 
 	"github.com/pitabwire/util"
 	"github.com/stretchr/testify/require"
@@ -32,15 +34,15 @@ func (lc *StdoutLogConsumer) Accept(l testcontainers.Log) {
 type FrameBaseTestSuite struct {
 	suite.Suite
 
-	Deps     []Dependancy
-	MockCtrl *gomock.Controller
+	Deps []definitions.Dependancy
+	Ctrl *gomock.Controller
 }
 
 // SetupSuite initialises the test environment for the test suite.
 func (s *FrameBaseTestSuite) SetupSuite() {
 	t := s.T()
 
-	s.MockCtrl = gomock.NewController(t)
+	s.Ctrl = gomock.NewController(t)
 
 	ctx := t.Context()
 
@@ -52,8 +54,8 @@ func (s *FrameBaseTestSuite) SetupSuite() {
 
 // TearDownSuite cleans up resources after all tests are completed.
 func (s *FrameBaseTestSuite) TearDownSuite() {
-	if s.MockCtrl != nil {
-		s.MockCtrl.Finish()
+	if s.Ctrl != nil {
+		s.Ctrl.Finish()
 	}
 
 	t := s.T()
@@ -61,5 +63,18 @@ func (s *FrameBaseTestSuite) TearDownSuite() {
 
 	for _, dep := range s.Deps {
 		dep.Cleanup(ctx)
+	}
+}
+
+
+// WithTestDependancies Creates subtests with each known DependancyOption.
+func WithTestDependancies(t *testing.T,
+	options []definitions.DependancyOption,
+	testFn func(t *testing.T, db definitions.DependancyOption)) {
+	for _, opt := range options {
+		t.Run(opt.Name(), func(tt *testing.T) {
+			// Removed tt.Parallel() as it conflicts with t.Setenv() used in GetService
+			testFn(tt, opt)
+		})
 	}
 }

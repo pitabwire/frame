@@ -1,14 +1,14 @@
-package queue
+package nats
 
 import (
 	"context"
 	"fmt"
+	"github.com/pitabwire/frame/tests/definitions"
 
 	"github.com/pitabwire/util"
 	tcNats "github.com/testcontainers/testcontainers-go/modules/nats"
 
 	"github.com/pitabwire/frame"
-	"github.com/pitabwire/frame/tests"
 )
 
 const (
@@ -34,11 +34,11 @@ type NatsDependancy struct {
 	natsContainer *tcNats.NATSContainer
 }
 
-func NewNatsDep() tests.Dependancy {
+func NewNatsDep() definitions.Dependancy {
 	return NewNatsDepWithCred(NatsImage, NatsUser, NatsPass, NatsCluster)
 }
 
-func NewNatsDepWithCred(natsImage, natsUserName, natsPassword, cluster string) tests.Dependancy {
+func NewNatsDepWithCred(natsImage, natsUserName, natsPassword, cluster string) definitions.Dependancy {
 	return &NatsDependancy{
 		image:    natsImage,
 		username: natsUserName,
@@ -46,10 +46,10 @@ func NewNatsDepWithCred(natsImage, natsUserName, natsPassword, cluster string) t
 		cluster:  cluster,
 	}
 }
-func (pg *NatsDependancy) Setup(ctx context.Context) error {
-	natsqContainer, err := tcNats.Run(ctx, pg.image,
-		tcNats.WithUsername(pg.username),
-		tcNats.WithPassword(pg.password),
+func (nd *NatsDependancy) Setup(ctx context.Context) error {
+	natsqContainer, err := tcNats.Run(ctx, nd.image,
+		tcNats.WithUsername(nd.username),
+		tcNats.WithPassword(nd.password),
 	)
 	if err != nil {
 		return fmt.Errorf("failed to start nats container: %w", err)
@@ -59,29 +59,29 @@ func (pg *NatsDependancy) Setup(ctx context.Context) error {
 		return fmt.Errorf("failed to get connection string for postgres container: %w", err)
 	}
 
-	pg.conn = frame.DataSource(conn)
+	nd.conn = frame.DataSource(conn)
 
-	pg.natsContainer = natsqContainer
+	nd.natsContainer = natsqContainer
 	return nil
 }
 
-func (pg *NatsDependancy) GetDS() frame.DataSource {
-	return pg.conn
+func (nd *NatsDependancy) GetDS() frame.DataSource {
+	return nd.conn
 }
 
-func (pg *NatsDependancy) GetPrefixedDS(
+func (nd *NatsDependancy) GetPrefixedDS(
 	_ context.Context,
 	_ string,
 ) (frame.DataSource, func(context.Context), error) {
-	return pg.conn, func(_ context.Context) {
+	return nd.conn, func(_ context.Context) {
 	}, nil
 }
 
-func (pg *NatsDependancy) Cleanup(ctx context.Context) {
-	if pg.natsContainer != nil {
-		if err := pg.natsContainer.Terminate(ctx); err != nil {
+func (nd *NatsDependancy) Cleanup(ctx context.Context) {
+	if nd.natsContainer != nil {
+		if err := nd.natsContainer.Terminate(ctx); err != nil {
 			log := util.Log(ctx)
-			log.Error("Failed to terminate nats container", "error", err)
+			log.WithError(err).Error("Failed to terminate nats container")
 		}
 	}
 }

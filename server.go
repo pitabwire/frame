@@ -7,7 +7,6 @@ import (
 	"net"
 	"net/http"
 
-	"github.com/improbable-eng/grpc-web/go/grpcweb"
 	"github.com/pitabwire/util"
 	"golang.org/x/net/http2"
 	"google.golang.org/grpc"
@@ -130,27 +129,13 @@ type grpcDriver struct {
 	errorChannel chan error
 
 	grpcServer        *grpc.Server
-	wrappedGrpcServer *grpcweb.WrappedGrpcServer
 
 	grpcListener net.Listener
 }
 
 func (gd *grpcDriver) ListenAndServe(addr string, h http.Handler) error {
 	gd.httpServer.Addr = addr
-
-	gd.httpServer.Handler = http.HandlerFunc(func(resp http.ResponseWriter, req *http.Request) {
-		if gd.wrappedGrpcServer.IsGrpcWebRequest(req) ||
-			gd.wrappedGrpcServer.IsAcceptableGrpcCorsRequest(req) ||
-			gd.wrappedGrpcServer.IsGrpcWebSocketRequest(req) {
-			gd.wrappedGrpcServer.ServeHTTP(resp, req)
-			return
-		}
-		h.ServeHTTP(resp, req)
-	})
-
-	grpcweb.WrapHandler(
-		h, grpcweb.WithOriginFunc(func(_ string) bool { return true }),
-	)
+	gd.httpServer.Handler = h
 
 	err := http2.ConfigureServer(gd.httpServer, nil)
 	if err != nil {
@@ -184,17 +169,7 @@ func (gd *grpcDriver) ListenAndServe(addr string, h http.Handler) error {
 
 func (gd *grpcDriver) ListenAndServeTLS(addr, certFile, certKeyFile string, h http.Handler) error {
 	gd.httpServer.Addr = addr
-	gd.httpServer.Handler = http.HandlerFunc(func(resp http.ResponseWriter, req *http.Request) {
-		if gd.wrappedGrpcServer.IsGrpcWebRequest(req) {
-			gd.wrappedGrpcServer.ServeHTTP(resp, req)
-			return
-		}
-		h.ServeHTTP(resp, req)
-	})
-
-	grpcweb.WrapHandler(
-		h, grpcweb.WithOriginFunc(func(_ string) bool { return true }),
-	)
+	gd.httpServer.Handler = h
 
 	err := http2.ConfigureServer(gd.httpServer, nil)
 	if err != nil {

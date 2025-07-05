@@ -3,12 +3,12 @@ package nats
 import (
 	"context"
 	"fmt"
-	"github.com/pitabwire/frame/tests/definitions"
 
 	"github.com/pitabwire/util"
 	tcNats "github.com/testcontainers/testcontainers-go/modules/nats"
 
 	"github.com/pitabwire/frame"
+	"github.com/pitabwire/frame/tests/definitions"
 )
 
 const (
@@ -23,7 +23,7 @@ const (
 	NatsCluster = "frame_test"
 )
 
-type NatsDependancy struct {
+type natsDependancy struct {
 	image    string
 	username string
 	password string
@@ -34,19 +34,19 @@ type NatsDependancy struct {
 	natsContainer *tcNats.NATSContainer
 }
 
-func NewNatsDep() definitions.Dependancy {
+func NewNatsDep() definitions.TestResource {
 	return NewNatsDepWithCred(NatsImage, NatsUser, NatsPass, NatsCluster)
 }
 
-func NewNatsDepWithCred(natsImage, natsUserName, natsPassword, cluster string) definitions.Dependancy {
-	return &NatsDependancy{
+func NewNatsDepWithCred(natsImage, natsUserName, natsPassword, cluster string) definitions.TestResource {
+	return &natsDependancy{
 		image:    natsImage,
 		username: natsUserName,
 		password: natsPassword,
 		cluster:  cluster,
 	}
 }
-func (nd *NatsDependancy) Setup(ctx context.Context) error {
+func (nd *natsDependancy) Setup(ctx context.Context) error {
 	natsqContainer, err := tcNats.Run(ctx, nd.image,
 		tcNats.WithUsername(nd.username),
 		tcNats.WithPassword(nd.password),
@@ -65,11 +65,11 @@ func (nd *NatsDependancy) Setup(ctx context.Context) error {
 	return nil
 }
 
-func (nd *NatsDependancy) GetDS() frame.DataSource {
+func (nd *natsDependancy) GetDS() frame.DataSource {
 	return nd.conn
 }
 
-func (nd *NatsDependancy) GetPrefixedDS(
+func (nd *natsDependancy) GetPrefixedDS(
 	_ context.Context,
 	_ string,
 ) (frame.DataSource, func(context.Context), error) {
@@ -77,7 +77,7 @@ func (nd *NatsDependancy) GetPrefixedDS(
 	}, nil
 }
 
-func (nd *NatsDependancy) Cleanup(ctx context.Context) {
+func (nd *natsDependancy) Cleanup(ctx context.Context) {
 	if nd.natsContainer != nil {
 		if err := nd.natsContainer.Terminate(ctx); err != nil {
 			log := util.Log(ctx)

@@ -3,12 +3,12 @@ package nats
 import (
 	"context"
 	"fmt"
-	"github.com/pitabwire/frame/tests/definitions"
 
 	"github.com/pitabwire/util"
 	tcValKey "github.com/testcontainers/testcontainers-go/modules/valkey"
 
 	"github.com/pitabwire/frame"
+	"github.com/pitabwire/frame/tests/definitions"
 )
 
 const (
@@ -22,7 +22,7 @@ const (
 	ValKeyCluster = "frame_test"
 )
 
-type ValKeyDependancy struct {
+type valKeyDependancy struct {
 	image    string
 	username string
 	password string
@@ -33,19 +33,19 @@ type ValKeyDependancy struct {
 	container *tcValKey.ValkeyContainer
 }
 
-func NewValKeyDep() definitions.Dependancy {
+func NewValKeyDep() definitions.TestResource {
 	return NewValKeyDepWithCred(ValKeyImage, ValKeyUser, ValKeyPass, ValKeyCluster)
 }
 
-func NewValKeyDepWithCred(natsImage, natsUserName, natsPassword, cluster string) definitions.Dependancy {
-	return &ValKeyDependancy{
+func NewValKeyDepWithCred(natsImage, natsUserName, natsPassword, cluster string) definitions.TestResource {
+	return &valKeyDependancy{
 		image:    natsImage,
 		username: natsUserName,
 		password: natsPassword,
 		cluster:  cluster,
 	}
 }
-func (vkd *ValKeyDependancy) Setup(ctx context.Context) error {
+func (vkd *valKeyDependancy) Setup(ctx context.Context) error {
 	container, err := tcValKey.Run(ctx, vkd.image)
 	if err != nil {
 		return fmt.Errorf("failed to start nats container: %w", err)
@@ -61,11 +61,11 @@ func (vkd *ValKeyDependancy) Setup(ctx context.Context) error {
 	return nil
 }
 
-func (vkd *ValKeyDependancy) GetDS() frame.DataSource {
+func (vkd *valKeyDependancy) GetDS() frame.DataSource {
 	return vkd.conn
 }
 
-func (vkd *ValKeyDependancy) GetPrefixedDS(
+func (vkd *valKeyDependancy) GetPrefixedDS(
 	_ context.Context,
 	_ string,
 ) (frame.DataSource, func(context.Context), error) {
@@ -73,7 +73,7 @@ func (vkd *ValKeyDependancy) GetPrefixedDS(
 	}, nil
 }
 
-func (vkd *ValKeyDependancy) Cleanup(ctx context.Context) {
+func (vkd *valKeyDependancy) Cleanup(ctx context.Context) {
 	if vkd.container != nil {
 		if err := vkd.container.Terminate(ctx); err != nil {
 			log := util.Log(ctx)

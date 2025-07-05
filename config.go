@@ -88,10 +88,10 @@ type ConfigurationDefault struct {
 	GrpcServerPort string `envDefault:":50051" env:"GRPC_PORT" yaml:"grpc_server_port"`
 
 	// Worker pool settings
-	WorkerPoolCPUFactorForWorkerCount int    `envDefault:"10" env:"WORKER_POOL_CPU_FACTOR_FOR_WORKER_COUNT" yaml:"worker_pool_cpu_factor_for_worker_count"`
-	WorkerPoolCapacity                int    `envDefault:"100" env:"WORKER_POOL_CAPACITY" yaml:"worker_pool_capacity"`
-	WorkerPoolCount                   int    `envDefault:"100" env:"WORKER_POOL_COUNT" yaml:"worker_pool_count"`
-	WorkerPoolExpiryDuration          string `envDefault:"1s" env:"WORKER_POOL_EXPIRY_DURATION" yaml:"worker_pool_expiry_duration"`
+	WorkerPoolCPUFactorForWorkerCount int    `envDefault:"10"  env:"WORKER_POOL_CPU_FACTOR_FOR_WORKER_COUNT" yaml:"worker_pool_cpu_factor_for_worker_count"`
+	WorkerPoolCapacity                int    `envDefault:"100" env:"WORKER_POOL_CAPACITY"                    yaml:"worker_pool_capacity"`
+	WorkerPoolCount                   int    `envDefault:"100" env:"WORKER_POOL_COUNT"                       yaml:"worker_pool_count"`
+	WorkerPoolExpiryDuration          string `envDefault:"1s"  env:"WORKER_POOL_EXPIRY_DURATION"             yaml:"worker_pool_expiry_duration"`
 
 	CORSEnabled          bool     `envDefault:"false"                     env:"CORS_ENABLED"           yaml:"cors_enabled"`
 	CORSAllowCredentials bool     `envDefault:"false"                     env:"CORS_ALLOW_CREDENTIALS" yaml:"cors_allow_credentials"`
@@ -247,7 +247,6 @@ func (c *ConfigurationDefault) GetCount() int {
 }
 
 func (c *ConfigurationDefault) GetExpiryDuration() time.Duration {
-
 	if c.WorkerPoolExpiryDuration != "" {
 		duration, err := time.ParseDuration(c.WorkerPoolExpiryDuration)
 		if err == nil {

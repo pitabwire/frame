@@ -6,23 +6,39 @@ import (
 	"github.com/pitabwire/frame"
 )
 
-type Dependancy interface {
+type DependancyRes interface {
 	Setup(ctx context.Context) error
+	Cleanup(ctx context.Context)
+}
+
+type DependancyConn interface {
 	GetDS() frame.DataSource
 	GetPrefixedDS(ctx context.Context, randomisedPrefix string) (frame.DataSource, func(context.Context), error)
-	Cleanup(ctx context.Context)
+}
+
+type TestResource interface {
+	DependancyRes
+	DependancyConn
 }
 
 type DependancyOption struct {
 	name   string
 	prefix string
-	deps   []Dependancy
+	deps   []TestResource
+}
+
+func NewDependancyOption(name string, prefix string, deps []TestResource) *DependancyOption {
+	return &DependancyOption{
+		name:   name,
+		prefix: prefix,
+		deps:   deps,
+	}
 }
 
 func (opt *DependancyOption) Name() string {
 	return opt.name
 }
-func (opt *DependancyOption) Database() Dependancy {
+func (opt *DependancyOption) Database() DependancyConn {
 	for _, dep := range opt.deps {
 		if dep.GetDS().IsDB() {
 			return dep
@@ -30,7 +46,7 @@ func (opt *DependancyOption) Database() Dependancy {
 	}
 	return nil
 }
-func (opt *DependancyOption) Cache() Dependancy {
+func (opt *DependancyOption) Cache() DependancyConn {
 	for _, dep := range opt.deps {
 		if dep.GetDS().IsCache() {
 			return dep
@@ -38,7 +54,7 @@ func (opt *DependancyOption) Cache() Dependancy {
 	}
 	return nil
 }
-func (opt *DependancyOption) Queue() Dependancy {
+func (opt *DependancyOption) Queue() DependancyConn {
 	for _, dep := range opt.deps {
 		if dep.GetDS().IsQueue() {
 			return dep

@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"github.com/pitabwire/frame/tests/definitions"
 	"net/url"
 	"os"
 	"strings"
@@ -20,6 +19,7 @@ import (
 	"github.com/testcontainers/testcontainers-go/wait"
 
 	"github.com/pitabwire/frame"
+	"github.com/pitabwire/frame/tests/definitions"
 )
 
 const (
@@ -41,7 +41,7 @@ const (
 	TimeoutInSeconds = 60
 )
 
-type PostgreSQLDependancy struct {
+type postgreSQLDependancy struct {
 	image    string
 	username string
 	password string
@@ -51,12 +51,12 @@ type PostgreSQLDependancy struct {
 	postgresContainer *tcPostgres.PostgresContainer
 }
 
-func NewPGDep() definitions.Dependancy {
+func NewPGDep() definitions.TestResource {
 	return NewPGDepWithCred(PostgresqlDBImage, DBUser, DBPassword, DBName)
 }
 
-func NewPGDepWithCred(pgImage, pgUserName, pgPassword, pgDBName string) definitions.Dependancy {
-	return &PostgreSQLDependancy{
+func NewPGDepWithCred(pgImage, pgUserName, pgPassword, pgDBName string) definitions.TestResource {
+	return &postgreSQLDependancy{
 		image:    pgImage,
 		username: pgUserName,
 		password: pgPassword,
@@ -65,7 +65,7 @@ func NewPGDepWithCred(pgImage, pgUserName, pgPassword, pgDBName string) definiti
 }
 
 // Setup creates a PostgreSQL testcontainer and sets the container.
-func (pgd *PostgreSQLDependancy) Setup(ctx context.Context) error {
+func (pgd *postgreSQLDependancy) Setup(ctx context.Context) error {
 	log := util.Log(ctx)
 
 	log.Info("Setting up PostgreSQL container...")
@@ -95,7 +95,7 @@ func (pgd *PostgreSQLDependancy) Setup(ctx context.Context) error {
 	return nil
 }
 
-func (pgd *PostgreSQLDependancy) GetDS() frame.DataSource {
+func (pgd *postgreSQLDependancy) GetDS() frame.DataSource {
 	return pgd.conn
 }
 
@@ -103,7 +103,7 @@ func (pgd *PostgreSQLDependancy) GetDS() frame.DataSource {
 // Returns the connection string to use and a close function which must be called when the test finishes.
 // Calling this function twice will return the same database, which will have data from previous tests
 // unless close() is called.
-func (pgd *PostgreSQLDependancy) GetPrefixedDS(
+func (pgd *postgreSQLDependancy) GetPrefixedDS(
 	ctx context.Context,
 	randomisedPrefix string,
 ) (frame.DataSource, func(context.Context), error) {
@@ -128,7 +128,7 @@ func (pgd *PostgreSQLDependancy) GetPrefixedDS(
 	}, nil
 }
 
-func (pgd *PostgreSQLDependancy) Cleanup(ctx context.Context) {
+func (pgd *postgreSQLDependancy) Cleanup(ctx context.Context) {
 	if pgd.postgresContainer != nil {
 		if err := pgd.postgresContainer.Terminate(ctx); err != nil {
 			log := util.Log(ctx)

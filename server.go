@@ -128,7 +128,7 @@ type grpcDriver struct {
 
 	errorChannel chan error
 
-	grpcServer        *grpc.Server
+	grpcServer *grpc.Server
 
 	grpcListener net.Listener
 }

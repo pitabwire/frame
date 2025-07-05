@@ -13,13 +13,6 @@ import (
 	"github.com/rs/xid"
 )
 
-const (
-	defaultCPUFactorForWorkerCount = 10
-	defaultPoolCapacity            = 100
-	defaultPoolCount               = 1
-	defaultPoolExpiryDuration      = 1 * time.Second
-)
-
 var ErrWorkerPoolResultChannelIsClosed = errors.New("worker job is already closed")
 
 // WorkerPoolOptions defines configurable options for the service's internal worker pool.
@@ -392,6 +385,12 @@ func SafeChannelWrite[T any](ctx context.Context, ch chan<- JobResult[T], value 
 	select {
 	case <-ctx.Done():
 		return fmt.Errorf("context canceled while writing to channel: %w", ctx.Err())
+	default:
+	}
+
+	select {
+	case <-ctx.Done():
+		return fmt.Errorf("context canceled while writing to channel: %w", ctx.Err())
 	case ch <- value:
 		return nil
 	}
@@ -399,6 +398,13 @@ func SafeChannelWrite[T any](ctx context.Context, ch chan<- JobResult[T], value 
 
 // SafeChannelRead reads a value from a channel, returning false if the channel is closed or the context is canceled.
 func SafeChannelRead[T any](ctx context.Context, ch <-chan JobResult[T]) (JobResult[T], bool) {
+	select {
+	case <-ctx.Done():
+		var zero JobResult[T]
+		return zero, false
+	default:
+	}
+
 	select {
 	case <-ctx.Done():
 		var zero JobResult[T]

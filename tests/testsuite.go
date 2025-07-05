@@ -2,7 +2,6 @@ package tests
 
 import (
 	"context"
-	"github.com/pitabwire/frame/tests/definitions"
 	"testing"
 
 	"github.com/pitabwire/util"
@@ -10,6 +9,8 @@ import (
 	"github.com/stretchr/testify/suite"
 	"github.com/testcontainers/testcontainers-go"
 	"go.uber.org/mock/gomock"
+
+	"github.com/pitabwire/frame/tests/definitions"
 )
 
 // StdoutLogConsumer is a LogConsumer that prints the log to stdout.
@@ -34,7 +35,7 @@ func (lc *StdoutLogConsumer) Accept(l testcontainers.Log) {
 type FrameBaseTestSuite struct {
 	suite.Suite
 
-	Deps []definitions.Dependancy
+	Deps []definitions.TestResource
 	Ctrl *gomock.Controller
 }
 
@@ -65,7 +66,6 @@ func (s *FrameBaseTestSuite) TearDownSuite() {
 		dep.Cleanup(ctx)
 	}
 }
-
 
 // WithTestDependancies Creates subtests with each known DependancyOption.
 func WithTestDependancies(t *testing.T,

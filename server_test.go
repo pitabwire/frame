@@ -19,23 +19,23 @@ import (
 	"google.golang.org/grpc/test/bufconn"
 
 	"github.com/pitabwire/frame"
-	"github.com/pitabwire/frame/grpcping"
+	grpcping2 "github.com/pitabwire/frame/tests/grpcping"
 )
 
 type grpcServer struct {
-	grpcping.UnimplementedFramePingServer
+	grpcping2.UnimplementedFramePingServer
 }
 
-func (s *grpcServer) SayPing(_ context.Context, in *grpcping.HelloRequest) (
-	*grpcping.HelloResponse, error) {
-	return &grpcping.HelloResponse{Message: "Hello " + in.GetName() + " from frame"}, nil
+func (s *grpcServer) SayPing(_ context.Context, in *grpcping2.HelloRequest) (
+	*grpcping2.HelloResponse, error) {
+	return &grpcping2.HelloResponse{Message: "Hello " + in.GetName() + " from frame"}, nil
 }
 
 func startGRPCServer(_ *testing.T) (*grpc.Server, *bufconn.Listener) {
 	bufferSize := 1024 * 1024
 	listener := bufconn.Listen(bufferSize)
 	srv := grpc.NewServer()
-	grpcping.RegisterFramePingServer(srv, &grpcServer{})
+	grpcping2.RegisterFramePingServer(srv, &grpcServer{})
 
 	go func() {
 		if err := srv.Serve(listener); err != nil {
@@ -74,7 +74,7 @@ func TestServiceGrpcHealthServer(t *testing.T) {
 	bufferSize := 1024 * 1024
 	listener := bufconn.Listen(bufferSize)
 	gsrv := grpc.NewServer()
-	grpcping.RegisterFramePingServer(gsrv, &grpcServer{})
+	grpcping2.RegisterFramePingServer(gsrv, &grpcServer{})
 
 	defConf, err := frame.ConfigFromEnv[frame.ConfigurationDefault]()
 	if err != nil {
@@ -130,7 +130,7 @@ func TestServiceGrpcServer(t *testing.T) {
 	bufferSize := 1024 * 1024
 	listener := bufconn.Listen(bufferSize)
 	gsrv := grpc.NewServer()
-	grpcping.RegisterFramePingServer(gsrv, &grpcServer{})
+	grpcping2.RegisterFramePingServer(gsrv, &grpcServer{})
 
 	defConf, err := frame.ConfigFromEnv[frame.ConfigurationDefault]()
 	if err != nil {
@@ -188,7 +188,7 @@ func TestServiceGrpcTLSServer(_ *testing.T) {
 	)
 
 	gsrv := grpc.NewServer()
-	grpcping.RegisterFramePingServer(gsrv, &grpcServer{})
+	grpcping2.RegisterFramePingServer(gsrv, &grpcServer{})
 
 	srv.Init(ctx, frame.WithGRPCServer(gsrv), frame.WithGRPCPort(":50053"))
 
@@ -249,9 +249,9 @@ func getNetworkClConn(address string, opts ...grpc.DialOption) (
 }
 
 func clientInvokeGrpc(ctx context.Context, conn *grpc.ClientConn) error {
-	cli := grpcping.NewFramePingClient(conn)
+	cli := grpcping2.NewFramePingClient(conn)
 
-	req := grpcping.HelloRequest{
+	req := grpcping2.HelloRequest{
 		Name: "Testing Roma",
 	}
 

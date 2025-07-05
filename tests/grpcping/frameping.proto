@@ -1,7 +1,7 @@
 
 syntax = "proto3";
 
-option go_package = "github.com/pitabwire/frame;grpcping";
+option go_package = "github.com/pitabwire/frame/tests;grpcping";
 
 package grpcping;
 

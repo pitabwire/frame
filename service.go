@@ -98,7 +98,9 @@ func NewServiceWithContext(ctx context.Context, name string, opts ...Option) (co
 	defaultLogger := util.Log(ctx)
 	ctx = util.ContextWithLogger(ctx, defaultLogger)
 
-	defaultPoolOpts := defaultWorkerPoolOpts(defaultLogger)
+	defaultCfg, _ := ConfigFromEnv[ConfigurationDefault]()
+
+	defaultPoolOpts := defaultWorkerPoolOpts(&defaultCfg, defaultLogger)
 	defaultPool, err := setupWorkerPool(ctx, defaultPoolOpts)
 	if err != nil {
 		defaultLogger.WithError(err).Panic("could not create a default worker pool")

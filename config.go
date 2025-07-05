@@ -87,6 +87,12 @@ type ConfigurationDefault struct {
 	HTTPServerPort string `envDefault:":8080"  env:"HTTP_PORT" yaml:"http_server_port"`
 	GrpcServerPort string `envDefault:":50051" env:"GRPC_PORT" yaml:"grpc_server_port"`
 
+	// Worker pool settings
+	WorkerPoolCPUFactorForWorkerCount int    `envDefault:"10" env:"WORKER_POOL_CPU_FACTOR_FOR_WORKER_COUNT" yaml:"worker_pool_cpu_factor_for_worker_count"`
+	WorkerPoolCapacity                int    `envDefault:"100" env:"WORKER_POOL_CAPACITY" yaml:"worker_pool_capacity"`
+	WorkerPoolCount                   int    `envDefault:"100" env:"WORKER_POOL_COUNT" yaml:"worker_pool_count"`
+	WorkerPoolExpiryDuration          string `envDefault:"1s" env:"WORKER_POOL_EXPIRY_DURATION" yaml:"worker_pool_expiry_duration"`
+
 	CORSEnabled          bool     `envDefault:"false"                     env:"CORS_ENABLED"           yaml:"cors_enabled"`
 	CORSAllowCredentials bool     `envDefault:"false"                     env:"CORS_ALLOW_CREDENTIALS" yaml:"cors_allow_credentials"`
 	CORSAllowedHeaders   []string `envDefault:"Authorization"             env:"CORS_ALLOWED_HEADERS"   yaml:"cors_allowed_headers"`
@@ -217,6 +223,39 @@ func (c *ConfigurationDefault) GrpcPort() string {
 	}
 
 	return c.Port()
+}
+
+type ConfigurationWorkerPool interface {
+	GetCPUFactor() int
+	GetCapacity() int
+	GetCount() int
+	GetExpiryDuration() time.Duration
+}
+
+var _ ConfigurationWorkerPool = new(ConfigurationDefault)
+
+func (c *ConfigurationDefault) GetCPUFactor() int {
+	return c.WorkerPoolCPUFactorForWorkerCount
+}
+
+func (c *ConfigurationDefault) GetCapacity() int {
+	return c.WorkerPoolCapacity
+}
+
+func (c *ConfigurationDefault) GetCount() int {
+	return c.WorkerPoolCount
+}
+
+func (c *ConfigurationDefault) GetExpiryDuration() time.Duration {
+
+	if c.WorkerPoolExpiryDuration != "" {
+		duration, err := time.ParseDuration(c.WorkerPoolExpiryDuration)
+		if err == nil {
+			return duration
+		}
+	}
+
+	return time.Second
 }
 
 type ConfigurationCORS interface {

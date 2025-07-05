@@ -131,12 +131,12 @@ type WorkerPool interface {
 	Shutdown()
 }
 
-func defaultWorkerPoolOpts(log *util.LogEntry) *WorkerPoolOptions {
+func defaultWorkerPoolOpts(cfg ConfigurationWorkerPool, log *util.LogEntry) *WorkerPoolOptions {
 	return &WorkerPoolOptions{
-		Concurrency:        runtime.NumCPU() * defaultCPUFactorForWorkerCount,
-		SinglePoolCapacity: defaultPoolCapacity,
-		PoolCount:          defaultPoolCount,
-		ExpiryDuration:     defaultPoolExpiryDuration,
+		Concurrency:        runtime.NumCPU() * cfg.GetCPUFactor(),
+		SinglePoolCapacity: cfg.GetCapacity(),
+		PoolCount:          cfg.GetCount(),
+		ExpiryDuration:     cfg.GetExpiryDuration(),
 		Nonblocking:        true,
 		PreAlloc:           false,
 		PanicHandler:       nil,
@@ -220,41 +220,45 @@ func (w *multiPoolWrapper) Shutdown() {
 const defaultJobResultBufferSize = 10
 const defaultJobRetryCount = 0
 
-type JobResult interface {
+// JobResult represents the result of a job execution, which can be either a value of type T or an error.
+type JobResult[T any] interface {
 	IsError() bool
 	Error() error
-	Item() any
+	Item() T
 }
 
-type jobResult struct {
-	item  any
+// jobResult is the internal implementation of JobResult.
+type jobResult[T any] struct {
+	item  T
 	error error
 }
 
-func (j *jobResult) IsError() bool {
+func (j *jobResult[T]) IsError() bool {
 	return j.error != nil
 }
 
-func (j *jobResult) Error() error {
+func (j *jobResult[T]) Error() error {
 	return j.error
 }
 
-func (j *jobResult) Item() any {
+func (j *jobResult[T]) Item() T {
 	return j.item
 }
 
-type JobResultPipe interface {
+// JobResultPipe is a channel-based pipeline for passing job results.
+type JobResultPipe[T any] interface {
 	ResultBufferSize() int
-	ResultChan() <-chan JobResult
+	ResultChan() <-chan JobResult[T]
 	WriteError(ctx context.Context, val error) error
-	WriteResult(ctx context.Context, val any) error
-	ReadResult(ctx context.Context) (JobResult, bool)
+	WriteResult(ctx context.Context, val T) error
+	ReadResult(ctx context.Context) (JobResult[T], bool)
 	Close()
 }
 
-type Job interface {
-	JobResultPipe
-	F() func(ctx context.Context, result JobResultPipe) error
+// Job represents a task that can be executed and produce results of type T.
+type Job[T any] interface {
+	JobResultPipe[T]
+	F() func(ctx context.Context, result JobResultPipe[T]) error
 	ID() string
 	CanRun() bool
 	Retries() int
@@ -262,95 +266,98 @@ type Job interface {
 	IncreaseRuns()
 }
 
-type JobImpl struct {
+// JobImpl is the concrete implementation of a Job.
+type JobImpl[T any] struct {
 	id               string
 	runs             atomic.Int64
 	retries          int
 	resultBufferSize int
-	resultChan       chan JobResult
+	resultChan       chan JobResult[T]
 	resultChanDone   atomic.Bool
-	processFunc      func(ctx context.Context, result JobResultPipe) error
+	processFunc      func(ctx context.Context, result JobResultPipe[T]) error
 }
 
-func (ji *JobImpl) ID() string {
+func (ji *JobImpl[T]) ID() string {
 	return ji.id
 }
 
-func (ji *JobImpl) F() func(ctx context.Context, result JobResultPipe) error {
+func (ji *JobImpl[T]) F() func(ctx context.Context, result JobResultPipe[T]) error {
 	return ji.processFunc
 }
 
-func (ji *JobImpl) CanRun() bool {
+func (ji *JobImpl[T]) CanRun() bool {
 	return ji.Retries() >= ji.Runs()
 }
 
-func (ji *JobImpl) Retries() int {
+func (ji *JobImpl[T]) Retries() int {
 	return ji.retries
 }
 
-func (ji *JobImpl) Runs() int {
+func (ji *JobImpl[T]) Runs() int {
 	return int(ji.runs.Load())
 }
 
-func (ji *JobImpl) IncreaseRuns() {
+func (ji *JobImpl[T]) IncreaseRuns() {
 	ji.runs.Add(1)
 }
 
-func (ji *JobImpl) ResultBufferSize() int {
+func (ji *JobImpl[T]) ResultBufferSize() int {
 	return ji.resultBufferSize
 }
 
-func (ji *JobImpl) ResultChan() <-chan JobResult {
+func (ji *JobImpl[T]) ResultChan() <-chan JobResult[T] {
 	return ji.resultChan
 }
 
-func (ji *JobImpl) ReadResult(ctx context.Context) (JobResult, bool) {
+func (ji *JobImpl[T]) ReadResult(ctx context.Context) (JobResult[T], bool) {
 	return SafeChannelRead(ctx, ji.resultChan)
 }
 
-func (ji *JobImpl) WriteError(ctx context.Context, val error) error {
+func (ji *JobImpl[T]) WriteError(ctx context.Context, val error) error {
 	if ji.resultChanDone.Load() {
 		return ErrWorkerPoolResultChannelIsClosed
 	}
-	return SafeChannelWrite(ctx, ji.resultChan, &jobResult{error: val})
+	return SafeChannelWrite(ctx, ji.resultChan, &jobResult[T]{error: val})
 }
 
-func (ji *JobImpl) WriteResult(ctx context.Context, val any) error {
+func (ji *JobImpl[T]) WriteResult(ctx context.Context, val T) error {
 	if ji.resultChanDone.Load() {
 		return ErrWorkerPoolResultChannelIsClosed
 	}
-	return SafeChannelWrite(ctx, ji.resultChan, &jobResult{item: val})
+	return SafeChannelWrite(ctx, ji.resultChan, &jobResult[T]{item: val})
 }
 
-func (ji *JobImpl) Close() {
+func (ji *JobImpl[T]) Close() {
 	if ji.resultChanDone.CompareAndSwap(false, true) {
 		close(ji.resultChan)
 	}
 }
 
-var _ Job = new(JobImpl)
-
-func NewJob(process func(ctx context.Context, result JobResultPipe) error) Job {
-	return NewJobWithBufferAndRetry(process, defaultJobResultBufferSize, defaultJobRetryCount)
+// NewJob creates a new job with default buffer size and retry count.
+func NewJob[T any](process func(ctx context.Context, result JobResultPipe[T]) error) Job[T] {
+	return NewJobWithBufferAndRetry[T](process, defaultJobResultBufferSize, defaultJobRetryCount)
 }
 
-func NewJobWithBuffer(process func(ctx context.Context, result JobResultPipe) error, buffer int) Job {
-	return NewJobWithBufferAndRetry(process, buffer, 0)
+// NewJobWithBuffer creates a new job with a specified buffer size.
+func NewJobWithBuffer[T any](process func(ctx context.Context, result JobResultPipe[T]) error, buffer int) Job[T] {
+	return NewJobWithBufferAndRetry[T](process, buffer, 0)
 }
 
-func NewJobWithRetry(process func(ctx context.Context, result JobResultPipe) error, retries int) Job {
-	return NewJobWithBufferAndRetry(process, defaultJobResultBufferSize, retries)
+// NewJobWithRetry creates a new job with a specified retry count.
+func NewJobWithRetry[T any](process func(ctx context.Context, result JobResultPipe[T]) error, retries int) Job[T] {
+	return NewJobWithBufferAndRetry[T](process, defaultJobResultBufferSize, retries)
 }
 
-func NewJobWithBufferAndRetry(
-	process func(ctx context.Context, result JobResultPipe) error,
+// NewJobWithBufferAndRetry creates a new job with specified buffer size and retry count.
+func NewJobWithBufferAndRetry[T any](
+	process func(ctx context.Context, result JobResultPipe[T]) error,
 	resultBufferSize, retries int,
-) Job {
-	return &JobImpl{
+) Job[T] {
+	return &JobImpl[T]{
 		id:               xid.New().String(),
 		retries:          retries,
 		resultBufferSize: resultBufferSize,
-		resultChan:       make(chan JobResult, resultBufferSize),
+		resultChan:       make(chan JobResult[T], resultBufferSize),
 		processFunc:      process,
 	}
 }
@@ -362,10 +369,48 @@ func WithBackgroundConsumer(deque func(_ context.Context) error) Option {
 	}
 }
 
+// SubmitJob used to submit jobs to our worker pool for processing.
+// Once a job is submitted the end user does not need to do any further tasks
+// One can ideally also wait for the results of their processing for their specific job
+// by listening to the job's ResultChan.
+func SubmitJob[T any](ctx context.Context, s *Service, job Job[T]) error {
+	if s == nil {
+		return errors.New("service is nil")
+	}
+
+	if s.pool == nil {
+		return errors.New("worker pool is not configured")
+	}
+
+	// Create a task function that will be executed by the worker pool
+	task := createJobExecutionTask(ctx, s, job)
+	return s.pool.Submit(ctx, task)
+}
+
+// SafeChannelWrite writes a value to a channel, returning an error if the context is canceled.
+func SafeChannelWrite[T any](ctx context.Context, ch chan<- JobResult[T], value JobResult[T]) error {
+	select {
+	case <-ctx.Done():
+		return fmt.Errorf("context canceled while writing to channel: %w", ctx.Err())
+	case ch <- value:
+		return nil
+	}
+}
+
+// SafeChannelRead reads a value from a channel, returning false if the channel is closed or the context is canceled.
+func SafeChannelRead[T any](ctx context.Context, ch <-chan JobResult[T]) (JobResult[T], bool) {
+	select {
+	case <-ctx.Done():
+		var zero JobResult[T]
+		return zero, false
+	case result, ok := <-ch:
+		return result, ok
+	}
+}
+
 // createJobExecutionTask creates a new task function that encapsulates job execution, error handling, and retry logic.
-func createJobExecutionTask(ctx context.Context, s *Service, job Job) func() {
+func createJobExecutionTask[T any](ctx context.Context, s *Service, job Job[T]) func() {
 	return func() {
-		// At this point, executionErr != nil, so handle the error case.
 		log := s.Log(ctx).
 			WithField("job", job.ID()).
 			WithField("run", job.Runs())
@@ -392,71 +437,16 @@ func createJobExecutionTask(ctx context.Context, s *Service, job Job) func() {
 			log.Error("Job failed; retries exhausted.")
 			_ = job.WriteError(ctx, executionErr)
 			job.Close()
+			return
 		}
 
 		// Job can be retried to resolve error
 		log.Warn("Job failed, attempting to retry it")
 		resubmitErr := SubmitJob(ctx, s, job) // Recursive call to SubmitJob for retry
 		if resubmitErr != nil {
-			log.WithError(resubmitErr).
-				Error("Failed to resubmit job for retry.")
-			// If resubmission fails, the original error of this attempt should be reported.
-			_ = job.WriteError(ctx, executionErr)
+			log.WithError(resubmitErr).Error("Failed to resubmit job")
+			_ = job.WriteError(ctx, fmt.Errorf("failed to resubmit job: %w", executionErr))
 			job.Close()
 		}
-	}
-}
-
-// SubmitJob used to submit jobs to our worker pool for processing.
-// Once a job is submitted the end user does not need to do any further tasks
-// One can ideally also wait for the results of their processing for their specific job
-// This is done by simply by listening to the jobs ErrChan. Be sure to also check for when its closed
-//
-//	err, ok := <- errChan
-func SubmitJob(ctx context.Context, s *Service, job Job) error {
-	// This select block makes the submission attempt itself cancellable by ctx.
-	// It attempts to submit once.
-	select {
-	case <-ctx.Done():
-		// Use ctx.Err() to provide a more specific error about context cancellation.
-		return fmt.Errorf("context cancelled before job submission: %w", ctx.Err())
-	default:
-
-		// Create the actual task to be executed by a worker.
-		task := createJobExecutionTask(ctx, s, job)
-		return s.pool.Submit(ctx, task)
-	}
-}
-
-// SafeChannelWrite writes a value to a channel, returning an error if the context is canceled.
-func SafeChannelWrite(ctx context.Context, ch chan<- JobResult, value JobResult) error {
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	default:
-	}
-
-	ch <- value
-	return nil
-}
-
-func SafeChannelRead(ctx context.Context, ch <-chan JobResult) (JobResult, bool) {
-	// First check if the context is already done
-	select {
-	case <-ctx.Done():
-		return &jobResult{error: ctx.Err()}, false
-	default:
-		// Context is not canceled, proceed with reading
-	}
-
-	// Now do the actual read, still respecting potential context cancellation
-	select {
-	case <-ctx.Done():
-		// Return context error without blocking
-		return &jobResult{error: ctx.Err()}, false
-
-	case result, ok := <-ch:
-		// Channel read successfully or channel closed
-		return result, ok
 	}
 }

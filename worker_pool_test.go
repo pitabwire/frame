@@ -14,7 +14,7 @@ type fields struct {
 	counter int
 }
 
-func (f *fields) process(_ context.Context, _ frame.JobResultPipe) error {
+func (f *fields) process(_ context.Context, _ frame.JobResultPipe[any]) error {
 	if f.test == "first error" {
 		f.counter++
 		f.test = "erred"
@@ -33,7 +33,7 @@ func TestJobImpl_ChannelOperations(t *testing.T) {
 		ctx := t.Context()
 
 		// Create a job
-		job := frame.NewJob(func(_ context.Context, _ frame.JobResultPipe) error {
+		job := frame.NewJob(func(_ context.Context, _ frame.JobResultPipe[any]) error {
 			return nil
 		})
 
@@ -74,7 +74,7 @@ func TestJobImpl_ChannelOperations(t *testing.T) {
 	})
 }
 
-func writeIntRangeAsResult(ctx context.Context, t *testing.T, job frame.Job, count int) {
+func writeIntRangeAsResult(ctx context.Context, t *testing.T, job frame.Job[any], count int) {
 	for i := range count {
 		if err := job.WriteResult(ctx, i); err != nil {
 			t.Errorf("Failed to write result: %v", err)
@@ -92,7 +92,7 @@ func TestJobImpl_SafeConcurrentOperations(t *testing.T) {
 		ctx, cancel := context.WithTimeout(t.Context(), 500*time.Millisecond)
 		defer cancel()
 
-		job := frame.NewJobWithBuffer(func(_ context.Context, _ frame.JobResultPipe) error {
+		job := frame.NewJobWithBuffer(func(_ context.Context, _ frame.JobResultPipe[any]) error {
 			return nil
 		}, 10)
 
@@ -124,7 +124,7 @@ func TestJobImpl_SafeConcurrentOperations(t *testing.T) {
 func TestJobImpl_ChaoticConcurrentOperations(t *testing.T) {
 	t.Run("Close should prevent further writes but allow reads", func(t *testing.T) {
 		ctx := t.Context()
-		job := frame.NewJobWithBuffer(func(_ context.Context, _ frame.JobResultPipe) error {
+		job := frame.NewJobWithBuffer(func(_ context.Context, _ frame.JobResultPipe[any]) error {
 			return nil
 		}, 5)
 
@@ -167,7 +167,7 @@ func TestJobImpl_ChaoticConcurrentOperations(t *testing.T) {
 func TestJobImpl_ResultChannelDoneFlag(t *testing.T) {
 	t.Run("resultChanDone flag should properly indicate closed state", func(t *testing.T) {
 		ctx := t.Context()
-		job := frame.NewJob(func(_ context.Context, _ frame.JobResultPipe) error {
+		job := frame.NewJob(func(_ context.Context, _ frame.JobResultPipe[any]) error {
 			return nil
 		})
 
@@ -192,7 +192,7 @@ func TestJobImpl_ResultChannelDoneFlag(t *testing.T) {
 func TestJobImpl_SafeChannelOperations(t *testing.T) {
 	t.Run("Channel operations should respect context cancellation", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(t.Context())
-		job := frame.NewJobWithBuffer(func(_ context.Context, _ frame.JobResultPipe) error {
+		job := frame.NewJobWithBuffer(func(_ context.Context, _ frame.JobResultPipe[any]) error {
 			return nil
 		}, 1)
 

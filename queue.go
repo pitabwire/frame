@@ -422,7 +422,7 @@ func (s *subscriber) Stop(ctx context.Context) error {
 }
 
 func (s *subscriber) processReceivedMessage(ctx context.Context, msg *pubsub.Message) error {
-	job := NewJob(func(jobCtx context.Context, _ JobResultPipe) error {
+	job := NewJob[any](func(jobCtx context.Context, _ JobResultPipe[any]) error {
 		var err error
 		defer s.metrics.closeMessage(time.Now(), err)
 
@@ -455,7 +455,7 @@ func (s *subscriber) processReceivedMessage(ctx context.Context, msg *pubsub.Mes
 		return nil
 	})
 
-	submitErr := SubmitJob(ctx, s.service, job)
+	submitErr := SubmitJob[any](ctx, s.service, job)
 	if submitErr != nil {
 		msg.Nack()
 		logger := s.service.Log(ctx).

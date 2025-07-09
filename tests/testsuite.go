@@ -125,8 +125,8 @@ func (s *FrameBaseTestSuite) TearDownSuite() {
 
 // WithTestDependancies Creates subtests with each known DependancyOption.
 func WithTestDependancies(t *testing.T,
-	options []testdef.DependancyOption,
-	testFn func(t *testing.T, db testdef.DependancyOption)) {
+	options []*testdef.DependancyOption,
+	testFn func(t *testing.T, db *testdef.DependancyOption)) {
 	for _, opt := range options {
 		t.Run(opt.Name(), func(tt *testing.T) {
 			testFn(tt, opt)

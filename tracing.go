@@ -2,13 +2,15 @@ package frame
 
 import (
 	"context"
-	"go.opentelemetry.io/contrib/propagators/autoprop"
-	"go.opentelemetry.io/otel/log/global"
-	sdklogs "go.opentelemetry.io/otel/sdk/log"
+	"github.com/pitabwire/util"
 
+	"go.opentelemetry.io/contrib/bridges/otelslog"
 	"go.opentelemetry.io/contrib/exporters/autoexport"
+	"go.opentelemetry.io/contrib/propagators/autoprop"
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/log/global"
 	"go.opentelemetry.io/otel/propagation"
+	sdklogs "go.opentelemetry.io/otel/sdk/log"
 	sdkmetrics "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
@@ -84,6 +86,12 @@ func (s *Service) initTracer(ctx context.Context) error {
 		sdklogs.WithProcessor(logsProcessor),
 	)
 	global.SetLoggerProvider(lp)
+
+	logHandler := otelslog.NewHandler("", otelslog.WithSource(true),
+		otelslog.WithLoggerProvider(lp), otelslog.WithAttributes(res.Attributes()...))
+	log := util.NewLogger(ctx, util.WithLogHandler(logHandler))
+	log.WithField("service", s.Name())
+	s.logger = log
 
 	return nil
 }

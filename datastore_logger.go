@@ -34,7 +34,7 @@ func datbaseLogger(ctx context.Context, s *Service) glogger.Interface {
 	return &dbLogger{
 		logQueries:    logQueries,
 		slowThreshold: slowQueryThreshold,
-		baseLogger:    util.NewLogger(ctx, util.DefaultLogOptions()),
+		baseLogger:    util.Log(ctx),
 	}
 }
 

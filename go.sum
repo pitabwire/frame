@@ -187,8 +187,7 @@ github.com/panjf2000/ants/v2 v2.11.3 h1:AfI0ngBoXJmYOpDh9m516vjqoUu2sLrIVgppI9TZ
 github.com/panjf2000/ants/v2 v2.11.3/go.mod h1:8u92CYMUc6gyvTIw8Ru7Mt7+/ESnJahz5EVtqfrilek=
 github.com/pitabwire/natspubsub v0.6.9 h1:+1yd80fnj9lz9V7SIyr3kmn2TtMeB1ZM1TOaoN9FWfU=
 github.com/pitabwire/natspubsub v0.6.9/go.mod h1:fxAKe9c9Kf0NIxZZ7tLM7DXuq1OGv4+AsaoaWOPScrI=
-github.com/pitabwire/util v0.2.5 h1:UsxC8T2CmQgNVyi5sYYfpQiyoj5wQIySO9mPLxzJBoA=
-github.com/pitabwire/util v0.2.5/go.mod h1:WZczgF9qnAKM5jzzweeiWBdSi5cVEBjl7V9LI55q6xs=
+github.com/pitabwire/util v0.3.0 h1:eQYvEuGDBimBYj0gdIZSlwvF33HYfatsMk3PPLudkw4=
 github.com/pitabwire/util v0.3.0/go.mod h1:LjCZEToLP6DaOkiMBmRn0uWxFEDmPkrO9kKxY1/f4pI=
 github.com/pkg/errors v0.9.1 h1:FEBLx1zS214owpjy7qsBeixbURkuhQAwrK5UwLGTwt4=
 github.com/pkg/errors v0.9.1/go.mod h1:bwawxfHBFNV+L2hUp1rHADufV3IMtnDRdf1r5NINEl0=

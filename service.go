@@ -14,9 +14,9 @@ import (
 	"github.com/nicksnyder/go-i18n/v2/i18n"
 	"github.com/pitabwire/util"
 	"go.opentelemetry.io/otel/propagation"
+	sdklogs "go.opentelemetry.io/otel/sdk/log"
 	sdkmetrics "go.opentelemetry.io/otel/sdk/metric"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
-	sdklogs "go.opentelemetry.io/otel/sdk/log"
 	_ "go.uber.org/automaxprocs" // Automatically set GOMAXPROCS to match Linux container CPU quota.
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health/grpc_health_v1"

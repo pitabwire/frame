@@ -14,7 +14,7 @@ import (
 // WithLogger Option that helps with initialization of our internal dbLogger.
 func WithLogger() Option {
 	return func(ctx context.Context, s *Service) {
-		opts := util.DefaultLogOptions()
+		var opts []util.Option
 
 		if s.Config() != nil {
 			config, ok := s.Config().(ConfigurationLogLevel)
@@ -22,16 +22,16 @@ func WithLogger() Option {
 				logLevelStr := config.LoggingLevel()
 				logLevel, err := util.ParseLevel(logLevelStr)
 				if err == nil {
-					opts.Level = logLevel
+					opts = append(opts, util.WithLogLevel(logLevel))
 				}
-				opts.TimeFormat = config.LoggingTimeFormat()
-				opts.NoColor = !config.LoggingColored()
-				opts.ShowStackTrace = config.LoggingShowStackTrace()
-				opts.PrintFormat = config.LoggingFormat()
+				opts = append(opts,
+					util.WithLogTimeFormat(config.LoggingTimeFormat()),
+					util.WithLogNoColor(!config.LoggingColored()),
+					util.WithLogStackTrace())
 			}
 		}
 
-		log := util.NewLogger(ctx, opts)
+		log := util.NewLogger(ctx, opts...)
 		log.WithField("service", s.Name())
 		s.logger = log
 	}

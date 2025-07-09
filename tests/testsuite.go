@@ -3,6 +3,7 @@ package tests
 import (
 	"context"
 	"fmt"
+	"github.com/pitabwire/frame"
 	"testing"
 
 	"github.com/docker/docker/api/types/container"
@@ -68,7 +69,7 @@ func (s *FrameBaseTestSuite) SetupSuite() {
 	}
 }
 
-func (s *FrameBaseTestSuite) Migrate(ctx context.Context, ds testdef.DependancyConn) error {
+func (s *FrameBaseTestSuite) Migrate(ctx context.Context, ds frame.DataSource) error {
 	if s.MigrationImageContext == "" {
 		s.MigrationImageContext = "../../"
 	}
@@ -81,7 +82,7 @@ func (s *FrameBaseTestSuite) Migrate(ctx context.Context, ds testdef.DependancyC
 			config.Env = []string{
 				"LOG_LEVEL=debug",
 				"DO_MIGRATION=true",
-				fmt.Sprintf("DATABASE_URL=%s", ds.GetDS().String()),
+				fmt.Sprintf("DATABASE_URL=%s", ds.String()),
 			}
 		},
 		Networks:   []string{s.Network.ID},

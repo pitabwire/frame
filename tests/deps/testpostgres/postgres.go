@@ -70,10 +70,10 @@ func (pgd *postgreSQLDependancy) Setup(ctx context.Context, _ *testcontainers.Do
 
 	log.Info("Setting up PostgreSQL container...")
 
-	pgContainer, err := tcPostgres.Run(ctx, PostgresqlDBImage,
-		tcPostgres.WithDatabase(DBName),
-		tcPostgres.WithUsername(DBUser),
-		tcPostgres.WithPassword(DBPassword),
+	pgContainer, err := tcPostgres.Run(ctx, pgd.image,
+		tcPostgres.WithDatabase(pgd.dbname),
+		tcPostgres.WithUsername(pgd.username),
+		tcPostgres.WithPassword(pgd.password),
 		testcontainers.WithWaitStrategy(
 			wait.ForLog("database system is ready to accept connections").
 				WithOccurrence(OccurrenceValue).
@@ -83,7 +83,7 @@ func (pgd *postgreSQLDependancy) Setup(ctx context.Context, _ *testcontainers.Do
 		return fmt.Errorf("failed to start postgres container: %w", err)
 	}
 
-	conn, err := pgd.postgresContainer.ConnectionString(ctx)
+	conn, err := pgContainer.ConnectionString(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to get connection string for postgres container: %w", err)
 	}

@@ -3,7 +3,6 @@ package tests
 import (
 	"context"
 	"fmt"
-	"github.com/pitabwire/frame"
 	"testing"
 
 	"github.com/docker/docker/api/types/container"
@@ -15,6 +14,7 @@ import (
 	"github.com/testcontainers/testcontainers-go/wait"
 	"go.uber.org/mock/gomock"
 
+	"github.com/pitabwire/frame"
 	"github.com/pitabwire/frame/tests/testdef"
 )
 

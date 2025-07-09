@@ -38,27 +38,30 @@ func NewDependancyOption(name string, prefix string, deps []TestResource) *Depen
 func (opt *DependancyOption) Name() string {
 	return opt.name
 }
-func (opt *DependancyOption) Database() DependancyConn {
+func (opt *DependancyOption) Database() []DependancyConn {
+	var deps []DependancyConn
 	for _, dep := range opt.deps {
 		if dep.GetDS().IsDB() {
-			return dep
+			deps = append(deps, dep)
 		}
 	}
-	return nil
+	return deps
 }
-func (opt *DependancyOption) Cache() DependancyConn {
+func (opt *DependancyOption) Cache() []DependancyConn {
+	var deps []DependancyConn
 	for _, dep := range opt.deps {
 		if dep.GetDS().IsCache() {
-			return dep
+			deps = append(deps, dep)
 		}
 	}
-	return nil
+	return deps
 }
-func (opt *DependancyOption) Queue() DependancyConn {
+func (opt *DependancyOption) Queue() []DependancyConn {
+	var deps []DependancyConn
 	for _, dep := range opt.deps {
 		if dep.GetDS().IsQueue() {
-			return dep
+			deps = append(deps, dep)
 		}
 	}
-	return nil
+	return deps
 }

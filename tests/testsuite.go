@@ -35,8 +35,12 @@ func (lc *StdoutLogConsumer) Accept(l testcontainers.Log) {
 type FrameBaseTestSuite struct {
 	suite.Suite
 
-	Deps []definitions.TestResource
+	deps []definitions.TestResource
 	Ctrl *gomock.Controller
+}
+
+func (s *FrameBaseTestSuite) SetDeps(deps ...definitions.TestResource) {
+	s.deps = deps
 }
 
 // SetupSuite initialises the test environment for the test suite.
@@ -47,7 +51,7 @@ func (s *FrameBaseTestSuite) SetupSuite() {
 
 	ctx := t.Context()
 
-	for _, dep := range s.Deps {
+	for _, dep := range s.deps {
 		err := dep.Setup(ctx)
 		require.NoError(t, err, "could not setup tests")
 	}
@@ -62,7 +66,7 @@ func (s *FrameBaseTestSuite) TearDownSuite() {
 	t := s.T()
 	ctx := t.Context()
 
-	for _, dep := range s.Deps {
+	for _, dep := range s.deps {
 		dep.Cleanup(ctx)
 	}
 }
@@ -73,7 +77,6 @@ func WithTestDependancies(t *testing.T,
 	testFn func(t *testing.T, db definitions.DependancyOption)) {
 	for _, opt := range options {
 		t.Run(opt.Name(), func(tt *testing.T) {
-			// Removed tt.Parallel() as it conflicts with t.Setenv() used in GetService
 			testFn(tt, opt)
 		})
 	}

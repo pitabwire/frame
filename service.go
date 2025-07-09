@@ -13,7 +13,10 @@ import (
 	ghandler "github.com/gorilla/handlers"
 	"github.com/nicksnyder/go-i18n/v2/i18n"
 	"github.com/pitabwire/util"
-	"go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/propagation"
+	sdkmetrics "go.opentelemetry.io/otel/sdk/metric"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	sdklogs "go.opentelemetry.io/otel/sdk/log"
 	_ "go.uber.org/automaxprocs" // Automatically set GOMAXPROCS to match Linux container CPU quota.
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health/grpc_health_v1"
@@ -46,8 +49,12 @@ type Service struct {
 	version                    string
 	environment                string
 	logger                     *util.LogEntry
-	traceExporter              trace.SpanExporter
-	traceSampler               trace.Sampler
+	disableTracing             bool
+	traceTextMap               propagation.TextMapPropagator
+	traceExporter              sdktrace.SpanExporter
+	traceSampler               sdktrace.Sampler
+	metricsReader              sdkmetrics.Reader
+	traceLogsExporter          sdklogs.Exporter
 	handler                    http.Handler
 	cancelFunc                 context.CancelFunc
 	errorChannelMutex          sync.Mutex

@@ -2,8 +2,8 @@ package frame
 
 import (
 	"context"
-	"github.com/pitabwire/util"
 
+	"github.com/pitabwire/util"
 	"go.opentelemetry.io/contrib/bridges/otelslog"
 	"go.opentelemetry.io/contrib/exporters/autoexport"
 	"go.opentelemetry.io/contrib/propagators/autoprop"

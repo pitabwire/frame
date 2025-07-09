@@ -1,13 +1,15 @@
-package definitions
+package testdef
 
 import (
 	"context"
+
+	"github.com/testcontainers/testcontainers-go"
 
 	"github.com/pitabwire/frame"
 )
 
 type DependancyRes interface {
-	Setup(ctx context.Context) error
+	Setup(ctx context.Context, network *testcontainers.DockerNetwork) error
 	Cleanup(ctx context.Context)
 }
 
@@ -37,6 +39,9 @@ func NewDependancyOption(name string, prefix string, deps []TestResource) *Depen
 
 func (opt *DependancyOption) Name() string {
 	return opt.name
+}
+func (opt *DependancyOption) Prefix() string {
+	return opt.prefix
 }
 func (opt *DependancyOption) Database() []DependancyConn {
 	var deps []DependancyConn

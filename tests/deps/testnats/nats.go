@@ -1,14 +1,15 @@
-package nats
+package testnats
 
 import (
 	"context"
 	"fmt"
 
 	"github.com/pitabwire/util"
+	"github.com/testcontainers/testcontainers-go"
 	tcNats "github.com/testcontainers/testcontainers-go/modules/nats"
 
 	"github.com/pitabwire/frame"
-	"github.com/pitabwire/frame/tests/definitions"
+	"github.com/pitabwire/frame/tests/testdef"
 )
 
 const (
@@ -34,11 +35,11 @@ type natsDependancy struct {
 	natsContainer *tcNats.NATSContainer
 }
 
-func NewNatsDep() definitions.TestResource {
+func NewNatsDep() testdef.TestResource {
 	return NewNatsDepWithCred(NatsImage, NatsUser, NatsPass, NatsCluster)
 }
 
-func NewNatsDepWithCred(natsImage, natsUserName, natsPassword, cluster string) definitions.TestResource {
+func NewNatsDepWithCred(natsImage, natsUserName, natsPassword, cluster string) testdef.TestResource {
 	return &natsDependancy{
 		image:    natsImage,
 		username: natsUserName,
@@ -46,7 +47,7 @@ func NewNatsDepWithCred(natsImage, natsUserName, natsPassword, cluster string) d
 		cluster:  cluster,
 	}
 }
-func (nd *natsDependancy) Setup(ctx context.Context) error {
+func (nd *natsDependancy) Setup(ctx context.Context, _ *testcontainers.DockerNetwork) error {
 	natsqContainer, err := tcNats.Run(ctx, nd.image,
 		tcNats.WithUsername(nd.username),
 		tcNats.WithPassword(nd.password),

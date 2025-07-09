@@ -5,10 +5,11 @@ import (
 	"fmt"
 
 	"github.com/pitabwire/util"
+	"github.com/testcontainers/testcontainers-go"
 	tcValKey "github.com/testcontainers/testcontainers-go/modules/valkey"
 
 	"github.com/pitabwire/frame"
-	"github.com/pitabwire/frame/tests/definitions"
+	"github.com/pitabwire/frame/tests/testdef"
 )
 
 const (
@@ -33,11 +34,11 @@ type valKeyDependancy struct {
 	container *tcValKey.ValkeyContainer
 }
 
-func NewValKeyDep() definitions.TestResource {
+func NewValKeyDep() testdef.TestResource {
 	return NewValKeyDepWithCred(ValKeyImage, ValKeyUser, ValKeyPass, ValKeyCluster)
 }
 
-func NewValKeyDepWithCred(natsImage, natsUserName, natsPassword, cluster string) definitions.TestResource {
+func NewValKeyDepWithCred(natsImage, natsUserName, natsPassword, cluster string) testdef.TestResource {
 	return &valKeyDependancy{
 		image:    natsImage,
 		username: natsUserName,
@@ -45,7 +46,7 @@ func NewValKeyDepWithCred(natsImage, natsUserName, natsPassword, cluster string)
 		cluster:  cluster,
 	}
 }
-func (vkd *valKeyDependancy) Setup(ctx context.Context) error {
+func (vkd *valKeyDependancy) Setup(ctx context.Context, _ *testcontainers.DockerNetwork) error {
 	container, err := tcValKey.Run(ctx, vkd.image)
 	if err != nil {
 		return fmt.Errorf("failed to start nats container: %w", err)

@@ -1,4 +1,4 @@
-package postgres
+package testpostgres
 
 import (
 	"context"
@@ -19,7 +19,7 @@ import (
 	"github.com/testcontainers/testcontainers-go/wait"
 
 	"github.com/pitabwire/frame"
-	"github.com/pitabwire/frame/tests/definitions"
+	"github.com/pitabwire/frame/tests/testdef"
 )
 
 const (
@@ -51,11 +51,11 @@ type postgreSQLDependancy struct {
 	postgresContainer *tcPostgres.PostgresContainer
 }
 
-func NewPGDep() definitions.TestResource {
+func NewPGDep() testdef.TestResource {
 	return NewPGDepWithCred(PostgresqlDBImage, DBUser, DBPassword, DBName)
 }
 
-func NewPGDepWithCred(pgImage, pgUserName, pgPassword, pgDBName string) definitions.TestResource {
+func NewPGDepWithCred(pgImage, pgUserName, pgPassword, pgDBName string) testdef.TestResource {
 	return &postgreSQLDependancy{
 		image:    pgImage,
 		username: pgUserName,
@@ -65,7 +65,7 @@ func NewPGDepWithCred(pgImage, pgUserName, pgPassword, pgDBName string) definiti
 }
 
 // Setup creates a PostgreSQL testcontainer and sets the container.
-func (pgd *postgreSQLDependancy) Setup(ctx context.Context) error {
+func (pgd *postgreSQLDependancy) Setup(ctx context.Context, _ *testcontainers.DockerNetwork) error {
 	log := util.Log(ctx)
 
 	log.Info("Setting up PostgreSQL container...")

@@ -2,6 +2,7 @@ package tests
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"testing"
 
@@ -45,8 +46,8 @@ func (lc *StdoutLogConsumer) Accept(l testcontainers.Log) {
 type FrameBaseTestSuite struct {
 	suite.Suite
 
-	MigrationImageContext string
-	Network               *testcontainers.DockerNetwork
+	MigrationDockerFile *testcontainers.FromDockerfile
+	Network             *testcontainers.DockerNetwork
 	resources             []testdef.TestResource
 	Ctrl                  *gomock.Controller
 
@@ -87,14 +88,12 @@ func (s *FrameBaseTestSuite) Resources() []testdef.DependancyConn {
 }
 
 func (s *FrameBaseTestSuite) Migrate(ctx context.Context, ds frame.DataSource) error {
-	if s.MigrationImageContext == "" {
-		s.MigrationImageContext = "../../"
+	if s.MigrationDockerFile == nil {
+		return errors.New("migration docker file not provided")
 	}
 
 	cRequest := testcontainers.ContainerRequest{
-		FromDockerfile: testcontainers.FromDockerfile{
-			Context: s.MigrationImageContext,
-		},
+		FromDockerfile: *s.MigrationDockerFile,
 		ConfigModifier: func(config *container.Config) {
 			config.Env = []string{
 				"LOG_LEVEL=debug",

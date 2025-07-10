@@ -2,12 +2,9 @@ package testpostgres
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"net/url"
-	"os"
 	"strings"
 	"time"
 
@@ -107,24 +104,21 @@ func (pgd *postgreSQLDependancy) GetPrefixedDS(
 	ctx context.Context,
 	randomisedPrefix string,
 ) (frame.DataSource, func(context.Context), error) {
-	parsedPostgresURI, err := pgd.conn.ToURI()
+	connectionURI, err := pgd.conn.ToURI()
 	if err != nil {
 		return "", func(_ context.Context) {}, err
 	}
 
-	newDatabaseName, err := generateNewDBName(randomisedPrefix)
+	newDatabaseName := suffixedDatabaseName(connectionURI, randomisedPrefix)
+
+	connectionURI, err = ensureDatabaseExists(ctx, connectionURI, newDatabaseName)
 	if err != nil {
 		return "", func(_ context.Context) {}, err
 	}
 
-	connectionURI, err := ensureDatabaseExists(ctx, parsedPostgresURI, newDatabaseName)
-	if err != nil {
-		return "", func(_ context.Context) {}, err
-	}
-
-	postgresURIStr := connectionURI.String()
-	return frame.DataSource(postgresURIStr), func(_ context.Context) {
-		_ = clearDatabase(ctx, postgresURIStr)
+	suffixedPgURIStr := connectionURI.String()
+	return frame.DataSource(suffixedPgURIStr), func(_ context.Context) {
+		_ = clearDatabase(ctx, suffixedPgURIStr)
 	}, nil
 }
 
@@ -195,16 +189,6 @@ func clearDatabase(ctx context.Context, connectionString string) error {
 	return nil
 }
 
-func generateNewDBName(randomnesPrefix string) (string, error) {
-	// we cannot use 'matrix_test' here else 2x concurrently running packages will try to use the same db.
-	// instead, hash the current working directory, snaffle the first 16 bytes and append that to matrix_test
-	// and use that as the unique db name. We do this because packages are per-directory hence by hashing the
-	// working (test) directory we ensure we get a consistent hash and don't hash against concurrent packages.
-	wd, err := os.Getwd()
-	if err != nil {
-		return "", err
-	}
-	hash := sha256.Sum256([]byte(wd))
-	databaseName := fmt.Sprintf("notifications_test_%s_%s", randomnesPrefix, hex.EncodeToString(hash[:16]))
-	return databaseName, nil
+func suffixedDatabaseName(currentUri *url.URL, randomnesPrefix string) string {
+	return fmt.Sprintf("%s_%s", currentUri.Path, randomnesPrefix)
 }

@@ -2,54 +2,23 @@ package tests
 
 import (
 	"context"
-	"errors"
-	"fmt"
 	"testing"
 
-	"github.com/docker/docker/api/types/container"
-	"github.com/pitabwire/util"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/network"
-	"github.com/testcontainers/testcontainers-go/wait"
 	"go.uber.org/mock/gomock"
 
-	"github.com/pitabwire/frame"
 	"github.com/pitabwire/frame/tests/testdef"
 )
-
-// StdoutLogConsumer is a LogConsumer that prints the log to stdout.
-type StdoutLogConsumer struct {
-	logger *util.LogEntry
-}
-
-// NewStdoutLogConsumer creates a new StdoutLogConsumer.
-func NewStdoutLogConsumer(ctx context.Context) *StdoutLogConsumer {
-	return &StdoutLogConsumer{
-		logger: util.Log(ctx),
-	}
-}
-
-// Accept prints the log to stdout.
-func (lc *StdoutLogConsumer) Accept(l testcontainers.Log) {
-	switch l.LogType {
-	case "STDERR":
-		lc.logger.Error(string(l.Content))
-	default:
-		lc.logger.Info(string(l.Content))
-	}
-	lc.logger.Printf("%s", string(l.Content))
-}
 
 // FrameBaseTestSuite provides a base test suite with all necessary test components.
 type FrameBaseTestSuite struct {
 	suite.Suite
-
-	MigrationDockerFile *testcontainers.FromDockerfile
-	Network             *testcontainers.DockerNetwork
-	resources             []testdef.TestResource
-	Ctrl                  *gomock.Controller
+	Network   *testcontainers.DockerNetwork
+	resources []testdef.TestResource
+	Ctrl      *gomock.Controller
 
 	InitResourceFunc func(ctx context.Context) []testdef.TestResource
 }
@@ -85,39 +54,6 @@ func (s *FrameBaseTestSuite) Resources() []testdef.DependancyConn {
 	}
 
 	return deps
-}
-
-func (s *FrameBaseTestSuite) Migrate(ctx context.Context, ds frame.DataSource) error {
-	if s.MigrationDockerFile == nil {
-		return errors.New("migration docker file not provided")
-	}
-
-	cRequest := testcontainers.ContainerRequest{
-		FromDockerfile: *s.MigrationDockerFile,
-		ConfigModifier: func(config *container.Config) {
-			config.Env = []string{
-				"LOG_LEVEL=debug",
-				"DO_MIGRATION=true",
-				fmt.Sprintf("DATABASE_URL=%s", ds.String()),
-			}
-		},
-		Networks:   []string{s.Network.ID},
-		WaitingFor: wait.ForExit(),
-		LogConsumerCfg: &testcontainers.LogConsumerConfig{
-			Consumers: []testcontainers.LogConsumer{NewStdoutLogConsumer(ctx)},
-		},
-	}
-
-	migrationC, err := testcontainers.GenericContainer(ctx,
-		testcontainers.GenericContainerRequest{
-			ContainerRequest: cRequest,
-			Started:          true,
-		})
-	if err != nil {
-		return err
-	}
-
-	return migrationC.Terminate(ctx)
 }
 
 // TearDownSuite cleans up resources after all tests are completed.

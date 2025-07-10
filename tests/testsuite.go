@@ -47,8 +47,10 @@ type FrameBaseTestSuite struct {
 
 	MigrationImageContext string
 	Network               *testcontainers.DockerNetwork
-	Resources             []testdef.TestResource
+	resources             []testdef.TestResource
 	Ctrl                  *gomock.Controller
+
+	InitResourceFunc func(ctx context.Context) []testdef.TestResource
 }
 
 // SetupSuite initialises the test environment for the test suite.
@@ -63,10 +65,25 @@ func (s *FrameBaseTestSuite) SetupSuite() {
 	require.NoError(t, err, "could not create network")
 	s.Network = net
 
-	for _, dep := range s.Resources {
+	if s.InitResourceFunc == nil {
+		require.NotNil(t, s.InitResourceFunc, "InitResourceFunc is required")
+	}
+
+	s.resources = s.InitResourceFunc(ctx)
+
+	for _, dep := range s.resources {
 		err = dep.Setup(ctx, net)
 		require.NoError(t, err, "could not setup tests")
 	}
+}
+
+func (s *FrameBaseTestSuite) Resources() []testdef.DependancyConn {
+	var deps []testdef.DependancyConn
+	for _, dep := range s.resources {
+		deps = append(deps, dep)
+	}
+
+	return deps
 }
 
 func (s *FrameBaseTestSuite) Migrate(ctx context.Context, ds frame.DataSource) error {
@@ -113,7 +130,7 @@ func (s *FrameBaseTestSuite) TearDownSuite() {
 	t := s.T()
 	ctx := t.Context()
 
-	for _, dep := range s.Resources {
+	for _, dep := range s.resources {
 		dep.Cleanup(ctx)
 	}
 

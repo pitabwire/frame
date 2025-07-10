@@ -26,10 +26,10 @@ type TestResource interface {
 type DependancyOption struct {
 	name   string
 	prefix string
-	deps   []TestResource
+	deps   []DependancyConn
 }
 
-func NewDependancyOption(name string, prefix string, deps []TestResource) *DependancyOption {
+func NewDependancyOption(name string, prefix string, deps []DependancyConn) *DependancyOption {
 	return &DependancyOption{
 		name:   name,
 		prefix: prefix,

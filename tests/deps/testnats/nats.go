@@ -70,7 +70,7 @@ func (nd *natsDependancy) GetDS() frame.DataSource {
 	return nd.conn
 }
 
-func (nd *natsDependancy) GetPrefixedDS(
+func (nd *natsDependancy) GetRandomisedDS(
 	_ context.Context,
 	_ string,
 ) (frame.DataSource, func(context.Context), error) {

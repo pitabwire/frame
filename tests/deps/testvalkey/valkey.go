@@ -66,7 +66,7 @@ func (vkd *valKeyDependancy) GetDS() frame.DataSource {
 	return vkd.conn
 }
 
-func (vkd *valKeyDependancy) GetPrefixedDS(
+func (vkd *valKeyDependancy) GetRandomisedDS(
 	_ context.Context,
 	_ string,
 ) (frame.DataSource, func(context.Context), error) {

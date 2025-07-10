@@ -96,11 +96,11 @@ func (pgd *postgreSQLDependancy) GetDS() frame.DataSource {
 	return pgd.conn
 }
 
-// GetPrefixedDS Prepare a postgres connection string for testing.
+// GetRandomisedDS Prepare a postgres connection string for testing.
 // Returns the connection string to use and a close function which must be called when the test finishes.
 // Calling this function twice will return the same database, which will have data from previous tests
 // unless close() is called.
-func (pgd *postgreSQLDependancy) GetPrefixedDS(
+func (pgd *postgreSQLDependancy) GetRandomisedDS(
 	ctx context.Context,
 	randomisedPrefix string,
 ) (frame.DataSource, func(context.Context), error) {

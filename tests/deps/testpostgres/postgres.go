@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"regexp"
 	"strings"
 	"time"
 
@@ -21,6 +22,7 @@ import (
 
 const (
 	// Database configuration.
+	postgreSQLMaxIdentifiersCharLength = 60
 
 	// PostgresqlDBImage is the PostgreSQL Image.
 	PostgresqlDBImage = "postgres:17"
@@ -189,6 +191,30 @@ func clearDatabase(ctx context.Context, connectionString string) error {
 	return nil
 }
 
-func suffixedDatabaseName(currentUri *url.URL, randomnesPrefix string) string {
-	return fmt.Sprintf("%s_%s", currentUri.Path, randomnesPrefix)
+// suffixedDatabaseName generates a valid PostgreSQL database name from the given URL path and random prefix.
+// It ensures the name complies with PostgreSQL identifier rules and length constraints.
+func suffixedDatabaseName(currentURI *url.URL, randomnesPrefix string) string {
+	// Extract the path, remove slashes, and ensure we have some content
+	pathPart := strings.ReplaceAll(currentURI.Path, "/", "")
+	if pathPart == "" {
+		pathPart = "db"
+	}
+
+	// PostgreSQL identifiers are limited to 63 bytes
+	// Allow space for the random prefix and underscore
+	maxPathLength := postgreSQLMaxIdentifiersCharLength - len(randomnesPrefix)
+	if len(pathPart) > maxPathLength {
+		pathPart = pathPart[:maxPathLength]
+	}
+
+	// Generate the database name, ensuring it starts with a letter
+	// PostgreSQL identifiers must start with a letter or underscore
+	result := fmt.Sprintf("%s_%s", pathPart, randomnesPrefix)
+
+	// Replace any characters that aren't valid in PostgreSQL identifiers
+	// Valid: letters, digits, and underscores
+	re := regexp.MustCompile(`[^a-zA-Z0-9_]`)
+	result = re.ReplaceAllString(result, "_")
+
+	return strings.ToLower(result) // PostgreSQL folds unquoted identifiers to lowercase
 }

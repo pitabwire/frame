@@ -3,6 +3,7 @@ package testnats
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/pitabwire/util"
 	"github.com/testcontainers/testcontainers-go"
@@ -30,7 +31,8 @@ type natsDependancy struct {
 	password string
 	cluster  string
 
-	conn frame.DataSource
+	conn         frame.DataSource
+	internalConn frame.DataSource
 
 	natsContainer *tcNats.NATSContainer
 }
@@ -55,12 +57,24 @@ func (nd *natsDependancy) Setup(ctx context.Context, _ *testcontainers.DockerNet
 	if err != nil {
 		return fmt.Errorf("failed to start nats container: %w", err)
 	}
+
+	host, err := natsqContainer.Host(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get host for container: %w", err)
+	}
+
+	internalIP, err := natsqContainer.ContainerIP(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get internal host ip for container: %w", err)
+	}
+
 	conn, err := natsqContainer.ConnectionString(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to get connection string for postgres container: %w", err)
+		return fmt.Errorf("failed to get connection string for container: %w", err)
 	}
 
 	nd.conn = frame.DataSource(conn)
+	nd.internalConn = frame.DataSource(strings.ReplaceAll(conn, host, internalIP))
 
 	nd.natsContainer = natsqContainer
 	return nil
@@ -69,12 +83,15 @@ func (nd *natsDependancy) Setup(ctx context.Context, _ *testcontainers.DockerNet
 func (nd *natsDependancy) GetDS() frame.DataSource {
 	return nd.conn
 }
+func (nd *natsDependancy) GetInternalDS() frame.DataSource {
+	return nd.internalConn
+}
 
 func (nd *natsDependancy) GetRandomisedDS(
 	_ context.Context,
 	_ string,
 ) (frame.DataSource, func(context.Context), error) {
-	return nd.conn, func(_ context.Context) {
+	return nd.GetDS(), func(_ context.Context) {
 	}, nil
 }
 

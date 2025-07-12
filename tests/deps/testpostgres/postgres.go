@@ -41,11 +41,12 @@ const (
 )
 
 type postgreSQLDependancy struct {
-	image    string
-	username string
-	password string
-	dbname   string
-	conn     frame.DataSource
+	image        string
+	username     string
+	password     string
+	dbname       string
+	conn         frame.DataSource
+	internalConn frame.DataSource
 
 	postgresContainer *tcPostgres.PostgresContainer
 }
@@ -82,12 +83,23 @@ func (pgd *postgreSQLDependancy) Setup(ctx context.Context, _ *testcontainers.Do
 		return fmt.Errorf("failed to start postgres container: %w", err)
 	}
 
+	host, err := pgContainer.Host(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get host for postgres container: %w", err)
+	}
+
+	internalIP, err := pgContainer.ContainerIP(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get internal host ip for postgres container: %w", err)
+	}
+
 	conn, err := pgContainer.ConnectionString(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to get connection string for postgres container: %w", err)
 	}
 
 	pgd.conn = frame.DataSource(conn)
+	pgd.internalConn = frame.DataSource(strings.ReplaceAll(conn, host, internalIP))
 
 	pgd.postgresContainer = pgContainer
 
@@ -98,6 +110,10 @@ func (pgd *postgreSQLDependancy) GetDS() frame.DataSource {
 	return pgd.conn
 }
 
+func (pgd *postgreSQLDependancy) GetInternalDS() frame.DataSource {
+	return pgd.internalConn
+}
+
 // GetRandomisedDS Prepare a postgres connection string for testing.
 // Returns the connection string to use and a close function which must be called when the test finishes.
 // Calling this function twice will return the same database, which will have data from previous tests
@@ -106,7 +122,7 @@ func (pgd *postgreSQLDependancy) GetRandomisedDS(
 	ctx context.Context,
 	randomisedPrefix string,
 ) (frame.DataSource, func(context.Context), error) {
-	connectionURI, err := pgd.conn.ToURI()
+	connectionURI, err := pgd.GetDS().ToURI()
 	if err != nil {
 		return "", func(_ context.Context) {}, err
 	}

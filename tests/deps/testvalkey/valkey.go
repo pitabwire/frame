@@ -3,6 +3,7 @@ package nats
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/pitabwire/util"
 	"github.com/testcontainers/testcontainers-go"
@@ -29,7 +30,8 @@ type valKeyDependancy struct {
 	password string
 	cluster  string
 
-	conn frame.DataSource
+	conn         frame.DataSource
+	internalConn frame.DataSource
 
 	container *tcValKey.ValkeyContainer
 }
@@ -51,13 +53,24 @@ func (vkd *valKeyDependancy) Setup(ctx context.Context, _ *testcontainers.Docker
 	if err != nil {
 		return fmt.Errorf("failed to start nats container: %w", err)
 	}
+
+	host, err := container.Host(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get host for container: %w", err)
+	}
+
+	internalIP, err := container.ContainerIP(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get internal host ip for container: %w", err)
+	}
+
 	conn, err := container.ConnectionString(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to get connection string for postgres container: %w", err)
+		return fmt.Errorf("failed to get connection string for container: %w", err)
 	}
 
 	vkd.conn = frame.DataSource(conn)
-
+	vkd.internalConn = frame.DataSource(strings.ReplaceAll(conn, host, internalIP))
 	vkd.container = container
 	return nil
 }
@@ -66,11 +79,15 @@ func (vkd *valKeyDependancy) GetDS() frame.DataSource {
 	return vkd.conn
 }
 
+func (vkd *valKeyDependancy) GetInternalDS() frame.DataSource {
+	return vkd.conn
+}
+
 func (vkd *valKeyDependancy) GetRandomisedDS(
 	_ context.Context,
 	_ string,
 ) (frame.DataSource, func(context.Context), error) {
-	return vkd.conn, func(_ context.Context) {
+	return vkd.GetDS(), func(_ context.Context) {
 	}, nil
 }
 

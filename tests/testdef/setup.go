@@ -15,6 +15,7 @@ type DependancyRes interface {
 
 type DependancyConn interface {
 	GetDS() frame.DataSource
+	GetInternalDS() frame.DataSource
 	GetRandomisedDS(ctx context.Context, randomisedPrefix string) (frame.DataSource, func(context.Context), error)
 }
 

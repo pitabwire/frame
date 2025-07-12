@@ -96,7 +96,13 @@ func (pgd *postgreSQLDependancy) Setup(ctx context.Context, _ *testcontainers.Do
 		return fmt.Errorf("failed to get internal host ip for postgres container: %w", err)
 	}
 
-	connStr := fmt.Sprintf("postgres://%s:%s@%s/%s", pgd.username, pgd.password, net.JoinHostPort(internalIP, "5432"), pgd.dbname)
+	connStr := fmt.Sprintf(
+		"postgres://%s:%s@%s/%s",
+		pgd.username,
+		pgd.password,
+		net.JoinHostPort(internalIP, "5432"),
+		pgd.dbname,
+	)
 
 	pgd.internalConn = frame.DataSource(connStr)
 

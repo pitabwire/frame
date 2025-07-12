@@ -3,6 +3,8 @@ package nats
 import (
 	"context"
 	"fmt"
+	"net"
+
 	"github.com/pitabwire/util"
 	"github.com/testcontainers/testcontainers-go"
 	tcValKey "github.com/testcontainers/testcontainers-go/modules/valkey"
@@ -63,7 +65,7 @@ func (vkd *valKeyDependancy) Setup(ctx context.Context, _ *testcontainers.Docker
 	if err != nil {
 		return fmt.Errorf("failed to get internal host ip for container: %w", err)
 	}
-	vkd.internalConn = frame.DataSource(fmt.Sprintf("redis://%s:6379", internalIP))
+	vkd.internalConn = frame.DataSource(fmt.Sprintf("redis://%s", net.JoinHostPort(internalIP, "6379")))
 	vkd.container = container
 	return nil
 }

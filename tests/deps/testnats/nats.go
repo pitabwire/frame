@@ -3,8 +3,6 @@ package testnats
 import (
 	"context"
 	"fmt"
-	"strings"
-
 	"github.com/pitabwire/util"
 	"github.com/testcontainers/testcontainers-go"
 	tcNats "github.com/testcontainers/testcontainers-go/modules/nats"
@@ -58,23 +56,18 @@ func (nd *natsDependancy) Setup(ctx context.Context, _ *testcontainers.DockerNet
 		return fmt.Errorf("failed to start nats container: %w", err)
 	}
 
-	host, err := natsqContainer.Host(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to get host for container: %w", err)
-	}
-
-	internalIP, err := natsqContainer.ContainerIP(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to get internal host ip for container: %w", err)
-	}
-
 	conn, err := natsqContainer.ConnectionString(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to get connection string for container: %w", err)
 	}
 
 	nd.conn = frame.DataSource(conn)
-	nd.internalConn = frame.DataSource(strings.ReplaceAll(conn, host, internalIP))
+
+	internalIP, err := natsqContainer.ContainerIP(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get internal host ip for container: %w", err)
+	}
+	nd.internalConn = frame.DataSource(fmt.Sprintf("nats://%s:4222", internalIP))
 
 	nd.natsContainer = natsqContainer
 	return nil

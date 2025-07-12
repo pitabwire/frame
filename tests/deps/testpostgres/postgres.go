@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"net/url"
 	"regexp"
 	"strings"
@@ -83,23 +84,21 @@ func (pgd *postgreSQLDependancy) Setup(ctx context.Context, _ *testcontainers.Do
 		return fmt.Errorf("failed to start postgres container: %w", err)
 	}
 
-	host, err := pgContainer.Host(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to get host for postgres container: %w", err)
-	}
-
-	internalIP, err := pgContainer.ContainerIP(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to get internal host ip for postgres container: %w", err)
-	}
-
 	conn, err := pgContainer.ConnectionString(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to get connection string for postgres container: %w", err)
 	}
 
 	pgd.conn = frame.DataSource(conn)
-	pgd.internalConn = frame.DataSource(strings.ReplaceAll(conn, host, internalIP))
+
+	internalIP, err := pgContainer.ContainerIP(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get internal host ip for postgres container: %w", err)
+	}
+
+	connStr := fmt.Sprintf("postgres://%s:%s@%s/%s", pgd.username, pgd.password, net.JoinHostPort(internalIP, "5432"), pgd.dbname)
+
+	pgd.internalConn = frame.DataSource(connStr)
 
 	pgd.postgresContainer = pgContainer
 

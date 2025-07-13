@@ -3,6 +3,7 @@ package nats
 import (
 	"context"
 	"fmt"
+	"github.com/testcontainers/testcontainers-go/network"
 	"net"
 
 	"github.com/pitabwire/util"
@@ -48,8 +49,8 @@ func NewValKeyDepWithCred(natsImage, natsUserName, natsPassword, cluster string)
 		cluster:  cluster,
 	}
 }
-func (vkd *valKeyDependancy) Setup(ctx context.Context, _ *testcontainers.DockerNetwork) error {
-	container, err := tcValKey.Run(ctx, vkd.image)
+func (vkd *valKeyDependancy) Setup(ctx context.Context, ntwk *testcontainers.DockerNetwork) error {
+	container, err := tcValKey.Run(ctx, vkd.image, network.WithNetwork([]string{ntwk.Name}, ntwk))
 	if err != nil {
 		return fmt.Errorf("failed to start nats container: %w", err)
 	}

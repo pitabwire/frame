@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/testcontainers/testcontainers-go/network"
 	"net"
 	"net/url"
 	"regexp"
@@ -66,7 +67,7 @@ func NewPGDepWithCred(pgImage, pgUserName, pgPassword, pgDBName string) testdef.
 }
 
 // Setup creates a PostgreSQL testcontainer and sets the container.
-func (pgd *postgreSQLDependancy) Setup(ctx context.Context, _ *testcontainers.DockerNetwork) error {
+func (pgd *postgreSQLDependancy) Setup(ctx context.Context, ntwk *testcontainers.DockerNetwork) error {
 	log := util.Log(ctx)
 
 	log.Info("Setting up PostgreSQL container...")
@@ -79,7 +80,8 @@ func (pgd *postgreSQLDependancy) Setup(ctx context.Context, _ *testcontainers.Do
 			wait.ForLog("database system is ready to accept connections").
 				WithOccurrence(OccurrenceValue).
 				WithStartupTimeout(TimeoutInSeconds*time.Second)),
-	)
+		network.WithNetwork([]string{ntwk.Name}, ntwk))
+
 	if err != nil {
 		return fmt.Errorf("failed to start postgres container: %w", err)
 	}

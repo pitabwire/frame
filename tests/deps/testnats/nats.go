@@ -3,12 +3,12 @@ package testnats
 import (
 	"context"
 	"fmt"
-	"github.com/testcontainers/testcontainers-go/network"
 	"net"
 
 	"github.com/pitabwire/util"
 	"github.com/testcontainers/testcontainers-go"
 	tcNats "github.com/testcontainers/testcontainers-go/modules/nats"
+	"github.com/testcontainers/testcontainers-go/network"
 
 	"github.com/pitabwire/frame"
 	"github.com/pitabwire/frame/tests/testdef"

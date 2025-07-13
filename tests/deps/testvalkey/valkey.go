@@ -3,12 +3,12 @@ package nats
 import (
 	"context"
 	"fmt"
-	"github.com/testcontainers/testcontainers-go/network"
 	"net"
 
 	"github.com/pitabwire/util"
 	"github.com/testcontainers/testcontainers-go"
 	tcValKey "github.com/testcontainers/testcontainers-go/modules/valkey"
+	"github.com/testcontainers/testcontainers-go/network"
 
 	"github.com/pitabwire/frame"
 	"github.com/pitabwire/frame/tests/testdef"

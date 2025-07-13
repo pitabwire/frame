@@ -41,18 +41,23 @@ func NewValKeyDep() testdef.TestResource {
 	return NewValKeyDepWithCred(ValKeyImage, ValKeyUser, ValKeyPass, ValKeyCluster)
 }
 
-func NewValKeyDepWithCred(natsImage, natsUserName, natsPassword, cluster string) testdef.TestResource {
+func NewValKeyDepWithCred(image, userName, password, cluster string) testdef.TestResource {
 	return &valKeyDependancy{
-		image:    natsImage,
-		username: natsUserName,
-		password: natsPassword,
+		image:    image,
+		username: userName,
+		password: password,
 		cluster:  cluster,
 	}
 }
-func (vkd *valKeyDependancy) Setup(ctx context.Context, ntwk *testcontainers.DockerNetwork) error {
-	container, err := tcValKey.Run(ctx, vkd.image, network.WithNetwork([]string{ntwk.Name}, ntwk))
+
+func (d *valKeyDependancy) Container() testcontainers.Container {
+	return d.container
+}
+
+func (d *valKeyDependancy) Setup(ctx context.Context, ntwk *testcontainers.DockerNetwork) error {
+	container, err := tcValKey.Run(ctx, d.image, network.WithNetwork([]string{ntwk.Name}, ntwk))
 	if err != nil {
-		return fmt.Errorf("failed to start nats container: %w", err)
+		return fmt.Errorf("failed to start container: %w", err)
 	}
 
 	conn, err := container.ConnectionString(ctx)
@@ -60,36 +65,36 @@ func (vkd *valKeyDependancy) Setup(ctx context.Context, ntwk *testcontainers.Doc
 		return fmt.Errorf("failed to get connection string for container: %w", err)
 	}
 
-	vkd.conn = frame.DataSource(conn)
+	d.conn = frame.DataSource(conn)
 
 	internalIP, err := container.ContainerIP(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to get internal host ip for container: %w", err)
 	}
-	vkd.internalConn = frame.DataSource(fmt.Sprintf("redis://%s", net.JoinHostPort(internalIP, "6379")))
-	vkd.container = container
+	d.internalConn = frame.DataSource(fmt.Sprintf("redis://%s", net.JoinHostPort(internalIP, "6379")))
+	d.container = container
 	return nil
 }
 
-func (vkd *valKeyDependancy) GetDS() frame.DataSource {
-	return vkd.conn
+func (d *valKeyDependancy) GetDS() frame.DataSource {
+	return d.conn
 }
 
-func (vkd *valKeyDependancy) GetInternalDS() frame.DataSource {
-	return vkd.conn
+func (d *valKeyDependancy) GetInternalDS() frame.DataSource {
+	return d.conn
 }
 
-func (vkd *valKeyDependancy) GetRandomisedDS(
+func (d *valKeyDependancy) GetRandomisedDS(
 	_ context.Context,
 	_ string,
 ) (frame.DataSource, func(context.Context), error) {
-	return vkd.GetDS(), func(_ context.Context) {
+	return d.GetDS(), func(_ context.Context) {
 	}, nil
 }
 
-func (vkd *valKeyDependancy) Cleanup(ctx context.Context) {
-	if vkd.container != nil {
-		if err := vkd.container.Terminate(ctx); err != nil {
+func (d *valKeyDependancy) Cleanup(ctx context.Context) {
+	if d.container != nil {
+		if err := d.container.Terminate(ctx); err != nil {
 			log := util.Log(ctx)
 			log.WithError(err).Error("Failed to terminate valkey container")
 		}

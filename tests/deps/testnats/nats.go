@@ -18,7 +18,7 @@ const (
 
 	// NATS configuration.
 
-	NatsImage = "nats-streaming:0.25.5"
+	NatsImage = "nats:latest"
 
 	NatsPort    = "4222"
 	NatsUser    = "frame"
@@ -35,7 +35,7 @@ type natsDependancy struct {
 	conn         frame.DataSource
 	internalConn frame.DataSource
 
-	natsContainer *tcNats.NATSContainer
+	container *tcNats.NATSContainer
 }
 
 func NewNatsDep() testdef.TestResource {
@@ -50,10 +50,17 @@ func NewNatsDepWithCred(natsImage, natsUserName, natsPassword, cluster string) t
 		cluster:  cluster,
 	}
 }
-func (nd *natsDependancy) Setup(ctx context.Context, ntwk *testcontainers.DockerNetwork) error {
-	natsqContainer, err := tcNats.Run(ctx, nd.image,
-		tcNats.WithUsername(nd.username),
-		tcNats.WithPassword(nd.password),
+
+func (d *natsDependancy) Container() testcontainers.Container {
+	return d.container
+}
+
+func (d *natsDependancy) Setup(ctx context.Context, ntwk *testcontainers.DockerNetwork) error {
+	natsqContainer, err := tcNats.Run(ctx, d.image,
+		testcontainers.WithCmdArgs("--js", "-DVV"),
+		tcNats.WithUsername(d.username),
+		tcNats.WithPassword(d.password),
+
 		network.WithNetwork([]string{ntwk.Name}, ntwk),
 	)
 	if err != nil {
@@ -65,36 +72,36 @@ func (nd *natsDependancy) Setup(ctx context.Context, ntwk *testcontainers.Docker
 		return fmt.Errorf("failed to get connection string for container: %w", err)
 	}
 
-	nd.conn = frame.DataSource(conn)
+	d.conn = frame.DataSource(conn)
 
 	internalIP, err := natsqContainer.ContainerIP(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to get internal host ip for container: %w", err)
 	}
-	nd.internalConn = frame.DataSource(fmt.Sprintf("nats://%s", net.JoinHostPort(internalIP, "4222")))
+	d.internalConn = frame.DataSource(fmt.Sprintf("nats://%s", net.JoinHostPort(internalIP, "4222")))
 
-	nd.natsContainer = natsqContainer
+	d.container = natsqContainer
 	return nil
 }
 
-func (nd *natsDependancy) GetDS() frame.DataSource {
-	return nd.conn
+func (d *natsDependancy) GetDS() frame.DataSource {
+	return d.conn
 }
-func (nd *natsDependancy) GetInternalDS() frame.DataSource {
-	return nd.internalConn
+func (d *natsDependancy) GetInternalDS() frame.DataSource {
+	return d.internalConn
 }
 
-func (nd *natsDependancy) GetRandomisedDS(
+func (d *natsDependancy) GetRandomisedDS(
 	_ context.Context,
 	_ string,
 ) (frame.DataSource, func(context.Context), error) {
-	return nd.GetDS(), func(_ context.Context) {
+	return d.GetDS(), func(_ context.Context) {
 	}, nil
 }
 
-func (nd *natsDependancy) Cleanup(ctx context.Context) {
-	if nd.natsContainer != nil {
-		if err := nd.natsContainer.Terminate(ctx); err != nil {
+func (d *natsDependancy) Cleanup(ctx context.Context) {
+	if d.container != nil {
+		if err := d.container.Terminate(ctx); err != nil {
 			log := util.Log(ctx)
 			log.WithError(err).Error("Failed to terminate nats container")
 		}

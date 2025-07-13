@@ -50,7 +50,7 @@ type postgreSQLDependancy struct {
 	conn         frame.DataSource
 	internalConn frame.DataSource
 
-	postgresContainer *tcPostgres.PostgresContainer
+	container *tcPostgres.PostgresContainer
 }
 
 func NewPGDep() testdef.TestResource {
@@ -66,16 +66,20 @@ func NewPGDepWithCred(pgImage, pgUserName, pgPassword, pgDBName string) testdef.
 	}
 }
 
+func (d *postgreSQLDependancy) Container() testcontainers.Container {
+	return d.container
+}
+
 // Setup creates a PostgreSQL testcontainer and sets the container.
-func (pgd *postgreSQLDependancy) Setup(ctx context.Context, ntwk *testcontainers.DockerNetwork) error {
+func (d *postgreSQLDependancy) Setup(ctx context.Context, ntwk *testcontainers.DockerNetwork) error {
 	log := util.Log(ctx)
 
 	log.Info("Setting up PostgreSQL container...")
 
-	pgContainer, err := tcPostgres.Run(ctx, pgd.image,
-		tcPostgres.WithDatabase(pgd.dbname),
-		tcPostgres.WithUsername(pgd.username),
-		tcPostgres.WithPassword(pgd.password),
+	pgContainer, err := tcPostgres.Run(ctx, d.image,
+		tcPostgres.WithDatabase(d.dbname),
+		tcPostgres.WithUsername(d.username),
+		tcPostgres.WithPassword(d.password),
 		testcontainers.WithWaitStrategy(
 			wait.ForLog("database system is ready to accept connections").
 				WithOccurrence(OccurrenceValue).
@@ -91,7 +95,7 @@ func (pgd *postgreSQLDependancy) Setup(ctx context.Context, ntwk *testcontainers
 		return fmt.Errorf("failed to get connection string for postgres container: %w", err)
 	}
 
-	pgd.conn = frame.DataSource(conn)
+	d.conn = frame.DataSource(conn)
 
 	internalIP, err := pgContainer.ContainerIP(ctx)
 	if err != nil {
@@ -100,36 +104,36 @@ func (pgd *postgreSQLDependancy) Setup(ctx context.Context, ntwk *testcontainers
 
 	connStr := fmt.Sprintf(
 		"postgres://%s:%s@%s/%s",
-		pgd.username,
-		pgd.password,
+		d.username,
+		d.password,
 		net.JoinHostPort(internalIP, "5432"),
-		pgd.dbname,
+		d.dbname,
 	)
 
-	pgd.internalConn = frame.DataSource(connStr)
+	d.internalConn = frame.DataSource(connStr)
 
-	pgd.postgresContainer = pgContainer
+	d.container = pgContainer
 
 	return nil
 }
 
-func (pgd *postgreSQLDependancy) GetDS() frame.DataSource {
-	return pgd.conn
+func (d *postgreSQLDependancy) GetDS() frame.DataSource {
+	return d.conn
 }
 
-func (pgd *postgreSQLDependancy) GetInternalDS() frame.DataSource {
-	return pgd.internalConn
+func (d *postgreSQLDependancy) GetInternalDS() frame.DataSource {
+	return d.internalConn
 }
 
 // GetRandomisedDS Prepare a postgres connection string for testing.
 // Returns the connection string to use and a close function which must be called when the test finishes.
 // Calling this function twice will return the same database, which will have data from previous tests
 // unless close() is called.
-func (pgd *postgreSQLDependancy) GetRandomisedDS(
+func (d *postgreSQLDependancy) GetRandomisedDS(
 	ctx context.Context,
 	randomisedPrefix string,
 ) (frame.DataSource, func(context.Context), error) {
-	connectionURI, err := pgd.GetDS().ToURI()
+	connectionURI, err := d.GetDS().ToURI()
 	if err != nil {
 		return "", func(_ context.Context) {}, err
 	}
@@ -147,9 +151,9 @@ func (pgd *postgreSQLDependancy) GetRandomisedDS(
 	}, nil
 }
 
-func (pgd *postgreSQLDependancy) Cleanup(ctx context.Context) {
-	if pgd.postgresContainer != nil {
-		if err := pgd.postgresContainer.Terminate(ctx); err != nil {
+func (d *postgreSQLDependancy) Cleanup(ctx context.Context) {
+	if d.container != nil {
+		if err := d.container.Terminate(ctx); err != nil {
 			log := util.Log(ctx)
 			log.WithError(err).Error("Failed to terminate postgres container")
 		}

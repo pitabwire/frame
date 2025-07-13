@@ -8,9 +8,12 @@ import (
 	"github.com/pitabwire/frame"
 )
 
+const ContainerFileMode = 0o755
+
 type DependancyRes interface {
 	Setup(ctx context.Context, network *testcontainers.DockerNetwork) error
 	Cleanup(ctx context.Context)
+	Container() testcontainers.Container
 }
 
 type DependancyConn interface {

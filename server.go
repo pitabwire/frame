@@ -69,11 +69,17 @@ func (dd *defaultDriver) getListener(
 		}
 	}
 
-	if tlsConfig == nil {
-		return net.Listen("tcp", address)
+	var lc net.ListenConfig
+	listener, err = lc.Listen(dd.ctx, "tcp", address)
+	if err != nil {
+		return nil, err
 	}
 
-	return tls.Listen("tcp", address, tlsConfig)
+	if tlsConfig == nil {
+		return listener, nil
+	}
+
+	return tls.NewListener(listener, tlsConfig), nil
 }
 
 // ListenAndServe sets the address and handlers on DefaultDriver's http.Server,

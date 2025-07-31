@@ -169,6 +169,8 @@ github.com/pitabwire/natspubsub v0.6.11 h1:7IEwgPrdzOxoyz9BWXXiUBaMXNUZS31cHxJnR
 github.com/pitabwire/natspubsub v0.6.11/go.mod h1:pudFshYEmqs6jvgTfJo9HwMfwstWaNITFVLdEsFa3jo=
 github.com/pitabwire/util v0.3.1 h1:tMwVZ3kbGQSQdK7ogRrqbCx/FdvCIaFaELR74atJOys=
 github.com/pitabwire/util v0.3.1/go.mod h1:LjCZEToLP6DaOkiMBmRn0uWxFEDmPkrO9kKxY1/f4pI=
+github.com/pitabwire/util v0.3.2 h1:krg4nkyf1MfoMXo7etLNAg+tE861OJ+kLut3keE9Ok0=
+github.com/pitabwire/util v0.3.2/go.mod h1:LjCZEToLP6DaOkiMBmRn0uWxFEDmPkrO9kKxY1/f4pI=
 github.com/pkg/errors v0.9.1 h1:FEBLx1zS214owpjy7qsBeixbURkuhQAwrK5UwLGTwt4=
 github.com/pkg/errors v0.9.1/go.mod h1:bwawxfHBFNV+L2hUp1rHADufV3IMtnDRdf1r5NINEl0=
 github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZbAQM=

@@ -238,6 +238,14 @@ func (j *jobResult[T]) Item() T {
 	return j.item
 }
 
+func Result[T any](item T) JobResult[T] {
+	return &jobResult[T]{item: item}
+}
+
+func ErrorResult[T any](err error) JobResult[T] {
+	return &jobResult[T]{error: err}
+}
+
 // JobResultPipe is a channel-based pipeline for passing job results.
 type JobResultPipe[T any] interface {
 	ResultBufferSize() int
@@ -310,14 +318,14 @@ func (ji *JobImpl[T]) WriteError(ctx context.Context, val error) error {
 	if ji.resultChanDone.Load() {
 		return ErrWorkerPoolResultChannelIsClosed
 	}
-	return SafeChannelWrite(ctx, ji.resultChan, &jobResult[T]{error: val})
+	return SafeChannelWrite(ctx, ji.resultChan, ErrorResult[T](val))
 }
 
 func (ji *JobImpl[T]) WriteResult(ctx context.Context, val T) error {
 	if ji.resultChanDone.Load() {
 		return ErrWorkerPoolResultChannelIsClosed
 	}
-	return SafeChannelWrite(ctx, ji.resultChan, &jobResult[T]{item: val})
+	return SafeChannelWrite(ctx, ji.resultChan, Result[T](val))
 }
 
 func (ji *JobImpl[T]) Close() {

@@ -13,6 +13,7 @@ import (
 	ghandler "github.com/gorilla/handlers"
 	"github.com/nicksnyder/go-i18n/v2/i18n"
 	"github.com/pitabwire/util"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel/propagation"
 	sdklogs "go.opentelemetry.io/otel/sdk/log"
 	sdkmetrics "go.opentelemetry.io/otel/sdk/metric"
@@ -119,8 +120,10 @@ func NewServiceWithContext(ctx context.Context, name string, opts ...Option) (co
 		name:         name,
 		cancelFunc:   signalCancelFunc, // Store its cancel function
 		errorChannel: make(chan error, 1),
-		client:       &http.Client{},
-		logger:       defaultLogger,
+		client: &http.Client{
+			Transport: otelhttp.NewTransport(http.DefaultTransport),
+		},
+		logger: defaultLogger,
 
 		pool:        defaultPool,
 		poolOptions: defaultPoolOpts,

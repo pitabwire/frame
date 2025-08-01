@@ -5,11 +5,13 @@ import (
 	"strconv"
 	"testing"
 
+	"github.com/pitabwire/util"
+
 	"github.com/pitabwire/frame"
 )
 
 func TestService_Datastore(t *testing.T) {
-	testDBURL := frame.GetEnv(
+	testDBURL := util.GetEnv(
 		"TEST_DATABASE_URL",
 		"postgres://frame:secret@localhost:5435/framedatabase?sslmode=disable",
 	)
@@ -89,7 +91,7 @@ func TestService_DatastoreRunQuery(t *testing.T) {
 }
 
 func TestService_DatastoreRead(t *testing.T) {
-	testDBURL := frame.GetEnv(
+	testDBURL := util.GetEnv(
 		"TEST_DATABASE_URL",
 		"postgres://frame:secret@localhost:5435/framedatabase?sslmode=disable",
 	)

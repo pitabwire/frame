@@ -3,13 +3,9 @@ package frame
 import (
 	"context"
 	"database/sql"
-	"fmt"
-	"net"
-	"net/http"
-	"os"
-	"strings"
 	"time"
 
+	"github.com/pitabwire/util"
 	"github.com/rs/xid"
 	"gorm.io/gorm"
 )
@@ -41,7 +37,7 @@ func (model *BaseModel) GenID(ctx context.Context) {
 		return
 	}
 
-	model.ID = GenerateID(ctx)
+	model.ID = util.IDString()
 
 	authClaim := ClaimsFromContext(ctx)
 	if authClaim == nil {
@@ -114,63 +110,4 @@ type Migration struct {
 	Patch       string `gorm:"type:text"`
 	RevertPatch string `gorm:"type:text"`
 	AppliedAt   sql.NullTime
-}
-
-func GenerateID(_ context.Context) string {
-	return xid.New().String()
-}
-
-// GetIP convenience method to extract the remote ip address from our inbound request.
-func GetIP(r *http.Request) string {
-	sourceIP := r.Header.Get("X-Forwarded-For")
-	if sourceIP == "" {
-		sourceIP, _, _ = net.SplitHostPort(r.RemoteAddr)
-	}
-
-	return sourceIP
-}
-
-// GetEnv Obtains the environment key or returns the default value.
-func GetEnv(key, fallback string) string {
-	if value, ok := os.LookupEnv(key); ok {
-		return value
-	}
-	return fallback
-}
-
-// GetLocalIP convenince method that obtains the non localhost ip address for machine running app.
-func GetLocalIP() string {
-	addrs, _ := net.InterfaceAddrs()
-
-	currentIP := ""
-
-	for _, address := range addrs {
-		if ipnet, ok := address.(*net.IPNet); ok && !ipnet.IP.IsLoopback() {
-			currentIP = ipnet.IP.String()
-			break
-		}
-		if ipnet, ok := address.(*net.IPNet); ok {
-			currentIP = ipnet.IP.String()
-		}
-	}
-
-	return currentIP
-}
-
-// GetMacAddress convenience method to get some unique address based on the network interfaces the application is running on.
-func GetMacAddress() string {
-	currentIP := GetLocalIP()
-
-	interfaces, _ := net.Interfaces()
-	for _, interf := range interfaces {
-		if addrs, err := interf.Addrs(); err == nil {
-			for _, addr := range addrs {
-				// only interested in the name with current IP address
-				if strings.Contains(addr.String(), currentIP) {
-					return fmt.Sprintf("%s:%s", interf.Name, interf.HardwareAddr.String())
-				}
-			}
-		}
-	}
-	return ""
 }

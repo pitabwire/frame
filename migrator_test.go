@@ -4,13 +4,14 @@ import (
 	"os"
 	"testing"
 
+	"github.com/pitabwire/util"
 	"gorm.io/gorm"
 
 	"github.com/pitabwire/frame"
 )
 
 func TestSaveNewMigrations(t *testing.T) {
-	testDBURL := frame.GetEnv(
+	testDBURL := util.GetEnv(
 		"TEST_DATABASE_URL",
 		"postgres://frame:secret@localhost:5435/framedatabase?sslmode=disable",
 	)
@@ -83,7 +84,7 @@ func TestSaveNewMigrations(t *testing.T) {
 }
 
 func TestApplyMigrations(t *testing.T) {
-	testDBURL := frame.GetEnv(
+	testDBURL := util.GetEnv(
 		"TEST_DATABASE_URL",
 		"postgres://frame:secret@localhost:5435/framedatabase?sslmode=disable",
 	)
@@ -155,7 +156,7 @@ func TestApplyMigrations(t *testing.T) {
 }
 
 func TestService_MigrateDatastore(t *testing.T) {
-	testDBURL := frame.GetEnv(
+	testDBURL := util.GetEnv(
 		"TEST_DATABASE_URL",
 		"postgres://frame:secret@localhost:5435/framedatabase?sslmode=disable",
 	)
@@ -176,7 +177,7 @@ func TestService_MigrateDatastore(t *testing.T) {
 }
 
 func TestService_MigrateDatastoreIDempotency(t *testing.T) {
-	testDBURL := frame.GetEnv(
+	testDBURL := util.GetEnv(
 		"TEST_DATABASE_URL",
 		"postgres://frame:secret@localhost:5435/framedatabase?sslmode=disable",
 	)

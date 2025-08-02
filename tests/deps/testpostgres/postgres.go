@@ -27,7 +27,7 @@ const (
 	postgreSQLMaxIdentifiersCharLength = 60
 
 	// PostgresqlDBImage is the PostgreSQL Image.
-	PostgresqlDBImage = "postgres:17"
+	PostgresqlDBImage = "postgres:latest"
 
 	// DBUser is the default username for the PostgreSQL test database.
 	DBUser = "frame"

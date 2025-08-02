@@ -565,10 +565,10 @@ func (s *SearchTestSuite) TestPaginatorEdgeCases() {
 				{opType: "stop", loadedCount: 0},
 			},
 			expectedStates: []paginatorState{
-				{shouldStop: false, offset: 5, batchSize: 5},   // 5 == 5, so false
-				{shouldStop: true, offset: 8, batchSize: 5},    // 3 < 5, so true
-				{shouldStop: false, offset: 13, batchSize: 5},  // 5 == 5, so false
-				{shouldStop: true, offset: 13, batchSize: 5},   // 0 < 5, so true
+				{shouldStop: false, offset: 5, batchSize: 5},  // 5 == 5, so false
+				{shouldStop: true, offset: 8, batchSize: 5},   // 3 < 5, so true
+				{shouldStop: false, offset: 13, batchSize: 5}, // 5 == 5, so false
+				{shouldStop: true, offset: 13, batchSize: 5},  // 0 < 5, so true
 			},
 		},
 		{

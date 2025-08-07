@@ -75,7 +75,7 @@ type Service struct {
 	bundle                     *i18n.Bundle
 	healthCheckers             []Checker
 	healthCheckPath            string
-	startup                    func(s *Service)
+	startup                    func(ctx context.Context, s *Service)
 	cleanup                    func(ctx context.Context)
 	eventRegistry              map[string]EventI
 	configuration              any
@@ -209,7 +209,7 @@ func (s *Service) Init(ctx context.Context, opts ...Option) {
 
 // AddPreStartMethod Adds user defined functions that can be run just before
 // the service starts receiving requests but is fully initialized.
-func (s *Service) AddPreStartMethod(f func(s *Service)) {
+func (s *Service) AddPreStartMethod(f func(ctx context.Context, s *Service)) {
 	s.stopMutex.Lock()
 	defer s.stopMutex.Unlock()
 	if s.startup == nil {
@@ -218,7 +218,7 @@ func (s *Service) AddPreStartMethod(f func(s *Service)) {
 	}
 
 	old := s.startup
-	s.startup = func(st *Service) { old(st); f(st) }
+	s.startup = func(ctx context.Context, st *Service) { old(ctx, st); f(ctx, st) }
 }
 
 // AddCleanupMethod Adds user defined functions to be run just before completely stopping the service.
@@ -410,7 +410,7 @@ func (s *Service) initServer(ctx context.Context, httpPort string) error {
 	})
 
 	if s.startup != nil {
-		s.startup(s)
+		s.startup(ctx, s)
 	}
 
 	if s.TLSEnabled() {

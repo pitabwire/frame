@@ -16,11 +16,10 @@ type SearchQuery struct {
 	Pagination *Paginator
 }
 
-func NewSearchQuery(
-	_ context.Context, query string,
+func NewSearchQuery(query string,
 	fields map[string]any,
 	resultPage, resultCount int,
-) (*SearchQuery, error) {
+) *SearchQuery {
 	if resultCount == 0 {
 		resultCount = defaultBatchSize
 	}
@@ -40,7 +39,7 @@ func NewSearchQuery(
 		},
 	}
 
-	return sq, nil
+	return sq
 }
 
 type Paginator struct {
@@ -50,17 +49,21 @@ type Paginator struct {
 	BatchSize int
 }
 
-func (sq *Paginator) CanLoad() bool {
-	return sq.Offset < sq.Limit
+func (p *Paginator) CanLoad() bool {
+	return p.Offset < p.Limit
 }
 
-func (sq *Paginator) Stop(loadedCount int) bool {
-	sq.Offset += loadedCount
-	if sq.Offset+sq.BatchSize > sq.Limit {
-		sq.BatchSize = sq.Limit - sq.Offset
+func (p *Paginator) SetBatchSize(batchSize int) {
+	p.BatchSize = batchSize
+}
+
+func (p *Paginator) Stop(loadedCount int) bool {
+	p.Offset += loadedCount
+	if p.Offset+p.BatchSize > p.Limit {
+		p.BatchSize = p.Limit - p.Offset
 	}
 
-	return loadedCount < sq.BatchSize
+	return loadedCount < p.BatchSize
 }
 
 func StableSearch[T any](

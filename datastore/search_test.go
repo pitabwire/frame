@@ -138,22 +138,14 @@ func (s *SearchTestSuite) TestNewSearchQuery() {
 
 	for _, tc := range testCases {
 		s.Run(tc.name, func() {
-			ctx := context.Background()
+			result := datastore.NewSearchQuery(tc.query, tc.fields, tc.resultPage, tc.resultCount)
 
-			result, err := datastore.NewSearchQuery(ctx, tc.query, tc.fields, tc.resultPage, tc.resultCount)
-
-			if tc.expectError {
-				s.Require().Error(err)
-				s.Require().Nil(result)
-			} else {
-				s.Require().NoError(err)
-				s.NotNil(result)
-				s.Equal(tc.expectedQuery.Query, result.Query)
-				s.Equal(tc.expectedQuery.Fields, result.Fields)
-				s.Equal(tc.expectedQuery.Pagination.Offset, result.Pagination.Offset)
-				s.Equal(tc.expectedQuery.Pagination.Limit, result.Pagination.Limit)
-				s.Equal(tc.expectedQuery.Pagination.BatchSize, result.Pagination.BatchSize)
-			}
+			s.NotNil(result)
+			s.Equal(tc.expectedQuery.Query, result.Query)
+			s.Equal(tc.expectedQuery.Fields, result.Fields)
+			s.Equal(tc.expectedQuery.Pagination.Offset, result.Pagination.Offset)
+			s.Equal(tc.expectedQuery.Pagination.Limit, result.Pagination.Limit)
+			s.Equal(tc.expectedQuery.Pagination.BatchSize, result.Pagination.BatchSize)
 		})
 	}
 }
@@ -529,11 +521,7 @@ func (s *SearchTestSuite) TestProfileIDHandling() {
 
 	for _, tc := range testCases {
 		s.Run(tc.name, func() {
-			ctx := context.Background()
-
-			result, err := datastore.NewSearchQuery(ctx, tc.query, tc.fields, 0, 10)
-
-			s.Require().NoError(err)
+			result := datastore.NewSearchQuery(tc.query, tc.fields, 0, 10)
 			s.NotNil(result)
 
 			s.Equal(tc.query, result.Query)
@@ -808,11 +796,8 @@ func (s *SearchTestSuite) TestFieldTypeValidation() {
 
 	for _, tc := range testCases {
 		s.Run(tc.name, func() {
-			ctx := context.Background()
+			result := datastore.NewSearchQuery("test query", tc.fields, 0, 10)
 
-			result, err := datastore.NewSearchQuery(ctx, "test query", tc.fields, 0, 10)
-
-			s.Require().NoError(err)
 			s.NotNil(result)
 			s.Equal(tc.fields, result.Fields)
 			s.Equal("test query", result.Query)

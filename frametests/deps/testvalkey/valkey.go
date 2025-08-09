@@ -11,7 +11,7 @@ import (
 	"github.com/testcontainers/testcontainers-go/network"
 
 	"github.com/pitabwire/frame"
-	"github.com/pitabwire/frame/tests/testdef"
+	"github.com/pitabwire/frame/frametests/testdef"
 )
 
 const (
@@ -48,6 +48,10 @@ func NewValKeyDepWithCred(image, userName, password, cluster string) testdef.Tes
 		password: password,
 		cluster:  cluster,
 	}
+}
+
+func (d *valKeyDependancy) Name() string {
+	return d.image
 }
 
 func (d *valKeyDependancy) Container() testcontainers.Container {

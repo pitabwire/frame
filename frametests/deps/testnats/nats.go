@@ -11,7 +11,7 @@ import (
 	"github.com/testcontainers/testcontainers-go/network"
 
 	"github.com/pitabwire/frame"
-	"github.com/pitabwire/frame/tests/testdef"
+	"github.com/pitabwire/frame/frametests/testdef"
 )
 
 const (
@@ -51,6 +51,9 @@ func NewNatsDepWithCred(natsImage, natsUserName, natsPassword, cluster string) t
 	}
 }
 
+func (d *natsDependancy) Name() string {
+	return d.image
+}
 func (d *natsDependancy) Container() testcontainers.Container {
 	return d.container
 }

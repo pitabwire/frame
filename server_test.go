@@ -19,7 +19,7 @@ import (
 	"google.golang.org/grpc/test/bufconn"
 
 	"github.com/pitabwire/frame"
-	grpcping2 "github.com/pitabwire/frame/tests/grpcping"
+	grpcping2 "github.com/pitabwire/frame/frametests/grpcping"
 )
 
 type grpcServer struct {

@@ -19,7 +19,7 @@ import (
 	"github.com/testcontainers/testcontainers-go/wait"
 
 	"github.com/pitabwire/frame"
-	"github.com/pitabwire/frame/tests/testdef"
+	"github.com/pitabwire/frame/frametests/testdef"
 )
 
 const (
@@ -66,16 +66,16 @@ func NewPGDepWithCred(pgImage, pgUserName, pgPassword, pgDBName string) testdef.
 	}
 }
 
+func (d *postgreSQLDependancy) Name() string {
+	return d.image
+}
+
 func (d *postgreSQLDependancy) Container() testcontainers.Container {
 	return d.container
 }
 
 // Setup creates a PostgreSQL testcontainer and sets the container.
 func (d *postgreSQLDependancy) Setup(ctx context.Context, ntwk *testcontainers.DockerNetwork) error {
-	log := util.Log(ctx)
-
-	log.Info("Setting up PostgreSQL container...")
-
 	pgContainer, err := tcPostgres.Run(ctx, d.image,
 		tcPostgres.WithDatabase(d.dbname),
 		tcPostgres.WithUsername(d.username),

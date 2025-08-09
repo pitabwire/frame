@@ -1,4 +1,4 @@
-package testoryketo
+package testoryhydra
 
 import (
 	"context"
@@ -11,42 +11,55 @@ import (
 	"github.com/testcontainers/testcontainers-go/wait"
 
 	"github.com/pitabwire/frame"
-	"github.com/pitabwire/frame/tests/testdef"
+	"github.com/pitabwire/frame/frametests"
+	"github.com/pitabwire/frame/frametests/testdef"
 )
 
 const (
-	OryKetoImage = "oryd/keto:latest"
 
-	KetoConfiguration = `
-## ORY Keto Configuration
+	// NATS configuration.
+
+	OryHydraImage = "oryd/hydra:latest"
+
+	HydraConfiguration = `
+## ORY Hydra Configuration
 #
 
-## serve ##
-#
 serve:
-  ## Write API (http and gRPC) ##
-  #
-  write:
+  admin:
     host: 0.0.0.0
-
-
-  ## Read API (http and gRPC) ##
-  #
-  read:
+  public:
     host: 0.0.0.0
-log:
-  level: info
-namespaces:
-  - id: 0
-    name: default
+  cookies:
+    same_site_mode: Lax
+
+urls:
+  self:
+    issuer: http://127.0.0.1:4444
+  consent: http://127.0.0.1:3000/consent
+  login: http://127.0.0.1:3000/login
+  logout: http://127.0.0.1:3000/logout
+
+secrets:
+  system:
+    - youReallyNeedToChangeThis
+
+oidc:
+  subject_identifiers:
+    supported_types:
+      - public
+
+strategies:
+  access_token: jwt
 
 `
 )
 
-type ketoDependancy struct {
+type hydraDependancy struct {
 	image              string
 	configuration      string
 	databaseConnection string
+	databaseDep        testdef.DependancyConn
 
 	conn         frame.DataSource
 	internalConn frame.DataSource
@@ -55,40 +68,56 @@ type ketoDependancy struct {
 }
 
 func New() testdef.TestResource {
-	return NewWithCred(OryKetoImage, KetoConfiguration, "")
+	return NewWithCred(OryHydraImage, HydraConfiguration, "")
 }
 
 func NewWithCred(image, configuration, databaseConnection string) testdef.TestResource {
-	return &ketoDependancy{
+	return &hydraDependancy{
 		image:              image,
 		configuration:      configuration,
 		databaseConnection: databaseConnection,
 	}
 }
 
-func (d *ketoDependancy) Container() testcontainers.Container {
+func NewWithDBDependancy(image, configuration string, dbDep testdef.DependancyConn) testdef.TestResource {
+	return &hydraDependancy{
+		image:         image,
+		configuration: configuration,
+		databaseDep:   dbDep,
+	}
+}
+
+func (d *hydraDependancy) Name() string {
+	return d.image
+}
+func (d *hydraDependancy) Container() testcontainers.Container {
 	return d.container
 }
 
-func (d *ketoDependancy) migrateContainer(ctx context.Context, ntwk *testcontainers.DockerNetwork) error {
+func (d *hydraDependancy) migrateContainer(
+	ctx context.Context,
+	ntwk *testcontainers.DockerNetwork,
+	databaseURL string,
+) error {
 	container, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
 		ContainerRequest: testcontainers.ContainerRequest{
-			Image:    OryKetoImage,
+			Image:    OryHydraImage,
 			Networks: []string{ntwk.Name},
 			Cmd:      []string{"migrate", "sql", "up", "--read-from-env", "--yes"},
 			Env: map[string]string{
 				"LOG_LEVEL": "debug",
-				"DSN":       d.databaseConnection,
+				"DSN":       databaseURL,
 			},
 
 			Files: []testcontainers.ContainerFile{
 				{
 					Reader:            strings.NewReader(d.configuration),
-					ContainerFilePath: "/etc/config/keto.yml",
+					ContainerFilePath: "/etc/config/hydra.yml",
 					FileMode:          testdef.ContainerFileMode,
 				},
 			},
-			WaitingFor: wait.ForExit(),
+			WaitingFor:     wait.ForExit(),
+			LogConsumerCfg: frametests.LogConfig(ctx, frametests.DefaultLogProductionTimeout),
 		},
 
 		Started: true,
@@ -104,30 +133,36 @@ func (d *ketoDependancy) migrateContainer(ctx context.Context, ntwk *testcontain
 	return nil
 }
 
-func (d *ketoDependancy) Setup(ctx context.Context, ntwk *testcontainers.DockerNetwork) error {
-	err := d.migrateContainer(ctx, ntwk)
+func (d *hydraDependancy) Setup(ctx context.Context, ntwk *testcontainers.DockerNetwork) error {
+	databaseURL := d.databaseConnection
+	if d.databaseDep != nil {
+		databaseURL = d.databaseDep.GetInternalDS().String()
+	}
+
+	err := d.migrateContainer(ctx, ntwk, databaseURL)
 	if err != nil {
 		return err
 	}
 
 	container, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
 		ContainerRequest: testcontainers.ContainerRequest{
-			Image:        OryKetoImage,
+			Image:        OryHydraImage,
 			Networks:     []string{ntwk.Name},
-			ExposedPorts: []string{"4466/tcp", "4467/tcp"},
-			Cmd:          []string{"serve", "all", "--config", "/etc/config/keto.yml", "--dev"},
+			ExposedPorts: []string{"4444/tcp", "4445/tcp"},
+			Cmd:          []string{"serve", "all", "--config", "/etc/config/hydra.yml", "--dev"},
 			Env: map[string]string{
 				"LOG_LEVEL": "debug",
-				"DSN":       d.databaseConnection,
+				"DSN":       databaseURL,
 			},
 			Files: []testcontainers.ContainerFile{
 				{
 					Reader:            strings.NewReader(d.configuration),
-					ContainerFilePath: "/etc/config/keto.yml",
+					ContainerFilePath: "/etc/config/hydra.yml",
 					FileMode:          testdef.ContainerFileMode,
 				},
 			},
-			WaitingFor: wait.ForHTTP("/health/ready").WithPort("4445/tcp"),
+			WaitingFor:     wait.ForHTTP("/health/ready").WithPort("4445/tcp"),
+			LogConsumerCfg: frametests.LogConfig(ctx, frametests.DefaultLogProductionTimeout),
 		},
 		Started: true,
 	})
@@ -136,7 +171,7 @@ func (d *ketoDependancy) Setup(ctx context.Context, ntwk *testcontainers.DockerN
 		return fmt.Errorf("failed to start container: %w", err)
 	}
 
-	port, err := container.MappedPort(ctx, "4467/tcp")
+	port, err := container.MappedPort(ctx, "4445/tcp")
 	if err != nil {
 		return fmt.Errorf("failed to get connection string for container: %w", err)
 	}
@@ -158,14 +193,14 @@ func (d *ketoDependancy) Setup(ctx context.Context, ntwk *testcontainers.DockerN
 	return nil
 }
 
-func (d *ketoDependancy) GetDS() frame.DataSource {
+func (d *hydraDependancy) GetDS() frame.DataSource {
 	return d.conn
 }
-func (d *ketoDependancy) GetInternalDS() frame.DataSource {
+func (d *hydraDependancy) GetInternalDS() frame.DataSource {
 	return d.internalConn
 }
 
-func (d *ketoDependancy) GetRandomisedDS(
+func (d *hydraDependancy) GetRandomisedDS(
 	_ context.Context,
 	_ string,
 ) (frame.DataSource, func(context.Context), error) {
@@ -173,7 +208,7 @@ func (d *ketoDependancy) GetRandomisedDS(
 	}, nil
 }
 
-func (d *ketoDependancy) Cleanup(ctx context.Context) {
+func (d *hydraDependancy) Cleanup(ctx context.Context) {
 	if d.container != nil {
 		if err := d.container.Terminate(ctx); err != nil {
 			log := util.Log(ctx)

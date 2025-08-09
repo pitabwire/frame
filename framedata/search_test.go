@@ -13,21 +13,21 @@ import (
 
 	"github.com/pitabwire/frame"
 	"github.com/pitabwire/frame/framedata"
-	"github.com/pitabwire/frame/tests"
-	"github.com/pitabwire/frame/tests/deps/testnats"
-	"github.com/pitabwire/frame/tests/deps/testpostgres"
-	"github.com/pitabwire/frame/tests/testdef"
+	"github.com/pitabwire/frame/frametests"
+	"github.com/pitabwire/frame/frametests/deps/testnats"
+	"github.com/pitabwire/frame/frametests/deps/testpostgres"
+	"github.com/pitabwire/frame/frametests/testdef"
 )
 
 // SearchTestSuite extends FrameBaseTestSuite for comprehensive search testing.
 type SearchTestSuite struct {
-	tests.FrameBaseTestSuite
+	frametests.FrameBaseTestSuite
 }
 
 // TestSearchSuite runs the search test suite.
 func TestSearchSuite(t *testing.T) {
 	suite.Run(t, &SearchTestSuite{
-		FrameBaseTestSuite: tests.FrameBaseTestSuite{
+		FrameBaseTestSuite: frametests.FrameBaseTestSuite{
 			InitResourceFunc: func(_ context.Context) []testdef.TestResource {
 				return []testdef.TestResource{
 					testpostgres.NewPGDep(),
@@ -306,7 +306,7 @@ func (s *SearchTestSuite) TestStableSearchWithDependencies() {
 		testdef.NewDependancyOption("postgres_nats", "test", s.Resources()),
 	}
 
-	tests.WithTestDependancies(s.T(), depOptions, func(t *testing.T, depOpt *testdef.DependancyOption) {
+	frametests.WithTestDependancies(s.T(), depOptions, func(t *testing.T, depOpt *testdef.DependancyOption) {
 		testCases := []struct {
 			name          string
 			query         *framedata.SearchQuery
@@ -607,7 +607,7 @@ func (s *SearchTestSuite) TestStableSearchConcurrency() {
 		testdef.NewDependancyOption("postgres_nats", "test", s.Resources()),
 	}
 
-	tests.WithTestDependancies(s.T(), depOptions, func(t *testing.T, depOpt *testdef.DependancyOption) {
+	frametests.WithTestDependancies(s.T(), depOptions, func(t *testing.T, depOpt *testdef.DependancyOption) {
 		ctx := context.Background()
 
 		// Create a service with the test dependencies
@@ -686,7 +686,7 @@ func (s *SearchTestSuite) TestStableSearchMemoryManagement() {
 		testdef.NewDependancyOption("postgres_nats", "test", s.Resources()),
 	}
 
-	tests.WithTestDependancies(s.T(), depOptions, func(t *testing.T, depOpt *testdef.DependancyOption) {
+	frametests.WithTestDependancies(s.T(), depOptions, func(t *testing.T, depOpt *testdef.DependancyOption) {
 		ctx := context.Background()
 
 		// Create a service with the test dependencies
@@ -868,7 +868,7 @@ func (s *SearchTestSuite) TestStableSearchErrorRecovery() {
 		testdef.NewDependancyOption("postgres_nats", "test", s.Resources()),
 	}
 
-	tests.WithTestDependancies(s.T(), depOptions, func(t *testing.T, depOpt *testdef.DependancyOption) {
+	frametests.WithTestDependancies(s.T(), depOptions, func(t *testing.T, depOpt *testdef.DependancyOption) {
 		testCases := []struct {
 			name       string
 			searchFunc func(ctx context.Context, query *framedata.SearchQuery) ([]*TestItem, error)

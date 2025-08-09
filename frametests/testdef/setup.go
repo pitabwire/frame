@@ -11,6 +11,7 @@ import (
 const ContainerFileMode = 0o755
 
 type DependancyRes interface {
+	Name() string
 	Setup(ctx context.Context, network *testcontainers.DockerNetwork) error
 	Cleanup(ctx context.Context)
 	Container() testcontainers.Container
@@ -47,6 +48,10 @@ func (opt *DependancyOption) Name() string {
 func (opt *DependancyOption) Prefix() string {
 	return opt.prefix
 }
+func (opt *DependancyOption) All() []DependancyConn {
+	return opt.deps
+}
+
 func (opt *DependancyOption) Database() []DependancyConn {
 	var deps []DependancyConn
 	for _, dep := range opt.deps {

@@ -1,16 +1,18 @@
-package tests
+package frametests
 
 import (
 	"context"
 	"testing"
+	"time"
 
+	"github.com/pitabwire/util"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/network"
 	"go.uber.org/mock/gomock"
 
-	"github.com/pitabwire/frame/tests/testdef"
+	"github.com/pitabwire/frame/frametests/testdef"
 )
 
 // FrameBaseTestSuite provides a base test suite with all necessary test components.
@@ -23,6 +25,31 @@ type FrameBaseTestSuite struct {
 	InitResourceFunc func(ctx context.Context) []testdef.TestResource
 }
 
+const DefaultLogProductionTimeout = 10 * time.Second
+
+type StdoutLogConsumer struct {
+	log *util.LogEntry
+}
+
+func LogConfig(ctx context.Context, timeout time.Duration) *testcontainers.LogConsumerConfig {
+	return &testcontainers.LogConsumerConfig{
+		Opts: []testcontainers.LogProductionOption{testcontainers.WithLogProductionTimeout(timeout)},
+		Consumers: []testcontainers.LogConsumer{&StdoutLogConsumer{
+			log: util.Log(ctx),
+		}},
+	}
+}
+
+// Accept prints the log to stdout.
+func (s *StdoutLogConsumer) Accept(l testcontainers.Log) {
+	if l.LogType == "STDOUT" {
+		s.log.Info(string(l.Content))
+	}
+	if l.LogType == "STDERR" {
+		s.log.Error(string(l.Content))
+	}
+}
+
 // SetupSuite initialises the test environment for the test suite.
 func (s *FrameBaseTestSuite) SetupSuite() {
 	t := s.T()
@@ -30,6 +57,8 @@ func (s *FrameBaseTestSuite) SetupSuite() {
 	s.Ctrl = gomock.NewController(t)
 
 	ctx := t.Context()
+
+	log := util.Log(ctx)
 
 	net, err := network.New(ctx)
 	require.NoError(t, err, "could not create network")
@@ -42,6 +71,7 @@ func (s *FrameBaseTestSuite) SetupSuite() {
 	s.resources = s.InitResourceFunc(ctx)
 
 	for _, dep := range s.resources {
+		log.WithField("image", dep.Name()).Info("Setting up container...")
 		err = dep.Setup(ctx, net)
 		require.NoError(t, err, "could not setup tests")
 	}

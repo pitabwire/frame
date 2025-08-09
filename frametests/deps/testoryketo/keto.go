@@ -6,12 +6,12 @@ import (
 	"net"
 	"strings"
 
-	"github.com/pitabwire/frame/frametests"
 	"github.com/pitabwire/util"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
 
 	"github.com/pitabwire/frame"
+	"github.com/pitabwire/frame/frametests"
 	"github.com/pitabwire/frame/frametests/testdef"
 )
 
@@ -83,7 +83,11 @@ func (d *ketoDependancy) Container() testcontainers.Container {
 	return d.container
 }
 
-func (d *ketoDependancy) migrateContainer(ctx context.Context, ntwk *testcontainers.DockerNetwork, databaseURL string, ) error {
+func (d *ketoDependancy) migrateContainer(
+	ctx context.Context,
+	ntwk *testcontainers.DockerNetwork,
+	databaseURL string,
+) error {
 	container, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
 		ContainerRequest: testcontainers.ContainerRequest{
 			Image:    OryKetoImage,
@@ -119,7 +123,6 @@ func (d *ketoDependancy) migrateContainer(ctx context.Context, ntwk *testcontain
 }
 
 func (d *ketoDependancy) Setup(ctx context.Context, ntwk *testcontainers.DockerNetwork) error {
-
 	databaseURL := d.databaseConnection
 	if d.databaseDep != nil {
 		databaseURL = d.databaseDep.GetInternalDS().String()

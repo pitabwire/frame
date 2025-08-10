@@ -34,11 +34,7 @@ func (s *FrameBaseTestSuite) SetupSuite() {
 
 	log := util.Log(ctx)
 
-	// Create a custom bridge network with modern API
-	net, err := network.New(ctx,
-		network.WithDriver("bridge"),
-		network.WithAttachable(),
-	)
+	net, err := network.New(ctx)
 
 	require.NoError(t, err, "could not create network")
 	s.Network = net

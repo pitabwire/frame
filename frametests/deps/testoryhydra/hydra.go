@@ -24,63 +24,27 @@ const (
 	HydraPort = "4445"
 
 	HydraConfiguration = `
-
-dsn: memory
+## ORY Hydra Configuration
+#
 
 serve:
+  admin:
+    host: 0.0.0.0
+  public:
+    host: 0.0.0.0
   cookies:
     same_site_mode: Lax
 
 urls:
   self:
-    issuer: http://127.0.0.1:4444/
+    issuer: http://127.0.0.1:4444
   consent: http://127.0.0.1:3000/consent
   login: http://127.0.0.1:3000/login
   logout: http://127.0.0.1:3000/logout
 
-  identity_provider:
-    url: http://127.0.0.1:3000/
-    headers:
-      X-User: 
-        - user
-
-oidc:
-  subject_identifiers:
-    supported_types:
-      - public
-      - pairwise
-  dynamic_client_registration:
-    enabled: true
-
-oauth2:
-  expose_internal_errors: true
-
-log:
-  level: debug
-  format: text
-
 secrets:
   system:
-    - this-is-the-primary-secret
-  cookie:
-    - this-is-the-secondary-secret
-
-ttl:
-  login_consent_request: 1h
-  access_token: 1h
-  refresh_token: 1h
-  id_token: 1h
-  auth_code: 10m
-
-oauth2:
-  hashers:
-    algorithm: bcrypt
-    bcrypt:
-      cost: 4
-
-  pkce:
-    enforced: false
-    enforced_for_public_clients: false
+    - youReallyNeedToChangeThis
 
 oidc:
   subject_identifiers:
@@ -156,8 +120,6 @@ func (d *hydraDependancy) migrateContainer(
 				if d.opts.UseHostMode {
 					hostConfig.NetworkMode = "host"
 				}
-
-				hostConfig.AutoRemove = true
 			},
 			LogConsumerCfg: definition.LogConfig(ctx, d.opts.DisableLogging, d.opts.LoggingTimeout),
 		},
@@ -180,7 +142,7 @@ func (d *hydraDependancy) Setup(ctx context.Context, ntwk *testcontainers.Docker
 		return errors.New("no Database dependencies was supplied")
 	}
 
-	databaseURL := d.opts.Dependancies[0].GetDS().String()
+	databaseURL := d.opts.Dependancies[0].GetInternalDS().String()
 	err := d.migrateContainer(ctx, ntwk, databaseURL)
 	if err != nil {
 		return err
@@ -215,7 +177,6 @@ func (d *hydraDependancy) Setup(ctx context.Context, ntwk *testcontainers.Docker
 				if d.opts.UseHostMode {
 					hostConfig.NetworkMode = "host"
 				}
-				hostConfig.AutoRemove = true
 			},
 			LogConsumerCfg: definition.LogConfig(ctx, d.opts.DisableLogging, d.opts.LoggingTimeout),
 		},

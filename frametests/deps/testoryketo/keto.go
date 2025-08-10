@@ -115,8 +115,6 @@ func (d *ketoDependancy) migrateContainer(
 				if d.opts.UseHostMode {
 					hostConfig.NetworkMode = "host"
 				}
-
-				hostConfig.AutoRemove = true
 			},
 			LogConsumerCfg: definition.LogConfig(ctx, d.opts.DisableLogging, d.opts.LoggingTimeout),
 		},
@@ -135,11 +133,11 @@ func (d *ketoDependancy) migrateContainer(
 }
 
 func (d *ketoDependancy) Setup(ctx context.Context, ntwk *testcontainers.DockerNetwork) error {
-	if len(d.opts.Dependancies) == 0 || !d.opts.Dependancies[0].GetDS().IsDB() {
+	if len(d.opts.Dependancies) == 0 || !d.opts.Dependancies[0].GetInternalDS().IsDB() {
 		return errors.New("no Database dependencies was supplied")
 	}
 
-	databaseURL := d.opts.Dependancies[0].GetDS().String()
+	databaseURL := d.opts.Dependancies[0].GetInternalDS().String()
 	err := d.migrateContainer(ctx, ntwk, databaseURL)
 	if err != nil {
 		return err
@@ -174,7 +172,6 @@ func (d *ketoDependancy) Setup(ctx context.Context, ntwk *testcontainers.DockerN
 				if d.opts.UseHostMode {
 					hostConfig.NetworkMode = "host"
 				}
-				hostConfig.AutoRemove = true
 			},
 			LogConsumerCfg: definition.LogConfig(ctx, d.opts.DisableLogging, d.opts.LoggingTimeout),
 		},

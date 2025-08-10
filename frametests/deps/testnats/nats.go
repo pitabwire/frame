@@ -80,8 +80,6 @@ func (d *natsDependancy) Setup(ctx context.Context, ntwk *testcontainers.DockerN
 				if d.opts.UseHostMode {
 					hostConfig.NetworkMode = "host"
 				}
-
-				hostConfig.AutoRemove = true
 			}),
 		testcontainers.WithLogConsumerConfig(definition.LogConfig(ctx, d.opts.DisableLogging, d.opts.LoggingTimeout)),
 	)

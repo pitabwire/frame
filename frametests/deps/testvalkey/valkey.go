@@ -76,7 +76,6 @@ func (d *valKeyDependancy) Setup(ctx context.Context, ntwk *testcontainers.Docke
 				if d.opts.UseHostMode {
 					hostConfig.NetworkMode = "host"
 				}
-				hostConfig.AutoRemove = true
 			}),
 		testcontainers.WithLogConsumerConfig(definition.LogConfig(ctx, d.opts.DisableLogging, d.opts.LoggingTimeout)),
 	)

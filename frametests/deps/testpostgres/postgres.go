@@ -102,7 +102,6 @@ func (d *postgreSQLDependancy) Setup(ctx context.Context, ntwk *testcontainers.D
 				if d.opts.UseHostMode {
 					hostConfig.NetworkMode = "host"
 				}
-				hostConfig.AutoRemove = true
 			}),
 		testcontainers.WithLogConsumerConfig(definition.LogConfig(ctx, d.opts.DisableLogging, d.opts.LoggingTimeout)),
 	)

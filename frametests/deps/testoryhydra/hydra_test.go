@@ -26,7 +26,7 @@ func (h *HydraImageSetupTestSuite) SetupSuite() {
 
 		return []definition.TestResource{
 			pgDep,
-			testoryhydra.NewWithOpts(testoryhydra.HydraConfiguration, definition.WithDependancies(pgDep)),
+			testoryhydra.NewWithOpts(testoryhydra.HydraConfiguration, definition.WithDependancies(pgDep), definition.WithDisableLogging(false)),
 		}
 	}
 

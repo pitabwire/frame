@@ -67,18 +67,28 @@ func (d *valKeyDependancy) Container() testcontainers.Container {
 }
 
 func (d *valKeyDependancy) Setup(ctx context.Context, ntwk *testcontainers.DockerNetwork) error {
-	valkeyContainer, err := tcValKey.Run(ctx, d.opts.ImageName,
-		network.WithNetwork([]string{ntwk.Name}, ntwk),
-		network.WithNetworkName([]string{"valkey", "cache-valkey"}, ntwk.Name),
+	var containerCustomize []testcontainers.ContainerCustomizer
 
-		testcontainers.WithHostConfigModifier(
+	if !d.opts.DisableLogging {
+		containerCustomize = append(
+			containerCustomize,
+			testcontainers.WithLogConsumerConfig(definition.LogConfig(ctx, d.opts.LoggingTimeout)),
+		)
+	}
+
+	if d.opts.UseHostMode {
+		containerCustomize = append(containerCustomize, testcontainers.WithHostConfigModifier(
 			func(hostConfig *container.HostConfig) {
-				if d.opts.UseHostMode {
-					hostConfig.NetworkMode = "host"
-				}
-			}),
-		testcontainers.WithLogConsumerConfig(definition.LogConfig(ctx, d.opts.DisableLogging, d.opts.LoggingTimeout)),
-	)
+				hostConfig.NetworkMode = definition.HostNetworkingMode
+			}))
+	} else {
+		containerCustomize = append(containerCustomize,
+			network.WithNetwork([]string{ntwk.Name}, ntwk),
+			network.WithNetworkName([]string{"valkey", "cache-valkey"}, ntwk.Name))
+	}
+
+	valkeyContainer, err := tcValKey.Run(ctx, d.opts.ImageName, containerCustomize...)
+
 	if err != nil {
 		return fmt.Errorf("failed to start valkeyContainer: %w", err)
 	}

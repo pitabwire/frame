@@ -99,30 +99,37 @@ func (d *hydraDependancy) migrateContainer(
 	ntwk *testcontainers.DockerNetwork,
 	databaseURL string,
 ) error {
-	hydraContainer, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
-		ContainerRequest: testcontainers.ContainerRequest{
-			Image:    d.opts.ImageName,
-			Networks: []string{ntwk.Name},
-			Cmd:      []string{"migrate", "sql", "up", "--read-from-env", "--yes"},
-			Env: map[string]string{
-				"LOG_LEVEL": "debug",
-				"DSN":       databaseURL,
-			},
-			Files: []testcontainers.ContainerFile{
-				{
-					Reader:            strings.NewReader(d.configuration),
-					ContainerFilePath: "/etc/config/hydra.yml",
-					FileMode:          definition.ContainerFileMode,
-				},
-			},
-			WaitingFor: wait.ForExit(),
-			HostConfigModifier: func(hostConfig *container.HostConfig) {
-				if d.opts.UseHostMode {
-					hostConfig.NetworkMode = "host"
-				}
-			},
-			LogConsumerCfg: definition.LogConfig(ctx, d.opts.DisableLogging, d.opts.LoggingTimeout),
+	containerRequest := testcontainers.ContainerRequest{
+		Image: d.opts.ImageName,
+		Cmd:   []string{"migrate", "sql", "up", "--read-from-env", "--yes"},
+		Env: map[string]string{
+			"LOG_LEVEL": "debug",
+			"DSN":       databaseURL,
 		},
+		Files: []testcontainers.ContainerFile{
+			{
+				Reader:            strings.NewReader(d.configuration),
+				ContainerFilePath: "/etc/config/hydra.yml",
+				FileMode:          definition.ContainerFileMode,
+			},
+		},
+		WaitingFor: wait.ForExit(),
+	}
+
+	if d.opts.DisableLogging {
+		containerRequest.LogConsumerCfg = definition.LogConfig(ctx, d.opts.LoggingTimeout)
+	}
+
+	if d.opts.UseHostMode {
+		containerRequest.HostConfigModifier = func(hostConfig *container.HostConfig) {
+			hostConfig.NetworkMode = definition.HostNetworkingMode
+		}
+	} else {
+		containerRequest.Networks = []string{ntwk.Name}
+	}
+
+	hydraContainer, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
+		ContainerRequest: containerRequest,
 
 		Started: true,
 	})
@@ -152,36 +159,46 @@ func (d *hydraDependancy) Setup(ctx context.Context, ntwk *testcontainers.Docker
 	if err != nil {
 		return err
 	}
-	hydraContainer, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
-		ContainerRequest: testcontainers.ContainerRequest{
-			Image:    d.opts.ImageName,
-			Networks: []string{ntwk.Name},
-			NetworkAliases: map[string][]string{
-				ntwk.Name: {"hydra", "auth-hydra"},
-			},
-			ExposedPorts: []string{hydraPort.Port()},
-			Cmd:          []string{"serve", "all", "--config", "/etc/config/hydra.yml", "--dev"},
-			Env: map[string]string{
-				"LOG_LEVEL": "debug",
-				"DSN":       databaseURL,
-			},
-			Files: []testcontainers.ContainerFile{
-				{
-					Reader:            strings.NewReader(d.configuration),
-					ContainerFilePath: "/etc/config/hydra.yml",
-					FileMode:          definition.ContainerFileMode,
-				},
-			},
-			WaitingFor: wait.ForHTTP("/health/ready").WithPort(hydraPort),
-			HostConfigModifier: func(hostConfig *container.HostConfig) {
-				if d.opts.UseHostMode {
-					hostConfig.NetworkMode = "host"
-				}
-			},
-			LogConsumerCfg: definition.LogConfig(ctx, d.opts.DisableLogging, d.opts.LoggingTimeout),
+
+	containerRequest := testcontainers.ContainerRequest{
+		Image: d.opts.ImageName,
+		Cmd:   []string{"serve", "all", "--config", "/etc/config/hydra.yml", "--dev"},
+		Env: map[string]string{
+			"LOG_LEVEL": "debug",
+			"DSN":       databaseURL,
 		},
-		Started: true,
-	})
+		Files: []testcontainers.ContainerFile{
+			{
+				Reader:            strings.NewReader(d.configuration),
+				ContainerFilePath: "/etc/config/hydra.yml",
+				FileMode:          definition.ContainerFileMode,
+			},
+		},
+		WaitingFor: wait.ForHTTP("/health/ready").WithPort(hydraPort),
+	}
+
+	if d.opts.DisableLogging {
+		containerRequest.LogConsumerCfg = definition.LogConfig(ctx, d.opts.LoggingTimeout)
+	}
+
+	if d.opts.UseHostMode {
+		containerRequest.HostConfigModifier = func(hostConfig *container.HostConfig) {
+			hostConfig.NetworkMode = "host"
+		}
+	} else {
+		containerRequest.ExposedPorts = []string{hydraPort.Port()}
+
+		containerRequest.Networks = []string{ntwk.Name}
+		containerRequest.NetworkAliases = map[string][]string{
+			ntwk.Name: {"hydra", "auth-hydra"},
+		}
+	}
+
+	hydraContainer, err := testcontainers.GenericContainer(ctx,
+		testcontainers.GenericContainerRequest{
+			ContainerRequest: containerRequest,
+			Started:          true,
+		})
 
 	if err != nil {
 		return fmt.Errorf("failed to start hydraContainer: %w", err)

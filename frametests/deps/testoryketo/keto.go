@@ -93,31 +93,38 @@ func (d *ketoDependancy) migrateContainer(
 	ntwk *testcontainers.DockerNetwork,
 	databaseURL string,
 ) error {
-	ketoContainer, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
-		ContainerRequest: testcontainers.ContainerRequest{
-			Image:    d.opts.ImageName,
-			Networks: []string{ntwk.Name},
-			Cmd:      []string{"migrate", "sql", "up", "--read-from-env", "--yes"},
-			Env: map[string]string{
-				"LOG_LEVEL": "debug",
-				"DSN":       databaseURL,
-			},
-
-			Files: []testcontainers.ContainerFile{
-				{
-					Reader:            strings.NewReader(d.configuration),
-					ContainerFilePath: "/etc/config/keto.yml",
-					FileMode:          definition.ContainerFileMode,
-				},
-			},
-			WaitingFor: wait.ForExit(),
-			HostConfigModifier: func(hostConfig *container.HostConfig) {
-				if d.opts.UseHostMode {
-					hostConfig.NetworkMode = "host"
-				}
-			},
-			LogConsumerCfg: definition.LogConfig(ctx, d.opts.DisableLogging, d.opts.LoggingTimeout),
+	containerRequest := testcontainers.ContainerRequest{
+		Image: d.opts.ImageName,
+		Cmd:   []string{"migrate", "sql", "up", "--read-from-env", "--yes"},
+		Env: map[string]string{
+			"LOG_LEVEL": "debug",
+			"DSN":       databaseURL,
 		},
+
+		Files: []testcontainers.ContainerFile{
+			{
+				Reader:            strings.NewReader(d.configuration),
+				ContainerFilePath: "/etc/config/keto.yml",
+				FileMode:          definition.ContainerFileMode,
+			},
+		},
+		WaitingFor: wait.ForExit(),
+	}
+
+	if d.opts.DisableLogging {
+		containerRequest.LogConsumerCfg = definition.LogConfig(ctx, d.opts.LoggingTimeout)
+	}
+
+	if d.opts.UseHostMode {
+		containerRequest.HostConfigModifier = func(hostConfig *container.HostConfig) {
+			hostConfig.NetworkMode = "host"
+		}
+	} else {
+		containerRequest.Networks = []string{ntwk.Name}
+	}
+
+	ketoContainer, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
+		ContainerRequest: containerRequest,
 
 		Started: true,
 	})
@@ -147,36 +154,45 @@ func (d *ketoDependancy) Setup(ctx context.Context, ntwk *testcontainers.DockerN
 		return err
 	}
 
-	ketoContainer, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
-		ContainerRequest: testcontainers.ContainerRequest{
-			Image:    d.opts.ImageName,
-			Networks: []string{ntwk.Name},
-			NetworkAliases: map[string][]string{
-				ntwk.Name: {"keto", "auth-keto"},
-			},
-			ExposedPorts: []string{fmt.Sprintf("%s/tcp", d.opts.Port), "4466/tcp"},
-			Cmd:          []string{"serve", "all", "--config", "/etc/config/keto.yml", "--dev"},
-			Env: map[string]string{
-				"LOG_LEVEL": "debug",
-				"DSN":       databaseURL,
-			},
-			Files: []testcontainers.ContainerFile{
-				{
-					Reader:            strings.NewReader(d.configuration),
-					ContainerFilePath: "/etc/config/keto.yml",
-					FileMode:          definition.ContainerFileMode,
-				},
-			},
-			WaitingFor: wait.ForHTTP("/health/ready").WithPort(ketoPort),
-			HostConfigModifier: func(hostConfig *container.HostConfig) {
-				if d.opts.UseHostMode {
-					hostConfig.NetworkMode = "host"
-				}
-			},
-			LogConsumerCfg: definition.LogConfig(ctx, d.opts.DisableLogging, d.opts.LoggingTimeout),
+	containerRequest := testcontainers.ContainerRequest{
+		Image: d.opts.ImageName,
+		Cmd:   []string{"serve", "all", "--config", "/etc/config/keto.yml", "--dev"},
+		Env: map[string]string{
+			"LOG_LEVEL": "debug",
+			"DSN":       databaseURL,
 		},
-		Started: true,
-	})
+		Files: []testcontainers.ContainerFile{
+			{
+				Reader:            strings.NewReader(d.configuration),
+				ContainerFilePath: "/etc/config/keto.yml",
+				FileMode:          definition.ContainerFileMode,
+			},
+		},
+		WaitingFor: wait.ForHTTP("/health/ready").WithPort(ketoPort),
+	}
+
+	if d.opts.DisableLogging {
+		containerRequest.LogConsumerCfg = definition.LogConfig(ctx, d.opts.LoggingTimeout)
+	}
+
+	if d.opts.UseHostMode {
+		containerRequest.HostConfigModifier = func(hostConfig *container.HostConfig) {
+			hostConfig.NetworkMode = definition.HostNetworkingMode
+		}
+	} else {
+		containerRequest.ExposedPorts = []string{fmt.Sprintf("%s/tcp", d.opts.Port), "4466/tcp"}
+
+		containerRequest.Networks = []string{ntwk.Name}
+		containerRequest.NetworkAliases = map[string][]string{
+			ntwk.Name: {"keto", "auth-keto"},
+		}
+	}
+
+	ketoContainer, err := testcontainers.GenericContainer(ctx,
+		testcontainers.GenericContainerRequest{
+			ContainerRequest: containerRequest,
+			Started:          true,
+		})
 
 	if err != nil {
 		return fmt.Errorf("failed to start ketoContainer: %w", err)

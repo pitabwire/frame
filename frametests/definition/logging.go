@@ -14,11 +14,7 @@ type StdoutLogConsumer struct {
 	log *util.LogEntry
 }
 
-func LogConfig(ctx context.Context, disableLogging bool, timeout time.Duration) *testcontainers.LogConsumerConfig {
-	if disableLogging {
-		return nil
-	}
-
+func LogConfig(ctx context.Context, timeout time.Duration) *testcontainers.LogConsumerConfig {
 	return &testcontainers.LogConsumerConfig{
 		Opts: []testcontainers.LogProductionOption{testcontainers.WithLogProductionTimeout(timeout)},
 		Consumers: []testcontainers.LogConsumer{&StdoutLogConsumer{

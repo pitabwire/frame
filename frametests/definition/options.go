@@ -5,6 +5,8 @@ import (
 	"time"
 )
 
+const HostNetworkingMode = "host"
+
 type ContainerOpts struct {
 	ImageName string
 	UserName  string

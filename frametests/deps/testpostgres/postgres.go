@@ -85,26 +85,36 @@ func (d *postgreSQLDependancy) Container() testcontainers.Container {
 
 // Setup creates a PostgreSQL testcontainer and sets the container.
 func (d *postgreSQLDependancy) Setup(ctx context.Context, ntwk *testcontainers.DockerNetwork) error {
-	pgContainer, err := tcPostgres.Run(ctx, d.opts.ImageName,
+	containerCustomize := []testcontainers.ContainerCustomizer{
+
 		tcPostgres.WithDatabase(d.dbname),
 		tcPostgres.WithUsername(d.opts.UserName),
 		tcPostgres.WithPassword(d.opts.Password),
 		testcontainers.WithWaitStrategy(
 			wait.ForLog("database system is ready to accept connections").
 				WithOccurrence(OccurrenceValue).
-				WithStartupTimeout(TimeoutInSeconds*time.Second)),
+				WithStartupTimeout(TimeoutInSeconds * time.Second)),
+	}
 
-		network.WithNetwork([]string{ntwk.Name}, ntwk),
-		network.WithNetworkName([]string{"postgres", "db-postgres"}, ntwk.Name),
+	if !d.opts.DisableLogging {
+		containerCustomize = append(
+			containerCustomize,
+			testcontainers.WithLogConsumerConfig(definition.LogConfig(ctx, d.opts.LoggingTimeout)),
+		)
+	}
 
-		testcontainers.WithHostConfigModifier(
+	if d.opts.UseHostMode {
+		containerCustomize = append(containerCustomize, testcontainers.WithHostConfigModifier(
 			func(hostConfig *container.HostConfig) {
-				if d.opts.UseHostMode {
-					hostConfig.NetworkMode = "host"
-				}
-			}),
-		testcontainers.WithLogConsumerConfig(definition.LogConfig(ctx, d.opts.DisableLogging, d.opts.LoggingTimeout)),
-	)
+				hostConfig.NetworkMode = definition.HostNetworkingMode
+			}))
+	} else {
+		containerCustomize = append(containerCustomize,
+			network.WithNetwork([]string{ntwk.Name}, ntwk),
+			network.WithNetworkName([]string{"postgres", "db-postgres"}, ntwk.Name))
+	}
+
+	pgContainer, err := tcPostgres.Run(ctx, d.opts.ImageName, containerCustomize...)
 	if err != nil {
 		return fmt.Errorf("failed to start postgres container: %w", err)
 	}

@@ -66,23 +66,32 @@ func (d *natsDependancy) Container() testcontainers.Container {
 }
 
 func (d *natsDependancy) Setup(ctx context.Context, ntwk *testcontainers.DockerNetwork) error {
-	natsqContainer, err := tcNats.Run(ctx, d.opts.ImageName,
+	containerCustomize := []testcontainers.ContainerCustomizer{
+
 		testcontainers.WithCmdArgs("--js", "-DVV"),
 		tcNats.WithUsername(d.opts.UserName),
 		tcNats.WithPassword(d.opts.Password),
+	}
 
-		network.WithNetwork([]string{ntwk.Name}, ntwk),
-		network.WithNetworkName([]string{"nats", "queue-nats"}, ntwk.Name),
+	if !d.opts.DisableLogging {
+		containerCustomize = append(
+			containerCustomize,
+			testcontainers.WithLogConsumerConfig(definition.LogConfig(ctx, d.opts.LoggingTimeout)),
+		)
+	}
 
-		testcontainers.WithHostConfigModifier(
-
+	if d.opts.UseHostMode {
+		containerCustomize = append(containerCustomize, testcontainers.WithHostConfigModifier(
 			func(hostConfig *container.HostConfig) {
-				if d.opts.UseHostMode {
-					hostConfig.NetworkMode = "host"
-				}
-			}),
-		testcontainers.WithLogConsumerConfig(definition.LogConfig(ctx, d.opts.DisableLogging, d.opts.LoggingTimeout)),
-	)
+				hostConfig.NetworkMode = definition.HostNetworkingMode
+			}))
+	} else {
+		containerCustomize = append(containerCustomize,
+			network.WithNetwork([]string{ntwk.Name}, ntwk),
+			network.WithNetworkName([]string{"nats", "queue-nats"}, ntwk.Name))
+	}
+
+	natsqContainer, err := tcNats.Run(ctx, d.opts.ImageName, containerCustomize...)
 	if err != nil {
 		return fmt.Errorf("failed to start nats container: %w", err)
 	}

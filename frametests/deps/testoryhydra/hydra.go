@@ -19,8 +19,6 @@ import (
 const (
 	// OryHydraImage is the Ory Hydra Image.
 	OryHydraImage = "oryd/hydra:latest"
-	// HydraPort is the default port for Hydra.
-	HydraPort = "4445"
 
 	HydraConfiguration = `
 ## ORY Hydra Configuration
@@ -73,10 +71,8 @@ func New() definition.TestResource {
 func NewWithOpts(configuration string, containerOpts ...definition.ContainerOption) definition.TestResource {
 	opts := definition.ContainerOpts{
 		ImageName:      OryHydraImage,
-		Port:           HydraPort,
+		Ports:          []string{"4444", "4445"},
 		NetworkAliases: []string{"hydra", "auth-hydra"},
-		UseHostMode:    false,
-		EnableLogging:  true,
 	}
 	opts.Setup(containerOpts...)
 
@@ -135,17 +131,17 @@ func (d *hydraDependancy) migrateContainer(
 }
 
 func (d *hydraDependancy) Setup(ctx context.Context, ntwk *testcontainers.DockerNetwork) error {
-	if len(d.opts.Dependancies) == 0 || !d.opts.Dependancies[0].GetDS().IsDB() {
+	if len(d.opts.Dependencies) == 0 || !d.opts.Dependencies[0].GetDS().IsDB() {
 		return errors.New("no Database dependencies was supplied")
 	}
 
-	databaseURL := d.opts.Dependancies[0].GetInternalDS().String()
+	databaseURL := d.opts.Dependencies[0].GetInternalDS().String()
 	err := d.migrateContainer(ctx, ntwk, databaseURL)
 	if err != nil {
 		return err
 	}
 
-	hydraPort, err := nat.NewPort("tcp", d.opts.Port)
+	adminPort, err := nat.NewPort("tcp", d.opts.Ports[1])
 	if err != nil {
 		return err
 	}
@@ -164,14 +160,10 @@ func (d *hydraDependancy) Setup(ctx context.Context, ntwk *testcontainers.Docker
 				FileMode:          definition.ContainerFileMode,
 			},
 		},
-		WaitingFor: wait.ForHTTP("/health/ready").WithPort(hydraPort),
+		WaitingFor: wait.ForHTTP("/health/ready").WithPort(adminPort),
 	}
 
 	d.opts.Configure(ctx, ntwk, &containerRequest)
-
-	if !d.opts.UseHostMode {
-		containerRequest.ExposedPorts = []string{fmt.Sprintf("%s/tcp", d.opts.Port), "4444/tcp"}
-	}
 
 	hydraContainer, err := testcontainers.GenericContainer(ctx,
 		testcontainers.GenericContainerRequest{
@@ -183,7 +175,7 @@ func (d *hydraDependancy) Setup(ctx context.Context, ntwk *testcontainers.Docker
 		return fmt.Errorf("failed to start hydraContainer: %w", err)
 	}
 
-	port, err := hydraContainer.MappedPort(ctx, hydraPort)
+	port, err := hydraContainer.MappedPort(ctx, adminPort)
 	if err != nil {
 		return fmt.Errorf("failed to get connection string for hydraContainer: %w", err)
 	}
@@ -200,7 +192,7 @@ func (d *hydraDependancy) Setup(ctx context.Context, ntwk *testcontainers.Docker
 		return fmt.Errorf("failed to get internal host ip for hydraContainer: %w", err)
 	}
 	d.internalConn = frame.DataSource(
-		fmt.Sprintf("http://%s", net.JoinHostPort(internalIP, d.opts.Port)),
+		fmt.Sprintf("http://%s", net.JoinHostPort(internalIP, adminPort.Port())),
 	)
 
 	d.container = hydraContainer

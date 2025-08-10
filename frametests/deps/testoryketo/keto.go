@@ -19,8 +19,6 @@ import (
 const (
 	// OryKetoImage is the Ory Keto Image.
 	OryKetoImage = "oryd/keto:latest"
-	// KetoPort is the default port for Keto.
-	KetoPort = "4467"
 
 	KetoConfiguration = `
 version: v0.12.0
@@ -67,10 +65,8 @@ func NewWithOpts(
 ) definition.TestResource {
 	opts := definition.ContainerOpts{
 		ImageName:      OryKetoImage,
-		Port:           KetoPort,
+		Ports:          []string{"4466", "4467"},
 		NetworkAliases: []string{"keto", "auth-keto"},
-		UseHostMode:    false,
-		EnableLogging:  true,
 	}
 	opts.Setup(containerOpts...)
 
@@ -130,16 +126,16 @@ func (d *ketoDependancy) migrateContainer(
 }
 
 func (d *ketoDependancy) Setup(ctx context.Context, ntwk *testcontainers.DockerNetwork) error {
-	if len(d.opts.Dependancies) == 0 || !d.opts.Dependancies[0].GetInternalDS().IsDB() {
+	if len(d.opts.Dependencies) == 0 || !d.opts.Dependencies[0].GetInternalDS().IsDB() {
 		return errors.New("no Database dependencies was supplied")
 	}
 
-	databaseURL := d.opts.Dependancies[0].GetInternalDS().String()
+	databaseURL := d.opts.Dependencies[0].GetInternalDS().String()
 	err := d.migrateContainer(ctx, ntwk, databaseURL)
 	if err != nil {
 		return err
 	}
-	ketoPort, err := nat.NewPort("tcp", d.opts.Port)
+	adminPort, err := nat.NewPort("tcp", d.opts.Ports[1])
 	if err != nil {
 		return err
 	}
@@ -158,13 +154,13 @@ func (d *ketoDependancy) Setup(ctx context.Context, ntwk *testcontainers.DockerN
 				FileMode:          definition.ContainerFileMode,
 			},
 		},
-		WaitingFor: wait.ForHTTP("/health/ready").WithPort(ketoPort),
+		WaitingFor: wait.ForHTTP("/health/ready").WithPort(adminPort),
 	}
 
 	d.opts.Configure(ctx, ntwk, &containerRequest)
 
 	if !d.opts.UseHostMode {
-		containerRequest.ExposedPorts = []string{fmt.Sprintf("%s/tcp", d.opts.Port), "4466/tcp"}
+		containerRequest.ExposedPorts = []string{fmt.Sprintf("%s/tcp", d.opts.Ports), "4466/tcp"}
 	}
 
 	ketoContainer, err := testcontainers.GenericContainer(ctx,
@@ -177,7 +173,7 @@ func (d *ketoDependancy) Setup(ctx context.Context, ntwk *testcontainers.DockerN
 		return fmt.Errorf("failed to start ketoContainer: %w", err)
 	}
 
-	port, err := ketoContainer.MappedPort(ctx, ketoPort)
+	port, err := ketoContainer.MappedPort(ctx, adminPort)
 	if err != nil {
 		return fmt.Errorf("failed to get connection string for ketoContainer: %w", err)
 	}
@@ -193,7 +189,7 @@ func (d *ketoDependancy) Setup(ctx context.Context, ntwk *testcontainers.DockerN
 	if err != nil {
 		return fmt.Errorf("failed to get internal host ip for ketoContainer: %w", err)
 	}
-	d.internalConn = frame.DataSource(fmt.Sprintf("http://%s", net.JoinHostPort(internalIP, d.opts.Port)))
+	d.internalConn = frame.DataSource(fmt.Sprintf("http://%s", net.JoinHostPort(internalIP, adminPort.Port())))
 
 	d.container = ketoContainer
 	return nil

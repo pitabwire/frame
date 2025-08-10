@@ -44,10 +44,8 @@ func NewWithOpts(cluster string, containerOpts ...definition.ContainerOption) de
 		ImageName:      NatsImage,
 		UserName:       NatsUser,
 		Password:       NatsPass,
-		Port:           NatsPort,
+		Ports:          []string{NatsPort},
 		NetworkAliases: []string{"nats", "queue-nats"},
-		UseHostMode:    false,
-		EnableLogging:  true,
 	}
 	opts.Setup(containerOpts...)
 
@@ -77,6 +75,8 @@ func (d *natsDependancy) Setup(ctx context.Context, ntwk *testcontainers.DockerN
 		return fmt.Errorf("failed to start nats container: %w", err)
 	}
 
+	d.container = natsqContainer
+
 	conn, err := natsqContainer.ConnectionString(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to get connection string for container: %w", err)
@@ -88,9 +88,8 @@ func (d *natsDependancy) Setup(ctx context.Context, ntwk *testcontainers.DockerN
 	if err != nil {
 		return fmt.Errorf("failed to get internal host ip for container: %w", err)
 	}
-	d.internalConn = frame.DataSource(fmt.Sprintf("nats://%s", net.JoinHostPort(internalIP, d.opts.Port)))
+	d.internalConn = frame.DataSource(fmt.Sprintf("nats://%s", net.JoinHostPort(internalIP, d.opts.Ports[0])))
 
-	d.container = natsqContainer
 	return nil
 }
 

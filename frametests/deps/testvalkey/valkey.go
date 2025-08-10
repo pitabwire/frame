@@ -44,10 +44,8 @@ func NewWithOpts(cluster string, containerOpts ...definition.ContainerOption) de
 		ImageName:      ValKeyImage,
 		UserName:       ValKeyUser,
 		Password:       ValKeyPass,
-		Port:           ValKeyPort,
+		Ports:          []string{ValKeyPort},
 		NetworkAliases: []string{"valkey", "cache-valkey"},
-		UseHostMode:    false,
-		EnableLogging:  true,
 	}
 	opts.Setup(containerOpts...)
 
@@ -84,7 +82,7 @@ func (d *valKeyDependancy) Setup(ctx context.Context, ntwk *testcontainers.Docke
 	if err != nil {
 		return fmt.Errorf("failed to get internal host ip for valkeyContainer: %w", err)
 	}
-	d.internalConn = frame.DataSource(fmt.Sprintf("redis://%s", net.JoinHostPort(internalIP, d.opts.Port)))
+	d.internalConn = frame.DataSource(fmt.Sprintf("redis://%s", net.JoinHostPort(internalIP, d.opts.Ports[0])))
 	d.container = valkeyContainer
 	return nil
 }

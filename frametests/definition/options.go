@@ -2,7 +2,6 @@ package definition
 
 import (
 	"context"
-	"strconv"
 	"time"
 
 	"github.com/docker/docker/api/types/container"
@@ -17,11 +16,11 @@ type ContainerOpts struct {
 	UserName  string
 	Password  string
 
-	Port           string
+	Ports          []string
 	UseHostMode    bool
 	NetworkAliases []string
 
-	Dependancies []DependancyConn
+	Dependencies []DependancyConn
 
 	EnableLogging  bool
 	LoggingTimeout time.Duration
@@ -50,7 +49,7 @@ func (o *ContainerOpts) Configure(
 			hostConfig.NetworkMode = "host"
 		}
 	} else {
-		containerRequest.ExposedPorts = []string{o.Port}
+		containerRequest.ExposedPorts = o.Ports
 
 		containerRequest.Networks = []string{ntwk.Name}
 		containerRequest.NetworkAliases = map[string][]string{
@@ -78,7 +77,7 @@ func (o *ContainerOpts) ConfigurationExtend(
 			}))
 	} else {
 		containerCustomize = append(containerCustomize,
-			testcontainers.WithExposedPorts(o.Port),
+			// testcontainers.WithExposedPorts(o.Ports...),
 			network.WithNetwork([]string{ntwk.Name}, ntwk),
 			network.WithNetworkName(o.NetworkAliases, ntwk.Name))
 	}
@@ -110,10 +109,10 @@ func WithPassword(password string) ContainerOption {
 	}
 }
 
-// WithPort allows to set the port to use for testing.
-func WithPort(port int) ContainerOption {
+// WithPorts allows to set the ports to use for testing.
+func WithPorts(ports ...string) ContainerOption {
 	return func(original *ContainerOpts) {
-		original.Port = strconv.Itoa(port)
+		original.Ports = ports
 	}
 }
 
@@ -148,6 +147,6 @@ func WithLoggingTimeout(loggingTimeout time.Duration) ContainerOption {
 // WithDependancies allows to set the dependancies to use for testing.
 func WithDependancies(dependancies ...DependancyConn) ContainerOption {
 	return func(original *ContainerOpts) {
-		original.Dependancies = dependancies
+		original.Dependencies = dependancies
 	}
 }

@@ -61,10 +61,8 @@ func NewWithOpts(dbName string, containerOpts ...definition.ContainerOption) def
 		ImageName:      PostgresqlDBImage,
 		UserName:       DBUser,
 		Password:       DBPassword,
-		Port:           DBPort,
+		Ports:          []string{DBPort},
 		NetworkAliases: []string{"postgres", "db-postgres"},
-		UseHostMode:    false,
-		EnableLogging:  true,
 	}
 	opts.Setup(containerOpts...)
 
@@ -116,7 +114,7 @@ func (d *postgreSQLDependancy) Setup(ctx context.Context, ntwk *testcontainers.D
 		"postgres://%s:%s@%s/%s",
 		d.opts.UserName,
 		d.opts.Password,
-		net.JoinHostPort(internalIP, d.opts.Port),
+		net.JoinHostPort(internalIP, d.opts.Ports[0]),
 		d.dbname,
 	)
 

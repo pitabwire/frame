@@ -7,7 +7,6 @@ import (
 	"net"
 	"strings"
 
-	"github.com/docker/docker/api/types/container"
 	"github.com/docker/go-connections/nat"
 	"github.com/pitabwire/util"
 	"github.com/testcontainers/testcontainers-go"
@@ -69,8 +68,9 @@ func NewWithOpts(
 	opts := definition.ContainerOpts{
 		ImageName:      OryKetoImage,
 		Port:           KetoPort,
+		NetworkAliases: []string{"keto", "auth-keto"},
 		UseHostMode:    false,
-		DisableLogging: true,
+		EnableLogging:  true,
 	}
 	opts.Setup(containerOpts...)
 
@@ -111,17 +111,7 @@ func (d *ketoDependancy) migrateContainer(
 		WaitingFor: wait.ForExit(),
 	}
 
-	if d.opts.DisableLogging {
-		containerRequest.LogConsumerCfg = definition.LogConfig(ctx, d.opts.LoggingTimeout)
-	}
-
-	if d.opts.UseHostMode {
-		containerRequest.HostConfigModifier = func(hostConfig *container.HostConfig) {
-			hostConfig.NetworkMode = "host"
-		}
-	} else {
-		containerRequest.Networks = []string{ntwk.Name}
-	}
+	d.opts.Configure(ctx, ntwk, &containerRequest)
 
 	ketoContainer, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
 		ContainerRequest: containerRequest,
@@ -171,21 +161,10 @@ func (d *ketoDependancy) Setup(ctx context.Context, ntwk *testcontainers.DockerN
 		WaitingFor: wait.ForHTTP("/health/ready").WithPort(ketoPort),
 	}
 
-	if d.opts.DisableLogging {
-		containerRequest.LogConsumerCfg = definition.LogConfig(ctx, d.opts.LoggingTimeout)
-	}
+	d.opts.Configure(ctx, ntwk, &containerRequest)
 
-	if d.opts.UseHostMode {
-		containerRequest.HostConfigModifier = func(hostConfig *container.HostConfig) {
-			hostConfig.NetworkMode = definition.HostNetworkingMode
-		}
-	} else {
+	if !d.opts.UseHostMode {
 		containerRequest.ExposedPorts = []string{fmt.Sprintf("%s/tcp", d.opts.Port), "4466/tcp"}
-
-		containerRequest.Networks = []string{ntwk.Name}
-		containerRequest.NetworkAliases = map[string][]string{
-			ntwk.Name: {"keto", "auth-keto"},
-		}
 	}
 
 	ketoContainer, err := testcontainers.GenericContainer(ctx,

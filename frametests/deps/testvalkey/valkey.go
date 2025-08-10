@@ -5,14 +5,11 @@ import (
 	"fmt"
 	"net"
 
-	"github.com/docker/docker/api/types/container"
+	"github.com/pitabwire/frame"
+	"github.com/pitabwire/frame/frametests/definition"
 	"github.com/pitabwire/util"
 	"github.com/testcontainers/testcontainers-go"
 	tcValKey "github.com/testcontainers/testcontainers-go/modules/valkey"
-	"github.com/testcontainers/testcontainers-go/network"
-
-	"github.com/pitabwire/frame"
-	"github.com/pitabwire/frame/frametests/definition"
 )
 
 const (
@@ -47,8 +44,9 @@ func NewWithOpts(cluster string, containerOpts ...definition.ContainerOption) de
 		UserName:       ValKeyUser,
 		Password:       ValKeyPass,
 		Port:           ValKeyPort,
+		NetworkAliases: []string{"valkey", "cache-valkey"},
 		UseHostMode:    false,
-		DisableLogging: true,
+		EnableLogging:  true,
 	}
 	opts.Setup(containerOpts...)
 
@@ -67,26 +65,8 @@ func (d *valKeyDependancy) Container() testcontainers.Container {
 }
 
 func (d *valKeyDependancy) Setup(ctx context.Context, ntwk *testcontainers.DockerNetwork) error {
-	var containerCustomize []testcontainers.ContainerCustomizer
 
-	if !d.opts.DisableLogging {
-		containerCustomize = append(
-			containerCustomize,
-			testcontainers.WithLogConsumerConfig(definition.LogConfig(ctx, d.opts.LoggingTimeout)),
-		)
-	}
-
-	if d.opts.UseHostMode {
-		containerCustomize = append(containerCustomize, testcontainers.WithHostConfigModifier(
-			func(hostConfig *container.HostConfig) {
-				hostConfig.NetworkMode = definition.HostNetworkingMode
-			}))
-	} else {
-		containerCustomize = append(containerCustomize,
-			network.WithNetwork([]string{ntwk.Name}, ntwk),
-			network.WithNetworkName([]string{"valkey", "cache-valkey"}, ntwk.Name))
-	}
-
+	containerCustomize := d.opts.ConfigurationExtend(ctx, ntwk)
 	valkeyContainer, err := tcValKey.Run(ctx, d.opts.ImageName, containerCustomize...)
 
 	if err != nil {

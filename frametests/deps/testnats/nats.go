@@ -5,14 +5,11 @@ import (
 	"fmt"
 	"net"
 
-	"github.com/docker/docker/api/types/container"
+	"github.com/pitabwire/frame"
+	"github.com/pitabwire/frame/frametests/definition"
 	"github.com/pitabwire/util"
 	"github.com/testcontainers/testcontainers-go"
 	tcNats "github.com/testcontainers/testcontainers-go/modules/nats"
-	"github.com/testcontainers/testcontainers-go/network"
-
-	"github.com/pitabwire/frame"
-	"github.com/pitabwire/frame/frametests/definition"
 )
 
 const (
@@ -47,8 +44,9 @@ func NewWithOpts(cluster string, containerOpts ...definition.ContainerOption) de
 		UserName:       NatsUser,
 		Password:       NatsPass,
 		Port:           NatsPort,
+		NetworkAliases: []string{"nats", "queue-nats"},
 		UseHostMode:    false,
-		DisableLogging: true,
+		EnableLogging:  true,
 	}
 	opts.Setup(containerOpts...)
 
@@ -66,30 +64,12 @@ func (d *natsDependancy) Container() testcontainers.Container {
 }
 
 func (d *natsDependancy) Setup(ctx context.Context, ntwk *testcontainers.DockerNetwork) error {
-	containerCustomize := []testcontainers.ContainerCustomizer{
+	containerCustomize := d.opts.ConfigurationExtend(ctx, ntwk, []testcontainers.ContainerCustomizer{
 
 		testcontainers.WithCmdArgs("--js", "-DVV"),
 		tcNats.WithUsername(d.opts.UserName),
 		tcNats.WithPassword(d.opts.Password),
-	}
-
-	if !d.opts.DisableLogging {
-		containerCustomize = append(
-			containerCustomize,
-			testcontainers.WithLogConsumerConfig(definition.LogConfig(ctx, d.opts.LoggingTimeout)),
-		)
-	}
-
-	if d.opts.UseHostMode {
-		containerCustomize = append(containerCustomize, testcontainers.WithHostConfigModifier(
-			func(hostConfig *container.HostConfig) {
-				hostConfig.NetworkMode = definition.HostNetworkingMode
-			}))
-	} else {
-		containerCustomize = append(containerCustomize,
-			network.WithNetwork([]string{ntwk.Name}, ntwk),
-			network.WithNetworkName([]string{"nats", "queue-nats"}, ntwk.Name))
-	}
+	}...)
 
 	natsqContainer, err := tcNats.Run(ctx, d.opts.ImageName, containerCustomize...)
 	if err != nil {

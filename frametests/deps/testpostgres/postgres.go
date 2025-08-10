@@ -10,13 +10,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/docker/docker/api/types/container"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/pitabwire/util"
 	"github.com/testcontainers/testcontainers-go"
 	tcPostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
-	"github.com/testcontainers/testcontainers-go/network"
 	"github.com/testcontainers/testcontainers-go/wait"
 
 	"github.com/pitabwire/frame"
@@ -64,8 +62,9 @@ func NewWithOpts(dbName string, containerOpts ...definition.ContainerOption) def
 		UserName:       DBUser,
 		Password:       DBPassword,
 		Port:           DBPort,
+		NetworkAliases: []string{"postgres", "db-postgres"},
 		UseHostMode:    false,
-		DisableLogging: true,
+		EnableLogging:  true,
 	}
 	opts.Setup(containerOpts...)
 
@@ -85,7 +84,7 @@ func (d *postgreSQLDependancy) Container() testcontainers.Container {
 
 // Setup creates a PostgreSQL testcontainer and sets the container.
 func (d *postgreSQLDependancy) Setup(ctx context.Context, ntwk *testcontainers.DockerNetwork) error {
-	containerCustomize := []testcontainers.ContainerCustomizer{
+	containerCustomize := d.opts.ConfigurationExtend(ctx, ntwk, []testcontainers.ContainerCustomizer{
 
 		tcPostgres.WithDatabase(d.dbname),
 		tcPostgres.WithUsername(d.opts.UserName),
@@ -94,25 +93,7 @@ func (d *postgreSQLDependancy) Setup(ctx context.Context, ntwk *testcontainers.D
 			wait.ForLog("database system is ready to accept connections").
 				WithOccurrence(OccurrenceValue).
 				WithStartupTimeout(TimeoutInSeconds * time.Second)),
-	}
-
-	if !d.opts.DisableLogging {
-		containerCustomize = append(
-			containerCustomize,
-			testcontainers.WithLogConsumerConfig(definition.LogConfig(ctx, d.opts.LoggingTimeout)),
-		)
-	}
-
-	if d.opts.UseHostMode {
-		containerCustomize = append(containerCustomize, testcontainers.WithHostConfigModifier(
-			func(hostConfig *container.HostConfig) {
-				hostConfig.NetworkMode = definition.HostNetworkingMode
-			}))
-	} else {
-		containerCustomize = append(containerCustomize,
-			network.WithNetwork([]string{ntwk.Name}, ntwk),
-			network.WithNetworkName([]string{"postgres", "db-postgres"}, ntwk.Name))
-	}
+	}...)
 
 	pgContainer, err := tcPostgres.Run(ctx, d.opts.ImageName, containerCustomize...)
 	if err != nil {

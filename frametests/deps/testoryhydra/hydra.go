@@ -7,7 +7,6 @@ import (
 	"net"
 	"strings"
 
-	"github.com/docker/docker/api/types/container"
 	"github.com/docker/go-connections/nat"
 	"github.com/pitabwire/util"
 	"github.com/testcontainers/testcontainers-go"
@@ -75,8 +74,9 @@ func NewWithOpts(configuration string, containerOpts ...definition.ContainerOpti
 	opts := definition.ContainerOpts{
 		ImageName:      OryHydraImage,
 		Port:           HydraPort,
+		NetworkAliases: []string{"hydra", "auth-hydra"},
 		UseHostMode:    false,
-		DisableLogging: true,
+		EnableLogging:  true,
 	}
 	opts.Setup(containerOpts...)
 
@@ -116,17 +116,7 @@ func (d *hydraDependancy) migrateContainer(
 		WaitingFor: wait.ForExit(),
 	}
 
-	if d.opts.DisableLogging {
-		containerRequest.LogConsumerCfg = definition.LogConfig(ctx, d.opts.LoggingTimeout)
-	}
-
-	if d.opts.UseHostMode {
-		containerRequest.HostConfigModifier = func(hostConfig *container.HostConfig) {
-			hostConfig.NetworkMode = definition.HostNetworkingMode
-		}
-	} else {
-		containerRequest.Networks = []string{ntwk.Name}
-	}
+	d.opts.Configure(ctx, ntwk, &containerRequest)
 
 	hydraContainer, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
 		ContainerRequest: containerRequest,
@@ -177,21 +167,10 @@ func (d *hydraDependancy) Setup(ctx context.Context, ntwk *testcontainers.Docker
 		WaitingFor: wait.ForHTTP("/health/ready").WithPort(hydraPort),
 	}
 
-	if d.opts.DisableLogging {
-		containerRequest.LogConsumerCfg = definition.LogConfig(ctx, d.opts.LoggingTimeout)
-	}
+	d.opts.Configure(ctx, ntwk, &containerRequest)
 
-	if d.opts.UseHostMode {
-		containerRequest.HostConfigModifier = func(hostConfig *container.HostConfig) {
-			hostConfig.NetworkMode = "host"
-		}
-	} else {
-		containerRequest.ExposedPorts = []string{hydraPort.Port()}
-
-		containerRequest.Networks = []string{ntwk.Name}
-		containerRequest.NetworkAliases = map[string][]string{
-			ntwk.Name: {"hydra", "auth-hydra"},
-		}
+	if !d.opts.UseHostMode {
+		containerRequest.ExposedPorts = []string{fmt.Sprintf("%s/tcp", d.opts.Port), "4444/tcp"}
 	}
 
 	hydraContainer, err := testcontainers.GenericContainer(ctx,

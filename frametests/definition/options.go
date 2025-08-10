@@ -1,8 +1,13 @@
 package definition
 
 import (
+	"context"
 	"strconv"
 	"time"
+
+	"github.com/docker/docker/api/types/container"
+	"github.com/testcontainers/testcontainers-go"
+	"github.com/testcontainers/testcontainers-go/network"
 )
 
 const HostNetworkingMode = "host"
@@ -12,12 +17,13 @@ type ContainerOpts struct {
 	UserName  string
 	Password  string
 
-	Port        string
-	UseHostMode bool
+	Port           string
+	UseHostMode    bool
+	NetworkAliases []string
 
 	Dependancies []DependancyConn
 
-	DisableLogging bool
+	EnableLogging  bool
 	LoggingTimeout time.Duration
 }
 
@@ -28,6 +34,51 @@ func (o *ContainerOpts) Setup(opts ...ContainerOption) {
 	for _, opt := range opts {
 		opt(o)
 	}
+}
+
+func (o *ContainerOpts) Configure(ctx context.Context, ntwk *testcontainers.DockerNetwork, containerRequest *testcontainers.ContainerRequest) {
+	if o.EnableLogging {
+		containerRequest.LogConsumerCfg = LogConfig(ctx, o.LoggingTimeout)
+	}
+
+	if o.UseHostMode {
+		containerRequest.HostConfigModifier = func(hostConfig *container.HostConfig) {
+			hostConfig.NetworkMode = "host"
+		}
+	} else {
+		containerRequest.ExposedPorts = []string{o.Port}
+
+		containerRequest.Networks = []string{ntwk.Name}
+		containerRequest.NetworkAliases = map[string][]string{
+			ntwk.Name: o.NetworkAliases,
+		}
+	}
+
+}
+
+func (o *ContainerOpts) ConfigurationExtend(ctx context.Context, ntwk *testcontainers.DockerNetwork, containerCustomize ...testcontainers.ContainerCustomizer) []testcontainers.ContainerCustomizer {
+
+	if o.EnableLogging {
+		containerCustomize = append(
+			containerCustomize,
+			testcontainers.WithLogConsumerConfig(LogConfig(ctx, o.LoggingTimeout)),
+		)
+	}
+
+	if o.UseHostMode {
+		containerCustomize = append(containerCustomize, testcontainers.WithHostConfigModifier(
+			func(hostConfig *container.HostConfig) {
+				hostConfig.NetworkMode = HostNetworkingMode
+			}))
+	} else {
+
+		containerCustomize = append(containerCustomize,
+			testcontainers.WithExposedPorts(o.Port),
+			network.WithNetwork([]string{ntwk.Name}, ntwk),
+			network.WithNetworkName(o.NetworkAliases, ntwk.Name))
+	}
+
+	return containerCustomize
 }
 
 // ContainerOption is a type that can be used to configure the container creation request.
@@ -68,10 +119,17 @@ func WithUseHostMode(useHostMode bool) ContainerOption {
 	}
 }
 
+// WithNetworkAliases allows to set the network aliases to use for testing.
+func WithNetworkAliases(networkAliases []string) ContainerOption {
+	return func(original *ContainerOpts) {
+		original.NetworkAliases = networkAliases
+	}
+}
+
 // WithDisableLogging allows to set the disable logging to use for testing.
 func WithDisableLogging(disableLogging bool) ContainerOption {
 	return func(original *ContainerOpts) {
-		original.DisableLogging = disableLogging
+		original.EnableLogging = disableLogging
 	}
 }
 

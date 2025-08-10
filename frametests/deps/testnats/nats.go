@@ -5,11 +5,12 @@ import (
 	"fmt"
 	"net"
 
-	"github.com/pitabwire/frame"
-	"github.com/pitabwire/frame/frametests/definition"
 	"github.com/pitabwire/util"
 	"github.com/testcontainers/testcontainers-go"
 	tcNats "github.com/testcontainers/testcontainers-go/modules/nats"
+
+	"github.com/pitabwire/frame"
+	"github.com/pitabwire/frame/frametests/definition"
 )
 
 const (

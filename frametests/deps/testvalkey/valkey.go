@@ -5,11 +5,12 @@ import (
 	"fmt"
 	"net"
 
-	"github.com/pitabwire/frame"
-	"github.com/pitabwire/frame/frametests/definition"
 	"github.com/pitabwire/util"
 	"github.com/testcontainers/testcontainers-go"
 	tcValKey "github.com/testcontainers/testcontainers-go/modules/valkey"
+
+	"github.com/pitabwire/frame"
+	"github.com/pitabwire/frame/frametests/definition"
 )
 
 const (
@@ -65,7 +66,6 @@ func (d *valKeyDependancy) Container() testcontainers.Container {
 }
 
 func (d *valKeyDependancy) Setup(ctx context.Context, ntwk *testcontainers.DockerNetwork) error {
-
 	containerCustomize := d.opts.ConfigurationExtend(ctx, ntwk)
 	valkeyContainer, err := tcValKey.Run(ctx, d.opts.ImageName, containerCustomize...)
 

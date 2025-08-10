@@ -36,7 +36,11 @@ func (o *ContainerOpts) Setup(opts ...ContainerOption) {
 	}
 }
 
-func (o *ContainerOpts) Configure(ctx context.Context, ntwk *testcontainers.DockerNetwork, containerRequest *testcontainers.ContainerRequest) {
+func (o *ContainerOpts) Configure(
+	ctx context.Context,
+	ntwk *testcontainers.DockerNetwork,
+	containerRequest *testcontainers.ContainerRequest,
+) {
 	if o.EnableLogging {
 		containerRequest.LogConsumerCfg = LogConfig(ctx, o.LoggingTimeout)
 	}
@@ -53,11 +57,13 @@ func (o *ContainerOpts) Configure(ctx context.Context, ntwk *testcontainers.Dock
 			ntwk.Name: o.NetworkAliases,
 		}
 	}
-
 }
 
-func (o *ContainerOpts) ConfigurationExtend(ctx context.Context, ntwk *testcontainers.DockerNetwork, containerCustomize ...testcontainers.ContainerCustomizer) []testcontainers.ContainerCustomizer {
-
+func (o *ContainerOpts) ConfigurationExtend(
+	ctx context.Context,
+	ntwk *testcontainers.DockerNetwork,
+	containerCustomize ...testcontainers.ContainerCustomizer,
+) []testcontainers.ContainerCustomizer {
 	if o.EnableLogging {
 		containerCustomize = append(
 			containerCustomize,
@@ -71,7 +77,6 @@ func (o *ContainerOpts) ConfigurationExtend(ctx context.Context, ntwk *testconta
 				hostConfig.NetworkMode = HostNetworkingMode
 			}))
 	} else {
-
 		containerCustomize = append(containerCustomize,
 			testcontainers.WithExposedPorts(o.Port),
 			network.WithNetwork([]string{ntwk.Name}, ntwk),

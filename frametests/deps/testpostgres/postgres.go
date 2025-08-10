@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/docker/docker/api/types/container"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/pitabwire/util"
@@ -19,7 +20,7 @@ import (
 	"github.com/testcontainers/testcontainers-go/wait"
 
 	"github.com/pitabwire/frame"
-	"github.com/pitabwire/frame/frametests/testdef"
+	"github.com/pitabwire/frame/frametests/definition"
 )
 
 const (
@@ -35,6 +36,8 @@ const (
 	DBPassword = "fr@m3"
 	// DBName is the default database name for the PostgreSQL test database.
 	DBName = "frame_test"
+	// DBPort is the default port for the PostgreSQL test database.
+	DBPort = "5432"
 
 	// OccurrenceValue is the number of occurrences to wait for in the log pattern.
 	OccurrenceValue = 2
@@ -43,9 +46,7 @@ const (
 )
 
 type postgreSQLDependancy struct {
-	image        string
-	username     string
-	password     string
+	opts         definition.ContainerOpts
 	dbname       string
 	conn         frame.DataSource
 	internalConn frame.DataSource
@@ -53,21 +54,29 @@ type postgreSQLDependancy struct {
 	container *tcPostgres.PostgresContainer
 }
 
-func NewPGDep() testdef.TestResource {
-	return NewPGDepWithCred(PostgresqlDBImage, DBUser, DBPassword, DBName)
+func New() definition.TestResource {
+	return NewWithOpts(DBName)
 }
 
-func NewPGDepWithCred(pgImage, pgUserName, pgPassword, pgDBName string) testdef.TestResource {
+func NewWithOpts(dbName string, containerOpts ...definition.ContainerOption) definition.TestResource {
+	opts := definition.ContainerOpts{
+		ImageName:      PostgresqlDBImage,
+		UserName:       DBUser,
+		Password:       DBPassword,
+		Port:           DBPort,
+		UseHostMode:    false,
+		DisableLogging: true,
+	}
+	opts.Setup(containerOpts...)
+
 	return &postgreSQLDependancy{
-		image:    pgImage,
-		username: pgUserName,
-		password: pgPassword,
-		dbname:   pgDBName,
+		opts:   opts,
+		dbname: dbName,
 	}
 }
 
 func (d *postgreSQLDependancy) Name() string {
-	return d.image
+	return d.opts.ImageName
 }
 
 func (d *postgreSQLDependancy) Container() testcontainers.Container {
@@ -76,16 +85,27 @@ func (d *postgreSQLDependancy) Container() testcontainers.Container {
 
 // Setup creates a PostgreSQL testcontainer and sets the container.
 func (d *postgreSQLDependancy) Setup(ctx context.Context, ntwk *testcontainers.DockerNetwork) error {
-	pgContainer, err := tcPostgres.Run(ctx, d.image,
+	pgContainer, err := tcPostgres.Run(ctx, d.opts.ImageName,
 		tcPostgres.WithDatabase(d.dbname),
-		tcPostgres.WithUsername(d.username),
-		tcPostgres.WithPassword(d.password),
+		tcPostgres.WithUsername(d.opts.UserName),
+		tcPostgres.WithPassword(d.opts.Password),
 		testcontainers.WithWaitStrategy(
 			wait.ForLog("database system is ready to accept connections").
 				WithOccurrence(OccurrenceValue).
 				WithStartupTimeout(TimeoutInSeconds*time.Second)),
-		network.WithNetwork([]string{ntwk.Name}, ntwk))
 
+		network.WithNetwork([]string{ntwk.Name}, ntwk),
+		network.WithNetworkName([]string{"postgres", "db-postgres"}, ntwk.Name),
+
+		testcontainers.WithHostConfigModifier(
+			func(hostConfig *container.HostConfig) {
+				if d.opts.UseHostMode {
+					hostConfig.NetworkMode = "host"
+				}
+				hostConfig.AutoRemove = true
+			}),
+		testcontainers.WithLogConsumerConfig(definition.LogConfig(ctx, d.opts.DisableLogging, d.opts.LoggingTimeout)),
+	)
 	if err != nil {
 		return fmt.Errorf("failed to start postgres container: %w", err)
 	}
@@ -104,9 +124,9 @@ func (d *postgreSQLDependancy) Setup(ctx context.Context, ntwk *testcontainers.D
 
 	connStr := fmt.Sprintf(
 		"postgres://%s:%s@%s/%s",
-		d.username,
-		d.password,
-		net.JoinHostPort(internalIP, "5432"),
+		d.opts.UserName,
+		d.opts.Password,
+		net.JoinHostPort(internalIP, d.opts.Port),
 		d.dbname,
 	)
 

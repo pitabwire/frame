@@ -10,9 +10,9 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	"github.com/pitabwire/frame/frametests"
+	"github.com/pitabwire/frame/frametests/definition"
 	"github.com/pitabwire/frame/frametests/deps/testoryhydra"
 	"github.com/pitabwire/frame/frametests/deps/testpostgres"
-	"github.com/pitabwire/frame/frametests/testdef"
 )
 
 // HydraImageSetupTestSuite extends FrameBaseTestSuite for comprehensive search testing.
@@ -21,12 +21,12 @@ type HydraImageSetupTestSuite struct {
 }
 
 func (h *HydraImageSetupTestSuite) SetupSuite() {
-	h.InitResourceFunc = func(_ context.Context) []testdef.TestResource {
-		pgDep := testpostgres.NewPGDep()
+	h.InitResourceFunc = func(_ context.Context) []definition.TestResource {
+		pgDep := testpostgres.New()
 
-		return []testdef.TestResource{
+		return []definition.TestResource{
 			pgDep,
-			testoryhydra.NewWithDBDependancy(testoryhydra.OryHydraImage, testoryhydra.HydraConfiguration, pgDep),
+			testoryhydra.NewWithOpts(testoryhydra.HydraConfiguration, definition.WithDependancies(pgDep)),
 		}
 	}
 
@@ -39,11 +39,11 @@ func TestHydraImageSetup(t *testing.T) {
 
 // TestHydraImageSetup tests the hydra image setup.
 func (h *HydraImageSetupTestSuite) TestHydraImageSetup() {
-	depOptions := []*testdef.DependancyOption{
-		testdef.NewDependancyOption("hydra setup", "hydra_t", h.Resources()),
+	depOptions := []*definition.DependancyOption{
+		definition.NewDependancyOption("hydra setup", "hydra_t", h.Resources()),
 	}
 
-	frametests.WithTestDependancies(h.T(), depOptions, func(t *testing.T, depOpt *testdef.DependancyOption) {
+	frametests.WithTestDependancies(h.T(), depOptions, func(t *testing.T, depOpt *definition.DependancyOption) {
 		testCases := []struct {
 			name   string
 			path   string

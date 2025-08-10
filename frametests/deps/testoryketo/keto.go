@@ -2,81 +2,86 @@ package testoryketo
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"strings"
 
+	"github.com/docker/docker/api/types/container"
+	"github.com/docker/go-connections/nat"
 	"github.com/pitabwire/util"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
 
 	"github.com/pitabwire/frame"
-	"github.com/pitabwire/frame/frametests"
-	"github.com/pitabwire/frame/frametests/testdef"
+	"github.com/pitabwire/frame/frametests/definition"
 )
 
 const (
+	// OryKetoImage is the Ory Keto Image.
 	OryKetoImage = "oryd/keto:latest"
+	// KetoPort is the default port for Keto.
+	KetoPort = "4467"
 
 	KetoConfiguration = `
-## ORY Keto Configuration
-#
+version: v0.12.0
 
-## serve ##
-#
+dsn: memory
+
 serve:
-  ## Write API (http and gRPC) ##
-  #
-  write:
-    host: 0.0.0.0
-
-
-  ## Read API (http and gRPC) ##
-  #
   read:
     host: 0.0.0.0
+    port: 4466
+  write:
+    host: 0.0.0.0
+    port: 4467
+
 log:
-  level: info
+  level: debug
+  format: text
+
 namespaces:
   - id: 0
-    name: default
+    name: files
+    config:
+      location: file://etc/config/keto_namespaces
 
 `
 )
 
 type ketoDependancy struct {
-	image              string
-	configuration      string
-	databaseConnection string
-	databaseDep        testdef.DependancyConn
-	conn               frame.DataSource
-	internalConn       frame.DataSource
+	opts          definition.ContainerOpts
+	configuration string
+	conn          frame.DataSource
+	internalConn  frame.DataSource
 
 	container testcontainers.Container
 }
 
-func New() testdef.TestResource {
-	return NewWithCred(OryKetoImage, KetoConfiguration, "")
+func New() definition.TestResource {
+	return NewWithOpts(KetoConfiguration)
 }
 
-func NewWithCred(image, configuration, databaseConnection string) testdef.TestResource {
-	return &ketoDependancy{
-		image:              image,
-		configuration:      configuration,
-		databaseConnection: databaseConnection,
+func NewWithOpts(
+	configuration string,
+	containerOpts ...definition.ContainerOption,
+) definition.TestResource {
+	opts := definition.ContainerOpts{
+		ImageName:      OryKetoImage,
+		Port:           KetoPort,
+		UseHostMode:    false,
+		DisableLogging: true,
 	}
-}
+	opts.Setup(containerOpts...)
 
-func NewWithDBDependancy(image, configuration string, dbDep testdef.DependancyConn) testdef.TestResource {
 	return &ketoDependancy{
-		image:         image,
+		opts:          opts,
 		configuration: configuration,
-		databaseDep:   dbDep,
 	}
 }
 
 func (d *ketoDependancy) Name() string {
-	return d.image
+	return d.opts.ImageName
 }
 
 func (d *ketoDependancy) Container() testcontainers.Container {
@@ -88,9 +93,9 @@ func (d *ketoDependancy) migrateContainer(
 	ntwk *testcontainers.DockerNetwork,
 	databaseURL string,
 ) error {
-	container, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
+	ketoContainer, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
 		ContainerRequest: testcontainers.ContainerRequest{
-			Image:    OryKetoImage,
+			Image:    d.opts.ImageName,
 			Networks: []string{ntwk.Name},
 			Cmd:      []string{"migrate", "sql", "up", "--read-from-env", "--yes"},
 			Env: map[string]string{
@@ -102,11 +107,18 @@ func (d *ketoDependancy) migrateContainer(
 				{
 					Reader:            strings.NewReader(d.configuration),
 					ContainerFilePath: "/etc/config/keto.yml",
-					FileMode:          testdef.ContainerFileMode,
+					FileMode:          definition.ContainerFileMode,
 				},
 			},
-			WaitingFor:     wait.ForExit(),
-			LogConsumerCfg: frametests.LogConfig(ctx, frametests.DefaultLogProductionTimeout),
+			WaitingFor: wait.ForExit(),
+			HostConfigModifier: func(hostConfig *container.HostConfig) {
+				if d.opts.UseHostMode {
+					hostConfig.NetworkMode = "host"
+				}
+
+				hostConfig.AutoRemove = true
+			},
+			LogConsumerCfg: definition.LogConfig(ctx, d.opts.DisableLogging, d.opts.LoggingTimeout),
 		},
 
 		Started: true,
@@ -115,7 +127,7 @@ func (d *ketoDependancy) migrateContainer(
 		return err
 	}
 
-	err = container.Terminate(ctx)
+	err = ketoContainer.Terminate(ctx)
 	if err != nil {
 		return err
 	}
@@ -123,62 +135,75 @@ func (d *ketoDependancy) migrateContainer(
 }
 
 func (d *ketoDependancy) Setup(ctx context.Context, ntwk *testcontainers.DockerNetwork) error {
-	databaseURL := d.databaseConnection
-	if d.databaseDep != nil {
-		databaseURL = d.databaseDep.GetInternalDS().String()
+	if len(d.opts.Dependancies) == 0 || !d.opts.Dependancies[0].GetDS().IsDB() {
+		return errors.New("no Database dependencies was supplied")
 	}
 
+	databaseURL := d.opts.Dependancies[0].GetDS().String()
 	err := d.migrateContainer(ctx, ntwk, databaseURL)
 	if err != nil {
 		return err
 	}
+	ketoPort, err := nat.NewPort("tcp", d.opts.Port)
+	if err != nil {
+		return err
+	}
 
-	container, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
+	ketoContainer, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
 		ContainerRequest: testcontainers.ContainerRequest{
-			Image:        OryKetoImage,
-			Networks:     []string{ntwk.Name},
-			ExposedPorts: []string{"4466/tcp", "4467/tcp"},
+			Image:    d.opts.ImageName,
+			Networks: []string{ntwk.Name},
+			NetworkAliases: map[string][]string{
+				ntwk.Name: {"keto", "auth-keto"},
+			},
+			ExposedPorts: []string{fmt.Sprintf("%s/tcp", d.opts.Port), "4466/tcp"},
 			Cmd:          []string{"serve", "all", "--config", "/etc/config/keto.yml", "--dev"},
 			Env: map[string]string{
 				"LOG_LEVEL": "debug",
-				"DSN":       d.databaseConnection,
+				"DSN":       databaseURL,
 			},
 			Files: []testcontainers.ContainerFile{
 				{
 					Reader:            strings.NewReader(d.configuration),
 					ContainerFilePath: "/etc/config/keto.yml",
-					FileMode:          testdef.ContainerFileMode,
+					FileMode:          definition.ContainerFileMode,
 				},
 			},
-			WaitingFor:     wait.ForHTTP("/health/ready").WithPort("4445/tcp"),
-			LogConsumerCfg: frametests.LogConfig(ctx, frametests.DefaultLogProductionTimeout),
+			WaitingFor: wait.ForHTTP("/health/ready").WithPort(ketoPort),
+			HostConfigModifier: func(hostConfig *container.HostConfig) {
+				if d.opts.UseHostMode {
+					hostConfig.NetworkMode = "host"
+				}
+				hostConfig.AutoRemove = true
+			},
+			LogConsumerCfg: definition.LogConfig(ctx, d.opts.DisableLogging, d.opts.LoggingTimeout),
 		},
 		Started: true,
 	})
 
 	if err != nil {
-		return fmt.Errorf("failed to start container: %w", err)
+		return fmt.Errorf("failed to start ketoContainer: %w", err)
 	}
 
-	port, err := container.MappedPort(ctx, "4467/tcp")
+	port, err := ketoContainer.MappedPort(ctx, ketoPort)
 	if err != nil {
-		return fmt.Errorf("failed to get connection string for container: %w", err)
+		return fmt.Errorf("failed to get connection string for ketoContainer: %w", err)
 	}
 
-	host, err := container.Host(ctx)
+	host, err := ketoContainer.Host(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to get connection string for container: %w", err)
+		return fmt.Errorf("failed to get connection string for ketoContainer: %w", err)
 	}
 
 	d.conn = frame.DataSource(fmt.Sprintf("http://%s", net.JoinHostPort(host, port.Port())))
 
-	internalIP, err := container.ContainerIP(ctx)
+	internalIP, err := ketoContainer.ContainerIP(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to get internal host ip for container: %w", err)
+		return fmt.Errorf("failed to get internal host ip for ketoContainer: %w", err)
 	}
-	d.internalConn = frame.DataSource(fmt.Sprintf("http://%s", net.JoinHostPort(internalIP, "4445")))
+	d.internalConn = frame.DataSource(fmt.Sprintf("http://%s", net.JoinHostPort(internalIP, d.opts.Port)))
 
-	d.container = container
+	d.container = ketoContainer
 	return nil
 }
 

@@ -14,9 +14,9 @@ import (
 	"github.com/pitabwire/frame"
 	"github.com/pitabwire/frame/framedata"
 	"github.com/pitabwire/frame/frametests"
+	"github.com/pitabwire/frame/frametests/definition"
 	"github.com/pitabwire/frame/frametests/deps/testnats"
 	"github.com/pitabwire/frame/frametests/deps/testpostgres"
-	"github.com/pitabwire/frame/frametests/testdef"
 )
 
 // SearchTestSuite extends FrameBaseTestSuite for comprehensive search testing.
@@ -28,10 +28,10 @@ type SearchTestSuite struct {
 func TestSearchSuite(t *testing.T) {
 	suite.Run(t, &SearchTestSuite{
 		FrameBaseTestSuite: frametests.FrameBaseTestSuite{
-			InitResourceFunc: func(_ context.Context) []testdef.TestResource {
-				return []testdef.TestResource{
-					testpostgres.NewPGDep(),
-					testnats.NewNatsDep(),
+			InitResourceFunc: func(_ context.Context) []definition.TestResource {
+				return []definition.TestResource{
+					testpostgres.New(),
+					testnats.New(),
 				}
 			},
 		},
@@ -302,11 +302,11 @@ func (s *SearchTestSuite) TestPaginatorStop() {
 
 // TestStableSearchWithDependencies tests StableSearch with real infrastructure dependencies.
 func (s *SearchTestSuite) TestStableSearchWithDependencies() {
-	depOptions := []*testdef.DependancyOption{
-		testdef.NewDependancyOption("postgres_nats", "test", s.Resources()),
+	depOptions := []*definition.DependancyOption{
+		definition.NewDependancyOption("postgres_nats", "test", s.Resources()),
 	}
 
-	frametests.WithTestDependancies(s.T(), depOptions, func(t *testing.T, depOpt *testdef.DependancyOption) {
+	frametests.WithTestDependancies(s.T(), depOptions, func(t *testing.T, depOpt *definition.DependancyOption) {
 		testCases := []struct {
 			name          string
 			query         *framedata.SearchQuery
@@ -390,7 +390,7 @@ func (s *SearchTestSuite) TestStableSearchWithDependencies() {
 }
 
 // runStableSearchTests is a helper function to reduce complexity in TestStableSearchWithDependencies.
-func (s *SearchTestSuite) runStableSearchTests(t *testing.T, depOpt *testdef.DependancyOption, testCases []struct {
+func (s *SearchTestSuite) runStableSearchTests(t *testing.T, depOpt *definition.DependancyOption, testCases []struct {
 	name          string
 	query         *framedata.SearchQuery
 	searchFunc    func(ctx context.Context, query *framedata.SearchQuery) ([]*TestItem, error)
@@ -603,11 +603,11 @@ func (s *SearchTestSuite) TestPaginatorEdgeCases() {
 
 // TestStableSearchConcurrency tests concurrent access to StableSearch.
 func (s *SearchTestSuite) TestStableSearchConcurrency() {
-	depOptions := []*testdef.DependancyOption{
-		testdef.NewDependancyOption("postgres_nats", "test", s.Resources()),
+	depOptions := []*definition.DependancyOption{
+		definition.NewDependancyOption("postgres_nats", "test", s.Resources()),
 	}
 
-	frametests.WithTestDependancies(s.T(), depOptions, func(t *testing.T, depOpt *testdef.DependancyOption) {
+	frametests.WithTestDependancies(s.T(), depOptions, func(t *testing.T, depOpt *definition.DependancyOption) {
 		ctx := context.Background()
 
 		// Create a service with the test dependencies
@@ -682,11 +682,11 @@ func (s *SearchTestSuite) TestStableSearchConcurrency() {
 
 // TestStableSearchMemoryManagement tests memory handling with large result sets.
 func (s *SearchTestSuite) TestStableSearchMemoryManagement() {
-	depOptions := []*testdef.DependancyOption{
-		testdef.NewDependancyOption("postgres_nats", "test", s.Resources()),
+	depOptions := []*definition.DependancyOption{
+		definition.NewDependancyOption("postgres_nats", "test", s.Resources()),
 	}
 
-	frametests.WithTestDependancies(s.T(), depOptions, func(t *testing.T, depOpt *testdef.DependancyOption) {
+	frametests.WithTestDependancies(s.T(), depOptions, func(t *testing.T, depOpt *definition.DependancyOption) {
 		ctx := context.Background()
 
 		// Create a service with the test dependencies
@@ -864,11 +864,11 @@ func (s *SearchTestSuite) TestPaginatorStressTesting() {
 
 // TestStableSearchErrorRecovery tests error recovery scenarios.
 func (s *SearchTestSuite) TestStableSearchErrorRecovery() {
-	depOptions := []*testdef.DependancyOption{
-		testdef.NewDependancyOption("postgres_nats", "test", s.Resources()),
+	depOptions := []*definition.DependancyOption{
+		definition.NewDependancyOption("postgres_nats", "test", s.Resources()),
 	}
 
-	frametests.WithTestDependancies(s.T(), depOptions, func(t *testing.T, depOpt *testdef.DependancyOption) {
+	frametests.WithTestDependancies(s.T(), depOptions, func(t *testing.T, depOpt *definition.DependancyOption) {
 		testCases := []struct {
 			name       string
 			searchFunc func(ctx context.Context, query *framedata.SearchQuery) ([]*TestItem, error)
@@ -911,7 +911,7 @@ func (s *SearchTestSuite) TestStableSearchErrorRecovery() {
 }
 
 // runErrorRecoveryTests is a helper function to reduce complexity in TestStableSearchErrorRecovery.
-func (s *SearchTestSuite) runErrorRecoveryTests(t *testing.T, depOpt *testdef.DependancyOption, testCases []struct {
+func (s *SearchTestSuite) runErrorRecoveryTests(t *testing.T, depOpt *definition.DependancyOption, testCases []struct {
 	name       string
 	searchFunc func(ctx context.Context, query *framedata.SearchQuery) ([]*TestItem, error)
 	expectErr  bool

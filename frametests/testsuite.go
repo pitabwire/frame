@@ -3,7 +3,6 @@ package frametests
 import (
 	"context"
 	"testing"
-	"time"
 
 	"github.com/pitabwire/util"
 	"github.com/stretchr/testify/require"
@@ -12,42 +11,17 @@ import (
 	"github.com/testcontainers/testcontainers-go/network"
 	"go.uber.org/mock/gomock"
 
-	"github.com/pitabwire/frame/frametests/testdef"
+	"github.com/pitabwire/frame/frametests/definition"
 )
 
 // FrameBaseTestSuite provides a base test suite with all necessary test components.
 type FrameBaseTestSuite struct {
 	suite.Suite
 	Network   *testcontainers.DockerNetwork
-	resources []testdef.TestResource
+	resources []definition.TestResource
 	Ctrl      *gomock.Controller
 
-	InitResourceFunc func(ctx context.Context) []testdef.TestResource
-}
-
-const DefaultLogProductionTimeout = 10 * time.Second
-
-type StdoutLogConsumer struct {
-	log *util.LogEntry
-}
-
-func LogConfig(ctx context.Context, timeout time.Duration) *testcontainers.LogConsumerConfig {
-	return &testcontainers.LogConsumerConfig{
-		Opts: []testcontainers.LogProductionOption{testcontainers.WithLogProductionTimeout(timeout)},
-		Consumers: []testcontainers.LogConsumer{&StdoutLogConsumer{
-			log: util.Log(ctx),
-		}},
-	}
-}
-
-// Accept prints the log to stdout.
-func (s *StdoutLogConsumer) Accept(l testcontainers.Log) {
-	if l.LogType == "STDOUT" {
-		s.log.Info(string(l.Content))
-	}
-	if l.LogType == "STDERR" {
-		s.log.Error(string(l.Content))
-	}
+	InitResourceFunc func(ctx context.Context) []definition.TestResource
 }
 
 // SetupSuite initialises the test environment for the test suite.
@@ -60,7 +34,12 @@ func (s *FrameBaseTestSuite) SetupSuite() {
 
 	log := util.Log(ctx)
 
-	net, err := network.New(ctx)
+	// Create a custom bridge network with modern API
+	net, err := network.New(ctx,
+		network.WithDriver("bridge"),
+		network.WithAttachable(),
+	)
+
 	require.NoError(t, err, "could not create network")
 	s.Network = net
 
@@ -77,8 +56,8 @@ func (s *FrameBaseTestSuite) SetupSuite() {
 	}
 }
 
-func (s *FrameBaseTestSuite) Resources() []testdef.DependancyConn {
-	var deps []testdef.DependancyConn
+func (s *FrameBaseTestSuite) Resources() []definition.DependancyConn {
+	var deps []definition.DependancyConn
 	for _, dep := range s.resources {
 		deps = append(deps, dep)
 	}
@@ -107,8 +86,8 @@ func (s *FrameBaseTestSuite) TearDownSuite() {
 
 // WithTestDependancies Creates subtests with each known DependancyOption.
 func WithTestDependancies(t *testing.T,
-	options []*testdef.DependancyOption,
-	testFn func(t *testing.T, db *testdef.DependancyOption)) {
+	options []*definition.DependancyOption,
+	testFn func(t *testing.T, db *definition.DependancyOption)) {
 	for _, opt := range options {
 		t.Run(opt.Name(), func(tt *testing.T) {
 			testFn(tt, opt)

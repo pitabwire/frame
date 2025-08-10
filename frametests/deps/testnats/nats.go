@@ -5,13 +5,14 @@ import (
 	"fmt"
 	"net"
 
+	"github.com/docker/docker/api/types/container"
 	"github.com/pitabwire/util"
 	"github.com/testcontainers/testcontainers-go"
 	tcNats "github.com/testcontainers/testcontainers-go/modules/nats"
 	"github.com/testcontainers/testcontainers-go/network"
 
 	"github.com/pitabwire/frame"
-	"github.com/pitabwire/frame/frametests/testdef"
+	"github.com/pitabwire/frame/frametests/definition"
 )
 
 const (
@@ -27,10 +28,8 @@ const (
 )
 
 type natsDependancy struct {
-	image    string
-	username string
-	password string
-	cluster  string
+	opts    definition.ContainerOpts
+	cluster string
 
 	conn         frame.DataSource
 	internalConn frame.DataSource
@@ -38,33 +37,53 @@ type natsDependancy struct {
 	container *tcNats.NATSContainer
 }
 
-func NewNatsDep() testdef.TestResource {
-	return NewNatsDepWithCred(NatsImage, NatsUser, NatsPass, NatsCluster)
+func New() definition.TestResource {
+	return NewWithOpts(NatsCluster)
 }
 
-func NewNatsDepWithCred(natsImage, natsUserName, natsPassword, cluster string) testdef.TestResource {
+func NewWithOpts(cluster string, containerOpts ...definition.ContainerOption) definition.TestResource {
+	opts := definition.ContainerOpts{
+		ImageName:      NatsImage,
+		UserName:       NatsUser,
+		Password:       NatsPass,
+		Port:           NatsPort,
+		UseHostMode:    false,
+		DisableLogging: true,
+	}
+	opts.Setup(containerOpts...)
+
 	return &natsDependancy{
-		image:    natsImage,
-		username: natsUserName,
-		password: natsPassword,
-		cluster:  cluster,
+		cluster: cluster,
+		opts:    opts,
 	}
 }
 
 func (d *natsDependancy) Name() string {
-	return d.image
+	return d.opts.ImageName
 }
 func (d *natsDependancy) Container() testcontainers.Container {
 	return d.container
 }
 
 func (d *natsDependancy) Setup(ctx context.Context, ntwk *testcontainers.DockerNetwork) error {
-	natsqContainer, err := tcNats.Run(ctx, d.image,
+	natsqContainer, err := tcNats.Run(ctx, d.opts.ImageName,
 		testcontainers.WithCmdArgs("--js", "-DVV"),
-		tcNats.WithUsername(d.username),
-		tcNats.WithPassword(d.password),
+		tcNats.WithUsername(d.opts.UserName),
+		tcNats.WithPassword(d.opts.Password),
 
 		network.WithNetwork([]string{ntwk.Name}, ntwk),
+		network.WithNetworkName([]string{"nats", "queue-nats"}, ntwk.Name),
+
+		testcontainers.WithHostConfigModifier(
+
+			func(hostConfig *container.HostConfig) {
+				if d.opts.UseHostMode {
+					hostConfig.NetworkMode = "host"
+				}
+
+				hostConfig.AutoRemove = true
+			}),
+		testcontainers.WithLogConsumerConfig(definition.LogConfig(ctx, d.opts.DisableLogging, d.opts.LoggingTimeout)),
 	)
 	if err != nil {
 		return fmt.Errorf("failed to start nats container: %w", err)
@@ -81,7 +100,7 @@ func (d *natsDependancy) Setup(ctx context.Context, ntwk *testcontainers.DockerN
 	if err != nil {
 		return fmt.Errorf("failed to get internal host ip for container: %w", err)
 	}
-	d.internalConn = frame.DataSource(fmt.Sprintf("nats://%s", net.JoinHostPort(internalIP, "4222")))
+	d.internalConn = frame.DataSource(fmt.Sprintf("nats://%s", net.JoinHostPort(internalIP, d.opts.Port)))
 
 	d.container = natsqContainer
 	return nil

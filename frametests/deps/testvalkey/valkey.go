@@ -5,20 +5,22 @@ import (
 	"fmt"
 	"net"
 
+	"github.com/docker/docker/api/types/container"
 	"github.com/pitabwire/util"
 	"github.com/testcontainers/testcontainers-go"
 	tcValKey "github.com/testcontainers/testcontainers-go/modules/valkey"
 	"github.com/testcontainers/testcontainers-go/network"
 
 	"github.com/pitabwire/frame"
-	"github.com/pitabwire/frame/frametests/testdef"
+	"github.com/pitabwire/frame/frametests/definition"
 )
 
 const (
 
 	// ValKey configuration.
 
-	ValKeyImage = "docker.io/valkey/valkey:8.1"
+	ValKeyImage = "docker.io/valkey/valkey:latest"
+	ValKeyPort  = "6379"
 
 	ValKeyUser    = "frame"
 	ValKeyPass    = "fr@m3"
@@ -26,10 +28,8 @@ const (
 )
 
 type valKeyDependancy struct {
-	image    string
-	username string
-	password string
-	cluster  string
+	opts    definition.ContainerOpts
+	cluster string
 
 	conn         frame.DataSource
 	internalConn frame.DataSource
@@ -37,21 +37,29 @@ type valKeyDependancy struct {
 	container *tcValKey.ValkeyContainer
 }
 
-func NewValKeyDep() testdef.TestResource {
-	return NewValKeyDepWithCred(ValKeyImage, ValKeyUser, ValKeyPass, ValKeyCluster)
+func New() definition.TestResource {
+	return NewWithOpts(ValKeyCluster)
 }
 
-func NewValKeyDepWithCred(image, userName, password, cluster string) testdef.TestResource {
+func NewWithOpts(cluster string, containerOpts ...definition.ContainerOption) definition.TestResource {
+	opts := definition.ContainerOpts{
+		ImageName:      ValKeyImage,
+		UserName:       ValKeyUser,
+		Password:       ValKeyPass,
+		Port:           ValKeyPort,
+		UseHostMode:    false,
+		DisableLogging: true,
+	}
+	opts.Setup(containerOpts...)
+
 	return &valKeyDependancy{
-		image:    image,
-		username: userName,
-		password: password,
-		cluster:  cluster,
+		cluster: cluster,
+		opts:    opts,
 	}
 }
 
 func (d *valKeyDependancy) Name() string {
-	return d.image
+	return d.opts.ImageName
 }
 
 func (d *valKeyDependancy) Container() testcontainers.Container {
@@ -59,24 +67,36 @@ func (d *valKeyDependancy) Container() testcontainers.Container {
 }
 
 func (d *valKeyDependancy) Setup(ctx context.Context, ntwk *testcontainers.DockerNetwork) error {
-	container, err := tcValKey.Run(ctx, d.image, network.WithNetwork([]string{ntwk.Name}, ntwk))
+	valkeyContainer, err := tcValKey.Run(ctx, d.opts.ImageName,
+		network.WithNetwork([]string{ntwk.Name}, ntwk),
+		network.WithNetworkName([]string{"valkey", "cache-valkey"}, ntwk.Name),
+
+		testcontainers.WithHostConfigModifier(
+			func(hostConfig *container.HostConfig) {
+				if d.opts.UseHostMode {
+					hostConfig.NetworkMode = "host"
+				}
+				hostConfig.AutoRemove = true
+			}),
+		testcontainers.WithLogConsumerConfig(definition.LogConfig(ctx, d.opts.DisableLogging, d.opts.LoggingTimeout)),
+	)
 	if err != nil {
-		return fmt.Errorf("failed to start container: %w", err)
+		return fmt.Errorf("failed to start valkeyContainer: %w", err)
 	}
 
-	conn, err := container.ConnectionString(ctx)
+	conn, err := valkeyContainer.ConnectionString(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to get connection string for container: %w", err)
+		return fmt.Errorf("failed to get connection string for valkeyContainer: %w", err)
 	}
 
 	d.conn = frame.DataSource(conn)
 
-	internalIP, err := container.ContainerIP(ctx)
+	internalIP, err := valkeyContainer.ContainerIP(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to get internal host ip for container: %w", err)
+		return fmt.Errorf("failed to get internal host ip for valkeyContainer: %w", err)
 	}
-	d.internalConn = frame.DataSource(fmt.Sprintf("redis://%s", net.JoinHostPort(internalIP, "6379")))
-	d.container = container
+	d.internalConn = frame.DataSource(fmt.Sprintf("redis://%s", net.JoinHostPort(internalIP, d.opts.Port)))
+	d.container = valkeyContainer
 	return nil
 }
 

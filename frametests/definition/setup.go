@@ -1,4 +1,4 @@
-package testdef
+package definition
 
 import (
 	"context"

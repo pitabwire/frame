@@ -403,8 +403,8 @@ func (s *SearchTestSuite) runStableSearchTests(t *testing.T, depOpt *definition.
 
 			// Create a service with the test dependencies
 			ctx, svc := frame.NewServiceWithContext(ctx, "search-test",
-				frame.WithDatastoreConnection(depOpt.Database()[0].GetDS().String(), false),
-				frame.WithRegisterPublisher("test-queue", depOpt.Queue()[0].GetDS().String()),
+				frame.WithDatastoreConnection(depOpt.Database(ctx)[0].GetDS(ctx).String(), false),
+				frame.WithRegisterPublisher("test-queue", depOpt.Queue(ctx)[0].GetDS(ctx).String()),
 			)
 			defer svc.Stop(ctx)
 
@@ -612,8 +612,8 @@ func (s *SearchTestSuite) TestStableSearchConcurrency() {
 
 		// Create a service with the test dependencies
 		ctx, svc := frame.NewServiceWithContext(ctx, "search-test",
-			frame.WithDatastoreConnection(depOpt.Database()[0].GetDS().String(), false),
-			frame.WithRegisterPublisher("test-queue", depOpt.Queue()[0].GetDS().String()),
+			frame.WithDatastoreConnection(depOpt.Database(ctx)[0].GetDS(ctx).String(), false),
+			frame.WithRegisterPublisher("test-queue", depOpt.Queue(ctx)[0].GetDS(ctx).String()),
 		)
 		defer svc.Stop(ctx)
 
@@ -691,8 +691,8 @@ func (s *SearchTestSuite) TestStableSearchMemoryManagement() {
 
 		// Create a service with the test dependencies
 		ctx, svc := frame.NewServiceWithContext(ctx, "search-test",
-			frame.WithDatastoreConnection(depOpt.Database()[0].GetDS().String(), false),
-			frame.WithRegisterPublisher("test-queue", depOpt.Queue()[0].GetDS().String()),
+			frame.WithDatastoreConnection(depOpt.Database(ctx)[0].GetDS(ctx).String(), false),
+			frame.WithRegisterPublisher("test-queue", depOpt.Queue(ctx)[0].GetDS(ctx).String()),
 		)
 		defer svc.Stop(ctx)
 
@@ -922,8 +922,8 @@ func (s *SearchTestSuite) runErrorRecoveryTests(t *testing.T, depOpt *definition
 
 			// Create a service with the test dependencies
 			ctx, svc := frame.NewServiceWithContext(ctx, "search-test",
-				frame.WithDatastoreConnection(depOpt.Database()[0].GetDS().String(), false),
-				frame.WithRegisterPublisher("test-queue", depOpt.Queue()[0].GetDS().String()),
+				frame.WithDatastoreConnection(depOpt.Database(ctx)[0].GetDS(ctx).String(), false),
+				frame.WithRegisterPublisher("test-queue", depOpt.Queue(ctx)[0].GetDS(ctx).String()),
 			)
 			defer svc.Stop(ctx)
 

@@ -51,7 +51,6 @@ func (o *ContainerOpts) Configure(
 		}
 	} else {
 		containerRequest.ExposedPorts = o.Ports
-
 		containerRequest.Networks = []string{ntwk.Name}
 		containerRequest.NetworkAliases = map[string][]string{
 			ntwk.Name: o.NetworkAliases,
@@ -79,12 +78,20 @@ func (o *ContainerOpts) ConfigurationExtend(
 				}))
 	} else {
 		containerCustomize = append(containerCustomize,
-			testcontainers.WithExposedPorts(o.Ports...),
+			withExposePorts(o.Ports...),
 			network.WithNetwork([]string{ntwk.Name}, ntwk),
 			network.WithNetworkName(o.NetworkAliases, ntwk.Name))
 	}
 
 	return containerCustomize
+}
+
+// withExposePorts appends the ports to the exposed ports for a container.
+func withExposePorts(ports ...string) testcontainers.CustomizeRequestOption {
+	return func(req *testcontainers.GenericContainerRequest) error {
+		req.ExposedPorts = ports
+		return nil
+	}
 }
 
 // ContainerOption is a type that can be used to configure the container creation request.
@@ -132,10 +139,10 @@ func WithNetworkAliases(networkAliases []string) ContainerOption {
 	}
 }
 
-// WithDisableLogging allows to set the disable logging to use for testing.
-func WithDisableLogging(disableLogging bool) ContainerOption {
+// WithEnableLogging allows to enable logging to use for testing.
+func WithEnableLogging(enableLogging bool) ContainerOption {
 	return func(original *ContainerOpts) {
-		original.EnableLogging = disableLogging
+		original.EnableLogging = enableLogging
 	}
 }
 

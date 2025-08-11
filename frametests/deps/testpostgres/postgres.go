@@ -7,9 +7,11 @@ import (
 	"net"
 	"net/url"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
+	"github.com/docker/go-connections/nat"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/pitabwire/util"
@@ -34,8 +36,6 @@ const (
 	DBPassword = "fr@m3"
 	// DBName is the default database name for the PostgreSQL test database.
 	DBName = "frame_test"
-	// DBPort is the default port for the PostgreSQL test database.
-	DBPort = "5432/tcp"
 
 	// OccurrenceValue is the number of occurrences to wait for in the log pattern.
 	OccurrenceValue = 2
@@ -44,10 +44,8 @@ const (
 )
 
 type postgreSQLDependancy struct {
-	opts         definition.ContainerOpts
-	dbname       string
-	conn         frame.DataSource
-	internalConn frame.DataSource
+	opts   definition.ContainerOpts
+	dbname string
 
 	container *tcPostgres.PostgresContainer
 }
@@ -61,7 +59,7 @@ func NewWithOpts(dbName string, containerOpts ...definition.ContainerOption) def
 		ImageName:      PostgresqlDBImage,
 		UserName:       DBUser,
 		Password:       DBPassword,
-		Ports:          []string{DBPort},
+		Ports:          []string{"5432/tcp"},
 		NetworkAliases: []string{"postgres", "db-postgres"},
 	}
 	opts.Setup(containerOpts...)
@@ -98,39 +96,49 @@ func (d *postgreSQLDependancy) Setup(ctx context.Context, ntwk *testcontainers.D
 		return fmt.Errorf("failed to start postgres container: %w", err)
 	}
 
-	conn, err := pgContainer.ConnectionString(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to get connection string for postgres container: %w", err)
-	}
-
-	d.conn = frame.DataSource(conn)
-
-	internalIP, err := pgContainer.ContainerIP(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to get internal host ip for postgres container: %w", err)
-	}
-
-	connStr := fmt.Sprintf(
-		"postgres://%s:%s@%s/%s",
-		d.opts.UserName,
-		d.opts.Password,
-		net.JoinHostPort(internalIP, d.opts.Ports[0]),
-		d.dbname,
-	)
-
-	d.internalConn = frame.DataSource(connStr)
-
 	d.container = pgContainer
 
 	return nil
 }
 
-func (d *postgreSQLDependancy) GetDS() frame.DataSource {
-	return d.conn
+func (d *postgreSQLDependancy) GetDS(ctx context.Context) frame.DataSource {
+	port := nat.Port(d.opts.Ports[0])
+	endpoint, err := d.container.PortEndpoint(ctx, port, "")
+	if err != nil {
+		logger := util.Log(ctx).WithField("image", d.opts.ImageName)
+		logger.WithError(err).Error("failed to get connection for Container")
+	}
+
+	return frame.DataSource(fmt.Sprintf("postgres://%s:%s@%s/%s", d.opts.UserName, d.opts.Password, endpoint, d.dbname))
 }
 
-func (d *postgreSQLDependancy) GetInternalDS() frame.DataSource {
-	return d.internalConn
+func (d *postgreSQLDependancy) GetInternalDS(ctx context.Context) frame.DataSource {
+	logger := util.Log(ctx).WithField("image", d.opts.ImageName)
+
+	internalIP, err := d.container.ContainerIP(ctx)
+	if err != nil {
+		logger.WithError(err).Error("failed to get internal host ip for Container")
+		return ""
+	}
+
+	if internalIP == "" && d.opts.UseHostMode {
+		internalIP, err = d.container.Host(ctx)
+		if err != nil {
+			logger.WithError(err).Error("failed to get host ip for Container")
+			return ""
+		}
+	}
+	port := nat.Port(d.opts.Ports[0])
+
+	return frame.DataSource(
+		fmt.Sprintf(
+			"postgres://%s:%s@%s/%s",
+			d.opts.UserName,
+			d.opts.Password,
+			net.JoinHostPort(internalIP, strconv.Itoa(port.Int())),
+			d.dbname,
+		),
+	)
 }
 
 // GetRandomisedDS Prepare a postgres connection string for testing.
@@ -141,7 +149,7 @@ func (d *postgreSQLDependancy) GetRandomisedDS(
 	ctx context.Context,
 	randomisedPrefix string,
 ) (frame.DataSource, func(context.Context), error) {
-	connectionURI, err := d.GetDS().ToURI()
+	connectionURI, err := d.GetDS(ctx).ToURI()
 	if err != nil {
 		return "", func(_ context.Context) {}, err
 	}

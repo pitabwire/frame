@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"strconv"
 	"strings"
 
 	"github.com/docker/go-connections/nat"
@@ -46,7 +47,7 @@ namespaces:
 `
 )
 
-type ketoDependancy struct {
+type dependancy struct {
 	opts          definition.ContainerOpts
 	configuration string
 	conn          frame.DataSource
@@ -70,21 +71,21 @@ func NewWithOpts(
 	}
 	opts.Setup(containerOpts...)
 
-	return &ketoDependancy{
+	return &dependancy{
 		opts:          opts,
 		configuration: configuration,
 	}
 }
 
-func (d *ketoDependancy) Name() string {
+func (d *dependancy) Name() string {
 	return d.opts.ImageName
 }
 
-func (d *ketoDependancy) Container() testcontainers.Container {
+func (d *dependancy) Container() testcontainers.Container {
 	return d.container
 }
 
-func (d *ketoDependancy) migrateContainer(
+func (d *dependancy) migrateContainer(
 	ctx context.Context,
 	ntwk *testcontainers.DockerNetwork,
 	databaseURL string,
@@ -125,12 +126,12 @@ func (d *ketoDependancy) migrateContainer(
 	return nil
 }
 
-func (d *ketoDependancy) Setup(ctx context.Context, ntwk *testcontainers.DockerNetwork) error {
-	if len(d.opts.Dependencies) == 0 || !d.opts.Dependencies[0].GetInternalDS().IsDB() {
+func (d *dependancy) Setup(ctx context.Context, ntwk *testcontainers.DockerNetwork) error {
+	if len(d.opts.Dependencies) == 0 || !d.opts.Dependencies[0].GetInternalDS(ctx).IsDB() {
 		return errors.New("no Database dependencies was supplied")
 	}
 
-	databaseURL := d.opts.Dependencies[0].GetInternalDS().String()
+	databaseURL := d.opts.Dependencies[0].GetInternalDS(ctx).String()
 	err := d.migrateContainer(ctx, ntwk, databaseURL)
 	if err != nil {
 		return err
@@ -200,22 +201,47 @@ func (d *ketoDependancy) Setup(ctx context.Context, ntwk *testcontainers.DockerN
 	return nil
 }
 
-func (d *ketoDependancy) GetDS() frame.DataSource {
-	return d.conn
-}
-func (d *ketoDependancy) GetInternalDS() frame.DataSource {
-	return d.internalConn
+func (d *dependancy) GetDS(ctx context.Context) frame.DataSource {
+	port := nat.Port(d.opts.Ports[1])
+	conn, err := d.container.PortEndpoint(ctx, port, "http")
+	if err != nil {
+		logger := util.Log(ctx).WithField("image", d.opts.ImageName)
+		logger.WithError(err).Error("failed to get connection for Container")
+	}
+
+	return frame.DataSource(conn)
 }
 
-func (d *ketoDependancy) GetRandomisedDS(
-	_ context.Context,
+func (d *dependancy) GetInternalDS(ctx context.Context) frame.DataSource {
+	internalIP, err := d.container.ContainerIP(ctx)
+	if err != nil {
+		logger := util.Log(ctx).WithField("image", d.opts.ImageName)
+		logger.WithError(err).Error("failed to get internal host ip for Container")
+		return ""
+	}
+
+	if internalIP == "" && d.opts.UseHostMode {
+		internalIP, err = d.container.Host(ctx)
+		if err != nil {
+			logger := util.Log(ctx).WithField("image", d.opts.ImageName)
+			logger.WithError(err).Error("failed to get host ip for Container")
+			return ""
+		}
+	}
+	port := nat.Port(d.opts.Ports[1])
+
+	return frame.DataSource(fmt.Sprintf("http://%s", net.JoinHostPort(internalIP, strconv.Itoa(port.Int()))))
+}
+
+func (d *dependancy) GetRandomisedDS(
+	ctx context.Context,
 	_ string,
 ) (frame.DataSource, func(context.Context), error) {
-	return d.GetDS(), func(_ context.Context) {
+	return d.GetDS(ctx), func(_ context.Context) {
 	}, nil
 }
 
-func (d *ketoDependancy) Cleanup(ctx context.Context) {
+func (d *dependancy) Cleanup(ctx context.Context) {
 	if d.container != nil {
 		if err := d.container.Terminate(ctx); err != nil {
 			log := util.Log(ctx)

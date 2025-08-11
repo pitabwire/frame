@@ -22,14 +22,17 @@ type HydraImageSetupTestSuite struct {
 
 func (h *HydraImageSetupTestSuite) SetupSuite() {
 	h.InitResourceFunc = func(_ context.Context) []definition.TestResource {
-		pgDep := testpostgres.New()
+		pgDep := testpostgres.NewWithOpts(testpostgres.DBName,
+			definition.WithEnableLogging(true),
+			definition.WithUseHostMode(false))
 
 		return []definition.TestResource{
 			pgDep,
 			testoryhydra.NewWithOpts(
 				testoryhydra.HydraConfiguration,
 				definition.WithDependancies(pgDep),
-				definition.WithDisableLogging(false),
+				definition.WithEnableLogging(true),
+				definition.WithUseHostMode(false),
 			),
 		}
 	}
@@ -72,9 +75,10 @@ func (h *HydraImageSetupTestSuite) TestHydraImageSetup() {
 
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
+				ctx := t.Context()
 				for _, res := range depOpt.All() {
-					if strings.Contains(res.GetDS().String(), "http") {
-						resp, err := http.Get(res.GetDS().String() + tc.path)
+					if strings.Contains(res.GetDS(ctx).String(), "http") {
+						resp, err := http.Get(res.GetDS(ctx).String() + tc.path)
 						h.NoError(err)
 
 						defer resp.Body.Close() // Important to close the response body

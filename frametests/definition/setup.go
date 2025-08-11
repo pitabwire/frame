@@ -19,8 +19,8 @@ type DependancyRes interface {
 
 type DependancyConn interface {
 	Name() string
-	GetDS() frame.DataSource
-	GetInternalDS() frame.DataSource
+	GetDS(ctx context.Context) frame.DataSource
+	GetInternalDS(ctx context.Context) frame.DataSource
 	GetRandomisedDS(ctx context.Context, randomisedPrefix string) (frame.DataSource, func(context.Context), error)
 }
 
@@ -53,28 +53,28 @@ func (opt *DependancyOption) All() []DependancyConn {
 	return opt.deps
 }
 
-func (opt *DependancyOption) Database() []DependancyConn {
+func (opt *DependancyOption) Database(ctx context.Context) []DependancyConn {
 	var deps []DependancyConn
 	for _, dep := range opt.deps {
-		if dep.GetDS().IsDB() {
+		if dep.GetDS(ctx).IsDB() {
 			deps = append(deps, dep)
 		}
 	}
 	return deps
 }
-func (opt *DependancyOption) Cache() []DependancyConn {
+func (opt *DependancyOption) Cache(ctx context.Context) []DependancyConn {
 	var deps []DependancyConn
 	for _, dep := range opt.deps {
-		if dep.GetDS().IsCache() {
+		if dep.GetDS(ctx).IsCache() {
 			deps = append(deps, dep)
 		}
 	}
 	return deps
 }
-func (opt *DependancyOption) Queue() []DependancyConn {
+func (opt *DependancyOption) Queue(ctx context.Context) []DependancyConn {
 	var deps []DependancyConn
 	for _, dep := range opt.deps {
-		if dep.GetDS().IsQueue() {
+		if dep.GetDS(ctx).IsQueue() {
 			deps = append(deps, dep)
 		}
 	}

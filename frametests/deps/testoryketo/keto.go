@@ -189,6 +189,11 @@ func (d *ketoDependancy) Setup(ctx context.Context, ntwk *testcontainers.DockerN
 	if err != nil {
 		return fmt.Errorf("failed to get internal host ip for ketoContainer: %w", err)
 	}
+
+	if d.opts.UseHostMode && internalIP == "" {
+		internalIP = host
+	}
+
 	d.internalConn = frame.DataSource(fmt.Sprintf("http://%s", net.JoinHostPort(internalIP, adminPort.Port())))
 
 	d.container = ketoContainer

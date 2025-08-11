@@ -35,7 +35,7 @@ const (
 	// DBName is the default database name for the PostgreSQL test database.
 	DBName = "frame_test"
 	// DBPort is the default port for the PostgreSQL test database.
-	DBPort = "5432"
+	DBPort = "5432/tcp"
 
 	// OccurrenceValue is the number of occurrences to wait for in the log pattern.
 	OccurrenceValue = 2

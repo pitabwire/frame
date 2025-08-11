@@ -191,6 +191,11 @@ func (d *hydraDependancy) Setup(ctx context.Context, ntwk *testcontainers.Docker
 	if err != nil {
 		return fmt.Errorf("failed to get internal host ip for hydraContainer: %w", err)
 	}
+
+	if d.opts.UseHostMode && internalIP == "" {
+		internalIP = host
+	}
+
 	d.internalConn = frame.DataSource(
 		fmt.Sprintf("http://%s", net.JoinHostPort(internalIP, adminPort.Port())),
 	)

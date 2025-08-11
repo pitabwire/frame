@@ -14,12 +14,8 @@ import (
 )
 
 const (
-
-	// NATS configuration.
-
 	NatsImage = "nats:latest"
 
-	NatsPort    = "4222"
 	NatsUser    = "frame"
 	NatsPass    = "fr@m3"
 	NatsCluster = "frame_test"
@@ -44,7 +40,7 @@ func NewWithOpts(cluster string, containerOpts ...definition.ContainerOption) de
 		ImageName:      NatsImage,
 		UserName:       NatsUser,
 		Password:       NatsPass,
-		Ports:          []string{NatsPort},
+		Ports:          []string{"4222/tcp", "6222/tcp", "8222/tcp"},
 		NetworkAliases: []string{"nats", "queue-nats"},
 	}
 	opts.Setup(containerOpts...)
@@ -70,21 +66,21 @@ func (d *natsDependancy) Setup(ctx context.Context, ntwk *testcontainers.DockerN
 		tcNats.WithPassword(d.opts.Password),
 	}...)
 
-	natsqContainer, err := tcNats.Run(ctx, d.opts.ImageName, containerCustomize...)
+	natsContainer, err := tcNats.Run(ctx, d.opts.ImageName, containerCustomize...)
 	if err != nil {
 		return fmt.Errorf("failed to start nats container: %w", err)
 	}
 
-	d.container = natsqContainer
+	d.container = natsContainer
 
-	conn, err := natsqContainer.ConnectionString(ctx)
+	conn, err := natsContainer.ConnectionString(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to get connection string for container: %w", err)
 	}
 
 	d.conn = frame.DataSource(conn)
 
-	internalIP, err := natsqContainer.ContainerIP(ctx)
+	internalIP, err := natsContainer.ContainerIP(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to get internal host ip for container: %w", err)
 	}

@@ -45,6 +45,7 @@ func (o *ContainerOpts) Configure(
 	}
 
 	if o.UseHostMode {
+		containerRequest.ExposedPorts = nil
 		containerRequest.HostConfigModifier = func(hostConfig *container.HostConfig) {
 			hostConfig.NetworkMode = "host"
 		}
@@ -71,13 +72,14 @@ func (o *ContainerOpts) ConfigurationExtend(
 	}
 
 	if o.UseHostMode {
-		containerCustomize = append(containerCustomize, testcontainers.WithHostConfigModifier(
-			func(hostConfig *container.HostConfig) {
-				hostConfig.NetworkMode = HostNetworkingMode
-			}))
+		containerCustomize = append(containerCustomize,
+			testcontainers.WithHostConfigModifier(
+				func(hostConfig *container.HostConfig) {
+					hostConfig.NetworkMode = HostNetworkingMode
+				}))
 	} else {
 		containerCustomize = append(containerCustomize,
-			// testcontainers.WithExposedPorts(o.Ports...),
+			testcontainers.WithExposedPorts(o.Ports...),
 			network.WithNetwork([]string{ntwk.Name}, ntwk),
 			network.WithNetworkName(o.NetworkAliases, ntwk.Name))
 	}

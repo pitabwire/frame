@@ -18,7 +18,7 @@ const (
 	// ValKey configuration.
 
 	ValKeyImage = "docker.io/valkey/valkey:latest"
-	ValKeyPort  = "6379"
+	ValKeyPort  = "6379/tcp"
 
 	ValKeyUser    = "frame"
 	ValKeyPass    = "fr@m3"

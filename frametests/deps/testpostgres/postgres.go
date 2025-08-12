@@ -4,17 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net"
 	"net/url"
 	"regexp"
-	"strconv"
 	"strings"
 	"time"
 
-	"github.com/docker/go-connections/nat"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/pitabwire/util"
 	"github.com/testcontainers/testcontainers-go"
 	tcPostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/wait"
@@ -44,10 +40,8 @@ const (
 )
 
 type postgreSQLDependancy struct {
-	opts   definition.ContainerOpts
+	*definition.DefaultImpl
 	dbname string
-
-	container *tcPostgres.PostgresContainer
 }
 
 func New() definition.TestResource {
@@ -65,79 +59,47 @@ func NewWithOpts(dbName string, containerOpts ...definition.ContainerOption) def
 	opts.Setup(containerOpts...)
 
 	return &postgreSQLDependancy{
-		opts:   opts,
-		dbname: dbName,
+		DefaultImpl: definition.NewDefaultImpl(opts, ""),
+		dbname:      dbName,
 	}
-}
-
-func (d *postgreSQLDependancy) Name() string {
-	return d.opts.ImageName
-}
-
-func (d *postgreSQLDependancy) Container() testcontainers.Container {
-	return d.container
 }
 
 // Setup creates a PostgreSQL testcontainer and sets the container.
 func (d *postgreSQLDependancy) Setup(ctx context.Context, ntwk *testcontainers.DockerNetwork) error {
-	containerCustomize := d.opts.ConfigurationExtend(ctx, ntwk, []testcontainers.ContainerCustomizer{
+	containerCustomize := d.ConfigurationExtend(ctx, ntwk, []testcontainers.ContainerCustomizer{
 
 		tcPostgres.WithDatabase(d.dbname),
-		tcPostgres.WithUsername(d.opts.UserName),
-		tcPostgres.WithPassword(d.opts.Password),
+		tcPostgres.WithUsername(d.Opts().UserName),
+		tcPostgres.WithPassword(d.Opts().Password),
 		testcontainers.WithWaitStrategy(
 			wait.ForLog("database system is ready to accept connections").
 				WithOccurrence(OccurrenceValue).
 				WithStartupTimeout(TimeoutInSeconds * time.Second)),
 	}...)
 
-	pgContainer, err := tcPostgres.Run(ctx, d.opts.ImageName, containerCustomize...)
+	pgContainer, err := tcPostgres.Run(ctx, d.Name(), containerCustomize...)
 	if err != nil {
 		return fmt.Errorf("failed to start postgres container: %w", err)
 	}
 
-	d.container = pgContainer
+	d.SetContainer(pgContainer)
 
 	return nil
 }
 
 func (d *postgreSQLDependancy) GetDS(ctx context.Context) frame.DataSource {
-	port := nat.Port(d.opts.Ports[0])
-	endpoint, err := d.container.PortEndpoint(ctx, port, "")
-	if err != nil {
-		logger := util.Log(ctx).WithField("image", d.opts.ImageName)
-		logger.WithError(err).Error("failed to get connection for Container")
-	}
+	ds := d.DefaultImpl.GetDS(ctx)
 
-	return frame.DataSource(fmt.Sprintf("postgres://%s:%s@%s/%s", d.opts.UserName, d.opts.Password, endpoint, d.dbname))
+	return frame.DataSource(
+		fmt.Sprintf("postgres://%s:%s@%s/%s", d.Opts().UserName, d.Opts().Password, ds.String(), d.dbname),
+	)
 }
 
 func (d *postgreSQLDependancy) GetInternalDS(ctx context.Context) frame.DataSource {
-	logger := util.Log(ctx).WithField("image", d.opts.ImageName)
-
-	internalIP, err := d.container.ContainerIP(ctx)
-	if err != nil {
-		logger.WithError(err).Error("failed to get internal host ip for Container")
-		return ""
-	}
-
-	if internalIP == "" && d.opts.UseHostMode {
-		internalIP, err = d.container.Host(ctx)
-		if err != nil {
-			logger.WithError(err).Error("failed to get host ip for Container")
-			return ""
-		}
-	}
-	port := nat.Port(d.opts.Ports[0])
+	ds := d.DefaultImpl.GetInternalDS(ctx)
 
 	return frame.DataSource(
-		fmt.Sprintf(
-			"postgres://%s:%s@%s/%s",
-			d.opts.UserName,
-			d.opts.Password,
-			net.JoinHostPort(internalIP, strconv.Itoa(port.Int())),
-			d.dbname,
-		),
+		fmt.Sprintf("postgres://%s:%s@%s/%s", d.Opts().UserName, d.Opts().Password, ds.String(), d.dbname),
 	)
 }
 
@@ -165,15 +127,6 @@ func (d *postgreSQLDependancy) GetRandomisedDS(
 	return frame.DataSource(suffixedPgURIStr), func(_ context.Context) {
 		_ = clearDatabase(ctx, suffixedPgURIStr)
 	}, nil
-}
-
-func (d *postgreSQLDependancy) Cleanup(ctx context.Context) {
-	if d.container != nil {
-		if err := d.container.Terminate(ctx); err != nil {
-			log := util.Log(ctx)
-			log.WithError(err).Error("Failed to terminate postgres container")
-		}
-	}
 }
 
 // ensureDatabaseExists checks if a specific database exists and creates it if it does not.

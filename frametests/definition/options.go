@@ -16,7 +16,8 @@ type ContainerOpts struct {
 	UserName  string
 	Password  string
 
-	Ports          []string
+	Ports []string
+
 	UseHostMode    bool
 	NetworkAliases []string
 

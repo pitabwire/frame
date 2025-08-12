@@ -19,6 +19,7 @@ type DependancyRes interface {
 
 type DependancyConn interface {
 	Name() string
+	PortMapping(ctx context.Context, port string) (string, error)
 	GetDS(ctx context.Context) frame.DataSource
 	GetInternalDS(ctx context.Context) frame.DataSource
 	GetRandomisedDS(ctx context.Context, randomisedPrefix string) (frame.DataSource, func(context.Context), error)

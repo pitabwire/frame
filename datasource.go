@@ -1,6 +1,7 @@
 package frame
 
 import (
+	"fmt"
 	"net/url"
 	"path"
 	"regexp"
@@ -252,4 +253,15 @@ func (d DataSource) WithUserAndPassword(userName, password string) (DataSource, 
 
 func (d DataSource) String() string {
 	return string(d)
+}
+
+func (d DataSource) ChangePort(newPort string) (DataSource, error) {
+	nuURI, err := d.ToURI()
+	if err != nil {
+		return "", err
+	}
+
+	hostname := nuURI.Hostname()
+	nuURI.Host = fmt.Sprintf("%s:%s", hostname, newPort)
+	return DataSource(nuURI.String()), nil
 }

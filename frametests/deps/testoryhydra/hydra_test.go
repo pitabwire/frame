@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/pitabwire/util"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
 	"github.com/pitabwire/frame/frametests"
@@ -52,45 +54,91 @@ func (h *HydraImageSetupTestSuite) TestHydraImageSetup() {
 
 	frametests.WithTestDependancies(h.T(), depOptions, func(t *testing.T, depOpt *definition.DependancyOption) {
 		testCases := []struct {
-			name   string
-			path   string
-			status int
+			name      string
+			path      string
+			portToUse string
+			status    int
 		}{
 			{
-				name:   "Liveness check to hydra",
-				path:   "/health/alive",
-				status: 200,
+				name:      "Liveness check to hydra",
+				path:      "/health/alive",
+				portToUse: "4445/tcp",
+				status:    200,
 			},
 			{
-				name:   "Successfull ready hydra",
-				path:   "/health/ready",
-				status: 200,
+				name:      "Successfull ready hydra",
+				path:      "/health/ready",
+				portToUse: "4445/tcp",
+				status:    200,
 			},
 			{
-				name:   "Straight to hydra",
-				path:   "",
-				status: 404,
+				name:      "Straight to hydra admin",
+				path:      "",
+				portToUse: "4445/tcp",
+				status:    404,
 			},
+			{
+				name:      "Straight to hydra",
+				path:      "",
+				portToUse: "4444/tcp",
+				status:    404,
+			},
+			{
+				name:      "Open ID Configuration admin",
+				path:      "/.well-known/openid-configuration",
+				portToUse: "4445/tcp",
+				status:    404,
+			},
+			{
+				name:      "Open ID Configuration",
+				path:      "/.well-known/openid-configuration",
+				portToUse: "4444/tcp",
+				status:    200,
+			},
+			{
+				name:      "Json Web Keys path",
+				path:      "/.well-known/jwks.json",
+				portToUse: "4444/tcp",
+				status:    200,
+			},
+		}
+
+		var depCon definition.DependancyConn
+		for _, res := range depOpt.All() {
+			if strings.Contains(res.GetDS(h.T().Context()).String(), "http") {
+				depCon = res
+			}
 		}
 
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
 				ctx := t.Context()
-				for _, res := range depOpt.All() {
-					if strings.Contains(res.GetDS(ctx).String(), "http") {
-						resp, err := http.Get(res.GetDS(ctx).String() + tc.path)
-						h.NoError(err)
 
-						defer resp.Body.Close() // Important to close the response body
+				ds := depCon.GetDS(ctx)
+				portMapping, err := depCon.PortMapping(ctx, tc.portToUse)
+				require.NoError(t, err)
 
-						body, err := io.ReadAll(resp.Body)
-						h.NoError(err)
+				ds, err = ds.ChangePort(portMapping)
+				require.NoError(t, err)
 
-						t.Log(string(body))
+				resp, err := http.Get(ds.String() + tc.path)
+				require.NoError(t, err)
 
-						h.Equal(tc.status, resp.StatusCode)
-					}
-				}
+				defer util.CloseAndLogOnError(ctx, resp.Body) // Important to close the response body
+
+				body, err := io.ReadAll(resp.Body)
+				require.NoError(t, err)
+
+				t.Log(string(body))
+
+				require.Equalf(
+					t,
+					tc.status,
+					resp.StatusCode,
+					"expected status code to be %d but got %d",
+					tc.status,
+					resp.StatusCode,
+				)
 			})
 		}
 	})

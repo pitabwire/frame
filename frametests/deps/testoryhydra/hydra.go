@@ -35,19 +35,21 @@ urls:
   consent: http://127.0.0.1:3000/consent
   login: http://127.0.0.1:3000/login
   logout: http://127.0.0.1:3000/logout
+  
 oauth2:
   session:
-	encrypt_at_rest: true
+    encrypt_at_rest: true
   exclude_not_before_claim: true
   allowed_top_level_claims:
-	- contact_id
-	- tenant_id
-	- partition_id
-	- access_id
-	- roles
-	- username
-	- service_name
+    - contact_id
+    - tenant_id
+    - partition_id
+    - access_id
+    - roles
+    - username
+    - service_name
   mirror_top_level_claims: false
+
 secrets:
   system:
     - youReallyNeedToChangeThis

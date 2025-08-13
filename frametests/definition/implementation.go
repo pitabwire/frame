@@ -79,9 +79,7 @@ func (d *DefaultImpl) Endpoint(ctx context.Context, scheme string, port string) 
 		return "", err
 	}
 
-	if strings.Contains(conn, "localhost") {
-		conn = strings.Replace(conn, "localhost", "127.0.0.1", 1)
-	}
+	conn = strings.Replace(conn, "localhost", "127.0.0.1", 1)
 
 	return frame.DataSource(conn), nil
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"strings"
 
 	"github.com/docker/go-connections/nat"
 	"github.com/pitabwire/util"
@@ -78,6 +79,10 @@ func (d *DefaultImpl) Endpoint(ctx context.Context, scheme string, port string) 
 		return "", err
 	}
 
+	if strings.Contains(conn, "localhost") {
+		conn = strings.Replace(conn, "localhost", "127.0.0.1", 1)
+	}
+
 	return frame.DataSource(conn), nil
 }
 
@@ -92,6 +97,10 @@ func (d *DefaultImpl) InternalEndpoint(ctx context.Context, scheme string, port 
 		if err != nil {
 			return "", err
 		}
+	}
+
+	if internalIP == "localhost" {
+		internalIP = "127.0.0.1"
 	}
 
 	hostPort := net.JoinHostPort(internalIP, port)

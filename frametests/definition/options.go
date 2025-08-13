@@ -21,6 +21,7 @@ type ContainerOpts struct {
 	UseHostMode    bool
 	NetworkAliases []string
 
+	Environment  map[string]string
 	Dependencies []DependancyConn
 
 	EnableLogging  bool
@@ -87,6 +88,13 @@ func (o *ContainerOpts) ConfigurationExtend(
 	return containerCustomize
 }
 
+func (o *ContainerOpts) Env(defaultMap map[string]string) map[string]string {
+	for k, val := range o.Environment {
+		defaultMap[k] = val
+	}
+	return defaultMap
+}
+
 // withExposePorts appends the ports to the exposed ports for a container.
 func withExposePorts(ports ...string) testcontainers.CustomizeRequestOption {
 	return func(req *testcontainers.GenericContainerRequest) error {
@@ -123,6 +131,13 @@ func WithPassword(password string) ContainerOption {
 func WithPorts(ports ...string) ContainerOption {
 	return func(original *ContainerOpts) {
 		original.Ports = ports
+	}
+}
+
+// WithEnvironment allows to set the environment to use for testing.
+func WithEnvironment(environment map[string]string) ContainerOption {
+	return func(original *ContainerOpts) {
+		original.Environment = environment
 	}
 }
 

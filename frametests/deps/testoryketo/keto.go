@@ -122,11 +122,11 @@ func (d *dependancy) Setup(ctx context.Context, ntwk *testcontainers.DockerNetwo
 	containerRequest := testcontainers.ContainerRequest{
 		Image: d.Name(),
 		Cmd:   []string{"serve", "all", "--config", "/etc/config/keto.yml", "--dev"},
-		Env: map[string]string{
+		Env: d.Opts().Env(map[string]string{
 			"LOG_LEVEL":                 "debug",
 			"LOG_LEAK_SENSITIVE_VALUES": "true",
 			"DSN":                       databaseURL,
-		},
+		}),
 		Files: []testcontainers.ContainerFile{
 			{
 				Reader:            strings.NewReader(d.configuration),

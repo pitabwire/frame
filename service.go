@@ -50,7 +50,7 @@ type Service struct {
 	version                    string
 	environment                string
 	logger                     *util.LogEntry
-	disableTracing             bool
+	enableTracing              bool
 	traceTextMap               propagation.TextMapPropagator
 	traceExporter              sdktrace.SpanExporter
 	traceSampler               sdktrace.Sampler

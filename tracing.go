@@ -5,9 +5,11 @@ import (
 
 	"github.com/pitabwire/util"
 	"go.opentelemetry.io/contrib/bridges/otelslog"
-	"go.opentelemetry.io/contrib/exporters/autoexport"
 	"go.opentelemetry.io/contrib/propagators/autoprop"
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploggrpc"
+	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	"go.opentelemetry.io/otel/log/global"
 	"go.opentelemetry.io/otel/propagation"
 	sdklogs "go.opentelemetry.io/otel/sdk/log"
@@ -18,7 +20,7 @@ import (
 )
 
 func (s *Service) initTracer(ctx context.Context) error {
-	if s.disableTracing {
+	if !s.enableTracing {
 		return nil
 	}
 
@@ -45,21 +47,23 @@ func (s *Service) initTracer(ctx context.Context) error {
 	}
 
 	if s.traceExporter == nil {
-		s.traceExporter, err = autoexport.NewSpanExporter(ctx)
+		s.traceExporter, err = otlptracegrpc.New(ctx)
 		if err != nil {
 			return err
 		}
 	}
 
 	if s.metricsReader == nil {
-		s.metricsReader, err = autoexport.NewMetricReader(ctx)
-		if err != nil {
-			return err
+		metricsExporter, err0 := otlpmetricgrpc.New(ctx)
+		if err0 != nil {
+			return err0
 		}
+
+		s.metricsReader = sdkmetrics.NewPeriodicReader(metricsExporter)
 	}
 
 	if s.traceLogsExporter == nil {
-		s.traceLogsExporter, err = autoexport.NewLogExporter(ctx)
+		s.traceLogsExporter, err = otlploggrpc.New(ctx)
 		if err != nil {
 			return err
 		}
@@ -96,10 +100,10 @@ func (s *Service) initTracer(ctx context.Context) error {
 	return nil
 }
 
-// WithDisableTracing disable tracing for the service.
-func WithDisableTracing() Option {
+// WithEnableTracing disable tracing for the service.
+func WithEnableTracing() Option {
 	return func(_ context.Context, s *Service) {
-		s.disableTracing = true
+		s.enableTracing = true
 	}
 }
 

@@ -58,27 +58,29 @@ func (s *Service) RegisterForJwtWithParams(ctx context.Context,
 		s.Log(ctx).WithError(err).Error("could not get existing clients")
 		return nil, err
 
-	} else {
-		if status != http.StatusNotFound && (status > 299 || status < 200) {
-			s.Log(ctx).
-				WithField("status", status).
-				WithField("result", string(response)).
-				Error(" invalid response from oauth2 server")
+	}
+	if status != http.StatusNotFound && (status > 299 || status < 200) {
+		s.Log(ctx).
+			WithField("status", status).
+			WithField("result", string(response)).
+			Error(" invalid response from oauth2 server")
 
-			return nil, fmt.Errorf("invalid existing clients check response : %s", response)
+		return nil, fmt.Errorf("invalid existing clients check response : %s", response)
+	}
+
+	if status != http.StatusNotFound {
+
+		var existingClients []map[string]any
+		err = json.Unmarshal(response, &existingClients)
+		if err != nil {
+			s.Log(ctx).WithError(err).WithField("payload", string(response)).
+				Error("could not unmarshal existing clients")
+			return nil, err
 		}
-	}
 
-	var existingClients []map[string]any
-	err = json.Unmarshal(response, &existingClients)
-	if err != nil {
-		s.Log(ctx).WithError(err).WithField("payload", string(response)).
-			Error("could not unmarshal existing clients")
-		return nil, err
-	}
-
-	if len(existingClients) > 0 {
-		return existingClients[0], nil
+		if len(existingClients) > 0 {
+			return existingClients[0], nil
+		}
 	}
 
 	payload := map[string]any{

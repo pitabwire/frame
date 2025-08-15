@@ -157,6 +157,27 @@ func Svc(ctx context.Context) *Service {
 	return service
 }
 
+// WithName specifies the name the service will utilize
+func WithName(name string) Option {
+	return func(_ context.Context, s *Service) {
+		s.name = name
+	}
+}
+
+// WithEnvironment specifies the environment the service will utilize
+func WithEnvironment(environment string) Option {
+	return func(_ context.Context, s *Service) {
+		s.environment = environment
+	}
+}
+
+// WithVersion specifies the version the service will utilize
+func WithVersion(version string) Option {
+	return func(_ context.Context, s *Service) {
+		s.version = version
+	}
+}
+
 // Name gets the name of the service. Its the first argument used when NewService is called.
 func (s *Service) Name() string {
 	return s.name

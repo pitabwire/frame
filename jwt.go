@@ -9,11 +9,18 @@ import (
 	"strings"
 )
 
+const systemScope = "int_system"
+
 // RegisterForJwt function hooks in jwt client registration to make sure service is authenticated.
 func (s *Service) RegisterForJwt(ctx context.Context) error {
 	oauth2Config, ok := s.Config().(ConfigurationOAUTH2)
 	if ok {
 		oauth2ServiceAdminHost := oauth2Config.GetOauth2ServiceAdminURI()
+
+		clientID := oauth2Config.GetOauth2ServiceClientID()
+		if clientID == "" {
+			clientID = fmt.Sprintf("%s_%s", s.Name(), s.Environment())
+		}
 
 		clientSecret := oauth2Config.GetOauth2ServiceClientSecret()
 
@@ -22,8 +29,8 @@ func (s *Service) RegisterForJwt(ctx context.Context) error {
 		if oauth2ServiceAdminHost != "" && clientSecret != "" {
 			audienceList := strings.Split(oauth2Audience, ",")
 
-			jwtClient, err := s.RegisterForJwtWithParams(ctx, oauth2ServiceAdminHost, s.Name(), clientSecret,
-				"", audienceList, map[string]string{})
+			jwtClient, err := s.RegisterForJwtWithParams(ctx, oauth2ServiceAdminHost, s.Name(), clientID, clientSecret,
+				systemScope, audienceList, map[string]string{})
 			if err != nil {
 				return err
 			}
@@ -37,10 +44,10 @@ func (s *Service) RegisterForJwt(ctx context.Context) error {
 
 // RegisterForJwtWithParams registers for JWT with the given parameters. This is useful for situations where one may need to register external applications for access token generation.
 func (s *Service) RegisterForJwtWithParams(ctx context.Context,
-	oauth2ServiceAdminHost string, clientName string, clientSecret string,
+	oauth2ServiceAdminHost string, clientName string, clientId string, clientSecret string,
 	scope string, audienceList []string, metadata map[string]string) (map[string]any, error) {
-	oauth2AdminURI := fmt.Sprintf("%s%s", oauth2ServiceAdminHost, "/admin/clients")
-	oauth2AdminIDUri := fmt.Sprintf("%s?client_name=%s", oauth2AdminURI, url.QueryEscape(clientName))
+	oauth2AdminURI := fmt.Sprintf("%s/admin/clients", oauth2ServiceAdminHost)
+	oauth2AdminIDUri := fmt.Sprintf("%s/%s", oauth2AdminURI, clientId)
 
 	status, response, err := s.InvokeRestService(ctx, http.MethodGet, oauth2AdminIDUri, nil, nil)
 	if err != nil {
@@ -69,8 +76,8 @@ func (s *Service) RegisterForJwtWithParams(ctx context.Context,
 		return existingClients[0], nil
 	}
 
-	metadata["cc_bot"] = "true"
 	payload := map[string]any{
+		"client_id":                  clientId,
 		"client_name":                url.QueryEscape(clientName),
 		"client_secret":              url.QueryEscape(clientSecret),
 		"grant_types":                []string{"client_credentials"},

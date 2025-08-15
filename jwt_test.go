@@ -11,6 +11,7 @@ func TestService_RegisterForJwtWithParams(t *testing.T) {
 
 	oauthServiceURL := "http://localhost:4447"
 	clientName := "Testing CLI"
+	clientID := "test-cli-dev"
 	clientSecret := "topS3cret"
 
 	ctx, srv := frame.NewService("Test Srv", frame.WithConfig(&frame.ConfigurationDefault{
@@ -18,7 +19,7 @@ func TestService_RegisterForJwtWithParams(t *testing.T) {
 	}))
 
 	response, err := srv.RegisterForJwtWithParams(
-		ctx, oauthServiceURL, clientName, clientSecret,
+		ctx, oauthServiceURL, clientName, clientID, clientSecret,
 		"", []string{}, map[string]string{})
 	if err != nil {
 		t.Errorf("couldn't register for jwt %s", err)

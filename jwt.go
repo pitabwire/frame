@@ -14,30 +14,35 @@ const ConstInternalSystemScope = "int_system"
 // RegisterForJwt function hooks in jwt client registration to make sure service is authenticated.
 func (s *Service) RegisterForJwt(ctx context.Context) error {
 	oauth2Config, ok := s.Config().(ConfigurationOAUTH2)
-	if ok {
-		oauth2ServiceAdminHost := oauth2Config.GetOauth2ServiceAdminURI()
+	if !ok {
+		return nil
+	}
+	oauth2ServiceAdminHost := oauth2Config.GetOauth2ServiceAdminURI()
 
-		clientID := oauth2Config.GetOauth2ServiceClientID()
-		if clientID == "" {
-			clientID = strings.Join([]string{s.Name(), s.Environment()}, "_")
-		}
-
-		clientSecret := oauth2Config.GetOauth2ServiceClientSecret()
-
-		oauth2Audience := oauth2Config.GetOauth2ServiceAudience()
-
-		if oauth2ServiceAdminHost != "" && clientSecret != "" {
-			audienceList := strings.Split(oauth2Audience, ",")
-
-			jwtClient, err := s.RegisterForJwtWithParams(ctx, oauth2ServiceAdminHost, s.Name(), clientID, clientSecret,
-				ConstInternalSystemScope, audienceList, map[string]string{})
-			if err != nil {
-				return err
-			}
-
-			s.jwtClient = jwtClient
+	clientID := oauth2Config.GetOauth2ServiceClientID()
+	if clientID == "" {
+		clientID = s.Name()
+		if s.Environment() != "" {
+			clientID = fmt.Sprintf("%s_%s", s.Name(), s.Environment())
 		}
 	}
+
+	clientSecret := oauth2Config.GetOauth2ServiceClientSecret()
+
+	oauth2Audience := oauth2Config.GetOauth2ServiceAudience()
+
+	if oauth2ServiceAdminHost != "" && clientSecret != "" {
+		audienceList := strings.Split(oauth2Audience, ",")
+
+		jwtClient, err := s.RegisterForJwtWithParams(ctx, oauth2ServiceAdminHost, s.Name(), clientID, clientSecret,
+			ConstInternalSystemScope, audienceList, map[string]string{})
+		if err != nil {
+			return err
+		}
+
+		s.jwtClient = jwtClient
+	}
+
 	return nil
 }
 
@@ -50,17 +55,19 @@ func (s *Service) RegisterForJwtWithParams(ctx context.Context,
 
 	status, response, err := s.InvokeRestService(ctx, http.MethodGet, oauth2AdminIDUri, nil, nil)
 	if err != nil {
-		s.Log(ctx).WithError(err).Error("could not get existing clients")
-		return nil, err
-	}
+		if status != http.StatusNotFound {
+			s.Log(ctx).WithError(err).Error("could not get existing clients")
+			return nil, err
+		}
+	} else {
+		if status > 299 || status < 200 {
+			s.Log(ctx).
+				WithField("status", status).
+				WithField("result", string(response)).
+				Error(" invalid response from oauth2 server")
 
-	if status > 299 || status < 200 {
-		s.Log(ctx).
-			WithField("status", status).
-			WithField("result", string(response)).
-			Error(" invalid response from oauth2 server")
-
-		return nil, fmt.Errorf("invalid existing clients check response : %s", response)
+			return nil, fmt.Errorf("invalid existing clients check response : %s", response)
+		}
 	}
 
 	var existingClients []map[string]any

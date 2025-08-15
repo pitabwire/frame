@@ -52,6 +52,7 @@ type AuthenticationClaims struct {
 	PartitionID string         `json:"partition_id,omitempty"`
 	AccessID    string         `json:"access_id,omitempty"`
 	ContactID   string         `json:"contact_id,omitempty"`
+	SessionID   string         `json:"session_id,omitempty"`
 	DeviceID    string         `json:"device_id,omitempty"`
 	ServiceName string         `json:"service_name,omitempty"`
 	Roles       []string       `json:"roles,omitempty"`
@@ -118,6 +119,24 @@ func (a *AuthenticationClaims) GetContactID() string {
 		return result
 	}
 	val, ok := a.Ext["contact_id"]
+	if !ok {
+		return ""
+	}
+
+	result, ok = val.(string)
+	if !ok {
+		return ""
+	}
+
+	return result
+}
+
+func (a *AuthenticationClaims) GetSessionID() string {
+	result := a.SessionID
+	if result != "" {
+		return result
+	}
+	val, ok := a.Ext["session_id"]
 	if !ok {
 		return ""
 	}
@@ -320,7 +339,7 @@ func (s *Service) Authenticate(ctx context.Context,
 
 func (s *Service) systemPadPartitionInfo(
 	ctx context.Context,
-	tenantID, partitionID, accessID, contactID, deviceID, roles string,
+	tenantID, partitionID, accessID, contactID, sessionID, deviceID, roles string,
 ) context.Context {
 	claims := ClaimsFromContext(ctx)
 
@@ -347,6 +366,11 @@ func (s *Service) systemPadPartitionInfo(
 	val = claims.GetContactID()
 	if val == "" {
 		claims.ContactID = contactID
+	}
+
+	val = claims.GetSessionID()
+	if val == "" {
+		claims.SessionID = sessionID
 	}
 
 	val = claims.GetDeviceID()
@@ -466,7 +490,7 @@ func (s *Service) AuthenticationMiddleware(next http.Handler, audience string, i
 		s.systemPadPartitionInfo(ctx,
 			r.Header.Get("Tenant_id"), r.Header.Get("Partition_id"),
 			r.Header.Get("Access_id"), r.Header.Get("Contact_id"),
-			r.Header.Get("Device_id"), r.Header.Get("Roles"))
+			r.Header.Get("Session_id"), r.Header.Get("Device_id"), r.Header.Get("Roles"))
 
 		r = r.WithContext(ctx)
 
@@ -536,7 +560,8 @@ func (s *Service) UnaryAuthInterceptor(audience string, issuer string) grpc.Unar
 
 			ctx = s.systemPadPartitionInfo(ctx, getGrpcMetadata(ctx, "tenant_id"),
 				getGrpcMetadata(ctx, "partition_id"), getGrpcMetadata(ctx, "access_id"),
-				getGrpcMetadata(ctx, "contact_id"), getGrpcMetadata(ctx, "device_id"),
+				getGrpcMetadata(ctx, "contact_id"), getGrpcMetadata(ctx, "session_id"),
+				getGrpcMetadata(ctx, "device_id"),
 				getGrpcMetadata(ctx, "roles"))
 		}
 		return handler(ctx, req)
@@ -601,6 +626,7 @@ func (s *Service) ensureAuthenticatedStreamContext(
 			getGrpcMetadata(ss.Context(), "partition_id"),
 			getGrpcMetadata(ss.Context(), "access_id"),
 			getGrpcMetadata(ss.Context(), "contact_id"),
+			getGrpcMetadata(ss.Context(), "session_id"),
 			getGrpcMetadata(ss.Context(), "device_id"),
 			getGrpcMetadata(ss.Context(), "roles"))
 	}

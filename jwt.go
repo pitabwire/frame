@@ -19,7 +19,7 @@ func (s *Service) RegisterForJwt(ctx context.Context) error {
 
 		clientID := oauth2Config.GetOauth2ServiceClientID()
 		if clientID == "" {
-			clientID = fmt.Sprintf("%s_%s", s.Name(), s.Environment())
+			clientID = strings.Join([]string{s.Name(), s.Environment()}, "_")
 		}
 
 		clientSecret := oauth2Config.GetOauth2ServiceClientSecret()
@@ -36,7 +36,6 @@ func (s *Service) RegisterForJwt(ctx context.Context) error {
 			}
 
 			s.jwtClient = jwtClient
-			s.jwtClientSecret = clientSecret
 		}
 	}
 	return nil

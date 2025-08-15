@@ -45,6 +45,7 @@ func (s *Service) InvokeRestService(ctx context.Context,
 
 	s.Log(ctx).WithField("request", string(reqDump)).Debug("request out")
 
+	//nolint:bodyclose //this is done by util.CloseAndLogOnError()
 	resp, err := s.client.Do(req)
 	if err != nil {
 		return 0, nil, err
@@ -83,6 +84,7 @@ func (s *Service) InvokeRestServiceURLEncoded(ctx context.Context,
 	reqDump, _ := httputil.DumpRequestOut(req, true)
 	logger.WithField("request", string(reqDump)).Info("request out")
 
+	//nolint:bodyclose //this is done by util.CloseAndLogOnError()
 	resp, err := s.client.Do(req)
 	if err != nil {
 		return 0, nil, err

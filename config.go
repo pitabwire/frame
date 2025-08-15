@@ -83,10 +83,10 @@ type ConfigurationDefault struct {
 	LogColored        bool   `envDefault:"true"                      env:"LOG_COLORED"          yaml:"log_colored"`
 	LogShowStackTrace bool   `envDefault:"false"                     env:"LOG_SHOW_STACK_TRACE" yaml:"log_show_stack_trace"`
 
-	ServiceName        string `envDefault:""                      env:"SERVICE_NAME" yaml:"service_name"`
-	ServiceEnvironment string `envDefault:""                      env:"SERVICE_ENVIRONMENT" yaml:"service_environment"`
-	ServiceVersion     string `envDefault:""                      env:"SERVICE_VERSION" yaml:"service_version"`
-	RunServiceSecurely bool   `envDefault:"true"                      env:"RUN_SERVICE_SECURELY" yaml:"run_service_securely"`
+	ServiceName        string `envDefault:""     env:"SERVICE_NAME"         yaml:"service_name"`
+	ServiceEnvironment string `envDefault:""     env:"SERVICE_ENVIRONMENT"  yaml:"service_environment"`
+	ServiceVersion     string `envDefault:""     env:"SERVICE_VERSION"      yaml:"service_version"`
+	RunServiceSecurely bool   `envDefault:"true" env:"RUN_SERVICE_SECURELY" yaml:"run_service_securely"`
 
 	ServerPort     string `envDefault:":7000"  env:"PORT"      yaml:"server_port"`
 	HTTPServerPort string `envDefault:":8080"  env:"HTTP_PORT" yaml:"http_server_port"`
@@ -574,6 +574,7 @@ func (oid *OIDCMap) loadOIDC(ctx context.Context, url string) error {
 	}
 	hreq.Header.Set("Accept", "application/jrd+json,application/json;q=0.9")
 
+	//nolint:bodyclose //this is done by util.CloseAndLogOnError()
 	hresp, err := http.DefaultClient.Do(hreq)
 	if err != nil {
 		return err
@@ -612,6 +613,7 @@ func (oid *OIDCMap) loadJWKData(ctx context.Context, url string) (string, error)
 	}
 	hreq.Header.Set("Accept", "application/jrd+json,application/json;q=0.9")
 
+	//nolint:bodyclose //this is done by util.CloseAndLogOnError()
 	hresp, err := http.DefaultClient.Do(hreq)
 	if err != nil {
 		return "", err

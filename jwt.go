@@ -55,12 +55,11 @@ func (s *Service) RegisterForJwtWithParams(ctx context.Context,
 
 	status, response, err := s.InvokeRestService(ctx, http.MethodGet, oauth2AdminIDUri, nil, nil)
 	if err != nil {
-		if status != http.StatusNotFound {
-			s.Log(ctx).WithError(err).Error("could not get existing clients")
-			return nil, err
-		}
+		s.Log(ctx).WithError(err).Error("could not get existing clients")
+		return nil, err
+
 	} else {
-		if status > 299 || status < 200 {
+		if status != http.StatusNotFound && (status > 299 || status < 200) {
 			s.Log(ctx).
 				WithField("status", status).
 				WithField("result", string(response)).

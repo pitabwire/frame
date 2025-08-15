@@ -111,7 +111,7 @@ type ConfigurationDefault struct {
 	Oauth2ServiceAudience     string `env:"OAUTH2_SERVICE_AUDIENCE"      yaml:"oauth2_service_audience"`
 	Oauth2JwtVerifyAudience   string `env:"OAUTH2_JWT_VERIFY_AUDIENCE"   yaml:"oauth2_jwt_verify_audience"`
 	Oauth2JwtVerifyIssuer     string `env:"OAUTH2_JWT_VERIFY_ISSUER"     yaml:"oauth2_jwt_verify_issuer"`
-	Oauth2ServiceClientID     string `env:"OAUTH2_SERVICE_CLIENT_ID" yaml:"oauth2_service_client_id"`
+	Oauth2ServiceClientID     string `env:"OAUTH2_SERVICE_CLIENT_ID"     yaml:"oauth2_service_client_id"`
 	Oauth2ServiceClientSecret string `env:"OAUTH2_SERVICE_CLIENT_SECRET" yaml:"oauth2_service_client_secret"`
 
 	AuthorizationServiceReadURI  string `env:"AUTHORIZATION_SERVICE_READ_URI"  yaml:"authorization_service_read_uri"`

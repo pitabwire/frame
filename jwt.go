@@ -44,10 +44,10 @@ func (s *Service) RegisterForJwt(ctx context.Context) error {
 
 // RegisterForJwtWithParams registers for JWT with the given parameters. This is useful for situations where one may need to register external applications for access token generation.
 func (s *Service) RegisterForJwtWithParams(ctx context.Context,
-	oauth2ServiceAdminHost string, clientName string, clientId string, clientSecret string,
+	oauth2ServiceAdminHost string, clientName string, clientID string, clientSecret string,
 	scope string, audienceList []string, metadata map[string]string) (map[string]any, error) {
 	oauth2AdminURI := fmt.Sprintf("%s/admin/clients", oauth2ServiceAdminHost)
-	oauth2AdminIDUri := fmt.Sprintf("%s/%s", oauth2AdminURI, clientId)
+	oauth2AdminIDUri := fmt.Sprintf("%s/%s", oauth2AdminURI, clientID)
 
 	status, response, err := s.InvokeRestService(ctx, http.MethodGet, oauth2AdminIDUri, nil, nil)
 	if err != nil {
@@ -77,7 +77,7 @@ func (s *Service) RegisterForJwtWithParams(ctx context.Context,
 	}
 
 	payload := map[string]any{
-		"client_id":                  clientId,
+		"client_id":                  clientID,
 		"client_name":                url.QueryEscape(clientName),
 		"client_secret":              url.QueryEscape(clientSecret),
 		"grant_types":                []string{"client_credentials"},

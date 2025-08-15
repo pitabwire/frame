@@ -70,17 +70,15 @@ func (s *Service) RegisterForJwtWithParams(ctx context.Context,
 
 	if status != http.StatusNotFound {
 
-		var existingClients []map[string]any
-		err = json.Unmarshal(response, &existingClients)
+		var existingClient map[string]any
+		err = json.Unmarshal(response, &existingClient)
 		if err != nil {
 			s.Log(ctx).WithError(err).WithField("payload", string(response)).
 				Error("could not unmarshal existing clients")
 			return nil, err
 		}
 
-		if len(existingClients) > 0 {
-			return existingClients[0], nil
-		}
+		return existingClient, nil
 	}
 
 	payload := map[string]any{

@@ -9,6 +9,8 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"strings"
+
+	"github.com/pitabwire/util"
 )
 
 // InvokeRestService convenience method to call a http endpoint and utilize the raw results.
@@ -47,7 +49,7 @@ func (s *Service) InvokeRestService(ctx context.Context,
 	if err != nil {
 		return 0, nil, err
 	}
-	defer resp.Body.Close()
+	defer util.CloseAndLogOnError(ctx, resp.Body)
 
 	respDump, _ := httputil.DumpResponse(resp, true)
 	s.Log(ctx).WithField("response", string(respDump)).Debug("response in")
@@ -85,7 +87,7 @@ func (s *Service) InvokeRestServiceURLEncoded(ctx context.Context,
 	if err != nil {
 		return 0, nil, err
 	}
-	defer resp.Body.Close()
+	defer util.CloseAndLogOnError(ctx, resp.Body)
 
 	respDump, _ := httputil.DumpResponse(resp, true)
 	s.Log(ctx).WithField("response", string(respDump)).Info("response in")

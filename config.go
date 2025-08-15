@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/caarlos0/env/v11"
+	"github.com/pitabwire/util"
 )
 
 const (
@@ -76,11 +77,15 @@ func ConfigFillEnv(v any) error {
 }
 
 type ConfigurationDefault struct {
-	LogLevel           string `envDefault:"info"                      env:"LOG_LEVEL"            yaml:"log_level"`
-	LogFormat          string `envDefault:"info"                      env:"LOG_FORMAT"           yaml:"log_format"`
-	LogTimeFormat      string `envDefault:"2006-01-02T15:04:05Z07:00" env:"LOG_TIME_FORMAT"      yaml:"log_time_format"`
-	LogColored         bool   `envDefault:"true"                      env:"LOG_COLORED"          yaml:"log_colored"`
-	LogShowStackTrace  bool   `envDefault:"false"                     env:"LOG_SHOW_STACK_TRACE" yaml:"log_show_stack_trace"`
+	LogLevel          string `envDefault:"info"                      env:"LOG_LEVEL"            yaml:"log_level"`
+	LogFormat         string `envDefault:"info"                      env:"LOG_FORMAT"           yaml:"log_format"`
+	LogTimeFormat     string `envDefault:"2006-01-02T15:04:05Z07:00" env:"LOG_TIME_FORMAT"      yaml:"log_time_format"`
+	LogColored        bool   `envDefault:"true"                      env:"LOG_COLORED"          yaml:"log_colored"`
+	LogShowStackTrace bool   `envDefault:"false"                     env:"LOG_SHOW_STACK_TRACE" yaml:"log_show_stack_trace"`
+
+	ServiceName        string `envDefault:""                      env:"SERVICE_NAME" yaml:"service_name"`
+	ServiceEnvironment string `envDefault:""                      env:"SERVICE_ENVIRONMENT" yaml:"service_environment"`
+	ServiceVersion     string `envDefault:""                      env:"SERVICE_VERSION" yaml:"service_version"`
 	RunServiceSecurely bool   `envDefault:"true"                      env:"RUN_SERVICE_SECURELY" yaml:"run_service_securely"`
 
 	ServerPort     string `envDefault:":7000"  env:"PORT"      yaml:"server_port"`
@@ -573,7 +578,7 @@ func (oid *OIDCMap) loadOIDC(ctx context.Context, url string) error {
 	if err != nil {
 		return err
 	}
-	defer hresp.Body.Close()
+	defer util.CloseAndLogOnError(ctx, hresp.Body)
 
 	if hresp.StatusCode/100 != httpStatusOKClass {
 		return fmt.Errorf("OIDC discovery request %q failed: %d %s", url, hresp.StatusCode, hresp.Status)
@@ -611,7 +616,7 @@ func (oid *OIDCMap) loadJWKData(ctx context.Context, url string) (string, error)
 	if err != nil {
 		return "", err
 	}
-	defer hresp.Body.Close()
+	defer util.CloseAndLogOnError(ctx, hresp.Body)
 
 	if hresp.StatusCode/100 != httpStatusOKClass {
 		return "", fmt.Errorf("JWKs data request %q failed: %d %s", url, hresp.StatusCode, hresp.Status)

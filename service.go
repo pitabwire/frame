@@ -46,7 +46,6 @@ const (
 type Service struct {
 	name                       string
 	jwtClient                  map[string]any
-	jwtClientSecret            string
 	version                    string
 	environment                string
 	logger                     *util.LogEntry
@@ -131,6 +130,18 @@ func NewServiceWithContext(ctx context.Context, name string, opts ...Option) (co
 		queue: q,
 	}
 
+	if defaultCfg.ServiceName != "" {
+		opts = append(opts, WithName(defaultCfg.ServiceName))
+	}
+
+	if defaultCfg.ServiceEnvironment != "" {
+		opts = append(opts, WithEnvironment(defaultCfg.ServiceEnvironment))
+	}
+
+	if defaultCfg.ServiceVersion != "" {
+		opts = append(opts, WithVersion(defaultCfg.ServiceVersion))
+	}
+
 	opts = append(opts, WithLogger()) // Ensure logger is initialized early
 
 	service.Init(ctx, opts...) // Apply all options, using the signal-aware context
@@ -157,6 +168,11 @@ func Svc(ctx context.Context) *Service {
 	return service
 }
 
+// Name gets the name of the service. Its the first argument used when NewService is called.
+func (s *Service) Name() string {
+	return s.name
+}
+
 // WithName specifies the name the service will utilize.
 func WithName(name string) Option {
 	return func(_ context.Context, s *Service) {
@@ -164,11 +180,9 @@ func WithName(name string) Option {
 	}
 }
 
-// WithEnvironment specifies the environment the service will utilize.
-func WithEnvironment(environment string) Option {
-	return func(_ context.Context, s *Service) {
-		s.environment = environment
-	}
+// Version gets the release version of the service.
+func (s *Service) Version() string {
+	return s.version
 }
 
 // WithVersion specifies the version the service will utilize.
@@ -178,19 +192,16 @@ func WithVersion(version string) Option {
 	}
 }
 
-// Name gets the name of the service. Its the first argument used when NewService is called.
-func (s *Service) Name() string {
-	return s.name
-}
-
-// Version gets the release version of the service.
-func (s *Service) Version() string {
-	return s.version
-}
-
 // Environment gets the runtime environment of the service.
 func (s *Service) Environment() string {
 	return s.environment
+}
+
+// WithEnvironment specifies the environment the service will utilize.
+func WithEnvironment(environment string) Option {
+	return func(_ context.Context, s *Service) {
+		s.environment = environment
+	}
 }
 
 // JwtClient gets the authenticated jwt client if configured at startup.
@@ -214,7 +225,11 @@ func (s *Service) JwtClientID() string {
 
 // JwtClientSecret gets the authenticated jwt client if configured at startup.
 func (s *Service) JwtClientSecret() string {
-	return s.jwtClientSecret
+	clientSecret, ok := s.jwtClient["client_secret"].(string)
+	if !ok {
+		return ""
+	}
+	return clientSecret
 }
 
 func (s *Service) H() http.Handler {

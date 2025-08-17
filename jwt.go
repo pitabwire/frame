@@ -40,7 +40,7 @@ func (s *Service) RegisterForJwt(ctx context.Context) error {
 			return err
 		}
 
-		s.jwtClient = jwtClient
+		s.SetJwtClient(jwtClient)
 	}
 
 	return nil
@@ -57,7 +57,6 @@ func (s *Service) RegisterForJwtWithParams(ctx context.Context,
 	if err != nil {
 		s.Log(ctx).WithError(err).Error("could not get existing clients")
 		return nil, err
-
 	}
 	if status != http.StatusNotFound && (status > 299 || status < 200) {
 		s.Log(ctx).
@@ -69,7 +68,6 @@ func (s *Service) RegisterForJwtWithParams(ctx context.Context,
 	}
 
 	if status != http.StatusNotFound {
-
 		var existingClient map[string]any
 		err = json.Unmarshal(response, &existingClient)
 		if err != nil {

@@ -100,7 +100,7 @@ func (dd *defaultDriver) ListenAndServe(addr string, h http.Handler) error {
 		return err0
 	}
 
-	dd.log.Info("http server port is : %s", addr)
+	dd.log.WithField("http port", addr).Info("listening on server port")
 
 	return dd.httpServer.Serve(ln)
 }
@@ -119,8 +119,7 @@ func (dd *defaultDriver) ListenAndServeTLS(addr, certPath, certKeyPath string, h
 		return err0
 	}
 
-	dd.log.Info("http server port is : %s", addr)
-
+	dd.log.WithField("https port", addr).Info("listening on server port")
 	return dd.httpServer.Serve(ln)
 }
 
@@ -155,7 +154,7 @@ func (gd *grpcDriver) ListenAndServe(addr string, h http.Handler) error {
 			return
 		}
 
-		gd.log.Info("grpc server port is : %s", gd.grpcPort)
+		gd.log.WithField("grpc port", gd.grpcPort).Info("listening on server port")
 
 		err2 = gd.grpcServer.Serve(ln)
 		if err2 != nil {
@@ -168,7 +167,7 @@ func (gd *grpcDriver) ListenAndServe(addr string, h http.Handler) error {
 	if err0 != nil {
 		return err0
 	}
-	gd.log.Info("http server port is : %s", addr)
+	gd.log.WithField("http port", addr).Info("listening on server port")
 
 	return gd.httpServer.Serve(httpListener)
 }
@@ -189,7 +188,7 @@ func (gd *grpcDriver) ListenAndServeTLS(addr, certFile, certKeyFile string, h ht
 			return
 		}
 
-		gd.log.Info("grpc server port is : %s", address)
+		gd.log.WithField("grpc port", address).Info("listening on server port")
 
 		err2 = gd.grpcServer.Serve(ln)
 		if err2 != nil {
@@ -203,7 +202,7 @@ func (gd *grpcDriver) ListenAndServeTLS(addr, certFile, certKeyFile string, h ht
 		return err0
 	}
 
-	gd.log.Info("http server port is : %s", addr)
+	gd.log.WithField("http port", addr).Info("listening on server port")
 
 	return gd.httpServer.Serve(httpListener)
 }

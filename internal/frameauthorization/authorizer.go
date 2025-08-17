@@ -32,7 +32,9 @@ func (a *authorizer) IsEnabled() bool {
 // HasAccess checks if a subject can perform an action on a resource
 func (a *authorizer) HasAccess(ctx context.Context, action string, subject string) (bool, error) {
 	if !a.IsEnabled() {
-		a.logger.Debug("Authorization is disabled, allowing access")
+		if a.logger != nil {
+			a.logger.Debug("Authorization is disabled, allowing access")
+		}
 		return true, nil
 	}
 
@@ -65,7 +67,7 @@ func (a *authorizer) HasAccess(ctx context.Context, action string, subject strin
 		a.logger.WithField("status", status).WithField("response", string(result)).
 			WithField("action", action).WithField("subject", subject).
 			Error("Authorization service returned error status")
-		return false, fmt.Errorf(errMsg)
+		return false, fmt.Errorf("%s", errMsg)
 	}
 
 	// Parse response

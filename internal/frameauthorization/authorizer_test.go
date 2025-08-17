@@ -7,6 +7,8 @@ import (
 	"github.com/pitabwire/frame"
 	"github.com/pitabwire/frame/frametests"
 	"github.com/pitabwire/frame/frametests/definition"
+	"github.com/pitabwire/frame/frametests/deps/testnats"
+	"github.com/pitabwire/frame/frametests/deps/testpostgres"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -78,5 +80,14 @@ func (s *AuthorizerTestSuite) TestAuthorizerAccess() {
 }
 
 func TestAuthorizerTestSuite(t *testing.T) {
-	suite.Run(t, new(AuthorizerTestSuite))
+	suite.Run(t, &AuthorizerTestSuite{
+		FrameBaseTestSuite: frametests.FrameBaseTestSuite{
+			InitResourceFunc: func(_ context.Context) []definition.TestResource {
+				return []definition.TestResource{
+					testpostgres.New(),
+					testnats.New(),
+				}
+			},
+		},
+	})
 }

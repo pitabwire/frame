@@ -82,6 +82,10 @@ func (dm *datastoreManager) Initialize(ctx context.Context) error {
 
 // initializeWriteConnection initializes the write database connection
 func (dm *datastoreManager) initializeWriteConnection(ctx context.Context) error {
+	if dm.config == nil {
+		return fmt.Errorf("datastore config is not configured")
+	}
+	
 	databaseURL := dm.config.GetDatabaseURL()
 	if databaseURL == "" {
 		return fmt.Errorf("database URL is not configured")

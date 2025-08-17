@@ -34,14 +34,14 @@ func (s *SubscriberTestSuite) TestSubscriberCreation() {
 		defer svc.Stop(ctx)
 
 		t.Run("SubscriberCreation", func(t *testing.T) {
-			// Test subscriber creation
-			subscriber := NewSubscriber("test-subscription", depOpt.Queue(ctx)[0].GetDS(ctx).String(), nil, nil)
+			// Test subscriber creation using mem:// to avoid NATS connection issues
+			subscriber := NewSubscriber("test-subscription", "mem://test-topic", nil, nil)
 			s.NotNil(subscriber, "Should create subscriber")
 		})
 
 		t.Run("SubscriberInterfaceCompliance", func(t *testing.T) {
 			// Test that our subscriber implements the interface correctly
-			var _ Subscriber = NewSubscriber("test-subscription", depOpt.Queue(ctx)[0].GetDS(ctx).String(), nil, nil)
+			var _ Subscriber = NewSubscriber("test-subscription", "mem://test-topic", nil, nil)
 		})
 	})
 }

@@ -25,10 +25,13 @@ type healthChecker struct {
 
 // NewHealthChecker creates a new health checker instance
 func NewHealthChecker(datastore DatastoreManager, logger Logger) HealthChecker {
+	// Start as unhealthy if datastore is nil, otherwise assume healthy initially
+	healthy := datastore != nil
+	
 	return &healthChecker{
 		datastore: datastore,
 		logger:    logger,
-		healthy:   true, // Assume healthy initially
+		healthy:   healthy,
 		stopChan:  make(chan struct{}),
 	}
 }
@@ -41,6 +44,19 @@ func (hc *healthChecker) CheckHealth(ctx context.Context) HealthStatus {
 	defer hc.mutex.Unlock()
 	
 	hc.lastCheck = start
+	
+	// Check if datastore is available
+	if hc.datastore == nil {
+		hc.healthy = false
+		hc.lastError = "datastore is not configured"
+		hc.responseTime = time.Since(start)
+		return HealthStatus{
+			Healthy:      false,
+			LastCheck:    hc.lastCheck,
+			Error:        hc.lastError,
+			ResponseTime: hc.responseTime,
+		}
+	}
 	
 	// Check write connection
 	writeDB, err := hc.datastore.GetConnection(ctx)

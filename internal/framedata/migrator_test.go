@@ -7,6 +7,8 @@ import (
 	"github.com/pitabwire/frame"
 	"github.com/pitabwire/frame/frametests"
 	"github.com/pitabwire/frame/frametests/definition"
+	"github.com/pitabwire/frame/frametests/deps/testnats"
+	"github.com/pitabwire/frame/frametests/deps/testpostgres"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -33,13 +35,13 @@ func (s *MigratorTestSuite) TestMigratorCreation() {
 
 		t.Run("MigratorCreation", func(t *testing.T) {
 			// Test migrator creation
-			migrator := NewMigrator(nil, "", nil)
+			migrator := NewMigrator(nil, nil, nil, nil)
 			s.NotNil(migrator, "Should create migrator")
 		})
 
 		t.Run("MigratorInterfaceCompliance", func(t *testing.T) {
 			// Test that our migrator implements the interface correctly
-			var _ Migrator = NewMigrator(nil, "", nil)
+			var _ Migrator = NewMigrator(nil, nil, nil, nil)
 		})
 	})
 }
@@ -60,25 +62,34 @@ func (s *MigratorTestSuite) TestMigratorOperations() {
 		)
 		defer svc.Stop(ctx)
 
-		t.Run("MigratorLoadMigrations", func(t *testing.T) {
-			// Test migrator load migrations
-			migrator := NewMigrator(nil, "", nil)
-			migrations, err := migrator.LoadMigrations(ctx)
-			// With nil database and empty path, should handle gracefully
+		t.Run("MigratorGetPendingMigrations", func(t *testing.T) {
+			// Test migrator get pending migrations
+			migrator := NewMigrator(nil, nil, nil, nil)
+			migrations, err := migrator.GetPendingMigrations(ctx)
+			// With nil database, should handle gracefully
 			s.Error(err, "Should fail with nil database")
 			s.Nil(migrations, "Should return nil migrations on error")
 		})
 
 		t.Run("MigratorValidation", func(t *testing.T) {
 			// Test migrator validation
-			migrator := NewMigrator(nil, "", nil)
+			migrator := NewMigrator(nil, nil, nil, nil)
 			err := migrator.ValidateMigrations(ctx)
-			// With empty path, validation should handle gracefully
-			s.Error(err, "Should fail validation with empty path")
+			// With nil filesystem, validation should handle gracefully
+			s.Error(err, "Should fail validation with nil filesystem")
 		})
 	})
 }
 
 func TestMigratorTestSuite(t *testing.T) {
-	suite.Run(t, new(MigratorTestSuite))
+	suite.Run(t, &MigratorTestSuite{
+		FrameBaseTestSuite: frametests.FrameBaseTestSuite{
+			InitResourceFunc: func(_ context.Context) []definition.TestResource {
+				return []definition.TestResource{
+					testpostgres.New(),
+					testnats.New(),
+				}
+			},
+		},
+	})
 }

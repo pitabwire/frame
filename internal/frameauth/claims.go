@@ -159,6 +159,10 @@ func (a *AuthenticationClaims) GetRoles() []string {
 	if !ok {
 		roles, ok = a.Ext["role"]
 		if !ok {
+			// Return empty slice instead of nil
+			if result == nil {
+				return []string{}
+			}
 			return result
 		}
 	}
@@ -168,6 +172,10 @@ func (a *AuthenticationClaims) GetRoles() []string {
 		result = append(result, strings.Split(roleStr, ",")...)
 	}
 
+	// Return empty slice instead of nil if result is still nil
+	if result == nil {
+		return []string{}
+	}
 	return result
 }
 

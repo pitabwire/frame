@@ -8,7 +8,11 @@ import (
 	"github.com/pitabwire/frame"
 	"github.com/pitabwire/frame/frametests"
 	"github.com/pitabwire/frame/frametests/definition"
+	"github.com/pitabwire/frame/frametests/deps/testnats"
+	"github.com/pitabwire/frame/frametests/deps/testpostgres"
 	"github.com/stretchr/testify/suite"
+	sdklogs "go.opentelemetry.io/otel/sdk/log"
+	sdkmetrics "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 )
 
@@ -16,12 +20,17 @@ type ObservabilityTestSuite struct {
 	frametests.FrameBaseTestSuite
 }
 
-func (s *ObservabilityTestSuite) InitResourceFunc() definition.DependancyOption {
-	return definition.NewDependancyOption(s.Resources())
-}
-
 func TestObservabilityTestSuite(t *testing.T) {
-	suite.Run(t, new(ObservabilityTestSuite))
+	suite.Run(t, &ObservabilityTestSuite{
+		FrameBaseTestSuite: frametests.FrameBaseTestSuite{
+			InitResourceFunc: func(_ context.Context) []definition.TestResource {
+				return []definition.TestResource{
+					testpostgres.New(),
+					testnats.New(),
+				}
+			},
+		},
+	})
 }
 
 // mockTracingConfig implements TracingConfig for testing
@@ -48,14 +57,35 @@ func (m *mockLoggingConfig) LoggingLevel() string      { return m.loggingLevel }
 func (m *mockLoggingConfig) LoggingTimeFormat() string { return m.loggingTimeFormat }
 func (m *mockLoggingConfig) LoggingColored() bool      { return m.loggingColored }
 
-func (s *ObservabilityTestSuite) TestObservabilityOperations() {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
+// noopLogExporter implements sdklogs.Exporter for testing
+type noopLogExporter struct{}
 
-	// Create service with test dependencies
-	svc, err := frame.NewServiceWithContext(ctx, s.InitResourceFunc())
-	s.Require().NoError(err, "Should create service successfully")
-	defer svc.Stop(ctx)
+func (n *noopLogExporter) Export(ctx context.Context, records []sdklogs.Record) error {
+	return nil
+}
+
+func (n *noopLogExporter) Shutdown(ctx context.Context) error {
+	return nil
+}
+
+func (n *noopLogExporter) ForceFlush(ctx context.Context) error {
+	return nil
+}
+
+func (s *ObservabilityTestSuite) TestObservabilityOperations() {
+	depOptions := []*definition.DependancyOption{
+		definition.NewDependancyOption("postgres_nats", "observability_test", s.Resources()),
+	}
+
+	frametests.WithTestDependancies(s.T(), depOptions, func(t *testing.T, depOpt *definition.DependancyOption) {
+		ctx := context.Background()
+		
+		// Create a service with the test dependencies
+		ctx, svc := frame.NewServiceWithContext(ctx, "observability-test",
+			frame.WithDatastoreConnection(depOpt.Database(ctx)[0].GetDS(ctx).String(), false),
+			frame.WithRegisterPublisher("events", "mem://test-events"),
+		)
+		defer svc.Stop(ctx)
 
 	testCases := []struct {
 		name           string
@@ -98,44 +128,47 @@ func (s *ObservabilityTestSuite) TestObservabilityOperations() {
 				loggingColored:    true,
 			},
 			options: ObservabilityOptions{
-				EnableTracing: true,
-				TraceExporter: tracetest.NewInMemoryExporter(),
+				EnableTracing:      true,
+				TraceExporter:      tracetest.NewInMemoryExporter(),
+				MetricsReader:      sdkmetrics.NewManualReader(),
+				TraceLogsExporter:  &noopLogExporter{},
 			},
 			enableTracing: true,
 			expectError:   false,
 		},
 	}
 
-	for _, tc := range testCases {
-		s.Run(tc.name, func() {
-			// Test manager creation
-			manager := NewManager(tc.tracingConfig, tc.loggingConfig, tc.options)
-			s.Require().NotNil(manager, "Should create manager successfully")
+		for _, tc := range testCases {
+			t.Run(tc.name, func(t *testing.T) {
+				// Test manager creation
+				manager := NewManager(tc.tracingConfig, tc.loggingConfig, tc.options)
+				s.Require().NotNil(manager, "Should create manager successfully")
 
-			// Test tracer initialization
-			err := manager.InitTracer(ctx)
-			if tc.expectError {
-				s.Require().Error(err, "Should return error for invalid configuration")
-				return
-			}
-			s.Require().NoError(err, "Should initialize tracer successfully")
+				// Test tracer initialization
+				err := manager.InitTracer(ctx)
+				if tc.expectError {
+					s.Require().Error(err, "Should return error for invalid configuration")
+					return
+				}
+				s.Require().NoError(err, "Should initialize tracer successfully")
 
-			// Test logging functionality
-			logger := manager.Log(ctx)
-			s.Require().NotNil(logger, "Should return logger instance")
+				// Test logging functionality
+				logger := manager.Log(ctx)
+				s.Require().NotNil(logger, "Should return logger instance")
 
-			slogger := manager.SLog(ctx)
-			s.Require().NotNil(slogger, "Should return structured logger instance")
+				slogger := manager.SLog(ctx)
+				s.Require().NotNil(slogger, "Should return structured logger instance")
 
-			// Test logger functionality
-			logger.Info("Test log message")
-			logger.WithField("test_field", "test_value").Debug("Test debug message")
+				// Test logger functionality
+				logger.Info("Test log message")
+				logger.WithField("test_field", "test_value").Debug("Test debug message")
 
-			// Test shutdown
-			err = manager.Shutdown(ctx)
-			s.Require().NoError(err, "Should shutdown gracefully")
-		})
-	}
+				// Test shutdown
+				err = manager.Shutdown(ctx)
+				s.Require().NoError(err, "Should shutdown gracefully")
+			})
+		}
+	})
 }
 
 func (s *ObservabilityTestSuite) TestLoggingOptions() {

@@ -7,6 +7,8 @@ import (
 	"github.com/pitabwire/frame"
 	"github.com/pitabwire/frame/frametests"
 	"github.com/pitabwire/frame/frametests/definition"
+	"github.com/pitabwire/frame/frametests/deps/testnats"
+	"github.com/pitabwire/frame/frametests/deps/testpostgres"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -64,17 +66,26 @@ func (s *HealthTestSuite) TestHealthCheckerOperations() {
 			// Test health check with nil database
 			checker := NewHealthChecker(nil, nil)
 			status := checker.CheckHealth(ctx)
-			s.False(status.IsHealthy, "Should not be healthy with nil database")
+			s.False(status.Healthy, "Should not be healthy with nil database")
 		})
 
 		t.Run("HealthCheckerMonitoring", func(t *testing.T) {
 			// Test health checker monitoring
 			checker := NewHealthChecker(nil, nil)
-			s.False(checker.IsMonitoring(), "Should not be monitoring initially")
+			s.False(checker.IsHealthy(), "Should not be healthy initially with nil database")
 		})
 	})
 }
 
 func TestHealthTestSuite(t *testing.T) {
-	suite.Run(t, new(HealthTestSuite))
+	suite.Run(t, &HealthTestSuite{
+		FrameBaseTestSuite: frametests.FrameBaseTestSuite{
+			InitResourceFunc: func(_ context.Context) []definition.TestResource {
+				return []definition.TestResource{
+					testpostgres.New(),
+					testnats.New(),
+				}
+			},
+		},
+	})
 }

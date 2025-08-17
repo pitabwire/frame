@@ -40,7 +40,7 @@ func (s *Service) RegisterForJwt(ctx context.Context) error {
 			return err
 		}
 
-		s.jwtClient = jwtClient
+		s.SetJwtClient(jwtClient)
 	}
 
 	return nil

@@ -3,6 +3,7 @@ package frame
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net"
 	"net/http"
 	"os/signal"
@@ -217,19 +218,36 @@ func (s *Service) SetJwtClient(jwtCli map[string]any) {
 // JwtClientID gets the authenticated JWT client ID if configured at startup.
 func (s *Service) JwtClientID() string {
 	clientID, ok := s.jwtClient["client_id"].(string)
-	if !ok {
-		return ""
+	if ok {
+		return clientID
 	}
+	oauth2Config, sok := s.Config().(ConfigurationOAUTH2)
+	if sok {
+		clientID = oauth2Config.GetOauth2ServiceClientID()
+		if clientID != "" {
+			return clientID
+		}
+	}
+
+	clientID = s.Name()
+	if s.Environment() != "" {
+		clientID = fmt.Sprintf("%s_%s", s.Name(), s.Environment())
+	}
+
 	return clientID
 }
 
 // JwtClientSecret gets the authenticated jwt client if configured at startup.
 func (s *Service) JwtClientSecret() string {
 	clientSecret, ok := s.jwtClient["client_secret"].(string)
-	if !ok {
-		return ""
+	if ok {
+		return clientSecret
 	}
-	return clientSecret
+	oauth2Config, sok := s.Config().(ConfigurationOAUTH2)
+	if sok {
+		return oauth2Config.GetOauth2ServiceClientSecret()
+	}
+	return ""
 }
 
 func (s *Service) H() http.Handler {

@@ -9,7 +9,8 @@ import (
 	"strings"
 )
 
-const ConstInternalSystemScope = "int_system"
+const ConstSystemScopeInternal = "system_int"
+const ConstSystemScopeExternal = "system_ext"
 
 // RegisterForJwt function hooks in jwt client registration to make sure service is authenticated.
 func (s *Service) RegisterForJwt(ctx context.Context) error {
@@ -34,8 +35,9 @@ func (s *Service) RegisterForJwt(ctx context.Context) error {
 	if oauth2ServiceAdminHost != "" && clientSecret != "" {
 		audienceList := strings.Split(oauth2Audience, ",")
 
-		jwtClient, err := s.RegisterForJwtWithParams(ctx, oauth2ServiceAdminHost, s.Name(), clientID, clientSecret,
-			ConstInternalSystemScope, audienceList, map[string]string{})
+		jwtClient, err := s.RegisterForJwtWithParams(ctx,
+			oauth2ServiceAdminHost, s.Name(), clientID, clientSecret,
+			ConstSystemScopeInternal, audienceList, map[string]string{})
 		if err != nil {
 			return err
 		}

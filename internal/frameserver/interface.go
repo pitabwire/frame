@@ -39,6 +39,16 @@ type ServerStats struct {
 	ErrorCount     int64         `json:"error_count"`
 }
 
+// GetConnectionCount implements common.ServerStats interface
+func (s ServerStats) GetConnectionCount() int {
+	return int(s.ActiveRequests)
+}
+
+// GetRequestCount implements common.ServerStats interface  
+func (s ServerStats) GetRequestCount() int64 {
+	return s.TotalRequests
+}
+
 // HTTPServerBuilder defines the interface for building HTTP servers
 type HTTPServerBuilder interface {
 	// Server configuration

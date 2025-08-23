@@ -1,0 +1,106 @@
+package framedata
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"io"
+	"net/http"
+	"net/http/httputil"
+	"net/url"
+	"strings"
+
+	"github.com/pitabwire/util"
+)
+
+// datastoreService represents a service that can perform datastore operations
+type datastoreService struct {
+	Log func(ctx context.Context) *util.LogEntry
+	client *http.Client
+}
+
+// InvokeRestService convenience method to call a http endpoint and utilize the raw results.
+func (s *datastoreService) InvokeRestService(ctx context.Context,
+	method string, endpointURL string, payload map[string]any,
+	headers map[string][]string) (int, []byte, error) {
+	if headers == nil {
+		headers = map[string][]string{
+			"Content-Type": {"application/json"},
+			"Accept":       {"application/json"},
+		}
+	}
+
+	var body io.Reader
+	if payload != nil {
+		postBody, err := json.Marshal(payload)
+		if err != nil {
+			return 0, nil, err
+		}
+
+		body = bytes.NewBuffer(postBody)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, method, endpointURL, body)
+	if err != nil {
+		return 0, nil, err
+	}
+
+	req.Header = headers
+
+	reqDump, _ := httputil.DumpRequestOut(req, true)
+
+	s.Log(ctx).WithField("request", string(reqDump)).Debug("request out")
+
+	//nolint:bodyclose //this is done by util.CloseAndLogOnError()
+	resp, err := s.client.Do(req)
+	if err != nil {
+		return 0, nil, err
+	}
+	defer util.CloseAndLogOnError(ctx, resp.Body)
+
+	respDump, _ := httputil.DumpResponse(resp, true)
+	s.Log(ctx).WithField("response", string(respDump)).Debug("response in")
+
+	response, err := io.ReadAll(resp.Body)
+
+	return resp.StatusCode, response, err
+}
+
+// InvokeRestServiceURLEncoded sends an HTTP request to the specified endpoint with a URL-encoded payload.
+func (s *datastoreService) InvokeRestServiceURLEncoded(ctx context.Context,
+	method string, endpointURL string, payload url.Values,
+	headers map[string]string) (int, []byte, error) {
+	if headers == nil {
+		headers = map[string]string{
+			"Content-Type": "application/x-www-form-urlencoded",
+		}
+	}
+
+	logger := s.Log(ctx).WithField("method", method).WithField("endpoint", endpointURL).WithField("header", headers)
+
+	req, err := http.NewRequestWithContext(ctx, method, endpointURL, strings.NewReader(payload.Encode()))
+	if err != nil {
+		return 0, nil, err
+	}
+
+	for key, val := range headers {
+		req.Header.Set(key, val)
+	}
+
+	reqDump, _ := httputil.DumpRequestOut(req, true)
+	logger.WithField("request", string(reqDump)).Info("request out")
+
+	//nolint:bodyclose //this is done by util.CloseAndLogOnError()
+	resp, err := s.client.Do(req)
+	if err != nil {
+		return 0, nil, err
+	}
+	defer util.CloseAndLogOnError(ctx, resp.Body)
+
+	respDump, _ := httputil.DumpResponse(resp, true)
+	s.Log(ctx).WithField("response", string(respDump)).Info("response in")
+
+	response, err := io.ReadAll(resp.Body)
+
+	return resp.StatusCode, response, err
+}

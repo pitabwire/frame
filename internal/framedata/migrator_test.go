@@ -1,95 +1,206 @@
-package framedata
+package framedata_test
 
 import (
-	"context"
+	"os"
 	"testing"
 
+	"github.com/pitabwire/util"
+	"gorm.io/gorm"
+
 	"github.com/pitabwire/frame"
-	"github.com/pitabwire/frame/frametests"
-	"github.com/pitabwire/frame/frametests/definition"
-	"github.com/pitabwire/frame/frametests/deps/testnats"
-	"github.com/pitabwire/frame/frametests/deps/testpostgres"
-	"github.com/stretchr/testify/suite"
 )
 
-// MigratorTestSuite extends FrameBaseTestSuite for migrator testing with real dependencies
-type MigratorTestSuite struct {
-	frametests.FrameBaseTestSuite
-}
+func TestSaveNewMigrations(t *testing.T) {
+	testDBURL := util.GetEnv(
+		"TEST_DATABASE_URL",
+		"postgres://frame:secret@localhost:5435/framedatabase?sslmode=disable",
+	)
+	ctx, svc := frame.NewService("Test Migrations Srv")
 
-// TestMigratorCreation tests migrator creation with real dependencies
-func (s *MigratorTestSuite) TestMigratorCreation() {
-	depOptions := []*definition.DependancyOption{
-		definition.NewDependancyOption("postgres_nats", "migrator_creation_test", s.Resources()),
+	mainDB := frame.WithDatastoreConnection(testDBURL, false)
+	svc.Init(ctx, mainDB)
+
+	svc.DB(ctx, false).Session(&gorm.Session{AllowGlobalUpdate: true}).Unscoped().Delete(&frame.Migration{})
+
+	err := svc.MigrateDatastore(ctx, "./tests_runner/migrations/default")
+	if err != nil {
+		t.Errorf("Could not migrate successfully because : %s", err)
+		return
 	}
 
-	frametests.WithTestDependancies(s.T(), depOptions, func(t *testing.T, depOpt *definition.DependancyOption) {
-		ctx := context.Background()
-		
-		// Create a service with the test dependencies
-		ctx, svc := frame.NewServiceWithContext(ctx, "migrator-test",
-			frame.WithDatastoreConnection(depOpt.Database(ctx)[0].GetDS(ctx).String(), false),
-			frame.WithRegisterPublisher("events", depOpt.Queue(ctx)[0].GetDS(ctx).String()),
-		)
-		defer svc.Stop(ctx)
+	migrationPath := "./tests_runner/migrations/scans/scanned_select.sql"
 
-		t.Run("MigratorCreation", func(t *testing.T) {
-			// Test migrator creation
-			migrator := NewMigrator(nil, nil, nil, nil)
-			s.NotNil(migrator, "Should create migrator")
-		})
-
-		t.Run("MigratorInterfaceCompliance", func(t *testing.T) {
-			// Test that our migrator implements the interface correctly
-			var _ Migrator = NewMigrator(nil, nil, nil, nil)
-		})
-	})
-}
-
-// TestMigratorOperations tests migrator operations with real dependencies
-func (s *MigratorTestSuite) TestMigratorOperations() {
-	depOptions := []*definition.DependancyOption{
-		definition.NewDependancyOption("postgres_nats", "migrator_operations_test", s.Resources()),
+	err = svc.DB(ctx, false).Where("name = ?", migrationPath).Unscoped().Delete(&frame.Migration{}).Error
+	if err != nil {
+		t.Errorf("Could not ensure migrations are clean%s", err)
+		return
 	}
 
-	frametests.WithTestDependancies(s.T(), depOptions, func(t *testing.T, depOpt *definition.DependancyOption) {
-		ctx := context.Background()
-		
-		// Create a service with the test dependencies
-		ctx, svc := frame.NewServiceWithContext(ctx, "migrator-operations-test",
-			frame.WithDatastoreConnection(depOpt.Database(ctx)[0].GetDS(ctx).String(), false),
-			frame.WithRegisterPublisher("events", depOpt.Queue(ctx)[0].GetDS(ctx).String()),
-		)
-		defer svc.Stop(ctx)
+	migrationContent, err := os.ReadFile(migrationPath)
+	if err != nil {
+		t.Errorf("Could not read scanned migration %s", err)
+		return
+	}
 
-		t.Run("MigratorGetPendingMigrations", func(t *testing.T) {
-			// Test migrator get pending migrations
-			migrator := NewMigrator(nil, nil, nil, nil)
-			migrations, err := migrator.GetPendingMigrations(ctx)
-			// With nil database, should handle gracefully
-			s.Error(err, "Should fail with nil database")
-			s.Nil(migrations, "Should return nil migrations on error")
-		})
+	pool := svc.DBPool()
+	testMigrator := svc.NewMigrator(ctx, pool)
 
-		t.Run("MigratorValidation", func(t *testing.T) {
-			// Test migrator validation
-			migrator := NewMigrator(nil, nil, nil, nil)
-			err := migrator.ValidateMigrations(ctx)
-			// With nil filesystem, validation should handle gracefully
-			s.Error(err, "Should fail validation with nil filesystem")
-		})
-	})
+	err = testMigrator.SaveMigrationString(ctx, migrationPath, string(migrationContent), "")
+	if err != nil {
+		t.Errorf("Could not save new migration %s", err)
+		return
+	}
+
+	migration := frame.Migration{Name: migrationPath}
+	err = svc.DB(ctx, false).First(&migration, "name = ?", migrationPath).Error
+	if err != nil || migration.ID == "" {
+		t.Errorf("Migration was not saved successfully %s", err)
+		return
+	}
+
+	updateSQL := "SELECT 2;"
+	err = testMigrator.SaveMigrationString(ctx, migrationPath, updateSQL, "")
+	if err != nil {
+		t.Errorf("Could not update unapplied migration %s", err)
+		return
+	}
+
+	updatedMigration := frame.Migration{Name: migrationPath}
+	err = svc.DB(ctx, false).First(&updatedMigration, "name = ?", migrationPath).Error
+	if err != nil {
+		t.Errorf("Migration was not updated successfully %s", err)
+		return
+	}
+
+	if migration.ID != updatedMigration.ID {
+		t.Errorf("Migration ids do not match %s and %s", migration.ID, updatedMigration.ID)
+		return
+	}
+
+	if updatedMigration.Patch != updateSQL {
+		t.Errorf("Migration was not updated successfully %s to %s", updatedMigration.Patch, updateSQL)
+		return
+	}
 }
 
-func TestMigratorTestSuite(t *testing.T) {
-	suite.Run(t, &MigratorTestSuite{
-		FrameBaseTestSuite: frametests.FrameBaseTestSuite{
-			InitResourceFunc: func(_ context.Context) []definition.TestResource {
-				return []definition.TestResource{
-					testpostgres.New(),
-					testnats.New(),
-				}
-			},
-		},
-	})
+func TestApplyMigrations(t *testing.T) {
+	testDBURL := util.GetEnv(
+		"TEST_DATABASE_URL",
+		"postgres://frame:secret@localhost:5435/framedatabase?sslmode=disable",
+	)
+
+	defConf, err := frame.ConfigFromEnv[frame.ConfigurationDefault]()
+	if err != nil {
+		t.Errorf("Could not processFunc test configurations %v", err)
+		return
+	}
+	defConf.DatabaseSlowQueryLogThreshold = "5ms"
+	defConf.DatabaseTraceQueries = true
+	defConf.LogLevel = "debug"
+
+	ctx, svc := frame.NewService("Test Migrations Srv", frame.WithConfig(&defConf))
+
+	mainDB := frame.WithDatastoreConnection(testDBURL, false)
+	svc.Init(ctx, mainDB)
+
+	svc.DB(ctx, false).Session(&gorm.Session{AllowGlobalUpdate: true}).Unscoped().Delete(&frame.Migration{})
+
+	err = svc.MigrateDatastore(ctx, "./tests_runner/migrations/default")
+	if err != nil {
+		t.Errorf("Could not migrate successfully because : %s", err)
+		return
+	}
+
+	migrationPath := "./tests_runner/migrations/applied/apply_select.sql"
+
+	err = svc.DB(ctx, false).Where("name = ?", migrationPath).Unscoped().Delete(&frame.Migration{}).Error
+	if err != nil {
+		t.Errorf("Could not ensure migrations are clean%s", err)
+		return
+	}
+
+	migrationContent, err := os.ReadFile(migrationPath)
+	if err != nil {
+		t.Errorf("Could not read scanned migration %s", err)
+		return
+	}
+
+	pool := svc.DBPool()
+	testMigrator := svc.NewMigrator(ctx, pool)
+
+	err = testMigrator.SaveMigrationString(ctx, migrationPath, string(migrationContent), "")
+	if err != nil {
+		t.Errorf("Could not save new migration %s", err)
+		return
+	}
+
+	migration := frame.Migration{Name: migrationPath}
+	err = svc.DB(ctx, false).First(&migration, "name = ?", migrationPath).Error
+	if err != nil || migration.AppliedAt.Valid {
+		t.Errorf("Migration was not applied successfully %s", err)
+		return
+	}
+
+	err = testMigrator.ApplyNewMigrations(ctx)
+	if err != nil {
+		t.Errorf("Could not save new migration %s", err)
+		return
+	}
+
+	appliedMigration := frame.Migration{Name: migrationPath}
+	err = svc.DB(ctx, false).First(&appliedMigration, "name = ?", migrationPath).Error
+	if err != nil || !appliedMigration.AppliedAt.Valid {
+		t.Errorf("Migration was not applied successfully %s", err)
+		return
+	}
+}
+
+func TestService_MigrateDatastore(t *testing.T) {
+	testDBURL := util.GetEnv(
+		"TEST_DATABASE_URL",
+		"postgres://frame:secret@localhost:5435/framedatabase?sslmode=disable",
+	)
+
+	ctx, srv := frame.NewService("Test Migrations Srv")
+
+	mainDB := frame.WithDatastoreConnection(testDBURL, false)
+	srv.Init(ctx, mainDB)
+
+	srv.DB(ctx, false).Session(&gorm.Session{AllowGlobalUpdate: true}).Unscoped().Delete(&frame.Migration{})
+
+	migrationPath := "./migrations/default"
+
+	err := srv.MigrateDatastore(ctx, migrationPath)
+	if err != nil {
+		t.Errorf("Could not migrate successfully because : %s", err)
+	}
+}
+
+func TestService_MigrateDatastoreIDempotency(t *testing.T) {
+	testDBURL := util.GetEnv(
+		"TEST_DATABASE_URL",
+		"postgres://frame:secret@localhost:5435/framedatabase?sslmode=disable",
+	)
+
+	ctx, srv := frame.NewService("Test Migrations Srv")
+
+	mainDB := frame.WithDatastoreConnection(testDBURL, false)
+	srv.Init(ctx, mainDB)
+
+	srv.DB(ctx, false).Session(&gorm.Session{AllowGlobalUpdate: true}).Unscoped().Delete(&frame.Migration{})
+
+	migrationPath := "./migrations/default"
+
+	err := srv.MigrateDatastore(ctx, migrationPath)
+	if err != nil {
+		t.Errorf("Could not migrate successfully because : %s", err)
+	}
+	err = srv.MigrateDatastore(ctx, migrationPath)
+	if err != nil {
+		t.Errorf("Could not migrate successfully second time because : %s", err)
+	}
+	err = srv.MigrateDatastore(ctx, migrationPath)
+	if err != nil {
+		t.Errorf("Could not migrate successfully third time because : %s", err)
+	}
 }

@@ -90,16 +90,18 @@ func (d *postgreSQLDependancy) Setup(ctx context.Context, ntwk *testcontainers.D
 func (d *postgreSQLDependancy) GetDS(ctx context.Context) frame.DataSource {
 	ds := d.DefaultImpl.GetDS(ctx)
 
-	return frame.DataSource(
+	return frame.NewDataSource(
 		fmt.Sprintf("postgres://%s:%s@%s/%s", d.Opts().UserName, d.Opts().Password, ds.String(), d.dbname),
+		"db",
 	)
 }
 
 func (d *postgreSQLDependancy) GetInternalDS(ctx context.Context) frame.DataSource {
 	ds := d.DefaultImpl.GetInternalDS(ctx)
 
-	return frame.DataSource(
+	return frame.NewDataSource(
 		fmt.Sprintf("postgres://%s:%s@%s/%s", d.Opts().UserName, d.Opts().Password, ds.String(), d.dbname),
+		"db",
 	)
 }
 
@@ -111,20 +113,22 @@ func (d *postgreSQLDependancy) GetRandomisedDS(
 	ctx context.Context,
 	randomisedPrefix string,
 ) (frame.DataSource, func(context.Context), error) {
-	connectionURI, err := d.GetDS(ctx).ToURI()
+	connectionURIStr := d.GetDS(ctx).ToURI()
+	
+	connectionURI, err := url.Parse(connectionURIStr)
 	if err != nil {
-		return "", func(_ context.Context) {}, err
+		return frame.NewDataSource("", ""), func(_ context.Context) {}, err
 	}
 
 	newDatabaseName := suffixedDatabaseName(connectionURI, randomisedPrefix)
 
 	connectionURI, err = ensureDatabaseExists(ctx, connectionURI, newDatabaseName)
 	if err != nil {
-		return "", func(_ context.Context) {}, err
+		return frame.NewDataSource("", ""), func(_ context.Context) {}, err
 	}
 
 	suffixedPgURIStr := connectionURI.String()
-	return frame.DataSource(suffixedPgURIStr), func(_ context.Context) {
+	return frame.NewDataSource(suffixedPgURIStr, "db"), func(_ context.Context) {
 		_ = clearDatabase(ctx, suffixedPgURIStr)
 	}, nil
 }

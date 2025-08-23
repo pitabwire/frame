@@ -76,24 +76,34 @@ func (d *DefaultImpl) PortMapping(ctx context.Context, port string) (string, err
 func (d *DefaultImpl) Endpoint(ctx context.Context, scheme string, port string) (frame.DataSource, error) {
 	conn, err := d.container.PortEndpoint(ctx, nat.Port(port), scheme)
 	if err != nil {
-		return "", err
+		return frame.NewDataSource("", ""), err
 	}
 
 	conn = strings.Replace(conn, "localhost", "127.0.0.1", 1)
 
-	return frame.DataSource(conn), nil
+	// Determine data source type based on scheme
+	dsType := ""
+	if strings.Contains(scheme, "postgres") || strings.Contains(scheme, "mysql") {
+		dsType = "db"
+	} else if strings.Contains(scheme, "redis") || strings.Contains(scheme, "valkey") {
+		dsType = "cache"
+	} else if strings.Contains(scheme, "nats") || strings.Contains(scheme, "amqp") {
+		dsType = "queue"
+	}
+
+	return frame.NewDataSource(conn, dsType), nil
 }
 
 func (d *DefaultImpl) InternalEndpoint(ctx context.Context, scheme string, port string) (frame.DataSource, error) {
 	internalIP, err := d.container.ContainerIP(ctx)
 	if err != nil {
-		return "", err
+		return frame.NewDataSource("", ""), err
 	}
 
 	if internalIP == "" && d.opts.UseHostMode {
 		internalIP, err = d.container.Host(ctx)
 		if err != nil {
-			return "", err
+			return frame.NewDataSource("", ""), err
 		}
 	}
 
@@ -101,11 +111,21 @@ func (d *DefaultImpl) InternalEndpoint(ctx context.Context, scheme string, port 
 		internalIP = "127.0.0.1"
 	}
 
+	// Determine data source type based on scheme
+	dsType := ""
+	if strings.Contains(scheme, "postgres") || strings.Contains(scheme, "mysql") {
+		dsType = "db"
+	} else if strings.Contains(scheme, "redis") || strings.Contains(scheme, "valkey") {
+		dsType = "cache"
+	} else if strings.Contains(scheme, "nats") || strings.Contains(scheme, "amqp") {
+		dsType = "queue"
+	}
+
 	hostPort := net.JoinHostPort(internalIP, port)
 	if scheme == "" {
-		return frame.DataSource(hostPort), nil
+		return frame.NewDataSource(hostPort, dsType), nil
 	}
-	return frame.DataSource(fmt.Sprintf("%s://%s", scheme, hostPort)), nil
+	return frame.NewDataSource(fmt.Sprintf("%s://%s", scheme, hostPort), dsType), nil
 }
 
 func (d *DefaultImpl) GetDS(ctx context.Context) frame.DataSource {

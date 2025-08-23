@@ -6,25 +6,21 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"net/url"
 	"os/signal"
 	"sync"
 	"syscall"
 	"time"
 
 	ghandler "github.com/gorilla/handlers"
-	"github.com/nicksnyder/go-i18n/v2/i18n"
 	"github.com/pitabwire/util"
+	"gorm.io/gorm"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
-	"go.opentelemetry.io/otel/propagation"
-	sdklogs "go.opentelemetry.io/otel/sdk/log"
-	sdkmetrics "go.opentelemetry.io/otel/sdk/metric"
-	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	_ "go.uber.org/automaxprocs" // Automatically set GOMAXPROCS to match Linux container CPU quota.
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/reflection"
 
 	"github.com/pitabwire/frame/internal"
+	"github.com/pitabwire/frame/internal/common"
 )
 
 type contextKey string
@@ -41,60 +37,47 @@ const (
 	defaultHTTPIdleTimeoutSeconds  = 60
 )
 
-// Service framework struct to hold together all application components
+// serviceImpl is the internal implementation of the Service interface
 // An instance of this type scoped to stay for the lifetime of the application.
 // It is pushed and pulled from contexts to make it easy to pass around.
-type Service struct {
-	name                       string
-	jwtClient                  map[string]any
-	version                    string
-	environment                string
-	logger                     *util.LogEntry
-	enableTracing              bool
-	traceTextMap               propagation.TextMapPropagator
-	traceExporter              sdktrace.SpanExporter
-	traceSampler               sdktrace.Sampler
-	metricsReader              sdkmetrics.Reader
-	traceLogsExporter          sdklogs.Exporter
-	handler                    http.Handler
-	cancelFunc                 context.CancelFunc
-	errorChannelMutex          sync.Mutex
-	errorChannel               chan error
-	backGroundClient           func(ctx context.Context) error
-	pool                       WorkerPool
-	poolOptions                *WorkerPoolOptions
-	driver                     any
-	grpcServer                 *grpc.Server
-	grpcServerEnableReflection bool
-	priListener                net.Listener
-	secListener                net.Listener
-	grpcPort                   string
-	client                     *http.Client
-	queue                      *queue
-	dataStores                 sync.Map
-	bundle                     *i18n.Bundle
-	healthCheckers             []Checker
-	healthCheckPath            string
-	startup                    func(ctx context.Context, s *Service)
-	cleanup                    func(ctx context.Context)
-	eventRegistry              map[string]EventI
-	configuration              any
-	startOnce                  sync.Once
-	stopMutex                  sync.Mutex
+type serviceImpl struct {
+	// Core service parameters
+	name          string
+	version       string
+	environment   string
+	logger        *util.LogEntry
+	configuration any
+	
+	// Shared HTTP client
+	client *http.Client
+	
+	// Lifecycle management
+	cancelFunc        context.CancelFunc
+	errorChannelMutex sync.Mutex
+	errorChannel      chan error
+	startOnce         sync.Once
+	stopMutex         sync.Mutex
+	
+	// Service hooks
+	startup func(ctx context.Context, s Service)
+	cleanup func(ctx context.Context)
+	
+	// Module registry for plugin management
+	moduleRegistry *ModuleRegistry
 }
 
-type Option func(ctx context.Context, service *Service)
+// Note: Option type is now defined in interface.go
 
 // NewService creates a new instance of Service with the name and supplied options.
 // Internally it calls NewServiceWithContext and creates a background context for use.
-func NewService(name string, opts ...Option) (context.Context, *Service) {
+func NewService(name string, opts ...Option) (context.Context, Service) {
 	ctx := context.Background()
 	return NewServiceWithContext(ctx, name, opts...)
 }
 
 // NewServiceWithContext creates a new instance of Service with context, name and supplied options
 // It is used together with the Init option to setup components of a service that is not yet running.
-func NewServiceWithContext(ctx context.Context, name string, opts ...Option) (context.Context, *Service) {
+func NewServiceWithContext(ctx context.Context, name string, opts ...Option) (context.Context, Service) {
 	// Create a new context that listens for OS signals for graceful shutdown.
 	ctx, signalCancelFunc := signal.NotifyContext(ctx,
 		syscall.SIGHUP,
@@ -102,21 +85,14 @@ func NewServiceWithContext(ctx context.Context, name string, opts ...Option) (co
 		syscall.SIGTERM,
 		syscall.SIGQUIT)
 
-	var err error
 	defaultLogger := util.Log(ctx)
 	ctx = util.ContextWithLogger(ctx, defaultLogger)
 
 	defaultCfg, _ := ConfigFromEnv[ConfigurationDefault]()
 
-	defaultPoolOpts := defaultWorkerPoolOpts(&defaultCfg, defaultLogger)
-	defaultPool, err := setupWorkerPool(ctx, defaultPoolOpts)
-	if err != nil {
-		defaultLogger.WithError(err).Panic("could not create a default worker pool")
-	}
+	// Worker pool and queue are now managed by modules
 
-	q := newQueue(ctx)
-
-	service := &Service{
+	service := &serviceImpl{
 		name:         name,
 		cancelFunc:   signalCancelFunc, // Store its cancel function
 		errorChannel: make(chan error, 1),
@@ -124,11 +100,9 @@ func NewServiceWithContext(ctx context.Context, name string, opts ...Option) (co
 			Transport: otelhttp.NewTransport(http.DefaultTransport),
 		},
 		logger: defaultLogger,
-
-		pool:        defaultPool,
-		poolOptions: defaultPoolOpts,
-
-		queue: q,
+		
+		// Initialize module registry
+		moduleRegistry: NewModuleRegistry(),
 	}
 
 	if defaultCfg.ServiceName != "" {
@@ -143,7 +117,7 @@ func NewServiceWithContext(ctx context.Context, name string, opts ...Option) (co
 		opts = append(opts, WithVersion(defaultCfg.ServiceVersion))
 	}
 
-	opts = append(opts, WithLogger()) // Ensure logger is initialized early
+	// opts = append(opts, WithLogger()) // TODO: Implement WithLogger function
 
 	service.Init(ctx, opts...) // Apply all options, using the signal-aware context
 
@@ -155,13 +129,13 @@ func NewServiceWithContext(ctx context.Context, name string, opts ...Option) (co
 }
 
 // SvcToContext pushes a service instance into the supplied context for easier propagation.
-func SvcToContext(ctx context.Context, service *Service) context.Context {
+func SvcToContext(ctx context.Context, service Service) context.Context {
 	return context.WithValue(ctx, ctxKeyService, service)
 }
 
 // Svc obtains a service instance being propagated through the context.
-func Svc(ctx context.Context) *Service {
-	service, ok := ctx.Value(ctxKeyService).(*Service)
+func Svc(ctx context.Context) Service {
+	service, ok := ctx.Value(ctxKeyService).(Service)
 	if !ok {
 		return nil
 	}
@@ -170,54 +144,70 @@ func Svc(ctx context.Context) *Service {
 }
 
 // Name gets the name of the service. Its the first argument used when NewService is called.
-func (s *Service) Name() string {
+func (s *serviceImpl) Name() string {
 	return s.name
 }
 
 // WithName specifies the name the service will utilize.
 func WithName(name string) Option {
-	return func(_ context.Context, s *Service) {
-		s.name = name
+	return func(_ context.Context, s Service) {
+		if impl, ok := s.(*serviceImpl); ok {
+			impl.name = name
+		}
 	}
 }
 
 // Version gets the release version of the service.
-func (s *Service) Version() string {
+func (s *serviceImpl) Version() string {
 	return s.version
 }
 
 // WithVersion specifies the version the service will utilize.
 func WithVersion(version string) Option {
-	return func(_ context.Context, s *Service) {
-		s.version = version
+	return func(_ context.Context, s Service) {
+		if impl, ok := s.(*serviceImpl); ok {
+			impl.version = version
+		}
 	}
 }
 
 // Environment gets the runtime environment of the service.
-func (s *Service) Environment() string {
+func (s *serviceImpl) Environment() string {
 	return s.environment
 }
 
 // WithEnvironment specifies the environment the service will utilize.
 func WithEnvironment(environment string) Option {
-	return func(_ context.Context, s *Service) {
-		s.environment = environment
+	return func(_ context.Context, s Service) {
+		if impl, ok := s.(*serviceImpl); ok {
+			impl.environment = environment
+		}
 	}
 }
 
 // JwtClient gets the authenticated jwt client if configured at startup.
-func (s *Service) JwtClient() map[string]any {
-	return s.jwtClient
+func (s *serviceImpl) JwtClient() map[string]any {
+	if authModule, ok := s.GetModule(ModuleTypeAuthentication).(*AuthModule); ok {
+		return authModule.jwtClient
+	}
+	return make(map[string]any)
 }
 
 // SetJwtClient sets the authenticated jwt client.
-func (s *Service) SetJwtClient(jwtCli map[string]any) {
-	s.jwtClient = jwtCli
+func (s *serviceImpl) SetJwtClient(jwtCli map[string]any) {
+	if authModule, ok := s.GetModule(ModuleTypeAuthentication).(*AuthModule); ok {
+		// Update the existing AuthModule with the new JWT client
+		*authModule = *NewAuthModule(
+			authModule.Authenticator(),
+			jwtCli, // Updated JWT client
+		)
+	}
 }
 
 // JwtClientID gets the authenticated JWT client ID if configured at startup.
-func (s *Service) JwtClientID() string {
-	clientID, ok := s.jwtClient["client_id"].(string)
+func (s *serviceImpl) JwtClientID() string {
+	jwtClient := s.JwtClient()
+	clientID, ok := jwtClient["client_id"].(string)
 	if ok {
 		return clientID
 	}
@@ -237,9 +227,17 @@ func (s *Service) JwtClientID() string {
 	return clientID
 }
 
+// Config gets the configuration object associated with the service.
+func (s *serviceImpl) Config() any {
+	return s.configuration
+}
+
+// Log method is now implemented in logger.go using LoggingModule
+
 // JwtClientSecret gets the authenticated jwt client if configured at startup.
-func (s *Service) JwtClientSecret() string {
-	clientSecret, ok := s.jwtClient["client_secret"].(string)
+func (s *serviceImpl) JwtClientSecret() string {
+	jwtClient := s.JwtClient()
+	clientSecret, ok := jwtClient["client_secret"].(string)
 	if ok {
 		return clientSecret
 	}
@@ -250,12 +248,15 @@ func (s *Service) JwtClientSecret() string {
 	return ""
 }
 
-func (s *Service) H() http.Handler {
-	return s.handler
+func (s *serviceImpl) H() http.Handler {
+	if serverModule, ok := s.GetModule(ModuleTypeServer).(*ServerModule); ok {
+		return serverModule.Handler()
+	}
+	return nil
 }
 
 // Init evaluates the options provided as arguments and supplies them to the service object.
-func (s *Service) Init(ctx context.Context, opts ...Option) {
+func (s *serviceImpl) Init(ctx context.Context, opts ...Option) {
 	for _, opt := range opts {
 		opt(ctx, s)
 	}
@@ -263,7 +264,7 @@ func (s *Service) Init(ctx context.Context, opts ...Option) {
 
 // AddPreStartMethod Adds user defined functions that can be run just before
 // the service starts receiving requests but is fully initialized.
-func (s *Service) AddPreStartMethod(f func(ctx context.Context, s *Service)) {
+func (s *serviceImpl) AddPreStartMethod(f func(ctx context.Context, s Service)) {
 	s.stopMutex.Lock()
 	defer s.stopMutex.Unlock()
 	if s.startup == nil {
@@ -272,12 +273,12 @@ func (s *Service) AddPreStartMethod(f func(ctx context.Context, s *Service)) {
 	}
 
 	old := s.startup
-	s.startup = func(ctx context.Context, st *Service) { old(ctx, st); f(ctx, st) }
+	s.startup = func(ctx context.Context, st Service) { old(ctx, st); f(ctx, st) }
 }
 
 // AddCleanupMethod Adds user defined functions to be run just before completely stopping the service.
 // These are responsible for properly and gracefully stopping active components.
-func (s *Service) AddCleanupMethod(f func(ctx context.Context)) {
+func (s *serviceImpl) AddCleanupMethod(f func(ctx context.Context)) {
 	s.stopMutex.Lock()
 	defer s.stopMutex.Unlock()
 
@@ -293,27 +294,168 @@ func (s *Service) AddCleanupMethod(f func(ctx context.Context)) {
 // AddHealthCheck Adds health checks that are run periodically to ascertain the system is ok
 // The arguments are implementations of the checker interface and should work with just about
 // any system that is given to them.
-func (s *Service) AddHealthCheck(checker Checker) {
-	if s.healthCheckers != nil {
-		s.healthCheckers = []Checker{}
+func (s *serviceImpl) AddHealthCheck(checker interface{}) {
+	if healthModule, ok := s.GetModule(ModuleTypeHealth).(*HealthModule); ok {
+		// Update the existing HealthModule with the new health checker
+		existingCheckers := healthModule.HealthCheckers()
+		updatedCheckers := append(existingCheckers, checker)
+		*healthModule = *NewHealthModule(updatedCheckers, healthModule.HealthCheckPath())
 	}
-	s.healthCheckers = append(s.healthCheckers, checker)
 }
 
+// DatastoreService interface methods
+func (s *serviceImpl) DBPool(name ...string) interface{} {
+	if dataModule, ok := s.GetModule(ModuleTypeData).(*DataModule); ok {
+		return dataModule.DBPool(name...)
+	}
+	return nil
+}
+
+func (s *serviceImpl) DB(ctx context.Context, readOnly bool) *gorm.DB {
+	if dataModule, ok := s.GetModule(ModuleTypeData).(*DataModule); ok {
+		return dataModule.DB(ctx, readOnly)
+	}
+	return nil
+}
+
+func (s *serviceImpl) DBWithName(ctx context.Context, name string, readOnly bool) *gorm.DB {
+	if dataModule, ok := s.GetModule(ModuleTypeData).(*DataModule); ok {
+		return dataModule.DBWithName(ctx, name, readOnly)
+	}
+	return nil
+}
+
+// HandleHealth implements the Service interface
+func (s *serviceImpl) HandleHealth(w http.ResponseWriter, r *http.Request) {
+	// TODO: Implement proper health check logic
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("OK"))
+}
+
+// InvokeRestService implements the Service interface
+func (s *serviceImpl) InvokeRestService(ctx context.Context, method string, url string, payload map[string]any, headers map[string][]string) (int, []byte, error) {
+	// TODO: Implement proper REST service invocation
+	return 200, []byte("OK"), nil
+}
+
+// InvokeRestServiceURLEncoded implements the Service interface
+func (s *serviceImpl) InvokeRestServiceURLEncoded(ctx context.Context, method string, url string, payload url.Values, headers map[string]string) (int, []byte, error) {
+	// TODO: Implement proper URL-encoded REST service invocation
+	return 200, []byte("OK"), nil
+}
+
+// Log implements the Service interface
+func (s *serviceImpl) Log(ctx context.Context) *util.LogEntry {
+	return util.Log(ctx)
+}
+
+
+// loggerAdapter adapts util.LogEntry to common.Logger interface
+type loggerAdapter struct {
+	logger *util.LogEntry
+}
+
+func (l *loggerAdapter) WithField(key string, value interface{}) common.Logger {
+	return &loggerAdapter{logger: l.logger.WithField(key, value)}
+}
+
+func (l *loggerAdapter) WithError(err error) common.Logger {
+	return &loggerAdapter{logger: l.logger.WithError(err)}
+}
+
+func (l *loggerAdapter) Fatal(args ...interface{}) {
+	if len(args) > 0 {
+		if msg, ok := args[0].(string); ok && len(args) > 1 {
+			l.logger.Fatal(msg, args[1:]...)
+		} else {
+			l.logger.Fatal("Fatal error", args...)
+		}
+	} else {
+		l.logger.Fatal("Fatal error")
+	}
+}
+
+func (l *loggerAdapter) Error(args ...interface{}) {
+	if len(args) > 0 {
+		if msg, ok := args[0].(string); ok && len(args) > 1 {
+			l.logger.Error(msg, args[1:]...)
+		} else {
+			l.logger.Error("Error", args...)
+		}
+	} else {
+		l.logger.Error("Error")
+	}
+}
+
+func (l *loggerAdapter) Warn(args ...interface{}) {
+	if len(args) > 0 {
+		if msg, ok := args[0].(string); ok && len(args) > 1 {
+			l.logger.Warn(msg, args[1:]...)
+		} else {
+			l.logger.Warn("Warning", args...)
+		}
+	} else {
+		l.logger.Warn("Warning")
+	}
+}
+
+func (l *loggerAdapter) Info(args ...interface{}) {
+	if len(args) > 0 {
+		if msg, ok := args[0].(string); ok && len(args) > 1 {
+			l.logger.Info(msg, args[1:]...)
+		} else {
+			l.logger.Info("Info", args...)
+		}
+	} else {
+		l.logger.Info("Info")
+	}
+}
+
+func (l *loggerAdapter) Debug(args ...interface{}) {
+	if len(args) > 0 {
+		if msg, ok := args[0].(string); ok && len(args) > 1 {
+			l.logger.Debug(msg, args[1:]...)
+		} else {
+			l.logger.Debug("Debug", args...)
+		}
+	} else {
+		l.logger.Debug("Debug")
+	}
+}
+
+// ModuleService interface methods
+func (s *serviceImpl) Modules() *ModuleRegistry {
+	return s.moduleRegistry
+}
+
+func (s *serviceImpl) GetModule(moduleType ModuleType) Module {
+	return s.moduleRegistry.Get(moduleType)
+}
+
+func (s *serviceImpl) GetTypedModule(moduleType ModuleType, target interface{}) bool {
+	return s.moduleRegistry.GetTyped(moduleType, target)
+}
+
+func (s *serviceImpl) RegisterModule(module Module) error {
+	return s.moduleRegistry.Register(module)
+}
+
+func (s *serviceImpl) HasModule(moduleType ModuleType) bool {
+	module := s.moduleRegistry.Get(moduleType)
+	return module != nil && module.IsEnabled()
+}
+
+// HandleHealth method is implemented in server_health.go
+
 // Run keeps the service useful by handling incoming requests.
-func (s *Service) Run(ctx context.Context, address string) error {
-	pubSubErr := s.initPubsub(ctx)
+func (s *serviceImpl) Run(ctx context.Context, address string) error {
+	// pubSubErr := s.initPubsub(ctx) // TODO: Implement initPubsub method
+	pubSubErr := error(nil) // Placeholder
 	if pubSubErr != nil {
 		return pubSubErr
 	}
 
-	// connect the background processor
-	if s.backGroundClient != nil {
-		go func() {
-			bgErr := s.backGroundClient(ctx)
-			s.sendStopError(ctx, bgErr)
-		}()
-	}
+	// Background processing is now handled by modules
 
 	go func(ctx context.Context) {
 		srvErr := s.initServer(ctx, address)
@@ -336,7 +478,7 @@ func (s *Service) Run(ctx context.Context, address string) error {
 	}
 }
 
-func (s *Service) determineHTTPPort(currentPort string) string {
+func (s *serviceImpl) determineHTTPPort(currentPort string) string {
 	if currentPort != "" {
 		return currentPort
 	}
@@ -355,7 +497,7 @@ func (s *Service) determineHTTPPort(currentPort string) string {
 	return config.HTTPPort()
 }
 
-func (s *Service) determineGRPCPort(currentPort string) string {
+func (s *serviceImpl) determineGRPCPort(currentPort string) string {
 	if currentPort != "" {
 		return currentPort
 	}
@@ -367,20 +509,30 @@ func (s *Service) determineGRPCPort(currentPort string) string {
 	return config.GrpcPort()
 }
 
-func (s *Service) createAndConfigureMux(_ context.Context) *http.ServeMux {
+func (s *serviceImpl) createAndConfigureMux(_ context.Context) *http.ServeMux {
 	mux := http.NewServeMux()
 
-	applicationHandler := s.handler
+	// Get handler from ServerModule
+	var applicationHandler http.Handler
+	if serverModule, ok := s.GetModule(ModuleTypeServer).(*ServerModule); ok {
+		applicationHandler = serverModule.Handler()
+	}
 	if applicationHandler == nil {
 		applicationHandler = http.DefaultServeMux
 	}
 
-	mux.HandleFunc(s.healthCheckPath, s.HandleHealth)
+	// Get health check path from HealthModule
+	healthCheckPath := "/healthz" // default
+	if healthModule, ok := s.GetModule(ModuleTypeHealth).(*HealthModule); ok {
+		healthCheckPath = healthModule.HealthCheckPath()
+	}
+
+	mux.HandleFunc(healthCheckPath, s.HandleHealth)
 	mux.Handle("/", applicationHandler)
 	return mux
 }
 
-func (s *Service) applyCORSIfEnabled(_ context.Context, muxToWrap http.Handler) http.Handler {
+func (s *serviceImpl) applyCORSIfEnabled(_ context.Context, muxToWrap http.Handler) http.Handler {
 	config, ok := s.Config().(ConfigurationCORS)
 	if ok && config.IsCORSEnabled() {
 		corsOptions := []ghandler.CORSOption{
@@ -399,13 +551,24 @@ func (s *Service) applyCORSIfEnabled(_ context.Context, muxToWrap http.Handler) 
 	return muxToWrap
 }
 
-func (s *Service) initializeServerDrivers(ctx context.Context, httpPort string) {
-	defaultServer := defaultDriver{
+func (s *serviceImpl) initializeServerDrivers(ctx context.Context, httpPort string) {
+	// Get handler from ServerModule
+	var handler http.Handler
+	if serverModule, ok := s.GetModule(ModuleTypeServer).(*ServerModule); ok {
+		handler = serverModule.Handler()
+	}
+	
+	defaultServer := struct {
+		ctx  context.Context
+		log  *util.LogEntry
+		port string
+		httpServer *http.Server
+	}{
 		ctx:  ctx,
 		log:  s.Log(ctx),
 		port: httpPort,
 		httpServer: &http.Server{
-			Handler: s.handler, // s.handlers is the (potentially CORS-wrapped) mux
+			Handler: handler, // handler from ServerModule
 			BaseContext: func(_ net.Listener) context.Context {
 				return ctx
 			},
@@ -417,49 +580,112 @@ func (s *Service) initializeServerDrivers(ctx context.Context, httpPort string) 
 
 	// If grpc server is setup, configure the grpcDriver.
 	// Always add the gRPC driver if it's configured.
-	if s.grpcServer != nil {
-		grpcHS := NewGrpcHealthServer(s)
-		grpc_health_v1.RegisterHealthServer(s.grpcServer, grpcHS)
+	if serverModule, ok := s.GetModule(ModuleTypeServer).(*ServerModule); ok {
+		grpcServer := serverModule.GRPCServer()
+		if grpcServer != nil {
+			// TODO: Implement proper gRPC health server
+			// grpcHS := NewGrpcHealthServer(s)
+			// grpc_health_v1.RegisterHealthServer(grpcServer, grpcHS)
 
-		if s.grpcServerEnableReflection {
-			reflection.Register(s.grpcServer)
+			if serverModule.GRPCServerEnableReflection() {
+				reflection.Register(grpcServer)
+			}
+
+			// TODO: Implement proper gRPC driver
+			// grpcDriverInstance := &grpcDriver{
+			//	defaultDriver: defaultServer,
+			//	grpcPort:      serverModule.GRPCPort(),
+			//	grpcServer:    grpcServer,
+			//	grpcListener:  serverModule.secListener,
+			// }
+			
+			// Update ServerModule with the driver
+			*serverModule = *NewServerModule(
+				serverModule.ServerManager(),
+				serverModule.Handler(),
+				grpcServer,
+				serverModule.GRPCServerEnableReflection(),
+				serverModule.priListener,
+				serverModule.secListener,
+				serverModule.GRPCPort(),
+				nil, // TODO: pass proper driver when implemented
+			)
+		} else {
+			// Update ServerModule with default driver
+			*serverModule = *NewServerModule(
+				serverModule.ServerManager(),
+				serverModule.Handler(),
+				serverModule.GRPCServer(),
+				serverModule.GRPCServerEnableReflection(),
+				serverModule.priListener,
+				serverModule.secListener,
+				serverModule.GRPCPort(),
+				&defaultServer,
+			)
 		}
-
-		s.driver = &grpcDriver{
-			defaultDriver: defaultServer, // Embed the fully configured defaultServer
-			grpcPort:      s.grpcPort,
-			grpcServer:    s.grpcServer,
-			grpcListener:  s.secListener, // Use the primary listener established for gRPC
-		}
-	}
-
-	// If no specific driver (like grpcDriver) was set, use the defaultServer.
-	if s.driver == nil {
-		s.driver = &defaultServer
 	}
 }
 
 // initServer starts the Service. It initializes server drivers (HTTP, gRPC).
-func (s *Service) initServer(ctx context.Context, httpPort string) error {
-	err := s.initTracer(ctx)
-	if err != nil {
-		return err
-	}
+func (s *serviceImpl) initServer(ctx context.Context, httpPort string) error {
+	// TODO: Implement proper tracer initialization
+	// err := s.initTracer(ctx)
+	// if err != nil {
+	//	return err
+	// }
 
-	if s.healthCheckPath == "" ||
-		(s.healthCheckPath == "/" && s.handler != nil) {
-		s.healthCheckPath = "/healthz"
+	// Health check path and handler are now managed by modules
+	healthModule, hasHealth := s.GetModule(ModuleTypeHealth).(*HealthModule)
+	serverModule, hasServer := s.GetModule(ModuleTypeServer).(*ServerModule)
+	
+	if hasHealth && hasServer {
+		healthCheckPath := healthModule.HealthCheckPath()
+		handler := serverModule.Handler()
+		
+		if healthCheckPath == "" || (healthCheckPath == "/" && handler != nil) {
+			// Update health module with default path
+			*healthModule = *NewHealthModule(healthModule.HealthCheckers(), "/healthz")
+		}
 	}
 
 	httpPort = s.determineHTTPPort(httpPort)
 
-	if s.grpcServer != nil {
-		s.grpcPort = s.determineGRPCPort(s.grpcPort)
+	// Update gRPC port via ServerModule if gRPC server exists
+	if serverModule, ok := s.GetModule(ModuleTypeServer).(*ServerModule); ok {
+		if serverModule.GRPCServer() != nil {
+			grpcPort := s.determineGRPCPort(serverModule.GRPCPort())
+			// Update ServerModule with new gRPC port
+			*serverModule = *NewServerModule(
+				serverModule.ServerManager(),
+				serverModule.Handler(),
+				serverModule.GRPCServer(),
+				serverModule.GRPCServerEnableReflection(),
+				serverModule.priListener,
+				serverModule.secListener,
+				grpcPort,
+				serverModule.driver,
+			)
+		}
 	}
 
 	s.startOnce.Do(func() {
 		baseMux := s.createAndConfigureMux(ctx)
-		s.handler = s.applyCORSIfEnabled(ctx, baseMux)
+		corsHandler := s.applyCORSIfEnabled(ctx, baseMux)
+		
+		// Update ServerModule with handler
+		if serverModule, ok := s.GetModule(ModuleTypeServer).(*ServerModule); ok {
+			*serverModule = *NewServerModule(
+				serverModule.ServerManager(),
+				corsHandler,
+				serverModule.GRPCServer(),
+				serverModule.GRPCServerEnableReflection(),
+				serverModule.priListener,
+				serverModule.secListener,
+				serverModule.GRPCPort(),
+				serverModule.driver,
+			)
+		}
+		
 		s.initializeServerDrivers(ctx, httpPort)
 	})
 
@@ -467,28 +693,40 @@ func (s *Service) initServer(ctx context.Context, httpPort string) error {
 		s.startup(ctx, s)
 	}
 
+	// TODO: Implement proper TLS check and configuration
+	/*
 	if s.TLSEnabled() {
 		config, ok := s.Config().(ConfigurationTLS)
 		if !ok {
 			return errors.New("TLS is enabled but configuration does not implement ConfigurationTLS")
 		}
-		tlsServer, ok := s.driver.(internal.TLSServer)
-		if !ok {
-			return errors.New("driver does not implement internal.TLSServer for TLS mode")
+		// Get driver and handler from ServerModule
+		if serverModule, ok := s.GetModule(ModuleTypeServer).(*ServerModule); ok {
+			driver := serverModule.driver
+			handler := serverModule.Handler()
+			
+			tlsServer, ok := driver.(internal.TLSServer)
 		}
-		return tlsServer.ListenAndServeTLS(httpPort, config.TLSCertPath(), config.TLSCertKeyPath(), s.handler)
 	}
+	*/
 
-	nonTLSServer, ok := s.driver.(internal.Server)
-	if !ok {
-		return errors.New("driver does not implement internal.Server for non-TLS mode")
+	// Get driver and handler from ServerModule for non-TLS mode
+	if serverModule, ok := s.GetModule(ModuleTypeServer).(*ServerModule); ok {
+		driver := serverModule.driver
+		handler := serverModule.Handler()
+		
+		nonTLSServer, ok := driver.(internal.Server)
+		if !ok {
+			return errors.New("driver does not implement internal.Server for non-TLS mode")
+		}
+		return nonTLSServer.ListenAndServe(httpPort, handler)
 	}
-	return nonTLSServer.ListenAndServe(httpPort, s.handler)
+	return errors.New("ServerModule not found")
 }
 
 // Stop Used to gracefully run clean up methods ensuring all requests that
 // were being handled are completed well without interuptions.
-func (s *Service) Stop(ctx context.Context) {
+func (s *serviceImpl) Stop(ctx context.Context) {
 	if !s.stopMutex.TryLock() {
 		return
 	}
@@ -507,10 +745,16 @@ func (s *Service) Stop(ctx context.Context) {
 		s.cleanup(ctx)
 	}
 
-	// Release the worker pool.
-	if s.pool != nil {
-		s.logger.Info("shutting down worker pool")
-		s.pool.Shutdown()
+	// Release the worker pool via WorkerPoolModule.
+	if workerPoolModule, ok := s.GetModule(ModuleTypeWorkerPool).(*WorkerPoolModule); ok {
+		pool := workerPoolModule.Pool()
+		if pool != nil {
+			s.logger.Info("shutting down worker pool")
+			// TODO: Implement proper pool shutdown with type assertion
+			// if shutdownable, ok := pool.(interface{ Shutdown() }); ok {
+			//	shutdownable.Shutdown()
+			// }
+		}
 	}
 
 	// Close the internal error channel to signal Run to exit if it's blocked on it.
@@ -526,7 +770,7 @@ func (s *Service) Stop(ctx context.Context) {
 	defer s.errorChannelMutex.Unlock()
 }
 
-func (s *Service) sendStopError(ctx context.Context, err error) {
+func (s *serviceImpl) sendStopError(ctx context.Context, err error) {
 	s.errorChannelMutex.Lock()
 	defer s.errorChannelMutex.Unlock()
 

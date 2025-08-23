@@ -243,28 +243,7 @@ func (a *authenticator) systemPadPartitionInfo(
 	return claims.ClaimsToContext(ctx)
 }
 
-// grpcJwtTokenExtractor extracts JWT token from gRPC metadata
-func grpcJwtTokenExtractor(ctx context.Context) (string, error) {
-	requestMetadata, ok := metadata.FromIncomingContext(ctx)
-	if !ok {
-		return "", status.Error(codes.Unauthenticated, "no metadata was saved in context before")
-	}
-
-	vv, ok := requestMetadata["authorization"]
-	if !ok {
-		return "", status.Error(codes.Unauthenticated, "no authorization key found in request metadata")
-	}
-
-	extractedJwtToken := strings.Split(vv[0], " ")
-
-	if len(extractedJwtToken) != 2 ||
-		strings.ToLower(extractedJwtToken[0]) != "bearer" ||
-		extractedJwtToken[1] == "" {
-		return "", status.Error(codes.Unauthenticated, "authorization header is invalid")
-	}
-
-	return strings.TrimSpace(extractedJwtToken[1]), nil
-}
+// grpcJwtTokenExtractor function moved to authentication.go to avoid duplication
 
 // getGrpcMetadata extracts metadata from gRPC context
 func getGrpcMetadata(ctx context.Context, key string) string {

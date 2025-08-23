@@ -1,0 +1,138 @@
+package frameauth
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"net/url"
+	"strings"
+
+	"github.com/pitabwire/frame/internal/common"
+)
+
+const ConstInternalSystemScope = "int_system"
+
+// RegisterForJwt function hooks in jwt client registration to make sure service is authenticated.
+func RegisterForJwt(ctx context.Context, s common.Service) error {
+	oauth2Config, ok := s.Config().(common.ConfigurationOAUTH2)
+	if !ok {
+		return nil
+	}
+	oauth2ServiceAdminHost := oauth2Config.GetOauth2ServiceAdminURI()
+
+	clientID := oauth2Config.GetOauth2ServiceClientID()
+	if clientID == "" {
+		clientID = s.Name()
+		// Note: Environment method not available on Service interface
+		// Using just the service name for client ID
+	}
+
+	clientSecret := oauth2Config.GetOauth2ServiceClientSecret()
+
+	oauth2Audience := oauth2Config.GetOauth2ServiceAudience()
+
+	if oauth2ServiceAdminHost != "" && clientSecret != "" {
+		audienceList := strings.Split(oauth2Audience, ",")
+
+		_, err := RegisterForJwtWithParams(ctx, s, oauth2ServiceAdminHost, s.Name(), clientID, clientSecret,
+			ConstInternalSystemScope, audienceList, map[string]string{})
+		if err != nil {
+			return err
+		}
+
+		// Note: SetJwtClient method not available on Service interface
+		// This functionality would need to be implemented differently
+	}
+
+	return nil
+}
+
+// RegisterForJwtWithParams registers for JWT with the given parameters. This is useful for situations where one may need to register external applications for access token generation.
+func RegisterForJwtWithParams(ctx context.Context, s common.Service,
+	oauth2ServiceAdminHost string, clientName string, clientID string, clientSecret string,
+	scope string, audienceList []string, metadata map[string]string) (map[string]any, error) {
+	oauth2AdminURI := fmt.Sprintf("%s/admin/clients", oauth2ServiceAdminHost)
+	oauth2AdminIDUri := fmt.Sprintf("%s/%s", oauth2AdminURI, clientID)
+
+	status, response, err := s.InvokeRestService(ctx, http.MethodGet, oauth2AdminIDUri, nil, nil)
+	if err != nil {
+		s.Log(ctx).WithError(err).Error("could not get existing clients")
+		return nil, err
+	}
+	if status != http.StatusNotFound && (status > 299 || status < 200) {
+		s.Log(ctx).
+			WithField("status", status).
+			WithField("result", string(response)).
+			Error(" invalid response from oauth2 server")
+
+		return nil, fmt.Errorf("invalid existing clients check response : %s", response)
+	}
+
+	if status != http.StatusNotFound {
+		var existingClient map[string]any
+		err = json.Unmarshal(response, &existingClient)
+		if err != nil {
+			s.Log(ctx).WithError(err).WithField("payload", string(response)).
+				Error("could not unmarshal existing clients")
+			return nil, err
+		}
+
+		return existingClient, nil
+	}
+
+	payload := map[string]any{
+		"client_id":                  clientID,
+		"client_name":                url.QueryEscape(clientName),
+		"client_secret":              url.QueryEscape(clientSecret),
+		"grant_types":                []string{"client_credentials"},
+		"metadata":                   metadata,
+		"audience":                   audienceList,
+		"token_endpoint_auth_method": "client_secret_post",
+	}
+
+	if scope != "" {
+		payload["scope"] = scope
+	}
+
+	status, response, err = s.InvokeRestService(ctx, http.MethodPost, oauth2AdminURI, payload, nil)
+	if err != nil {
+		s.Log(ctx).WithError(err).Error("could not create a new client")
+		return nil, err
+	}
+
+	if status > 299 || status < 200 {
+		s.Log(ctx).
+			WithField("status", status).
+			WithField("result", string(response)).
+			Error(" invalid response from server")
+
+		return nil, fmt.Errorf("invalid registration response : %s", response)
+	}
+
+	var newClient map[string]any
+	err = json.Unmarshal(response, &newClient)
+	if err != nil {
+		s.Log(ctx).WithError(err).Error("could not un marshal new client")
+		return nil, err
+	}
+
+	return newClient, nil
+}
+
+// UnRegisterForJwt utilizing client id we de register external applications for access token generation.
+func UnRegisterForJwt(ctx context.Context, s common.Service,
+	oauth2ServiceAdminHost string, clientID string) error {
+	oauth2AdminURI := fmt.Sprintf("%s%s/%s", oauth2ServiceAdminHost, "/admin/clients", clientID)
+
+	status, result, err := s.InvokeRestService(ctx, http.MethodDelete, oauth2AdminURI, make(map[string]any), nil)
+	if err != nil {
+		s.Log(ctx).
+			WithError(err).
+			WithField("status", status).
+			WithField("result", string(result)).
+			Error(" invalid response from server")
+		return err
+	}
+	return nil
+}

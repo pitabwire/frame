@@ -7,6 +7,17 @@ import (
 	"time"
 )
 
+// responseWriterWrapper wraps http.ResponseWriter to capture status code
+type responseWriterWrapper struct {
+	http.ResponseWriter
+	statusCode int
+}
+
+func (rw *responseWriterWrapper) WriteHeader(code int) {
+	rw.statusCode = code
+	rw.ResponseWriter.WriteHeader(code)
+}
+
 // httpServerBuilder implements the HTTPServerBuilder interface
 type httpServerBuilder struct {
 	config     Config
@@ -148,7 +159,7 @@ func LoggingMiddleware(logger Logger) MiddlewareFunc {
 			start := time.Now()
 			
 			// Wrap response writer to capture status code
-			wrapper := &responseWriter{ResponseWriter: w, statusCode: http.StatusOK}
+			wrapper := &responseWriterWrapper{ResponseWriter: w, statusCode: http.StatusOK}
 			
 			next.ServeHTTP(wrapper, r)
 			

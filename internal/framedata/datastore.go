@@ -3,367 +3,536 @@ package framedata
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
+	"errors"
 	"fmt"
+	"net/url"
+	"strconv"
+	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
-	_ "github.com/lib/pq" // PostgreSQL driver
+	"github.com/XSAM/otelsql"
+	"github.com/pitabwire/frame/internal/common"
+	"go.opentelemetry.io/otel/attribute"
+	semconv "go.opentelemetry.io/otel/semconv/v1.30.0"
+	"gorm.io/driver/postgres"
+	"gorm.io/gorm"
 )
 
-// datastoreManager implements the DatastoreManager interface
-type datastoreManager struct {
-	config           Config
-	logger           Logger
-	metricsCollector MetricsCollector
-	
-	// Database connections
-	writeDB   *sql.DB
-	readDB    *sql.DB
-	
-	// Connection state
-	initialized bool
-	mutex       sync.RWMutex
-	
-	// Health monitoring
-	healthChecker HealthChecker
+const defaultStoreName = "__default__"
+const defaultPingRetryWaitMilliseconds = 250
+
+type Pool struct {
+	ctx context.Context
+
+	readIdx             uint64            // atomic counter for round-robin
+	writeIdx            uint64            // atomic counter for round-robin
+	mu                  sync.RWMutex      // protects db slices
+	allReadDBs          map[*gorm.DB]bool // track all read DBs
+	allWriteDBs         map[*gorm.DB]bool // track all write DBs
+	lastHealthCheckTime time.Time
+
+	healthCheckCancel  context.CancelFunc
+	healthCheckStopped <-chan struct{}
+	shouldDoMigrations bool
 }
 
-// NewDatastoreManager creates a new datastore manager instance
-func NewDatastoreManager(config Config, logger Logger, metricsCollector MetricsCollector) DatastoreManager {
-	return &datastoreManager{
-		config:           config,
-		logger:           logger,
-		metricsCollector: metricsCollector,
+func newStore(ctx context.Context, srv common.Service) *Pool {
+	store := &Pool{
+		ctx:                ctx,
+		allReadDBs:         make(map[*gorm.DB]bool),
+		allWriteDBs:        make(map[*gorm.DB]bool),
+		healthCheckStopped: make(chan struct{}),
+		shouldDoMigrations: true,
+		mu:                 sync.RWMutex{},
 	}
+
+	srv.AddCleanupMethod(store.cleanup)
+
+	return store
 }
 
-// Initialize initializes the datastore connections
-func (dm *datastoreManager) Initialize(ctx context.Context) error {
-	dm.mutex.Lock()
-	defer dm.mutex.Unlock()
-
-	if dm.initialized {
-		return nil
-	}
-
-	// Initialize write database connection
-	if err := dm.initializeWriteConnection(ctx); err != nil {
-		return fmt.Errorf("failed to initialize write connection: %w", err)
-	}
-
-	// Initialize read database connection (optional)
-	if err := dm.initializeReadConnection(ctx); err != nil {
-		if dm.logger != nil {
-			dm.logger.WithError(err).Warn("Failed to initialize read-only connection, using write connection for reads")
+// addNewConnection safely adds a DB connection to the pool.
+func (s *Pool) addNewConnection(db *gorm.DB, readOnly bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if readOnly {
+		if !s.allReadDBs[db] {
+			s.allReadDBs[db] = true
 		}
-		dm.readDB = dm.writeDB
+	} else {
+		if !s.allWriteDBs[db] {
+			s.allWriteDBs[db] = true
+		}
+	}
+}
+
+// markHealthy marks a DB connection as healthy or unhealthy it from the pool.
+func (s *Pool) markHealthy(readOnly bool, db *gorm.DB, isHealthy bool, err error) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if readOnly {
+		s.allReadDBs[db] = isHealthy
+	} else {
+		s.allWriteDBs[db] = isHealthy
 	}
 
-	// Start health monitoring if configured
-	if dm.config.GetDatabaseHealthCheckInterval() > 0 {
-		healthChecker := NewHealthChecker(dm, dm.logger)
-		dm.healthChecker = healthChecker
-		
-		if err := healthChecker.StartHealthMonitoring(ctx, dm.config.GetDatabaseHealthCheckInterval()); err != nil {
-			if dm.logger != nil {
-				dm.logger.WithError(err).Warn("Failed to start health monitoring")
+	return err
+}
+
+// CheckHealth iterates all known DBs, pings them, and updates pool membership accordingly.
+func (s *Pool) CheckHealth() error {
+	healthCheckError := ""
+
+	if s.DB(s.ctx, true) == nil {
+		healthCheckError = "No healthy read db available"
+	}
+	if s.DB(s.ctx, false) == nil {
+		healthCheckError += "No healthy write db available"
+	}
+
+	now := time.Now()
+	if s.lastHealthCheckTime.IsZero() || now.Sub(s.lastHealthCheckTime) > 5*time.Minute {
+		ctx, cancel := context.WithCancel(s.ctx)
+		s.healthCheckCancel = cancel
+		stopped := make(chan struct{})
+		s.healthCheckStopped = stopped
+		go func(ctx context.Context) {
+			defer func() {
+				close(stopped)
+			}()
+
+			for db := range s.allWriteDBs {
+				_ = s.pingWithTimeoutAndRetry(ctx, false, db)
+			}
+			for db := range s.allReadDBs {
+				_ = s.pingWithTimeoutAndRetry(ctx, true, db)
+			}
+			s.lastHealthCheckTime = now
+		}(ctx)
+	}
+	if healthCheckError != "" {
+		return errors.New(healthCheckError)
+	}
+
+	return nil
+}
+
+func (s *Pool) cleanup(_ context.Context) {
+	if s.healthCheckCancel != nil {
+		s.healthCheckCancel()
+		<-s.healthCheckStopped
+	}
+
+	for db := range s.allReadDBs {
+		sqlDB, err := db.DB()
+		if err == nil {
+			_ = sqlDB.Close()
+		}
+	}
+	for db := range s.allWriteDBs {
+		sqlDB, err := db.DB()
+		if err == nil {
+			_ = sqlDB.Close()
+		}
+	}
+}
+
+func (s *Pool) pingWithTimeoutAndRetry(ctx context.Context, readOnly bool, db *gorm.DB) error {
+	var timer *time.Timer
+	wait := defaultPingRetryWaitMilliseconds * time.Millisecond
+	const maxWait = 30 * time.Second
+
+	defer func() {
+		if timer != nil {
+			timer.Stop()
+		}
+	}()
+
+	for {
+		sqlDB, err := db.DB()
+		if err != nil {
+			return s.markHealthy(readOnly, db, false, err)
+		}
+		err = sqlDB.PingContext(ctx)
+		if err == nil {
+			return s.markHealthy(readOnly, db, true, nil)
+		}
+		if timer == nil {
+			timer = time.NewTimer(wait)
+		} else {
+			// Timer already fired, so resetting does not race.
+			timer.Reset(wait)
+		}
+		select {
+		case <-timer.C:
+			if wait < maxWait {
+				// Back off next ping.
+				wait *= 2
+				if wait > maxWait {
+					wait = maxWait
+				}
+			}
+		case <-ctx.Done():
+			return s.markHealthy(readOnly, db, false, ctx.Err())
+		}
+	}
+}
+
+// DB Returns a random item from the slice, or an error if the slice is empty.
+func (s *Pool) DB(ctx context.Context, readOnly bool) *gorm.DB {
+	var pool []*gorm.DB
+	var idx *uint64
+
+	s.mu.RLock()
+	if readOnly {
+		for db, healthy := range s.allReadDBs {
+			if healthy {
+				pool = append(pool, db)
 			}
 		}
-	}
-
-	dm.initialized = true
-
-	if dm.logger != nil {
-		dm.logger.Info("Datastore manager initialized successfully")
-	}
-
-	return nil
-}
-
-// initializeWriteConnection initializes the write database connection
-func (dm *datastoreManager) initializeWriteConnection(ctx context.Context) error {
-	if dm.config == nil {
-		return fmt.Errorf("datastore config is not configured")
-	}
-	
-	databaseURL := dm.config.GetDatabaseURL()
-	if databaseURL == "" {
-		return fmt.Errorf("database URL is not configured")
-	}
-
-	driver := dm.config.GetDatabaseDriver()
-	if driver == "" {
-		driver = "postgres" // Default to PostgreSQL
-	}
-
-	db, err := sql.Open(driver, databaseURL)
-	if err != nil {
-		if dm.logger != nil {
-			dm.logger.WithError(err).WithField("driver", driver).Error("Failed to open write database connection")
-		}
-		return err
-	}
-
-	// Configure connection pool
-	dm.configureConnectionPool(db)
-
-	// Test connection
-	if err := db.PingContext(ctx); err != nil {
-		db.Close()
-		if dm.logger != nil {
-			dm.logger.WithError(err).Error("Failed to ping write database")
-		}
-		return err
-	}
-
-	dm.writeDB = db
-
-	if dm.logger != nil {
-		dm.logger.WithField("driver", driver).Info("Write database connection initialized")
-	}
-
-	return nil
-}
-
-// initializeReadConnection initializes the read-only database connection
-func (dm *datastoreManager) initializeReadConnection(ctx context.Context) error {
-	readOnlyURL := dm.config.GetDatabaseReadOnlyURL()
-	if readOnlyURL == "" {
-		return nil // No read-only connection configured
-	}
-
-	driver := dm.config.GetDatabaseDriver()
-	if driver == "" {
-		driver = "postgres"
-	}
-
-	db, err := sql.Open(driver, readOnlyURL)
-	if err != nil {
-		return err
-	}
-
-	// Configure connection pool
-	dm.configureConnectionPool(db)
-
-	// Test connection
-	if err := db.PingContext(ctx); err != nil {
-		db.Close()
-		return err
-	}
-
-	dm.readDB = db
-
-	if dm.logger != nil {
-		dm.logger.WithField("driver", driver).Info("Read-only database connection initialized")
-	}
-
-	return nil
-}
-
-// configureConnectionPool configures the database connection pool
-func (dm *datastoreManager) configureConnectionPool(db *sql.DB) {
-	if maxOpen := dm.config.GetDatabaseMaxOpenConnections(); maxOpen > 0 {
-		db.SetMaxOpenConns(maxOpen)
-	}
-
-	if maxIdle := dm.config.GetDatabaseMaxIdleConnections(); maxIdle > 0 {
-		db.SetMaxIdleConns(maxIdle)
-	}
-
-	if maxLifetime := dm.config.GetDatabaseConnectionMaxLifetime(); maxLifetime > 0 {
-		db.SetConnMaxLifetime(maxLifetime)
-	}
-
-	if maxIdleTime := dm.config.GetDatabaseConnectionMaxIdleTime(); maxIdleTime > 0 {
-		db.SetConnMaxIdleTime(maxIdleTime)
-	}
-}
-
-// GetConnection returns a write database connection
-func (dm *datastoreManager) GetConnection(ctx context.Context) (*sql.DB, error) {
-	dm.mutex.RLock()
-	defer dm.mutex.RUnlock()
-
-	if !dm.initialized {
-		return nil, fmt.Errorf("datastore manager is not initialized")
-	}
-
-	if dm.writeDB == nil {
-		return nil, fmt.Errorf("write database connection is not available")
-	}
-
-	// Record metrics if available
-	if dm.metricsCollector != nil {
-		start := time.Now()
-		defer func() {
-			dm.metricsCollector.RecordConnectionAcquired(time.Since(start))
-		}()
-	}
-
-	return dm.writeDB, nil
-}
-
-// GetReadOnlyConnection returns a read-only database connection
-func (dm *datastoreManager) GetReadOnlyConnection(ctx context.Context) (*sql.DB, error) {
-	dm.mutex.RLock()
-	defer dm.mutex.RUnlock()
-
-	if !dm.initialized {
-		return nil, fmt.Errorf("datastore manager is not initialized")
-	}
-
-	if dm.readDB == nil {
-		return nil, fmt.Errorf("read database connection is not available")
-	}
-
-	// Record metrics if available
-	if dm.metricsCollector != nil {
-		start := time.Now()
-		defer func() {
-			dm.metricsCollector.RecordConnectionAcquired(time.Since(start))
-		}()
-	}
-
-	return dm.readDB, nil
-}
-
-// IsHealthy returns the health status of the datastore
-func (dm *datastoreManager) IsHealthy(ctx context.Context) bool {
-	dm.mutex.RLock()
-	defer dm.mutex.RUnlock()
-
-	if !dm.initialized {
-		return false
-	}
-
-	if dm.healthChecker != nil {
-		return dm.healthChecker.IsHealthy()
-	}
-
-	// Fallback health check
-	if dm.writeDB != nil {
-		if err := dm.writeDB.PingContext(ctx); err != nil {
-			return false
+		idx = &s.readIdx
+		if len(pool) != 0 {
+			// This check ensures we are able to use the write db if no more read dbs exist
+			return s.selectOne(pool, idx)
 		}
 	}
 
-	if dm.readDB != nil && dm.readDB != dm.writeDB {
-		if err := dm.readDB.PingContext(ctx); err != nil {
-			return false
+	for db, healthy := range s.allWriteDBs {
+		if healthy {
+			pool = append(pool, db)
 		}
 	}
+	idx = &s.writeIdx
 
-	return true
-}
+	s.mu.RUnlock()
+	db := s.selectOne(pool, idx)
 
-// BeginTransaction starts a new write transaction
-func (dm *datastoreManager) BeginTransaction(ctx context.Context) (*sql.Tx, error) {
-	db, err := dm.GetConnection(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	if dm.metricsCollector != nil {
-		dm.metricsCollector.RecordTransactionStarted()
-	}
-
-	tx, err := db.BeginTx(ctx, nil)
-	if err != nil {
-		if dm.metricsCollector != nil {
-			dm.metricsCollector.RecordConnectionError(err)
-		}
-		return nil, fmt.Errorf("failed to begin transaction: %w", err)
-	}
-
-	return tx, nil
-}
-
-// BeginReadOnlyTransaction starts a new read-only transaction
-func (dm *datastoreManager) BeginReadOnlyTransaction(ctx context.Context) (*sql.Tx, error) {
-	db, err := dm.GetReadOnlyConnection(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	if dm.metricsCollector != nil {
-		dm.metricsCollector.RecordTransactionStarted()
-	}
-
-	tx, err := db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
-	if err != nil {
-		if dm.metricsCollector != nil {
-			dm.metricsCollector.RecordConnectionError(err)
-		}
-		return nil, fmt.Errorf("failed to begin read-only transaction: %w", err)
-	}
-
-	return tx, nil
-}
-
-// GetConnectionPoolStats returns connection pool statistics
-func (dm *datastoreManager) GetConnectionPoolStats() ConnectionPoolStats {
-	dm.mutex.RLock()
-	defer dm.mutex.RUnlock()
-
-	if !dm.initialized || dm.writeDB == nil {
-		return ConnectionPoolStats{}
-	}
-
-	stats := dm.writeDB.Stats()
-	
-	return ConnectionPoolStats{
-		OpenConnections:    stats.OpenConnections,
-		InUse:             stats.InUse,
-		Idle:              stats.Idle,
-		WaitCount:         stats.WaitCount,
-		WaitDuration:      stats.WaitDuration,
-		MaxIdleClosed:     stats.MaxIdleClosed,
-		MaxIdleTimeClosed: stats.MaxIdleTimeClosed,
-		MaxLifetimeClosed: stats.MaxLifetimeClosed,
-	}
-}
-
-// Close closes all database connections
-func (dm *datastoreManager) Close() error {
-	dm.mutex.Lock()
-	defer dm.mutex.Unlock()
-
-	if !dm.initialized {
+	if db == nil {
 		return nil
 	}
 
-	var errors []error
+	return db.Session(&gorm.Session{NewDB: true, AllowGlobalUpdate: true}).WithContext(ctx).Scopes(tenantPartition(ctx))
+}
 
-	// Stop health monitoring
-	if dm.healthChecker != nil {
-		dm.healthChecker.StopHealthMonitoring()
+// selectOne uses atomic round-robin for high concurrency.
+func (s *Pool) selectOne(pool []*gorm.DB, idx *uint64) *gorm.DB {
+	if len(pool) == 0 {
+		return nil
 	}
+	pos := atomic.AddUint64(idx, 1)
+	return pool[int(pos-1)%len(pool)] //nolint:gosec // G115: index is result of (val % len), always < len and fits in int.
+}
 
-	// Close write connection
-	if dm.writeDB != nil {
-		if err := dm.writeDB.Close(); err != nil {
-			errors = append(errors, fmt.Errorf("failed to close write database: %w", err))
+// SetPoolConfig updates pool sizes and connection lifetimes at runtime for all DBs.
+func (s *Pool) SetPoolConfig(maxOpen, maxIdle int, maxLifetime time.Duration) {
+	for db := range s.allReadDBs {
+		if sqlDB, err := db.DB(); err == nil {
+			sqlDB.SetMaxOpenConns(maxOpen)
+			sqlDB.SetMaxIdleConns(maxIdle)
+			sqlDB.SetConnMaxLifetime(maxLifetime)
 		}
-		dm.writeDB = nil
 	}
-
-	// Close read connection if it's different from write connection
-	if dm.readDB != nil && dm.readDB != dm.writeDB {
-		if err := dm.readDB.Close(); err != nil {
-			errors = append(errors, fmt.Errorf("failed to close read database: %w", err))
+	for db := range s.allWriteDBs {
+		if sqlDB, err := db.DB(); err == nil {
+			sqlDB.SetMaxOpenConns(maxOpen)
+			sqlDB.SetMaxIdleConns(maxIdle)
+			sqlDB.SetConnMaxLifetime(maxLifetime)
 		}
-		dm.readDB = nil
+	}
+}
+
+func (s *Pool) CanMigrate() bool {
+	return s.shouldDoMigrations
+}
+
+func tenantPartition(ctx context.Context) func(db *gorm.DB) *gorm.DB {
+	return func(db *gorm.DB) *gorm.DB {
+		authClaim := common.ClaimsFromContext(ctx)
+		if authClaim == nil {
+			return db
+		}
+
+		skipTenancyChecksOnClaims := common.IsTenancyChecksOnClaimSkipped(ctx)
+		if skipTenancyChecksOnClaims {
+			return db
+		}
+
+		return db.Where("tenant_id = ? AND partition_id = ?", authClaim.GetTenantID(), authClaim.GetPartitionID())
+	}
+}
+
+// DBPropertiesToMap converts the supplied db json content into a golang map.
+func DBPropertiesToMap(props JSONMap) map[string]string {
+	if props == nil {
+		return make(map[string]string, len(props))
 	}
 
-	dm.initialized = false
+	payload := make(map[string]string, len(props))
 
-	if dm.logger != nil {
-		dm.logger.Info("Datastore manager closed")
+	for k, val := range props {
+		switch v := val.(type) {
+		case nil:
+			payload[k] = ""
+		case string:
+			payload[k] = v
+
+		case bool:
+			payload[k] = strconv.FormatBool(v)
+		case int, int64, int32, int16, int8:
+			iVal, ok := val.(int)
+			if !ok {
+				payload[k] = fmt.Sprintf("%v", val)
+				continue
+			}
+			payload[k] = strconv.FormatInt(int64(iVal), 10)
+
+		case float32, float64:
+			fVal, ok := val.(float64)
+			if !ok {
+				payload[k] = fmt.Sprintf("%v", val)
+				continue
+			}
+			payload[k] = strconv.FormatFloat(fVal, 'g', -1, 64)
+		default:
+
+			marVal, err1 := json.Marshal(val)
+			if err1 != nil {
+				payload[k] = fmt.Sprintf("%v", val)
+				continue
+			}
+			payload[k] = string(marVal)
+		}
 	}
 
-	if len(errors) > 0 {
-		return fmt.Errorf("errors occurred while closing datastore: %v", errors)
+	return payload
+}
+
+// DBPropertiesFromMap converts a map into a JSONMap object.
+func DBPropertiesFromMap(propsMap map[string]string) JSONMap {
+	jsonMap := make(JSONMap)
+
+	if propsMap == nil {
+		return jsonMap
 	}
 
-	return nil
+	for k, val := range propsMap {
+		jsonMap[k] = val
+
+		if !strings.HasPrefix(val, "{") && !strings.HasPrefix(val, "[") {
+			continue
+		}
+
+		var prop any
+		// Determine if the JSON is an object or an array and unmarshal accordingly
+		if err := json.Unmarshal([]byte(val), &prop); err != nil {
+			continue
+		}
+
+		jsonMap[k] = prop
+	}
+
+	return jsonMap
+}
+
+// ErrorIsNoRows validate if supplied error is because of record missing in DB.
+func ErrorIsNoRows(err error) bool {
+	return errors.Is(err, gorm.ErrRecordNotFound) || errors.Is(err, sql.ErrNoRows)
+}
+
+func DBPool(s common.Service, name ...string) *Pool {
+	dbPoolName := defaultStoreName
+	if len(name) > 0 {
+		dbPoolName = name[0]
+	}
+
+	// Get dataStores from DataModule
+	module := s.GetModule(common.ModuleTypeData)
+	if module == nil {
+		return nil
+	}
+	
+	dataModule, ok := module.(common.DataModule)
+	if !ok {
+		return nil
+	}
+	
+	dataStores := dataModule.DataStores()
+	v, ok := dataStores[dbPoolName]
+	if !ok {
+		return nil
+	}
+
+	pVal, ok := v.(*Pool)
+	if !ok {
+		return nil // Or log an error, depending on desired behavior
+	}
+	return pVal
+}
+
+// DB returns the database connection for the service.
+func DB(s common.Service, ctx context.Context, readOnly bool) *gorm.DB {
+	return DBWithName(s, ctx, defaultStoreName, readOnly)
+}
+
+func DBWithName(s common.Service, ctx context.Context, name string, readOnly bool) *gorm.DB {
+	store := DBPool(s, name)
+	if store == nil {
+		return nil
+	}
+	return store.DB(ctx, readOnly)
+}
+
+// WithDatastoreConnection Option method to store a connection that will be utilized when connecting to the database.
+func WithDatastoreConnection(postgresqlConnection string, readOnly bool) common.Option {
+	return WithDatastoreConnectionWithName(defaultStoreName, postgresqlConnection, readOnly)
+}
+func WithDatastoreConnectionWithName(name string, postgresqlConnection string, readOnly bool) common.Option {
+	return func(ctx context.Context, s common.Service) {
+		cleanedPostgresqlDSN, err := cleanPostgresDSN(postgresqlConnection)
+		if err != nil {
+			s.Log(ctx).
+				WithError(err).
+				WithField("dsn", postgresqlConnection).
+				Fatal("could not get a clean postgresql dsn")
+			return
+		}
+
+		preferSimpleProtocol := true
+		skipDefaultTransaction := true
+
+		dbConfig, _ := s.Config().(common.ConfigurationDatabase)
+		if dbConfig != nil {
+			preferSimpleProtocol = dbConfig.PreferSimpleProtocol()
+			skipDefaultTransaction = dbConfig.SkipDefaultTransaction()
+		}
+
+		conn, err := otelsql.Open("pgx", cleanedPostgresqlDSN,
+			otelsql.WithAttributes(
+				semconv.DBSystemNamePostgreSQL,
+				attribute.String("service.name", s.Name()),
+			),
+		)
+		if err != nil {
+			s.Log(ctx).WithError(err).WithField("dsn", postgresqlConnection).Error("could not connect to pg now")
+			return
+		}
+
+		gormDB, err := gorm.Open(
+			postgres.New(postgres.Config{
+				Conn:                 conn,
+				PreferSimpleProtocol: preferSimpleProtocol,
+			}),
+			&gorm.Config{
+				Logger:                 datbaseLogger(ctx, s),
+				SkipDefaultTransaction: skipDefaultTransaction,
+			},
+		)
+
+		if err != nil {
+			s.Log(ctx).WithError(err).WithField("dsn", postgresqlConnection).Error("could not connect to gorm now")
+			return
+		}
+
+		store := DBPool(s, name)
+		if store == nil { // Pool not found or was of an incompatible type
+			store = newStore(ctx, s)
+			// Get dataStores from DataModule and register the new store
+			module := s.GetModule(common.ModuleTypeData)
+			if module != nil {
+				if dataModule, ok := module.(common.DataModule); ok {
+					dataStores := dataModule.DataStores()
+					dataStores[name] = store
+				}
+			}
+		}
+		store.addNewConnection(gormDB, readOnly)
+
+		// Update the store in DataModule
+		module := s.GetModule(common.ModuleTypeData)
+		if module != nil {
+			if dataModule, ok := module.(common.DataModule); ok {
+				dataStores := dataModule.DataStores()
+				dataStores[name] = store
+			}
+		}
+
+		if dbConfig != nil {
+			store.shouldDoMigrations = dbConfig.DoDatabaseMigrate()
+			store.SetPoolConfig(
+				dbConfig.GetMaxOpenConnections(),
+				dbConfig.GetMaxIdleConnections(),
+				dbConfig.GetMaxConnectionLifeTimeInSeconds(),
+			)
+		}
+	}
+}
+
+func WithDatastore() common.Option {
+	return func(ctx context.Context, s common.Service) {
+		config, ok := s.Config().(common.ConfigurationDatabase)
+		if !ok {
+			s.Log(ctx).Warn("configuration object not of type : ConfigurationDatabase")
+			return
+		}
+
+		for _, primaryDBURL := range config.GetDatabasePrimaryHostURL() {
+			primaryDatabase := WithDatastoreConnection(primaryDBURL, false)
+			primaryDatabase(ctx, s)
+		}
+
+		for _, replicaDBURL := range config.GetDatabaseReplicaHostURL() {
+			replicaDatabase := WithDatastoreConnection(replicaDBURL, true)
+			replicaDatabase(ctx, s)
+		}
+	}
+}
+
+// cleanPostgresDSN checks if the input is already a DSN, otherwise converts a PostgreSQL URL to DSN.
+func cleanPostgresDSN(pgString string) (string, error) {
+	trimmed := strings.TrimSpace(pgString)
+	// Heuristic: if it contains '=' and does not start with postgres:// or postgresql://, treat as DSN
+	lower := strings.ToLower(trimmed)
+	if strings.Contains(trimmed, "=") && !strings.HasPrefix(lower, "postgres://") &&
+		!strings.HasPrefix(lower, "postgresql://") {
+		return trimmed, nil
+	}
+
+	u, err := url.Parse(trimmed)
+	if err != nil {
+		return "", err
+	}
+
+	if u.Scheme != "postgres" && u.Scheme != "postgresql" {
+		return "", fmt.Errorf("invalid scheme: %s", u.Scheme)
+	}
+
+	user := ""
+	password := ""
+	if u.User != nil {
+		user = u.User.Username()
+		password, _ = u.User.Password()
+	}
+	host := u.Hostname()
+	port := u.Port()
+	if port == "" {
+		port = "5432"
+	}
+	dbname := strings.TrimPrefix(u.Path, "/")
+
+	dsn := []string{
+		"host=" + host,
+		"port=" + port,
+		"user=" + user,
+		"password=" + password,
+		"dbname=" + dbname,
+	}
+	for k, vals := range u.Query() {
+		for _, v := range vals {
+			dsn = append(dsn, fmt.Sprintf("%s=%s", k, v))
+		}
+	}
+	return strings.Join(dsn, " "), nil
 }

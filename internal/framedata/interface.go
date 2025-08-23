@@ -77,14 +77,7 @@ type Migrator interface {
 	ValidateMigrations(ctx context.Context) error
 }
 
-// Migration represents a database migration
-type Migration struct {
-	ID          string    `json:"id"`
-	Description string    `json:"description"`
-	Version     int64     `json:"version"`
-	AppliedAt   time.Time `json:"applied_at,omitempty"`
-	Checksum    string    `json:"checksum"`
-}
+// Migration type moved to common.go to avoid duplication
 
 // Repository defines the base interface for data repositories
 type Repository interface {

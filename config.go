@@ -20,17 +20,16 @@ const (
 	ctxKeyConfiguration = contextKey("configurationKey")
 	httpStatusOKClass   = 2
 	// DefaultSlowQueryThresholdMilliseconds is defined in datastore_logger.go.
+	DefaultSlowQueryThreshold = 200 * time.Millisecond // Default slow query threshold
 )
 
 // WithConfig Option that helps to specify or override the configuration object of our service.
 func WithConfig(config any) Option {
-	return func(_ context.Context, s *Service) {
-		s.configuration = config
+	return func(_ context.Context, s Service) {
+		if impl, ok := s.(*serviceImpl); ok {
+			impl.configuration = config
+		}
 	}
-}
-
-func (s *Service) Config() any {
-	return s.configuration
 }
 
 // ConfigToContext adds service configuration to the current supplied context.

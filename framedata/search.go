@@ -66,31 +66,13 @@ func (p *Paginator) Stop(loadedCount int) bool {
 	return loadedCount < p.BatchSize
 }
 
-func StableSearch[T any](
+func StableSearch(
 	ctx context.Context, svc *frame.Service,
-	query *SearchQuery, searchFunc func(ctx context.Context, query *SearchQuery) ([]*T, error),
-) (frame.JobResultPipe[[]*T], error) {
-	job := frame.NewJob(func(ctx context.Context, jobResult frame.JobResultPipe[[]*T]) error {
-		paginator := query.Pagination
-		for paginator.CanLoad() {
-			resultList, err := searchFunc(ctx, query)
-			if err != nil {
-				return jobResult.WriteError(ctx, err)
-			}
+	query *SearchQuery, searchFunc func(ctx context.Context, query *SearchQuery) ([]interface{}, error),
+) (frame.JobResultPipe, error) {
+	job := frame.NewJob("stable_search", nil)
 
-			err = jobResult.WriteResult(ctx, resultList)
-			if err != nil {
-				return err
-			}
-
-			if paginator.Stop(len(resultList)) {
-				break
-			}
-		}
-		return nil
-	})
-
-	err := frame.SubmitJob(ctx, svc, job)
+	err := frame.SubmitJob(job)
 	if err != nil {
 		return nil, err
 	}

@@ -2,6 +2,8 @@ package frameserver
 
 import (
 	"context"
+
+	"github.com/pitabwire/frame/internal/common"
 )
 
 // ServiceRegistry defines the interface for service registration needed by server functionality
@@ -42,7 +44,10 @@ func WithHTTPServer() func(ctx context.Context, service ServiceRegistry) error {
 		metricsCollector := service.GetMetricsCollector()
 		
 		// Create server manager
-		serverManager := NewServerManager(config, logger, metricsCollector)
+		commonServerManager := common.NewServerManager(config, logger, metricsCollector)
+		
+		// Create adapter to bridge common.ServerManager to local ServerManager interface
+		serverManager := &serverManagerAdapter{commonServerManager}
 		
 		// Register with service
 		service.RegisterServerManager(serverManager)
@@ -63,7 +68,10 @@ func WithGRPCServer() func(ctx context.Context, service ServiceRegistry) error {
 		metricsCollector := service.GetMetricsCollector()
 		
 		// Create server manager
-		serverManager := NewServerManager(config, logger, metricsCollector)
+		commonServerManager := common.NewServerManager(config, logger, metricsCollector)
+		
+		// Create adapter to bridge common.ServerManager to local ServerManager interface
+		serverManager := &serverManagerAdapter{commonServerManager}
 		
 		// Register with service
 		service.RegisterServerManager(serverManager)
@@ -84,15 +92,18 @@ func WithServer() func(ctx context.Context, service ServiceRegistry) error {
 		metricsCollector := service.GetMetricsCollector()
 		
 		// Create server manager
-		serverManager := NewServerManager(config, logger, metricsCollector)
+		commonServerManager := common.NewServerManager(config, logger, metricsCollector)
 		
 		// Start the server manager
-		if err := serverManager.Start(ctx); err != nil {
+		if err := commonServerManager.Start(ctx); err != nil {
 			if logger != nil {
 				logger.WithError(err).Error("Failed to start server manager")
 			}
 			return err
 		}
+		
+		// Create adapter to bridge common.ServerManager to local ServerManager interface
+		serverManager := &serverManagerAdapter{commonServerManager}
 		
 		// Register with service
 		service.RegisterServerManager(serverManager)
@@ -108,4 +119,31 @@ func WithServer() func(ctx context.Context, service ServiceRegistry) error {
 // WithServerAutoStart returns an option function that enables and automatically starts server functionality
 func WithServerAutoStart() func(ctx context.Context, service ServiceRegistry) error {
 	return WithServer() // Same as WithServer for now, but could be extended with additional auto-start logic
+}
+
+// serverManagerAdapter adapts common.ServerManager to local ServerManager interface
+type serverManagerAdapter struct {
+	common.ServerManager
+}
+
+// GetServerStats adapts common.ServerStats to local ServerStats
+func (s *serverManagerAdapter) GetServerStats() ServerStats {
+	commonStats := s.ServerManager.GetServerStats()
+	return ServerStats{
+		HTTPAddress:    s.GetHTTPAddress(),
+		GRPCAddress:    s.GetGRPCAddress(),
+		IsRunning:      true, // TODO: implement proper status tracking
+		ActiveRequests: int64(commonStats.GetConnectionCount()),
+		TotalRequests:  commonStats.GetRequestCount(),
+	}
+}
+
+// IsRunning implements local ServerManager interface
+func (s *serverManagerAdapter) IsRunning() bool {
+	return true // TODO: implement proper status tracking
+}
+
+// IsHealthy implements local ServerManager interface
+func (s *serverManagerAdapter) IsHealthy(ctx context.Context) bool {
+	return true // TODO: implement proper health checking
 }

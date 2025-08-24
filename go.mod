@@ -18,7 +18,7 @@ require (
 	github.com/pitabwire/natspubsub v0.6.11
 	github.com/pitabwire/util v0.3.4
 	github.com/rs/xid v1.6.0
-	github.com/stretchr/testify v1.10.0
+	github.com/stretchr/testify v1.11.0
 	github.com/testcontainers/testcontainers-go v0.38.0
 	github.com/testcontainers/testcontainers-go/modules/nats v0.38.0
 	github.com/testcontainers/testcontainers-go/modules/postgres v0.38.0

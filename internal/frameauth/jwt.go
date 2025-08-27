@@ -11,7 +11,8 @@ import (
 	"github.com/pitabwire/frame/internal/common"
 )
 
-const ConstInternalSystemScope = "int_system"
+const ConstSystemScopeInternal = "system_int"
+const ConstSystemScopeExternal = "system_ext"
 
 // RegisterForJwt function hooks in jwt client registration to make sure service is authenticated.
 func RegisterForJwt(ctx context.Context, s common.Service) error {
@@ -35,8 +36,9 @@ func RegisterForJwt(ctx context.Context, s common.Service) error {
 	if oauth2ServiceAdminHost != "" && clientSecret != "" {
 		audienceList := strings.Split(oauth2Audience, ",")
 
-		_, err := RegisterForJwtWithParams(ctx, s, oauth2ServiceAdminHost, s.Name(), clientID, clientSecret,
-			ConstInternalSystemScope, audienceList, map[string]string{})
+		_, err := RegisterForJwtWithParams(ctx,
+			s, oauth2ServiceAdminHost, s.Name(), clientID, clientSecret,
+			ConstSystemScopeInternal, audienceList, map[string]string{})
 		if err != nil {
 			return err
 		}

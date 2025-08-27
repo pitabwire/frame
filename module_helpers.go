@@ -1,25 +1,25 @@
 package frame
 
 import (
-	"github.com/pitabwire/frame/internal/frameauth"
-	"github.com/pitabwire/frame/internal/frameauthorization"
-	"github.com/pitabwire/frame/internal/framedata"
-	"github.com/pitabwire/frame/internal/framequeue"
-	"github.com/pitabwire/frame/internal/frameobservability"
-	"github.com/pitabwire/frame/internal/frameserver"
+	"github.com/pitabwire/frame/modules/authentication"
+	"github.com/pitabwire/frame/modules/authorization"
+	"github.com/pitabwire/frame/modules/data"
+	"github.com/pitabwire/frame/modules/queue"
+	"github.com/pitabwire/frame/modules/observability"
+	"github.com/pitabwire/frame/modules/server"
 )
 
 // Helper functions for easy module retrieval by end users
 // These provide type-safe access to specific module implementations
 
 // GetAuthenticator retrieves the authentication module from the service
-func GetAuthenticator(service Service) frameauth.Authenticator {
+func GetAuthenticator(service Service) authentication.Authenticator {
 	module := service.GetModule(ModuleTypeAuthentication)
 	if module == nil {
 		return nil
 	}
 	
-	if authModule, ok := module.(interface{ Authenticator() frameauth.Authenticator }); ok {
+	if authModule, ok := module.(authentication.Module); ok {
 		return authModule.Authenticator()
 	}
 	
@@ -27,13 +27,13 @@ func GetAuthenticator(service Service) frameauth.Authenticator {
 }
 
 // GetAuthorizer retrieves the authorization module from the service
-func GetAuthorizer(service Service) frameauthorization.Authorizer {
+func GetAuthorizer(service Service) authorization.Authorizer {
 	module := service.GetModule(ModuleTypeAuthorization)
 	if module == nil {
 		return nil
 	}
 	
-	if authzModule, ok := module.(interface{ Authorizer() frameauthorization.Authorizer }); ok {
+	if authzModule, ok := module.(authorization.Module); ok {
 		return authzModule.Authorizer()
 	}
 	
@@ -41,13 +41,13 @@ func GetAuthorizer(service Service) frameauthorization.Authorizer {
 }
 
 // GetDatastoreManager retrieves the datastore manager from the service
-func GetDatastoreManager(service Service) framedata.DatastoreManager {
+func GetDatastoreManager(service Service) data.DatastoreManager {
 	module := service.GetModule(ModuleTypeData)
 	if module == nil {
 		return nil
 	}
 	
-	if dataModule, ok := module.(interface{ DatastoreManager() framedata.DatastoreManager }); ok {
+	if dataModule, ok := module.(data.Module); ok {
 		return dataModule.DatastoreManager()
 	}
 	
@@ -55,13 +55,13 @@ func GetDatastoreManager(service Service) framedata.DatastoreManager {
 }
 
 // GetMigrator retrieves the migrator from the service
-func GetMigrator(service Service) framedata.Migrator {
+func GetMigrator(service Service) data.Migrator {
 	module := service.GetModule(ModuleTypeData)
 	if module == nil {
 		return nil
 	}
 	
-	if dataModule, ok := module.(interface{ Migrator() framedata.Migrator }); ok {
+	if dataModule, ok := module.(data.Module); ok {
 		return dataModule.Migrator()
 	}
 	
@@ -69,13 +69,13 @@ func GetMigrator(service Service) framedata.Migrator {
 }
 
 // GetSearchProvider retrieves the search provider from the service
-func GetSearchProvider(service Service) framedata.SearchProvider {
+func GetSearchProvider(service Service) data.SearchProvider {
 	module := service.GetModule(ModuleTypeData)
 	if module == nil {
 		return nil
 	}
 	
-	if dataModule, ok := module.(interface{ SearchProvider() framedata.SearchProvider }); ok {
+	if dataModule, ok := module.(data.Module); ok {
 		return dataModule.SearchProvider()
 	}
 	
@@ -83,13 +83,13 @@ func GetSearchProvider(service Service) framedata.SearchProvider {
 }
 
 // GetQueueManager retrieves the queue manager from the service
-func GetQueueManager(service Service) framequeue.QueueManager {
+func GetQueueManager(service Service) queue.QueueManager {
 	module := service.GetModule(ModuleTypeQueue)
 	if module == nil {
 		return nil
 	}
 	
-	if queueModule, ok := module.(interface{ QueueManager() framequeue.QueueManager }); ok {
+	if queueModule, ok := module.(queue.Module); ok {
 		return queueModule.QueueManager()
 	}
 	
@@ -97,13 +97,13 @@ func GetQueueManager(service Service) framequeue.QueueManager {
 }
 
 // GetObservabilityManager retrieves the observability manager from the service
-func GetObservabilityManager(service Service) frameobservability.ObservabilityManager {
+func GetObservabilityManager(service Service) observability.ObservabilityManager {
 	module := service.GetModule(ModuleTypeObservability)
 	if module == nil {
 		return nil
 	}
 	
-	if obsModule, ok := module.(interface{ ObservabilityManager() frameobservability.ObservabilityManager }); ok {
+	if obsModule, ok := module.(observability.Module); ok {
 		return obsModule.ObservabilityManager()
 	}
 	
@@ -111,13 +111,13 @@ func GetObservabilityManager(service Service) frameobservability.ObservabilityMa
 }
 
 // GetServerManager retrieves the server manager from the service
-func GetServerManager(service Service) frameserver.ServerManager {
+func GetServerManager(service Service) server.ServerManager {
 	module := service.GetModule(ModuleTypeServer)
 	if module == nil {
 		return nil
 	}
 	
-	if serverModule, ok := module.(interface{ ServerManager() frameserver.ServerManager }); ok {
+	if serverModule, ok := module.(server.Module); ok {
 		return serverModule.ServerManager()
 	}
 	

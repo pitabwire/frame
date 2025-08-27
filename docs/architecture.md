@@ -1,107 +1,81 @@
-## Frame Architecture Overview
+# Pluggable Architecture Plan
 
-Frame is a Go-based framework built on top of [go-cloud](https://github.com/google/go-cloud) that provides a cloud-agnostic way to build modern API servers. This document outlines the core architecture and design principles of the framework.
+This document outlines the architectural plan for the `frame` project, focusing on creating a highly pluggable and extensible system.
 
-### Core Design Principles
+## 1. Core Concepts
 
-1. **Modularity**: Each component is independent and can be used in isolation
-2. **Cloud Agnosticism**: Built on go-cloud to prevent vendor lock-in
-3. **Minimal Boilerplate**: Simplified setup and configuration
-4. **Runtime Efficiency**: Only initialized components are loaded
-5. **Extensibility**: Easy to extend and customize components
+The architecture is based on three core concepts:
 
-### Key Components
+*   **Service:** The central component of the framework. It acts as a registry for modules and provides core services like configuration, logging, and lifecycle management.
+*   **Module:** A self-contained unit of functionality that can be plugged into the service. Each module implements a specific interface and is responsible for a distinct domain (e.g., authentication, data access, message queuing).
+*   **Option:** A function that configures the service. Options are used to enable, disable, and configure modules, as well as to set up other service-level parameters.
 
-#### 1. Service Layer (`service.go`)
-- Central orchestrator for all framework components
-- Manages component lifecycle and dependencies
-- Handles graceful startup and shutdown
-- Configurable through options pattern
+## 2. Directory Structure
 
-#### 2. Server Components
-- **HTTP Server**
-  - Built on gorilla/mux
-  - Configurable middleware support
-  - Health check endpoints
-  - Request logging
-  
-- **gRPC Server**
-  - Native gRPC support
-  - Bi-directional streaming
-  - Protocol buffer integration
+To ensure a clean and maintainable codebase, we will adopt the following directory structure:
 
-#### 3. Data Layer
-- **Database Management** (`datastore.go`)
-  - GORM integration for ORM capabilities
-  - Multi-tenancy support
-  - Read/Write separation
-  - Migration management
-  
-- **Queue System** (`queue.go`)
-  - Asynchronous message processing
-  - Multiple queue backend support (memory, NATS, GCP PubSub)
-  - Publisher/Subscriber pattern
-  - Message handling with retries
+```
+/
+├── cmd/           # Entry points for different services
+├── pkg/           # Shared packages and libraries
+├── internal/      # Private application and library code
+│   ├── core/      # Core interfaces and types (e.g., Module, Service)
+│   └── modules/   # Implementations of the various modules
+├── configs/       # Configuration files
+├── deployments/   # Deployment manifests (e.g., Dockerfiles, Kubernetes manifests)
+├── scripts/       # Scripts for automation (e.g., build, test, deploy)
+└── examples/      # Example usage of the framework
+```
 
-#### 4. Security Components
-- **Authentication** (`authentication.go`)
-  - OAuth2 support
-  - JWT token handling
-  - Flexible auth provider integration
-  
-- **Authorization** (`authorization.go`)
-  - Role-based access control
-  - Permission management
-  - Policy enforcement
+## 3. Module Design
 
-#### 5. Support Features
-- **Configuration** (`config.go`)
-  - Environment-based configuration
-  - Secret management
-  - Dynamic configuration updates
+Each module will be designed with the following principles in mind:
 
-- **Logging** (`logger.go`)
-  - Structured logging
-  - Log level management
-  - Context-aware logging
+*   **Interface-based:** Each module will expose its functionality through a public interface. This decouples the module's implementation from its consumers.
+*   **Self-contained:** Modules should be as self-contained as possible, with minimal dependencies on other modules.
+*   **Configurable:** Each module will have its own configuration struct, which can be populated from a configuration file or environment variables.
+*   **Optional:** Modules should be optional and only included in the final program if they are explicitly enabled via an `Option`.
 
-- **Tracing** (`tracing.go`)
-  - Distributed tracing support
-  - OpenTelemetry integration
-  - Performance monitoring
+### Module Structure
 
-### Component Interaction Flow
+Each module will have the following internal structure:
 
-1. Service initialization starts with `NewService()`
-2. Components are registered through options
-3. Service manages component lifecycle:
-   - Initialization order
-   - Dependency injection
-   - Graceful shutdown
-4. Request flow:
-   - HTTP/gRPC request received
-   - Authentication/Authorization
-   - Request processing
-   - Response handling
+```
+modules/
+└── mymodule/
+    ├── interface.go  # Public interface for the module
+    ├── module.go     # Implementation of the module interface
+    ├── config.go     # Configuration struct for the module
+    └── options.go    # Option functions for enabling and configuring the module
+```
 
-### Best Practices
+## 4. Service Design
 
-1. **Component Initialization**
-   - Initialize only required components
-   - Use appropriate options for customization
-   - Handle errors during initialization
+The `Service` will be responsible for the following:
 
-2. **Error Handling**
-   - Use context for cancellation
-   - Implement proper error wrapping
-   - Provide meaningful error messages
+*   **Module Registry:** The service will maintain a registry of all available modules.
+*   **Lifecycle Management:** The service will manage the lifecycle of modules, including initialization, starting, and stopping.
+*   **Dependency Injection:** The service will provide modules with their dependencies, such as a logger and a configuration object.
 
-3. **Configuration**
-   - Use environment variables for configuration
-   - Implement proper validation
-   - Follow secure practices for sensitive data
+### Service Initialization
 
-4. **Testing**
-   - Write unit tests for components
-   - Use integration tests for component interaction
-   - Implement proper mocking
+The service will be initialized using the `NewService` function, which accepts a list of `Option` functions. These options will be used to configure the service and its modules.
+
+```go
+// Create a new service with the authentication and data modules enabled
+svc := frame.NewService(
+    frame.WithAuthentication(authConfig),
+    frame.WithData(dataConfig),
+)
+```
+
+## 5. Example Workflow
+
+Here's an example workflow of how a user would use the framework:
+
+1.  **Define Configuration:** The user defines the configuration for their service in a `config.yaml` file.
+2.  **Create a Service:** The user creates a new service using `frame.NewService()` and passes in the desired `Option` functions to enable and configure the modules they need.
+3.  **Run the Service:** The user runs the service, which initializes and starts all the enabled modules.
+4.  **Access Module Functionality:** The user can then access the functionality of the enabled modules through the `Service`'s module registry.
+
+This pluggable architecture will make it easy to add new functionality to the framework without modifying the core service. It will also allow users to create lightweight services that only include the modules they need.

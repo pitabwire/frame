@@ -463,7 +463,7 @@ func AuthenticationMiddleware(s common.ServiceInterface, next http.Handler, audi
 		if authorizationHeader == "" || !strings.HasPrefix(authorizationHeader, "Bearer ") {
 			logger.WithField("available_headers", r.Header).
 				Debug(" AuthenticationMiddleware -- could not authenticate missing token")
-			http.Error(w, "An authorization header is required", http.StatusForbidden)
+			http.Error(w, "An authorization header is required", http.StatusUnauthorized)
 			return
 		}
 
@@ -482,7 +482,7 @@ func AuthenticationMiddleware(s common.ServiceInterface, next http.Handler, audi
 
 		if err != nil {
 			logger.WithError(err).Info(" AuthenticationMiddleware -- could not authenticate token")
-			http.Error(w, "Authorization header is invalid", http.StatusUnauthorized)
+			http.Error(w, "Authorization header is invalid", http.StatusForbidden)
 			return
 		}
 

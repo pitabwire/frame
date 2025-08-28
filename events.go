@@ -4,13 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+
+	"google.golang.org/protobuf/proto"
 )
 
-type eventPayload struct {
-	ID      string `json:",omitempty"`
-	Name    string `json:",omitempty"`
-	Payload string `json:",omitempty"`
-}
+const eventHeaderName = "frame._internal.event.header"
 
 // EventI an interface to represent a system event. All logic of an event is handled in the execute task
 // and can also emit other events into the system or if they don't emit an event the processFunc is deemed complete.
@@ -44,13 +42,6 @@ func WithRegisterEvents(events ...EventI) Option {
 
 // Emit a simple method used to deploy.
 func (s *Service) Emit(ctx context.Context, name string, payload any) error {
-	payloadBytes, err := json.Marshal(payload)
-
-	if err != nil {
-		return err
-	}
-
-	e := eventPayload{Name: name, Payload: string(payloadBytes)}
 
 	config, ok := s.Config().(ConfigurationEvents)
 	if !ok {
@@ -59,7 +50,7 @@ func (s *Service) Emit(ctx context.Context, name string, payload any) error {
 	}
 
 	// Queue event message for further processing
-	err = s.Publish(ctx, config.GetEventsQueueName(), e)
+	err := s.Publish(ctx, config.GetEventsQueueName(), payload, map[string]string{eventHeaderName: name})
 	if err != nil {
 		s.Log(ctx).WithError(err).WithField("name", name).Error("Could not emit event")
 		return err
@@ -72,31 +63,68 @@ type eventQueueHandler struct {
 	service *Service
 }
 
-func (eq *eventQueueHandler) Handle(ctx context.Context, _ map[string]string, payload []byte) error {
-	evtPyl := &eventPayload{}
-	err := json.Unmarshal(payload, evtPyl)
-	if err != nil {
-		return err
+func (eq *eventQueueHandler) Handle(ctx context.Context, header map[string]string, payload []byte) error {
+	// Early validation - get event name from header
+	eventName := header[eventHeaderName]
+	if eventName == "" {
+		eq.service.Log(ctx).Error("Missing event header in message")
+		return errors.New("missing event header")
 	}
 
-	eventHandler, ok := eq.service.eventRegistry[evtPyl.Name]
+	// Get event handler from registry with proper error handling
+	eventHandler, ok := eq.service.eventRegistry[eventName]
 	if !ok {
-		eq.service.Log(ctx).WithField("event", evtPyl.Name).Error("Could not get event from registry")
+		eq.service.Log(ctx).WithField("event", eventName).Error("Event not found in registry")
+		return errors.New("event not found in registry: " + eventName)
 	}
 
-	payLType := eventHandler.PayloadType()
-	err = json.Unmarshal([]byte(evtPyl.Payload), payLType)
-	if err != nil {
+	// Get payload type template for efficient processing
+	payloadTemplate := eventHandler.PayloadType()
+	var processedPayload any
+
+	// Optimize payload processing based on type with minimal allocations
+	switch v := payloadTemplate.(type) {
+	case []byte:
+		// Direct byte slice - no allocation needed
+		processedPayload = payload
+
+	case json.RawMessage:
+		// Direct raw message - no allocation needed
+		processedPayload = json.RawMessage(payload)
+
+	case string:
+		// Convert to string and return pointer to match expected type
+		processedPayload = string(payload)
+
+	default:
+		// Handle protobuf messages efficiently
+		if protoMsg, ok := v.(proto.Message); ok {
+			// Clone the prototype to avoid modifying the template
+			clonedMsg := proto.Clone(protoMsg)
+			if err := proto.Unmarshal(payload, clonedMsg); err != nil {
+				eq.service.Log(ctx).WithError(err).WithField("event", eventName).Error("Failed to unmarshal protobuf payload")
+				return err
+			}
+			processedPayload = clonedMsg
+		} else {
+			// Handle JSON unmarshaling with proper error context
+			if err := json.Unmarshal(payload, v); err != nil {
+				eq.service.Log(ctx).WithError(err).WithField("event", eventName).Error("Failed to unmarshal JSON payload")
+				return err
+			}
+			processedPayload = v
+		}
+	}
+
+	// Validate payload with proper error context
+	if err := eventHandler.Validate(ctx, processedPayload); err != nil {
+		eq.service.Log(ctx).WithError(err).WithField("event", eventName).Error("Event payload validation failed")
 		return err
 	}
 
-	err = eventHandler.Validate(ctx, payLType)
-	if err != nil {
-		return err
-	}
-
-	err = eventHandler.Execute(ctx, payLType)
-	if err != nil {
+	// Execute event with proper error context
+	if err := eventHandler.Execute(ctx, processedPayload); err != nil {
+		eq.service.Log(ctx).WithError(err).WithField("event", eventName).Error("Event execution failed")
 		return err
 	}
 

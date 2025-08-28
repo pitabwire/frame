@@ -1,6 +1,6 @@
 module github.com/pitabwire/frame
 
-go 1.24.0
+go 1.25.0
 
 require (
 	github.com/BurntSushi/toml v1.5.0
@@ -18,7 +18,7 @@ require (
 	github.com/pitabwire/natspubsub v0.6.11
 	github.com/pitabwire/util v0.3.4
 	github.com/rs/xid v1.6.0
-	github.com/stretchr/testify v1.10.0
+	github.com/stretchr/testify v1.11.1
 	github.com/testcontainers/testcontainers-go v0.38.0
 	github.com/testcontainers/testcontainers-go/modules/nats v0.38.0
 	github.com/testcontainers/testcontainers-go/modules/postgres v0.38.0
@@ -42,7 +42,7 @@ require (
 	google.golang.org/grpc v1.75.0
 	google.golang.org/protobuf v1.36.8
 	gorm.io/driver/postgres v1.6.0
-	gorm.io/gorm v1.30.1
+	gorm.io/gorm v1.30.2
 )
 
 require (

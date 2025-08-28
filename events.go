@@ -42,7 +42,6 @@ func WithRegisterEvents(events ...EventI) Option {
 
 // Emit a simple method used to deploy.
 func (s *Service) Emit(ctx context.Context, name string, payload any) error {
-
 	config, ok := s.Config().(ConfigurationEvents)
 	if !ok {
 		s.Log(ctx).Warn("configuration object not of type : ConfigurationDefault")
@@ -98,7 +97,7 @@ func (eq *eventQueueHandler) Handle(ctx context.Context, header map[string]strin
 
 	default:
 		// Handle protobuf messages efficiently
-		if protoMsg, ok := v.(proto.Message); ok {
+		if protoMsg, ok0 := v.(proto.Message); ok0 {
 			// Clone the prototype to avoid modifying the template
 			clonedMsg := proto.Clone(protoMsg)
 			if err := proto.Unmarshal(payload, clonedMsg); err != nil {

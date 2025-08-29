@@ -8,14 +8,23 @@ import (
 	"net/http"
 
 	"github.com/pitabwire/util"
+	"gocloud.dev/server/driver"
 	"golang.org/x/net/http2"
 	"google.golang.org/grpc"
 )
+
+type ServerDriver interface {
+	driver.Server
+	driver.TLSServer
+}
 
 type noopDriver struct {
 }
 
 func (t *noopDriver) ListenAndServe(_ string, _ http.Handler) error {
+	return nil
+}
+func (t *noopDriver) ListenAndServeTLS(_, _, _ string, _ http.Handler) error {
 	return nil
 }
 
@@ -232,17 +241,10 @@ func WithEnableGRPCServerReflection() Option {
 	}
 }
 
-// WithServerListener specifies a user-preferred listener instead of the default provided one.
-func WithServerListener(listener net.Listener) Option {
-	return func(_ context.Context, c *Service) {
-		c.priListener = listener
-	}
-}
-
 // WithGRPCServerListener specifies a user-preferred gRPC listener instead of the default provided one.
 func WithGRPCServerListener(listener net.Listener) Option {
 	return func(_ context.Context, c *Service) {
-		c.secListener = listener
+		c.grpcListener = listener
 	}
 }
 

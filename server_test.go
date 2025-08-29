@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"errors"
+	"fmt"
 	"net"
 	"net/http"
 	"os"
@@ -12,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
@@ -19,6 +21,7 @@ import (
 	"google.golang.org/grpc/test/bufconn"
 
 	"github.com/pitabwire/frame"
+	"github.com/pitabwire/frame/frametests"
 	grpcping2 "github.com/pitabwire/frame/frametests/grpcping"
 )
 
@@ -127,16 +130,21 @@ func TestServiceGrpcHealthServer(t *testing.T) {
 }
 
 func TestServiceGrpcServer(t *testing.T) {
+	ctx := t.Context()
+
 	bufferSize := 1024 * 1024
 	listener := bufconn.Listen(bufferSize)
 	gsrv := grpc.NewServer()
 	grpcping2.RegisterFramePingServer(gsrv, &grpcServer{})
 
+	freePort, err := frametests.GetFreePort(ctx)
+	require.NoError(t, err)
+
 	defConf, err := frame.ConfigFromEnv[frame.ConfigurationDefault]()
-	if err != nil {
-		_ = err
-		return
-	}
+	require.NoError(t, err)
+
+	defConf.HTTPServerPort = fmt.Sprintf(":%d", freePort)
+
 	ctx, srv := frame.NewService(
 		"Testing Service Grpc",
 		frame.WithGRPCServer(gsrv),
@@ -166,16 +174,19 @@ func TestServiceGrpcServer(t *testing.T) {
 	srv.Stop(ctx)
 }
 
-func TestServiceGrpcTLSServer(_ *testing.T) {
+func TestServiceGrpcTLSServer(t *testing.T) {
+	ctx := t.Context()
+
 	bufferSize := 10 * 1024 * 1024
 	priListener := bufconn.Listen(bufferSize)
 
-	defConf, err := frame.ConfigFromEnv[frame.ConfigurationDefault]()
-	if err != nil {
-		_ = err
-		return
-	}
+	freePort, err := frametests.GetFreePort(ctx)
+	require.NoError(t, err)
 
+	defConf, err := frame.ConfigFromEnv[frame.ConfigurationDefault]()
+	require.NoError(t, err)
+
+	defConf.HTTPServerPort = fmt.Sprintf(":%d", freePort)
 	defConf.SetTLSCertAndKeyPath(
 		"tests_runner/server-cert.pem",
 		"tests_runner/server-key.pem",
@@ -184,7 +195,7 @@ func TestServiceGrpcTLSServer(_ *testing.T) {
 	ctx, srv := frame.NewService(
 		"Testing Service Grpc",
 		frame.WithConfig(&defConf),
-		frame.WithServerListener(priListener),
+		frame.WithGRPCServerListener(priListener),
 	)
 
 	gsrv := grpc.NewServer()
@@ -285,8 +296,7 @@ func clientInvokeGrpcHealth(ctx context.Context, conn *grpc.ClientConn) error {
 }
 
 func TestService_Run(_ *testing.T) {
-	listener := bufconn.Listen(1024 * 1024)
-	ctx2, srv2 := frame.NewService("Testing", frame.WithServerListener(listener))
+	ctx2, srv2 := frame.NewService("Testing")
 
 	go func() {
 		if err := srv2.Run(ctx2, ":"); err != nil {

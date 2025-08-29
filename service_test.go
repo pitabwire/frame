@@ -13,8 +13,6 @@ import (
 	"testing"
 	"time"
 
-	"google.golang.org/grpc/test/bufconn"
-
 	"github.com/pitabwire/frame"
 )
 
@@ -103,10 +101,7 @@ func TestService_AddHealthCheck(t *testing.T) {
 }
 
 func TestBackGroundConsumer(t *testing.T) {
-	listener := bufconn.Listen(1024 * 1024)
-
 	ctx, srv := frame.NewService("Test Srv",
-		frame.WithServerListener(listener),
 		frame.WithBackgroundConsumer(func(_ context.Context) error {
 			return nil
 		}))
@@ -127,10 +122,7 @@ func TestBackGroundConsumer(t *testing.T) {
 }
 
 func TestServiceExitByOSSignal(t *testing.T) {
-	listener := bufconn.Listen(1024 * 1024)
-
-	ctx, srv := frame.NewService("Test Srv",
-		frame.WithServerListener(listener))
+	ctx, srv := frame.NewService("Test Srv")
 
 	go func(srv *frame.Service) {
 		err := srv.Run(ctx, ":")

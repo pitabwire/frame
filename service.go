@@ -19,12 +19,10 @@ import (
 	sdklogs "go.opentelemetry.io/otel/sdk/log"
 	sdkmetrics "go.opentelemetry.io/otel/sdk/metric"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
-	_ "go.uber.org/automaxprocs" // Automatically set GOMAXPROCS to match Linux container CPU quota.
+	"gocloud.dev/server/driver"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/reflection"
-
-	"github.com/pitabwire/frame/internal"
 )
 
 type contextKey string
@@ -63,11 +61,10 @@ type Service struct {
 	backGroundClient           func(ctx context.Context) error
 	pool                       WorkerPool
 	poolOptions                *WorkerPoolOptions
-	driver                     any
+	driver                     ServerDriver
 	grpcServer                 *grpc.Server
 	grpcServerEnableReflection bool
-	priListener                net.Listener
-	secListener                net.Listener
+	grpcListener               net.Listener
 	grpcPort                   string
 	client                     *http.Client
 	queue                      *queue
@@ -429,7 +426,7 @@ func (s *Service) initializeServerDrivers(ctx context.Context, httpPort string) 
 			defaultDriver: defaultServer, // Embed the fully configured defaultServer
 			grpcPort:      s.grpcPort,
 			grpcServer:    s.grpcServer,
-			grpcListener:  s.secListener, // Use the primary listener established for gRPC
+			grpcListener:  s.grpcListener, // Use the primary listener established for gRPC
 		}
 	}
 
@@ -472,14 +469,14 @@ func (s *Service) initServer(ctx context.Context, httpPort string) error {
 		if !ok {
 			return errors.New("TLS is enabled but configuration does not implement ConfigurationTLS")
 		}
-		tlsServer, ok := s.driver.(internal.TLSServer)
+		tlsServer, ok := s.driver.(driver.TLSServer)
 		if !ok {
 			return errors.New("driver does not implement internal.TLSServer for TLS mode")
 		}
 		return tlsServer.ListenAndServeTLS(httpPort, config.TLSCertPath(), config.TLSCertKeyPath(), s.handler)
 	}
 
-	nonTLSServer, ok := s.driver.(internal.Server)
+	nonTLSServer, ok := s.driver.(driver.Server)
 	if !ok {
 		return errors.New("driver does not implement internal.Server for non-TLS mode")
 	}

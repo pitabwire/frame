@@ -15,7 +15,7 @@ require (
 	github.com/lmittmann/tint v1.1.2
 	github.com/nicksnyder/go-i18n/v2 v2.6.0
 	github.com/panjf2000/ants/v2 v2.11.3
-	github.com/pitabwire/natspubsub v0.6.11
+	github.com/pitabwire/natspubsub v0.7.0
 	github.com/pitabwire/util v0.3.4
 	github.com/rs/xid v1.6.0
 	github.com/stretchr/testify v1.11.1
@@ -85,7 +85,7 @@ require (
 	github.com/moby/sys/userns v0.1.0 // indirect
 	github.com/moby/term v0.5.0 // indirect
 	github.com/morikuni/aec v1.0.0 // indirect
-	github.com/nats-io/nats.go v1.43.0 // indirect
+	github.com/nats-io/nats.go v1.45.0 // indirect
 	github.com/nats-io/nkeys v0.4.11 // indirect
 	github.com/nats-io/nuid v1.0.1 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect

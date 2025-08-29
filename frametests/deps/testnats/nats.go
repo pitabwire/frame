@@ -4,10 +4,10 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/pitabwire/frame/frametests/definition"
 	"github.com/testcontainers/testcontainers-go"
 	tcNats "github.com/testcontainers/testcontainers-go/modules/nats"
-
-	"github.com/pitabwire/frame/frametests/definition"
+	"github.com/testcontainers/testcontainers-go/wait"
 )
 
 const (
@@ -49,6 +49,8 @@ func (d *dependancy) Setup(ctx context.Context, ntwk *testcontainers.DockerNetwo
 		testcontainers.WithCmdArgs("--js", "-DVV"),
 		tcNats.WithUsername(d.Opts().UserName),
 		tcNats.WithPassword(d.Opts().Password),
+		testcontainers.WithWaitStrategy(
+			wait.ForLog("\\__/|___| |_| |___/ |_| |_|_\\___/_/ \\_\\_|  |_|")),
 	}...)
 
 	natsContainer, err := tcNats.Run(ctx, d.Name(), containerCustomize...)

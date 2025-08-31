@@ -130,8 +130,7 @@ func (d *dependancy) migrateContainer(
 
 	hydraContainer, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
 		ContainerRequest: containerRequest,
-
-		Started: true,
+		Started:          true,
 	})
 	if err != nil {
 		return err
@@ -146,7 +145,7 @@ func (d *dependancy) migrateContainer(
 
 func (d *dependancy) Setup(ctx context.Context, ntwk *testcontainers.DockerNetwork) error {
 	if len(d.Opts().Dependencies) == 0 || !d.Opts().Dependencies[0].GetDS(ctx).IsDB() {
-		return errors.New("no Database dependencies was supplied")
+		return errors.New("no ByIsDatabase dependencies was supplied")
 	}
 
 	databaseURL := d.Opts().Dependencies[0].GetInternalDS(ctx).String()

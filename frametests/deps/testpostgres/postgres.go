@@ -20,7 +20,7 @@ import (
 )
 
 const (
-	// Database configuration.
+	// ByIsDatabase configuration.
 	postgreSQLMaxIdentifiersCharLength = 60
 
 	// PostgresqlDBImage is the PostgreSQL Image.

@@ -15,7 +15,7 @@ require (
 	github.com/lmittmann/tint v1.1.2
 	github.com/nicksnyder/go-i18n/v2 v2.6.0
 	github.com/panjf2000/ants/v2 v2.11.3
-	github.com/pitabwire/natspubsub v0.7.0
+	github.com/pitabwire/natspubsub v0.7.1
 	github.com/pitabwire/util v0.3.4
 	github.com/rs/xid v1.6.0
 	github.com/stretchr/testify v1.11.1
@@ -34,7 +34,6 @@ require (
 	go.opentelemetry.io/otel/sdk v1.37.0
 	go.opentelemetry.io/otel/sdk/log v0.13.0
 	go.opentelemetry.io/otel/sdk/metric v1.37.0
-	go.uber.org/automaxprocs v1.6.0
 	go.uber.org/mock v0.6.0
 	gocloud.dev v0.43.0
 	golang.org/x/net v0.43.0

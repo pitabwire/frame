@@ -585,7 +585,7 @@ func (s *Service) GetSubscriber(reference string) (Subscriber, error) {
 	return sVal, nil
 }
 
-// Publish Queue method to write a new message into the queue pre initialized with the supplied reference.
+// Publish ByIsQueue method to write a new message into the queue pre initialized with the supplied reference.
 func (s *Service) Publish(ctx context.Context, reference string, payload any, headers ...map[string]string) error {
 	pub, err := s.GetPublisher(reference)
 	if err != nil {

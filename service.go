@@ -397,19 +397,21 @@ func (s *Service) applyCORSIfEnabled(_ context.Context, muxToWrap http.Handler) 
 }
 
 func (s *Service) initializeServerDrivers(ctx context.Context, httpPort string) {
-	defaultServer := defaultDriver{
-		ctx:  ctx,
-		log:  s.Log(ctx),
-		port: httpPort,
-		httpServer: &http.Server{
-			Handler: s.handler, // s.handlers is the (potentially CORS-wrapped) mux
-			BaseContext: func(_ net.Listener) context.Context {
-				return ctx
+
+	if s.driver == nil {
+		s.driver = &defaultDriver{
+			ctx:  ctx,
+			port: httpPort,
+			httpServer: &http.Server{
+				Handler: s.handler, // s.handlers is the (potentially CORS-wrapped) mux
+				BaseContext: func(_ net.Listener) context.Context {
+					return ctx
+				},
+				ReadTimeout:  defaultHTTPReadTimeoutSeconds * time.Second,
+				WriteTimeout: defaultHTTPWriteTimeoutSeconds * time.Second,
+				IdleTimeout:  defaultHTTPIdleTimeoutSeconds * time.Second,
 			},
-			ReadTimeout:  defaultHTTPReadTimeoutSeconds * time.Second,
-			WriteTimeout: defaultHTTPWriteTimeoutSeconds * time.Second,
-			IdleTimeout:  defaultHTTPIdleTimeoutSeconds * time.Second,
-		},
+		}
 	}
 
 	// If grpc server is setup, configure the grpcDriver.
@@ -423,16 +425,12 @@ func (s *Service) initializeServerDrivers(ctx context.Context, httpPort string) 
 		}
 
 		s.driver = &grpcDriver{
-			defaultDriver: defaultServer, // Embed the fully configured defaultServer
-			grpcPort:      s.grpcPort,
-			grpcServer:    s.grpcServer,
-			grpcListener:  s.grpcListener, // Use the primary listener established for gRPC
+			ctx:                ctx,
+			internalHttpDriver: s.driver, // Embed the fully configured defaultServer
+			grpcPort:           s.grpcPort,
+			grpcServer:         s.grpcServer,
+			grpcListener:       s.grpcListener, // Use the primary listener established for gRPC
 		}
-	}
-
-	// If no specific driver (like grpcDriver) was set, use the defaultServer.
-	if s.driver == nil {
-		s.driver = &defaultServer
 	}
 }
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/pitabwire/frame"
 	"github.com/testcontainers/testcontainers-go"
 	tcNats "github.com/testcontainers/testcontainers-go/modules/nats"
 	"github.com/testcontainers/testcontainers-go/wait"
@@ -51,7 +52,7 @@ func (d *dependancy) Setup(ctx context.Context, ntwk *testcontainers.DockerNetwo
 		tcNats.WithUsername(d.Opts().UserName),
 		tcNats.WithPassword(d.Opts().Password),
 		testcontainers.WithWaitStrategy(
-			wait.ForLog("\\__/|___| |_| |___/ |_| |_|_\\___/_/ \\_\\_|  |_|")),
+			wait.ForLog("Server is ready")),
 	}...)
 
 	natsContainer, err := tcNats.Run(ctx, d.Name(), containerCustomize...)
@@ -62,4 +63,20 @@ func (d *dependancy) Setup(ctx context.Context, ntwk *testcontainers.DockerNetwo
 	d.SetContainer(natsContainer)
 
 	return nil
+}
+
+func (d *dependancy) GetDS(ctx context.Context) frame.DataSource {
+	ds := d.DefaultImpl.GetDS(ctx)
+
+	ds, _ = ds.WithUser(d.Opts().UserName)
+	ds, _ = ds.WithPassword(d.Opts().Password)
+	return ds
+}
+
+func (d *dependancy) GetInternalDS(ctx context.Context) frame.DataSource {
+	ds := d.DefaultImpl.GetInternalDS(ctx)
+
+	ds, _ = ds.WithUser(d.Opts().UserName)
+	ds, _ = ds.WithPassword(d.Opts().Password)
+	return ds
 }

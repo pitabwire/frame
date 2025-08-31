@@ -1,38 +1,106 @@
 package frame_test
 
 import (
+	"context"
 	"testing"
 
+	"github.com/pitabwire/frame/frametests/deps/testnats"
+	"github.com/pitabwire/frame/frametests/deps/testoryhydra"
+	"github.com/pitabwire/frame/frametests/deps/testpostgres"
+	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
+
 	"github.com/pitabwire/frame"
+	"github.com/pitabwire/frame/frametests/definition"
+	"github.com/pitabwire/frame/tests"
 )
 
-func TestService_RegisterForJwtWithParams(t *testing.T) {
-	t.Skip("Only run this test manually by uncommenting line")
+// JwtTestSuite extends BaseTestSuite for comprehensive JWT testing.
+type JwtTestSuite struct {
+	tests.BaseTestSuite
+}
 
-	oauthServiceURL := "http://localhost:4447"
-	clientName := "Testing CLI"
-	clientID := "test-cli-dev"
-	clientSecret := "topS3cret"
+func initJwtResources(_ context.Context) []definition.TestResource {
+	pg := testpostgres.NewWithOpts("frame_test_service",
+		definition.WithUserName("ant"), definition.WithPassword("s3cr3t"),
+		definition.WithEnableLogging(false), definition.WithUseHostMode(false))
 
-	ctx, srv := frame.NewService("Test Srv", frame.WithConfig(&frame.ConfigurationDefault{
-		Oauth2ServiceAdminURI: oauthServiceURL,
-	}))
+	queue := testnats.NewWithOpts("partition",
+		definition.WithUserName("ant"),
+		definition.WithPassword("s3cr3t"),
+		definition.WithEnableLogging(false))
 
-	response, err := srv.RegisterForJwtWithParams(
-		ctx, oauthServiceURL, clientName, clientID, clientSecret,
-		"", []string{}, map[string]string{})
-	if err != nil {
-		t.Errorf("couldn't register for jwt %s", err)
-		return
+	hydra := testoryhydra.NewWithOpts(
+		testoryhydra.HydraConfiguration, definition.WithDependancies(pg),
+		definition.WithEnableLogging(false), definition.WithUseHostMode(true))
+
+	resources := []definition.TestResource{pg, queue, hydra}
+	return resources
+}
+
+func (s *JwtTestSuite) SetupSuite() {
+	if s.InitResourceFunc == nil {
+		s.InitResourceFunc = initJwtResources
+	}
+	s.BaseTestSuite.SetupSuite()
+}
+
+// TestJwtSuite runs the JWT test suite.
+func TestJwtSuite(t *testing.T) {
+	suite.Run(t, &JwtTestSuite{})
+}
+
+// TestServiceRegisterForJwtWithParams tests JWT registration and unregistration.
+func (s *JwtTestSuite) TestServiceRegisterForJwtWithParams() {
+	testCases := []struct {
+		name         string
+		serviceName  string
+		clientName   string
+		clientID     string
+		clientSecret string
+		expectError  bool
+	}{
+		{
+			name:         "register for JWT with valid parameters",
+			serviceName:  "Test Srv",
+			clientName:   "Testing CLI",
+			clientID:     "test-cli-dev",
+			clientSecret: "topS3cret",
+			expectError:  false,
+		},
 	}
 
-	srv.SetJwtClient(response)
+	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependancyOption) {
+		for _, tc := range testCases {
+			t.Run(tc.name, func(t *testing.T) {
+				// Skip this test as it requires external OAuth2 service
+				t.Skip("Only run this test manually by removing the skip - requires external OAuth2 service")
 
-	srv.Log(ctx).WithField("client id", response).Info("successfully registered for Jwt")
+				ctx := t.Context()
+				hydra := dep.ByImageName(testoryhydra.OryHydraImage)
 
-	err = srv.UnRegisterForJwt(ctx, oauthServiceURL, srv.JwtClientID())
-	if err != nil {
-		t.Errorf("couldn't un register for jwt %s", err)
-		return
-	}
+				ctx, srv := frame.NewService(tc.serviceName, frame.WithConfig(&frame.ConfigurationDefault{
+					Oauth2ServiceAdminURI: hydra.GetDS(ctx).String(),
+				}))
+
+				response, err := srv.RegisterForJwtWithParams(
+					ctx, hydra.GetDS(ctx).String(), tc.clientName, tc.clientID, tc.clientSecret,
+					"", []string{}, map[string]string{})
+
+				if tc.expectError {
+					require.Error(t, err, "JWT registration should fail")
+					return
+				}
+
+				require.NoError(t, err, "JWT registration should succeed")
+				require.NotEmpty(t, response, "JWT registration response should not be empty")
+
+				srv.SetJwtClient(response)
+				srv.Log(ctx).WithField("client id", response).Info("successfully registered for JWT")
+
+				err = srv.UnRegisterForJwt(ctx, hydra.GetDS(ctx).String(), srv.JwtClientID())
+				require.NoError(t, err, "JWT unregistration should succeed")
+			})
+		}
+	})
 }

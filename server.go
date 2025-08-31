@@ -18,23 +18,8 @@ type ServerDriver interface {
 	driver.TLSServer
 }
 
-type noopDriver struct {
-}
-
-func (t *noopDriver) ListenAndServe(_ string, _ http.Handler) error {
-	return nil
-}
-func (t *noopDriver) ListenAndServeTLS(_, _, _ string, _ http.Handler) error {
-	return nil
-}
-
-func (t *noopDriver) Shutdown(_ context.Context) error {
-	return nil
-}
-
 type defaultDriver struct {
 	ctx        context.Context
-	log        *util.LogEntry
 	port       string
 	httpServer *http.Server
 	listener   net.Listener
@@ -46,7 +31,7 @@ func (dd *defaultDriver) Context() context.Context {
 
 var ErrTLSPathsNotProvided = errors.New("TLS certificate path or key path not provided")
 
-func (dd *defaultDriver) tlsConfig(certPath, certKeyPath string) (*tls.Config, error) {
+func tlsConfig(certPath, certKeyPath string) (*tls.Config, error) {
 	if certPath == "" || certKeyPath == "" {
 		return nil, ErrTLSPathsNotProvided
 	}
@@ -63,7 +48,7 @@ func (dd *defaultDriver) tlsConfig(certPath, certKeyPath string) (*tls.Config, e
 	}, nil
 }
 
-func (dd *defaultDriver) getListener(
+func getListener(ctx context.Context,
 	address, certPath, certKeyPath string,
 	listener net.Listener,
 ) (net.Listener, error) {
@@ -71,7 +56,7 @@ func (dd *defaultDriver) getListener(
 		return listener, nil
 	}
 
-	tlsConfig, err := dd.tlsConfig(certPath, certKeyPath)
+	tlsCfg, err := tlsConfig(certPath, certKeyPath)
 	if err != nil {
 		if !errors.Is(err, ErrTLSPathsNotProvided) {
 			return nil, err
@@ -79,16 +64,16 @@ func (dd *defaultDriver) getListener(
 	}
 
 	var lc net.ListenConfig
-	listener, err = lc.Listen(dd.ctx, "tcp", address)
+	listener, err = lc.Listen(ctx, "tcp", address)
 	if err != nil {
 		return nil, err
 	}
 
-	if tlsConfig == nil {
+	if tlsCfg == nil {
 		return listener, nil
 	}
 
-	return tls.NewListener(listener, tlsConfig), nil
+	return tls.NewListener(listener, tlsCfg), nil
 }
 
 // ListenAndServe sets the address and handlers on DefaultDriver's http.Server,
@@ -98,18 +83,19 @@ func (dd *defaultDriver) ListenAndServe(addr string, h http.Handler) error {
 
 	dd.httpServer.Addr = addr
 	dd.httpServer.Handler = h
+	log := util.Log(dd.ctx).WithField("http port", addr)
 
 	err := http2.ConfigureServer(dd.httpServer, nil)
 	if err != nil {
 		return err
 	}
 
-	ln, err0 := dd.getListener(addr, "", "", dd.listener)
+	ln, err0 := getListener(dd.ctx, addr, "", "", dd.listener)
 	if err0 != nil {
 		return err0
 	}
 
-	dd.log.WithField("http port", addr).Info("listening on server port")
+	log.Info("listening on server port")
 
 	return dd.httpServer.Serve(ln)
 }
@@ -117,18 +103,19 @@ func (dd *defaultDriver) ListenAndServe(addr string, h http.Handler) error {
 func (dd *defaultDriver) ListenAndServeTLS(addr, certPath, certKeyPath string, h http.Handler) error {
 	dd.httpServer.Addr = addr
 	dd.httpServer.Handler = h
+	log := util.Log(dd.ctx).WithField("https port", addr)
 
 	err := http2.ConfigureServer(dd.httpServer, nil)
 	if err != nil {
 		return err
 	}
 
-	ln, err0 := dd.getListener(addr, certPath, certKeyPath, dd.listener)
+	ln, err0 := getListener(dd.ctx, addr, certPath, certKeyPath, dd.listener)
 	if err0 != nil {
 		return err0
 	}
 
-	dd.log.WithField("https port", addr).Info("listening on server port")
+	log.Info("listening on server port")
 	return dd.httpServer.Serve(ln)
 }
 
@@ -137,8 +124,9 @@ func (dd *defaultDriver) Shutdown(ctx context.Context) error {
 }
 
 type grpcDriver struct {
-	defaultDriver
-	grpcPort string
+	ctx                context.Context
+	internalHttpDriver ServerDriver
+	grpcPort           string
 
 	errorChannel chan error
 
@@ -148,22 +136,15 @@ type grpcDriver struct {
 }
 
 func (gd *grpcDriver) ListenAndServe(addr string, h http.Handler) error {
-	gd.httpServer.Addr = addr
-	gd.httpServer.Handler = h
-
-	err := http2.ConfigureServer(gd.httpServer, nil)
-	if err != nil {
-		return err
-	}
 
 	go func(address string) {
-		ln, err2 := gd.getListener(address, "", "", gd.grpcListener)
+		ln, err2 := getListener(gd.ctx, address, "", "", gd.grpcListener)
 		if err2 != nil {
 			gd.errorChannel <- err2
 			return
 		}
-
-		gd.log.WithField("grpc port", gd.grpcPort).Info("listening on server port")
+		log := util.Log(gd.ctx).WithField("grpc port", address)
+		log.Info("listening on server port")
 
 		err2 = gd.grpcServer.Serve(ln)
 		if err2 != nil {
@@ -172,32 +153,20 @@ func (gd *grpcDriver) ListenAndServe(addr string, h http.Handler) error {
 		}
 	}(gd.grpcPort)
 
-	httpListener, err0 := gd.getListener(addr, "", "", gd.listener)
-	if err0 != nil {
-		return err0
-	}
-	gd.log.WithField("http port", addr).Info("listening on server port")
-
-	return gd.httpServer.Serve(httpListener)
+	return gd.internalHttpDriver.ListenAndServe(addr, h)
 }
 
 func (gd *grpcDriver) ListenAndServeTLS(addr, certFile, certKeyFile string, h http.Handler) error {
-	gd.httpServer.Addr = addr
-	gd.httpServer.Handler = h
-
-	err := http2.ConfigureServer(gd.httpServer, nil)
-	if err != nil {
-		return err
-	}
 
 	go func(address, certPath, certKeyPath string) {
-		ln, err2 := gd.getListener(address, certPath, certKeyPath, gd.grpcListener)
+		ln, err2 := getListener(gd.ctx, address, certPath, certKeyPath, gd.grpcListener)
 		if err2 != nil {
 			gd.errorChannel <- err2
 			return
 		}
 
-		gd.log.WithField("grpc port", address).Info("listening on server port")
+		log := util.Log(gd.ctx).WithField("grpc port", address)
+		log.Info("listening on server port")
 
 		err2 = gd.grpcServer.Serve(ln)
 		if err2 != nil {
@@ -206,14 +175,7 @@ func (gd *grpcDriver) ListenAndServeTLS(addr, certFile, certKeyFile string, h ht
 		}
 	}(gd.grpcPort, certFile, certKeyFile)
 
-	httpListener, err0 := gd.getListener(addr, certFile, certKeyFile, gd.listener)
-	if err0 != nil {
-		return err0
-	}
-
-	gd.log.WithField("http port", addr).Info("listening on server port")
-
-	return gd.httpServer.Serve(httpListener)
+	return gd.internalHttpDriver.ListenAndServeTLS(addr, certFile, certKeyFile, h)
 }
 
 func (gd *grpcDriver) Shutdown(ctx context.Context) error {
@@ -221,8 +183,8 @@ func (gd *grpcDriver) Shutdown(ctx context.Context) error {
 		gd.grpcServer.Stop()
 	}
 
-	if gd.httpServer != nil {
-		return gd.httpServer.Shutdown(ctx)
+	if gd.internalHttpDriver != nil {
+		return gd.internalHttpDriver.Shutdown(ctx)
 	}
 	return nil
 }
@@ -262,9 +224,9 @@ func WithHTTPHandler(h http.Handler) Option {
 	}
 }
 
-// WithNoopDriver uses a no-op driver, mostly useful when writing tests against the frame service.
-func WithNoopDriver() Option {
+// WithDriver setsup a driver, mostly useful when writing tests against the frame service.
+func WithDriver(driver ServerDriver) Option {
 	return func(_ context.Context, c *Service) {
-		c.driver = &noopDriver{}
+		c.driver = driver
 	}
 }

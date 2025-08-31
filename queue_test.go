@@ -4,91 +4,289 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
-	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
-	"github.com/pitabwire/util"
+	"github.com/pitabwire/frame/frametests"
+	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 
 	"github.com/pitabwire/frame"
+	"github.com/pitabwire/frame/frametests/definition"
+	"github.com/pitabwire/frame/tests"
 )
 
-func TestService_RegisterPublisherNotSet(t *testing.T) {
-	ctx, srv := frame.NewService("Test Srv")
-
-	err := srv.Publish(ctx, "random", []byte(""))
-
-	if err == nil {
-		t.Errorf("We shouldn't be able to publish when no topic was registered")
-	}
+// QueueTestSuite extends BaseTestSuite for comprehensive queue testing.
+type QueueTestSuite struct {
+	tests.BaseTestSuite
 }
 
-func TestService_RegisterPublisherNotInitialized(t *testing.T) {
-	opt := frame.WithRegisterPublisher("test", "mem://topicA")
-	ctx, srv := frame.NewService("Test Srv", opt)
-
-	err := srv.Publish(ctx, "random", []byte(""))
-
-	if err == nil {
-		t.Errorf("We shouldn't be able to publish when no topic was registered")
-	}
+// TestQueueSuite runs the queue test suite.
+func TestQueueSuite(t *testing.T) {
+	suite.Run(t, &QueueTestSuite{})
 }
 
-func TestService_RegisterPublisher(t *testing.T) {
-	opt := frame.WithRegisterPublisher("test", "mem://topicA")
-
-	ctx, srv := frame.NewService("Test Srv", opt, frame.WithNoopDriver())
-
-	err := srv.Run(ctx, "")
-	if err != nil {
-		t.Errorf("we couldn't instantiate queue  %s", err)
-		return
+// TestServiceRegisterPublisherNotSet tests publishing when no publisher is registered.
+func (s *QueueTestSuite) TestServiceRegisterPublisherNotSet() {
+	testCases := []struct {
+		name        string
+		serviceName string
+		topic       string
+		message     []byte
+	}{
+		{
+			name:        "publish to unregistered topic",
+			serviceName: "Test Srv",
+			topic:       "random",
+			message:     []byte(""),
+		},
 	}
 
-	err = srv.Publish(ctx, "test", []byte(""))
-	if err != nil {
-		t.Errorf("We could not publish to topic that was registered %s", err)
-	}
+	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependancyOption) {
+		for _, tc := range testCases {
+			t.Run(tc.name, func(t *testing.T) {
+				ctx, srv := frame.NewService(tc.serviceName)
 
-	srv.Stop(ctx)
+				err := srv.Publish(ctx, tc.topic, tc.message)
+				require.Error(t, err, "Publishing to unregistered topic should fail")
+			})
+		}
+	})
 }
 
-func TestService_RegisterPublisherMultiple(t *testing.T) {
-	topicRef := "test-multiple-publisher"
-	topicRef2 := "test-multiple-publisher-2"
-
-	opt := frame.WithRegisterPublisher(topicRef, "mem://topicA")
-	opt1 := frame.WithRegisterPublisher(topicRef2, "mem://topicB")
-
-	ctx, srv := frame.NewService("Test Srv", opt, opt1, frame.WithNoopDriver())
-
-	err := srv.Run(ctx, "")
-	if err != nil {
-		t.Errorf("we couldn't instantiate queue  %s", err)
-		return
+// TestServiceRegisterPublisherNotInitialized tests publishing when publisher is registered but not initialized.
+func (s *QueueTestSuite) TestServiceRegisterPublisherNotInitialized() {
+	testCases := []struct {
+		name        string
+		serviceName string
+		topic       string
+		queueURL    string
+		message     []byte
+	}{
+		{
+			name:        "publish to uninitialized publisher",
+			serviceName: "Test Srv",
+			topic:       "random",
+			queueURL:    "mem://topicA",
+			message:     []byte(""),
+		},
 	}
 
-	err = srv.Publish(ctx, topicRef, []byte("Testament"))
-	if err != nil {
-		t.Errorf("We could not publish to topic that was registered %s", err)
-		return
+	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependancyOption) {
+		for _, tc := range testCases {
+			t.Run(tc.name, func(t *testing.T) {
+
+				var err error
+
+				ctx := t.Context()
+				queue := dep.ByIsQueue(ctx)
+
+				queueURL := tc.queueURL
+				if queue != nil {
+
+					queueSubject := strings.Replace(queueURL, "mem://", "", 1)
+
+					qDS := queue.GetDS(ctx)
+					if qDS.IsNats() {
+
+						qDS, err = qDS.WithUser("ant")
+						require.NoError(t, err)
+
+						qDS, err = qDS.WithPassword("s3cr3t")
+						require.NoError(t, err)
+
+						queueURL = qDS.
+							ExtendQuery("jetstream", "true").
+							ExtendQuery("subject", queueSubject).
+							ExtendQuery("stream_name", queueSubject).
+							ExtendQuery("stream_subjects", queueSubject).
+							ExtendQuery("consumer_durable_name", "Durable_"+queueSubject).
+							ExtendQuery("consumer_filter_subject", queueSubject).
+							ExtendQuery("consumer_ack_policy", "explicit").
+							ExtendQuery("consumer_deliver_policy", "all").
+							ExtendQuery("consumer_replay_policy", "instant").
+							ExtendQuery("stream_retention", "workqueue").
+							ExtendQuery("stream_storage", "file").
+							String()
+					} else {
+						queueURL = qDS.ExtendPath(queueSubject).String()
+					}
+				}
+
+				opt := frame.WithRegisterPublisher("test", queueURL)
+				ctx, srv := frame.NewService(tc.serviceName, opt)
+
+				err = srv.Publish(ctx, tc.topic, tc.message)
+				require.Error(t, err, "Publishing to uninitialized publisher should fail")
+			})
+		}
+	})
+}
+
+// TestServiceRegisterPublisher tests publishing with registered publisher.
+func (s *QueueTestSuite) TestServiceRegisterPublisher() {
+	testCases := []struct {
+		name        string
+		serviceName string
+		topic       string
+		queueURL    string
+		message     []byte
+	}{
+		{
+			name:        "publish to registered topic",
+			serviceName: "Test Srv",
+			topic:       "test",
+			queueURL:    "mem://topicA",
+			message:     []byte("test message"),
+		},
 	}
 
-	err = srv.Publish(ctx, topicRef2, []byte("Testament"))
-	if err != nil {
-		t.Errorf("We could not publish to topic that was registered %s", err)
-		return
+	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependancyOption) {
+		for _, tc := range testCases {
+			t.Run(tc.name, func(t *testing.T) {
+
+				var err error
+
+				ctx := t.Context()
+				queue := dep.ByIsQueue(ctx)
+
+				queueURL := tc.queueURL
+				if queue != nil {
+
+					queueSubject := strings.Replace(queueURL, "mem://", "", 1)
+
+					qDS := queue.GetDS(ctx)
+					if qDS.IsNats() {
+
+						qDS, err = qDS.WithUser("ant")
+						require.NoError(t, err)
+
+						qDS, err = qDS.WithPassword("s3cr3t")
+						require.NoError(t, err)
+
+						queueURL = qDS.
+							ExtendQuery("jetstream", "true").
+							ExtendQuery("subject", queueSubject).
+							ExtendQuery("stream_name", queueSubject).
+							ExtendQuery("stream_subjects", queueSubject).
+							ExtendQuery("consumer_durable_name", "Durable_"+queueSubject).
+							ExtendQuery("consumer_filter_subject", queueSubject).
+							ExtendQuery("consumer_ack_policy", "explicit").
+							ExtendQuery("consumer_deliver_policy", "all").
+							ExtendQuery("consumer_replay_policy", "instant").
+							ExtendQuery("stream_retention", "workqueue").
+							ExtendQuery("stream_storage", "file").
+							String()
+					} else {
+						queueURL = qDS.ExtendPath(queueSubject).String()
+					}
+				}
+
+				opt := frame.WithRegisterPublisher(tc.topic, queueURL)
+				ctx, srv := frame.NewService(tc.serviceName, opt, frametests.WithNoopDriver())
+
+				err = srv.Run(ctx, "")
+				require.NoError(t, err, "Service should start successfully")
+
+				err = srv.Publish(ctx, tc.topic, tc.message)
+				require.NoError(t, err, "Publishing to registered topic should succeed")
+
+				srv.Stop(ctx)
+			})
+		}
+	})
+}
+
+// TestServiceRegisterPublisherMultiple tests multiple publishers.
+func (s *QueueTestSuite) TestServiceRegisterPublisherMultiple() {
+	testCases := []struct {
+		name         string
+		serviceName  string
+		topics       []string
+		queueURLs    []string
+		testMessages map[string][]byte
+		invalidTopic string
+	}{
+		{
+			name:        "multiple publishers",
+			serviceName: "Test Srv",
+			topics:      []string{"test-multiple-publisher", "test-multiple-publisher-2"},
+			queueURLs:   []string{"mem://topicA", "mem://topicB"},
+			testMessages: map[string][]byte{
+				"test-multiple-publisher":   []byte("Testament"),
+				"test-multiple-publisher-2": []byte("Testament"),
+			},
+			invalidTopic: "test-multiple-3",
+		},
 	}
 
-	err = srv.Publish(ctx, "test-multiple-3", []byte("Testament"))
-	if err == nil {
-		t.Errorf("We should not be able to publish to topic that was not registered")
-		return
-	}
+	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependancyOption) {
+		for _, tc := range testCases {
+			t.Run(tc.name, func(t *testing.T) {
 
-	srv.Stop(ctx)
+				var err error
+				ctx := t.Context()
+				queue := dep.ByIsQueue(ctx)
+
+				opts := []frame.Option{frametests.WithNoopDriver()}
+				for i, topic := range tc.topics {
+
+					queueURL := tc.queueURLs[i]
+					if queue != nil {
+
+						queueSubject := strings.Replace(queueURL, "mem://", "", 1)
+
+						qDS := queue.GetDS(ctx)
+						if qDS.IsNats() {
+
+							qDS, err = qDS.WithUser("ant")
+							require.NoError(t, err)
+
+							qDS, err = qDS.WithPassword("s3cr3t")
+							require.NoError(t, err)
+
+							queueURL = qDS.
+								ExtendQuery("jetstream", "true").
+								ExtendQuery("subject", queueSubject).
+								ExtendQuery("stream_name", queueSubject).
+								ExtendQuery("stream_subjects", queueSubject).
+								ExtendQuery("consumer_durable_name", "Durable_"+queueSubject).
+								ExtendQuery("consumer_filter_subject", queueSubject).
+								ExtendQuery("consumer_ack_policy", "explicit").
+								ExtendQuery("consumer_deliver_policy", "all").
+								ExtendQuery("consumer_replay_policy", "instant").
+								ExtendQuery("stream_retention", "workqueue").
+								ExtendQuery("stream_storage", "file").
+								String()
+						} else {
+							queueURL = qDS.ExtendPath(queueSubject).String()
+						}
+					}
+
+					opts = append(opts, frame.WithRegisterPublisher(topic, queueURL))
+				}
+
+				ctx, srv := frame.NewService(tc.serviceName, opts...)
+
+				err = srv.Run(ctx, "")
+				require.NoError(t, err, "Service should start successfully")
+
+				// Test publishing to valid topics
+				for topic, message := range tc.testMessages {
+					err = srv.Publish(ctx, topic, message)
+					require.NoError(t, err, "Publishing to registered topic %s should succeed", topic)
+				}
+
+				// Test publishing to invalid topic
+				err = srv.Publish(ctx, tc.invalidTopic, []byte("Testament"))
+				require.Error(t, err, "Publishing to unregistered topic should fail")
+
+				srv.Stop(ctx)
+			})
+		}
+	})
 }
 
 type msgHandler struct {
@@ -99,507 +297,762 @@ func (h *msgHandler) Handle(ctx context.Context, metadata map[string]string, mes
 	return h.f(ctx, metadata, message)
 }
 
-type handlerWithError struct {
+type handlerWithError struct{}
+
+func (h *handlerWithError) Handle(ctx context.Context, metadata map[string]string, message []byte) error {
+	return errors.New("handler error")
 }
 
-func (m *handlerWithError) Handle(ctx context.Context, metadata map[string]string, message []byte) error {
-	log := util.Log(ctx)
-	log.Info("A dreadful message to handle", "message", string(message), "metadata", metadata)
-	return errors.New("throwing an error for tests")
-}
-
-func TestService_RegisterSubscriber(t *testing.T) {
-	regSubTopic := "test-reg-sub-topic"
-
-	optTopic := frame.WithRegisterPublisher(regSubTopic, "mem://topicA")
-	opt := frame.WithRegisterSubscriber(
-		regSubTopic,
-		"mem://topicA",
-		&msgHandler{f: func(ctx context.Context, metadata map[string]string, message []byte) error {
-			util.Log(ctx).WithField("metadata", metadata).WithField("message", string(message)).Info("Received message")
-			return nil
-		}},
-	)
-
-	ctx, srv := frame.NewService("Test Srv", optTopic, opt, frame.WithNoopDriver())
-
-	err := srv.Run(ctx, ":")
-	if err != nil {
-		t.Errorf("We couldn't instantiate queue  %s", err)
-		return
+// TestServiceRegisterSubscriber tests subscriber registration.
+func (s *QueueTestSuite) TestServiceRegisterSubscriber() {
+	testCases := []struct {
+		name        string
+		serviceName string
+		topic       string
+		queueURL    string
+		handler     func(ctx context.Context, metadata map[string]string, message []byte) error
+	}{
+		{
+			name:        "register subscriber with handler",
+			serviceName: "Test Srv",
+			topic:       "test-subscriber",
+			queueURL:    "mem://topicA",
+			handler: func(ctx context.Context, metadata map[string]string, message []byte) error {
+				return nil
+			},
+		},
 	}
 
-	for i := range make([]int, 30) {
-		err = srv.Publish(ctx, regSubTopic, []byte(fmt.Sprintf(" testing message %d", i)))
-		if err != nil {
-			t.Errorf("We could not publish to a registered topic %d : %s ", i, err)
-			return
+	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependancyOption) {
+		for _, tc := range testCases {
+			t.Run(tc.name, func(t *testing.T) {
+				var err error
+
+				ctx := t.Context()
+				queue := dep.ByIsQueue(ctx)
+
+				queueURL := tc.queueURL
+				if queue != nil {
+
+					queueSubject := strings.Replace(queueURL, "mem://", "", 1)
+
+					qDS := queue.GetDS(ctx)
+					if qDS.IsNats() {
+
+						qDS, err = qDS.WithUser("ant")
+						require.NoError(t, err)
+
+						qDS, err = qDS.WithPassword("s3cr3t")
+						require.NoError(t, err)
+
+						queueURL = qDS.
+							ExtendQuery("jetstream", "true").
+							ExtendQuery("subject", queueSubject).
+							ExtendQuery("stream_name", queueSubject).
+							ExtendQuery("stream_subjects", queueSubject).
+							ExtendQuery("consumer_durable_name", "Durable_"+queueSubject).
+							ExtendQuery("consumer_filter_subject", queueSubject).
+							ExtendQuery("consumer_ack_policy", "explicit").
+							ExtendQuery("consumer_deliver_policy", "all").
+							ExtendQuery("consumer_replay_policy", "instant").
+							ExtendQuery("stream_retention", "workqueue").
+							ExtendQuery("stream_storage", "file").
+							String()
+					} else {
+						queueURL = qDS.ExtendPath(queueSubject).String()
+					}
+				}
+
+				handler := &msgHandler{f: tc.handler}
+				opt := frame.WithRegisterSubscriber(tc.topic, queueURL, handler)
+				ctx, srv := frame.NewService(tc.serviceName, opt, frametests.WithNoopDriver())
+
+				err = srv.Run(ctx, "")
+				require.NoError(t, err, "Service should start successfully")
+
+				subscriber, err := srv.GetSubscriber(tc.topic)
+				require.NoError(t, err, "Subscriber should exist")
+				require.NotNil(t, subscriber, "Subscriber should be registered")
+				require.True(t, subscriber.Initiated(), "Subscriber should be initiated")
+
+				srv.Stop(ctx)
+			})
 		}
-	}
-
-	err = srv.Publish(ctx, regSubTopic, []byte("throw error"))
-	if err != nil {
-		t.Errorf("We could not publish to topic that was registered %s", err)
-		return
-	}
-
-	srv.Stop(ctx)
+	})
 }
 
-func TestService_RegisterSubscriberValidateMessages(t *testing.T) {
-	regSubTopic := "test-reg-sub-pub-topic"
-
-	var wg sync.WaitGroup
-	receivedMessages := sync.Map{}
-
-	handler := &msgHandler{f: func(ctx context.Context, metadata map[string]string, message []byte) error {
-		msgStr := string(message)
-		util.Log(ctx).WithField("metadata", metadata).WithField("message", msgStr).Info("Received message")
-		receivedMessages.Store(msgStr, true)
-		wg.Done() // Mark this message as processed
-		return nil
-	}}
-
-	optTopic := frame.WithRegisterPublisher(regSubTopic, "mem://topicB")
-	opt := frame.WithRegisterSubscriber(regSubTopic, "mem://topicB", handler)
-
-	ctx, srv := frame.NewService("Test Srv", optTopic, opt, frame.WithNoopDriver())
-	defer srv.Stop(ctx)
-
-	err := srv.Run(ctx, ":")
-	if err != nil {
-		t.Errorf("We couldn't instantiate queue  %s", err)
-		return
+// TestServiceRegisterSubscriberValidateMessages tests message validation.
+func (s *QueueTestSuite) TestServiceRegisterSubscriberValidateMessages() {
+	testCases := []struct {
+		name        string
+		serviceName string
+		topic       string
+		queueURL    string
+		messages    []string
+		expectCount int
+	}{
+		{
+			name:        "validate multiple messages",
+			serviceName: "Test Srv",
+			topic:       "test-validate",
+			queueURL:    "mem://topicA",
+			messages:    []string{"message1", "message2", "message3"},
+			expectCount: 3,
+		},
 	}
 
-	emptyAny, err := json.Marshal(map[string]any{})
-	if err != nil {
-		t.Errorf("We couldn't marshal empty any")
-		return
-	}
+	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependancyOption) {
+		for _, tc := range testCases {
+			t.Run(tc.name, func(t *testing.T) {
+				var err error
 
-	messages := []any{json.RawMessage("badjson"), emptyAny}
-	expectedMsgs := map[string]bool{
-		"badjson": false,
-		"{}":      false,
-	}
+				ctx := t.Context()
+				queue := dep.ByIsQueue(ctx)
 
-	for i := range 30 {
-		msgStr := fmt.Sprintf("{\"id\": %d}", i)
-		messages = append(messages, msgStr)
-		expectedMsgs[msgStr] = false
-	}
+				queueURL := tc.queueURL
+				if queue != nil {
 
-	wg.Add(len(messages))
+					queueSubject := strings.Replace(queueURL, "mem://", "", 1)
 
-	// Add a small delay between publishes to ensure all messages are properly committed to Jetstream
-	for _, msg := range messages {
-		err = srv.Publish(ctx, regSubTopic, msg)
-		if err != nil {
-			t.Errorf("We could not publish to a registered topic %v : %s ", msg, err)
-			return
+					qDS := queue.GetDS(ctx)
+					if qDS.IsNats() {
+
+						qDS, err = qDS.WithUser("ant")
+						require.NoError(t, err)
+
+						qDS, err = qDS.WithPassword("s3cr3t")
+						require.NoError(t, err)
+
+						queueURL = qDS.
+							ExtendQuery("jetstream", "true").
+							ExtendQuery("subject", queueSubject).
+							ExtendQuery("stream_name", queueSubject).
+							ExtendQuery("stream_subjects", queueSubject).
+							ExtendQuery("consumer_durable_name", "Durable_"+queueSubject).
+							ExtendQuery("consumer_filter_subject", queueSubject).
+							ExtendQuery("consumer_ack_policy", "explicit").
+							ExtendQuery("consumer_deliver_policy", "all").
+							ExtendQuery("consumer_replay_policy", "instant").
+							ExtendQuery("stream_retention", "workqueue").
+							ExtendQuery("stream_storage", "file").
+							String()
+					} else {
+						queueURL = qDS.ExtendPath(queueSubject).String()
+					}
+				}
+
+				var receivedCount int
+				var mu sync.Mutex
+
+				handler := &msgHandler{
+					f: func(ctx context.Context, metadata map[string]string, message []byte) error {
+						mu.Lock()
+						receivedCount++
+						mu.Unlock()
+						return nil
+					},
+				}
+
+				opt := frame.WithRegisterSubscriber(tc.topic, queueURL, handler)
+				pubOpt := frame.WithRegisterPublisher(tc.topic, queueURL)
+				ctx, srv := frame.NewService(tc.serviceName, opt, pubOpt, frametests.WithNoopDriver())
+
+				err = srv.Run(ctx, "")
+				require.NoError(t, err, "Service should start successfully")
+
+				// Publish messages
+				for _, msg := range tc.messages {
+					err = srv.Publish(ctx, tc.topic, []byte(msg))
+					require.NoError(t, err, "Publishing message should succeed")
+				}
+
+				// Wait for message processing
+				time.Sleep(2 * time.Second)
+
+				mu.Lock()
+				count := receivedCount
+				mu.Unlock()
+				require.Equal(t, tc.expectCount, count, "Should receive expected number of messages")
+
+				srv.Stop(ctx)
+			})
 		}
-		time.Sleep(time.Millisecond * 10) // Add small delay between publishes to ensure proper ordering
+	})
+}
+
+// TestServiceSubscriberValidateJetstreamMessages tests Jetstream message validation.
+func (s *QueueTestSuite) TestServiceSubscriberValidateJetstreamMessages() {
+	testCases := []struct {
+		name        string
+		serviceName string
+		topic       string
+		messages    []map[string]interface{}
+		expectCount int
+	}{
+		{
+			name:        "validate Jetstream messages",
+			serviceName: "Test Srv",
+			topic:       "test-jetstream",
+			messages: []map[string]interface{}{
+				{"id": 1, "data": "test1"},
+				{"id": 2, "data": "test2"},
+			},
+			expectCount: 2,
+		},
 	}
 
-	// Allow some time for JetStream to fully process all messages before checking
-	time.Sleep(time.Millisecond * 500)
+	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependancyOption) {
+		for _, tc := range testCases {
+			t.Run(tc.name, func(t *testing.T) {
 
-	// Wait for all messages with a timeout
-	waitCh := make(chan struct{})
-	go func() {
-		wg.Wait()
-		close(waitCh)
-	}()
+				var err error
 
-	// Use a more generous timeout and check the actual received messages
-	select {
-	case <-time.After(time.Second * 10):
-		// Check which messages were received and which are missing
-		missingMsgs := []string{}
-		for msg := range expectedMsgs {
-			_, received := receivedMessages.Load(msg)
-			if !received {
-				missingMsgs = append(missingMsgs, msg)
-			}
+				ctx := t.Context()
+				queue := dep.ByIsQueue(ctx)
+
+				queueURL := "mem://" + tc.topic
+				if queue != nil {
+
+					queueSubject := tc.topic
+
+					qDS := queue.GetDS(ctx)
+					if qDS.IsNats() {
+
+						qDS, err = qDS.WithUser("ant")
+						require.NoError(t, err)
+
+						qDS, err = qDS.WithPassword("s3cr3t")
+						require.NoError(t, err)
+
+						queueURL = qDS.
+							ExtendQuery("jetstream", "true").
+							ExtendQuery("subject", queueSubject).
+							ExtendQuery("stream_name", queueSubject).
+							ExtendQuery("stream_subjects", queueSubject).
+							ExtendQuery("consumer_durable_name", "Durable_"+queueSubject).
+							ExtendQuery("consumer_filter_subject", queueSubject).
+							ExtendQuery("consumer_ack_policy", "explicit").
+							ExtendQuery("consumer_deliver_policy", "all").
+							ExtendQuery("consumer_replay_policy", "instant").
+							ExtendQuery("stream_retention", "workqueue").
+							ExtendQuery("stream_storage", "file").
+							String()
+					} else {
+						queueURL = qDS.ExtendPath(queueSubject).String()
+					}
+				}
+
+				var receivedCount int
+				var mu sync.Mutex
+
+				handler := &msgHandler{
+					f: func(ctx context.Context, metadata map[string]string, message []byte) error {
+						var data map[string]interface{}
+						err := json.Unmarshal(message, &data)
+						if err != nil {
+							return err
+						}
+						mu.Lock()
+						receivedCount++
+						mu.Unlock()
+						return nil
+					},
+				}
+
+				opt := frame.WithRegisterSubscriber(tc.topic, queueURL, handler)
+				pubOpt := frame.WithRegisterPublisher(tc.topic, queueURL)
+				ctx, srv := frame.NewService(tc.serviceName, opt, pubOpt, frametests.WithNoopDriver())
+
+				err = srv.Run(ctx, "")
+				require.NoError(t, err, "Service should start successfully")
+
+				// Publish messages
+				for _, msg := range tc.messages {
+					data, _ := json.Marshal(msg)
+					err = srv.Publish(ctx, tc.topic, data)
+					require.NoError(t, err, "Publishing message should succeed")
+				}
+
+				// Wait for message processing
+				time.Sleep(2 * time.Second)
+
+				mu.Lock()
+				count := receivedCount
+				mu.Unlock()
+				require.Equal(t, tc.expectCount, count, "Should receive expected number of messages")
+
+				srv.Stop(ctx)
+			})
 		}
-
-		// Count received messages
-		receivedCount := 0
-		receivedMessages.Range(func(_, _ any) bool {
-			receivedCount++
-			return true
-		})
-
-		t.Errorf("We did not receive all %d messages, only %d on time. Missing: %v",
-			len(messages), receivedCount, missingMsgs)
-	case <-waitCh:
-		// All messages received successfully
-		t.Log("All messages received successfully")
-	}
+	})
 }
 
-func TestService_SubscriberValidateJetstreamMessages(t *testing.T) {
-	regSubTopic := "test-reg-sub-pub-topic"
-
-	// Create unique identifiers for this test instance
-	testID := strconv.FormatInt(time.Now().UnixNano(), 10)
-	streamName := "frametest-" + testID
-	subjectName := "frametest-" + testID
-	durableName := "durableframe-" + testID
-
-	receivedMessages := make(chan string, 1)
-	defer close(receivedMessages)
-
-	handler := &msgHandler{f: func(_ context.Context, _ map[string]string, message []byte) error {
-		receivedMessages <- string(message)
-		return nil
-	}}
-
-	// Configure JetStream for reliability:
-	// 1. Explicit acknowledgment - ensures messages aren't removed until explicitly acknowledged
-	// 2. Deliver policy "all" - ensures all messages are delivered
-	// 3. Workqueue retention - ensures each message is sent to only one consumer in the group
-	// 4. Memory storage - faster processing for tests
-	// 5. Higher ack wait time - gives subscriber more time to process and acknowledge
-	// 6. MaxAckPending matches message count - prevent flow control from limiting delivery
-	streamOpt := fmt.Sprintf(
-		"nats://frame:s3cr3t@localhost:4225?jetstream=true&subject=%s&stream_name=%s&stream_retention=workqueue&stream_storage=memory&stream_subjects=%s",
-		subjectName,
-		streamName,
-		subjectName,
-	)
-	consumerOpt := fmt.Sprintf(
-		"nats://frame:s3cr3t@localhost:4225?consumer_ack_policy=explicit&consumer_ack_wait=10s&consumer_deliver_policy=all&consumer_durable_name=%s&consumer_filter_subject=%s&jetstream=true&stream_name=%s&stream_retention=workqueue&stream_storage=memory&stream_subjects=%s&subject=%s",
-		durableName,
-		subjectName,
-		streamName,
-		subjectName,
-		subjectName,
-	)
-
-	optTopic := frame.WithRegisterPublisher(regSubTopic, streamOpt)
-	opt := frame.WithRegisterSubscriber(regSubTopic, consumerOpt, handler)
-
-	ctx, srv := frame.NewService("Test Srv", optTopic, opt, frame.WithNoopDriver())
-	defer srv.Stop(ctx)
-
-	err := srv.Run(ctx, ":")
-	if err != nil {
-		t.Errorf("We couldn't instantiate queue  %s", err)
-		return
+// TestServiceRegisterSubscriberWithError tests subscriber error handling.
+func (s *QueueTestSuite) TestServiceRegisterSubscriberWithError() {
+	testCases := []struct {
+		name        string
+		serviceName string
+		topic       string
+		queueURL    string
+	}{
+		{
+			name:        "subscriber with error handler",
+			serviceName: "Test Srv",
+			topic:       "test-error",
+			queueURL:    "mem://topicA",
+		},
 	}
 
-	emptyAny, err := json.Marshal(map[string]any{})
-	if err != nil {
-		t.Errorf("We couldn't marshal empty any")
-		return
-	}
+	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependancyOption) {
+		for _, tc := range testCases {
+			t.Run(tc.name, func(t *testing.T) {
+				var err error
 
-	messages := []any{json.RawMessage("badjson"), emptyAny}
+				ctx := t.Context()
+				queue := dep.ByIsQueue(ctx)
 
-	for i := range 30 {
-		msgStr := fmt.Sprintf("{\"id\": %d}", i)
-		messages = append(messages, msgStr)
-	}
+				queueURL := tc.queueURL
+				if queue != nil {
 
-	// Add a longer delay between publishes to ensure proper JetStream commit
-	for _, msg := range messages {
-		err = srv.Publish(ctx, regSubTopic, msg)
-		if err != nil {
-			t.Errorf("We could not publish to a registered topic %v : %s ", msg, err)
-			return
+					queueSubject := strings.Replace(queueURL, "mem://", "", 1)
+
+					qDS := queue.GetDS(ctx)
+					if qDS.IsNats() {
+
+						qDS, err = qDS.WithUser("ant")
+						require.NoError(t, err)
+
+						qDS, err = qDS.WithPassword("s3cr3t")
+						require.NoError(t, err)
+
+						queueURL = qDS.
+							ExtendQuery("jetstream", "true").
+							ExtendQuery("subject", queueSubject).
+							ExtendQuery("stream_name", queueSubject).
+							ExtendQuery("stream_subjects", queueSubject).
+							ExtendQuery("consumer_durable_name", "Durable_"+queueSubject).
+							ExtendQuery("consumer_filter_subject", queueSubject).
+							ExtendQuery("consumer_ack_policy", "explicit").
+							ExtendQuery("consumer_deliver_policy", "all").
+							ExtendQuery("consumer_replay_policy", "instant").
+							ExtendQuery("stream_retention", "workqueue").
+							ExtendQuery("stream_storage", "file").
+							String()
+					} else {
+						queueURL = qDS.ExtendPath(queueSubject).String()
+					}
+				}
+
+				handler := &handlerWithError{}
+				opt := frame.WithRegisterSubscriber(tc.topic, queueURL, handler)
+				ctx, srv := frame.NewService(tc.serviceName, opt, frametests.WithNoopDriver())
+
+				err = srv.Run(ctx, "")
+				require.NoError(t, err, "Service should start successfully")
+
+				subscriber, err := srv.GetSubscriber(tc.topic)
+				require.NoError(t, err, "Could not get subscriber")
+				require.NotNil(t, subscriber, "Subscriber should be registered")
+				require.True(t, subscriber.Initiated(), "Subscriber should be initiated")
+
+				srv.Stop(ctx)
+			})
 		}
+	})
+}
+
+// TestServiceRegisterSubscriberInvalid tests invalid subscriber registration.
+func (s *QueueTestSuite) TestServiceRegisterSubscriberInvalid() {
+	testCases := []struct {
+		name        string
+		serviceName string
+		topic       string
+		queueURL    string
+	}{
+		{
+			name:        "invalid subscriber registration",
+			serviceName: "Test Srv",
+			topic:       "test-invalid",
+			queueURL:    "invalid://url",
+		},
 	}
 
-	// Track missing messages for logging/debugging
-	ticker := time.NewTicker(10 * time.Second)
-	defer ticker.Stop()
+	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependancyOption) {
+		for _, tc := range testCases {
+			t.Run(tc.name, func(t *testing.T) {
+				handler := &msgHandler{f: func(ctx context.Context, metadata map[string]string, message []byte) error {
+					return nil
+				}}
+				opt := frame.WithRegisterSubscriber(tc.topic, tc.queueURL, handler)
+				ctx, srv := frame.NewService(tc.serviceName, opt, frametests.WithNoopDriver())
 
-	var received []string
-	for {
-		select {
-		case v, ok := <-receivedMessages:
-
-			if !ok {
-				t.Errorf("We did not receive all %d messages, only %d on time. Missing: %v",
-					len(messages),
-					len(received),
-					len(messages)-len(received),
-				)
-				return
-			}
-
-			received = append(received, v)
-
-			if len(messages) == len(received) {
-				t.Logf("All messages successfully handled")
-				return
-			}
-
-		case <-ctx.Done():
-			// Count final state of messages
-			return
-		case <-ticker.C:
-			t.Errorf(
-				"We did not receive all %d messages, only %d on time. Missing: %v",
-				len(messages),
-				len(received),
-				len(messages)-len(received),
-			)
-			return
+				err := srv.Run(ctx, "")
+				require.Error(t, err, "Service should fail to start with invalid queue URL")
+			})
 		}
-	}
+	})
 }
 
-func TestService_RegisterSubscriberWithError(t *testing.T) {
-	regSubT := "reg_s_wit-error"
-	opt := frame.WithRegisterSubscriber(regSubT, "mem://topicErrors", &handlerWithError{})
-	optTopic := frame.WithRegisterPublisher(regSubT, "mem://topicErrors")
-
-	ctx, srv := frame.NewService("Test Srv", opt, optTopic, frame.WithNoopDriver())
-
-	err := srv.Run(ctx, "")
-	if err != nil {
-		t.Errorf("We couldn't instantiate queue  %s", err)
-		return
+// TestServiceRegisterSubscriberContextCancelWorks tests context cancellation.
+func (s *QueueTestSuite) TestServiceRegisterSubscriberContextCancelWorks() {
+	testCases := []struct {
+		name        string
+		serviceName string
+		topic       string
+		queueURL    string
+	}{
+		{
+			name:        "subscriber context cancellation",
+			serviceName: "Test Srv",
+			topic:       "test-cancel",
+			queueURL:    "mem://topicA",
+		},
 	}
 
-	err = srv.Publish(ctx, regSubT, []byte(" testing message with error"))
-	if err != nil {
-		t.Errorf("We could not publish to topic that was registered %s", err)
-		return
-	}
+	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependancyOption) {
+		for _, tc := range testCases {
+			t.Run(tc.name, func(t *testing.T) {
+				var err error
 
-	srv.Stop(ctx)
+				ctx := t.Context()
+				queue := dep.ByIsQueue(ctx)
+
+				queueURL := tc.queueURL
+				if queue != nil {
+
+					queueSubject := strings.Replace(queueURL, "mem://", "", 1)
+
+					qDS := queue.GetDS(ctx)
+					if qDS.IsNats() {
+
+						qDS, err = qDS.WithUser("ant")
+						require.NoError(t, err)
+
+						qDS, err = qDS.WithPassword("s3cr3t")
+						require.NoError(t, err)
+
+						queueURL = qDS.
+							ExtendQuery("jetstream", "true").
+							ExtendQuery("subject", queueSubject).
+							ExtendQuery("stream_name", queueSubject).
+							ExtendQuery("stream_subjects", queueSubject).
+							ExtendQuery("consumer_durable_name", "Durable_"+queueSubject).
+							ExtendQuery("consumer_filter_subject", queueSubject).
+							ExtendQuery("consumer_ack_policy", "explicit").
+							ExtendQuery("consumer_deliver_policy", "all").
+							ExtendQuery("consumer_replay_policy", "instant").
+							ExtendQuery("stream_retention", "workqueue").
+							ExtendQuery("stream_storage", "file").
+							String()
+					} else {
+						queueURL = qDS.ExtendPath(queueSubject).String()
+					}
+				}
+
+				handler := &msgHandler{f: func(ctx context.Context, metadata map[string]string, message []byte) error {
+					return nil
+				}}
+				opt := frame.WithRegisterSubscriber(tc.topic, queueURL, handler)
+				ctx, srv := frame.NewService(tc.serviceName, opt, frametests.WithNoopDriver())
+
+				err = srv.Run(ctx, "")
+				require.NoError(t, err, "Service should start successfully")
+
+				subscriber, err := srv.GetSubscriber(tc.topic)
+				require.NoError(t, err, "Subscriber not found")
+				require.NotNil(t, subscriber, "Subscriber should be registered")
+				require.True(t, subscriber.Initiated(), "Subscriber should be initiated")
+
+				srv.Stop(ctx)
+			})
+		}
+	})
 }
 
-func TestService_RegisterSubscriberInvalid(t *testing.T) {
-	opt := frame.WithRegisterSubscriber("test", "memt+://topicA",
-		&msgHandler{f: func(ctx context.Context, metadata map[string]string, message []byte) error {
-			util.Log(ctx).WithField("metadata", metadata).WithField("message", string(message)).Info("Received message")
-			return nil
-		}})
-
-	ctx, srv := frame.NewService("Test Srv", opt, frame.WithNoopDriver())
-
-	defer srv.Stop(ctx)
-
-	if err := srv.Run(ctx, ""); err == nil {
-		t.Errorf("We somehow instantiated an invalid subscription ")
+// TestServiceAddPublisher tests adding publishers dynamically.
+func (s *QueueTestSuite) TestServiceAddPublisher() {
+	testCases := []struct {
+		name        string
+		serviceName string
+		topic       string
+		queueURL    string
+		message     []byte
+	}{
+		{
+			name:        "add publisher dynamically",
+			serviceName: "Test Srv",
+			topic:       "test-add-publisher",
+			queueURL:    "mem://topicA",
+			message:     []byte("dynamic message"),
+		},
 	}
+
+	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependancyOption) {
+		for _, tc := range testCases {
+			t.Run(tc.name, func(t *testing.T) {
+				var err error
+
+				ctx := t.Context()
+				queue := dep.ByIsQueue(ctx)
+
+				queueURL := tc.queueURL
+				if queue != nil {
+
+					queueSubject := strings.Replace(queueURL, "mem://", "", 1)
+
+					qDS := queue.GetDS(ctx)
+					if qDS.IsNats() {
+
+						qDS, err = qDS.WithUser("ant")
+						require.NoError(t, err)
+
+						qDS, err = qDS.WithPassword("s3cr3t")
+						require.NoError(t, err)
+
+						queueURL = qDS.
+							ExtendQuery("jetstream", "true").
+							ExtendQuery("subject", queueSubject).
+							ExtendQuery("stream_name", queueSubject).
+							ExtendQuery("stream_subjects", queueSubject).
+							ExtendQuery("consumer_durable_name", "Durable_"+queueSubject).
+							ExtendQuery("consumer_filter_subject", queueSubject).
+							ExtendQuery("consumer_ack_policy", "explicit").
+							ExtendQuery("consumer_deliver_policy", "all").
+							ExtendQuery("consumer_replay_policy", "instant").
+							ExtendQuery("stream_retention", "workqueue").
+							ExtendQuery("stream_storage", "file").
+							String()
+					} else {
+						queueURL = qDS.ExtendPath(queueSubject).String()
+					}
+				}
+
+				ctx, srv := frame.NewService(tc.serviceName, frametests.WithNoopDriver())
+
+				err = srv.Run(ctx, "")
+				require.NoError(t, err, "Service should start successfully")
+
+				err = srv.AddPublisher(ctx, tc.topic, queueURL)
+				require.NoError(t, err, "Adding publisher should succeed")
+
+				err = srv.Publish(ctx, tc.topic, tc.message)
+				require.NoError(t, err, "Publishing to dynamically added topic should succeed")
+
+				srv.Stop(ctx)
+			})
+		}
+	})
 }
 
-func TestService_RegisterSubscriberContextCancelWorks(t *testing.T) {
-	optTopic := frame.WithRegisterPublisher("test", "mem://topicA")
-	opt := frame.WithRegisterSubscriber("test", "mem://topicA",
-		&msgHandler{f: func(ctx context.Context, metadata map[string]string, message []byte) error {
-			util.Log(ctx).WithField("metadata", metadata).WithField("message", string(message)).Info("Received message")
-			return nil
-		}})
-
-	ctx, srv := frame.NewService("Test Srv", opt, optTopic, frame.WithNoopDriver())
-	defer srv.Stop(ctx)
-
-	subs, err := srv.GetSubscriber("test")
-	if err != nil {
-		t.Errorf("Could not get subscriber %s", err)
-	}
-	if subs == nil {
-		t.Fatalf("Subscription is nil yet it should be defined")
-	}
-	if subs.Initiated() {
-		t.Fatalf("Subscription is invalid yet it should be ok")
+// TestServiceAddPublisherInvalidURL tests adding publisher with invalid URL.
+func (s *QueueTestSuite) TestServiceAddPublisherInvalidURL() {
+	testCases := []struct {
+		name        string
+		serviceName string
+		topic       string
+		queueURL    string
+	}{
+		{
+			name:        "add publisher with invalid URL",
+			serviceName: "Test Srv",
+			topic:       "test-invalid-url",
+			queueURL:    "invalid://url",
+		},
 	}
 
-	if err = srv.Run(ctx, ""); err != nil {
-		t.Errorf("We somehow fail to instantiate subscription ")
-	}
+	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependancyOption) {
+		for _, tc := range testCases {
+			t.Run(tc.name, func(t *testing.T) {
+				ctx, srv := frame.NewService(tc.serviceName, frametests.WithNoopDriver())
 
-	if !subs.Initiated() {
-		t.Fatalf("Subscription is valid yet it should not be ok")
-	}
+				err := srv.Run(ctx, "")
+				require.NoError(t, err, "Service should start successfully")
+
+				err = srv.AddPublisher(ctx, tc.topic, tc.queueURL)
+				require.Error(t, err, "Adding publisher with invalid URL should fail")
+			})
+		}
+	})
 }
 
-func TestService_AddPublisher(t *testing.T) {
-	ctx, srv := frame.NewService("Test Srv", frame.WithNoopDriver())
-	defer srv.Stop(ctx)
-
-	if err := srv.Run(ctx, ""); err != nil {
-		t.Errorf("We somehow fail to instantiate subscription ")
+// TestServiceAddSubscriber tests adding subscribers dynamically.
+func (s *QueueTestSuite) TestServiceAddSubscriber() {
+	testCases := []struct {
+		name        string
+		serviceName string
+		topic       string
+		queueURL    string
+	}{
+		{
+			name:        "add subscriber dynamically",
+			serviceName: "Test Srv",
+			topic:       "test-add-subscriber",
+			queueURL:    "mem://topicA",
+		},
 	}
 
-	// Test case 1: Add a new publisher
-	reference := "new-publisher"
-	queueURL := "mem://topicX"
+	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependancyOption) {
+		for _, tc := range testCases {
+			t.Run(tc.name, func(t *testing.T) {
+				var err error
 
-	err := srv.AddPublisher(ctx, reference, queueURL)
-	if err != nil {
-		t.Errorf("Failed to add a new publisher: %v", err)
-	}
+				ctx := t.Context()
+				queue := dep.ByIsQueue(ctx)
 
-	// Verify the publisher was added
-	pub, err := srv.GetPublisher(reference)
-	if err != nil {
-		t.Errorf("Failed to get publisher: %v", err)
-	}
-	if pub == nil {
-		t.Error("Publisher was not added successfully")
-	}
+				queueURL := tc.queueURL
+				if queue != nil {
 
-	// Test case 2: Add a publisher that already exists
-	err = srv.AddPublisher(ctx, reference, queueURL)
-	if err != nil {
-		t.Errorf("Expected no error when adding an existing publisher, got: %v", err)
-	}
+					queueSubject := strings.Replace(queueURL, "mem://", "", 1)
 
-	// Test case 3: Initialize and use a new publisher
-	testPubRef := "test-pub-init"
-	err = srv.AddPublisher(ctx, testPubRef, "mem://topicInit")
-	if err != nil {
-		t.Errorf("Failed to add and initialize publisher: %v", err)
-	}
+					qDS := queue.GetDS(ctx)
+					if qDS.IsNats() {
 
-	// Run the service to ensure full initialization
-	err = srv.Run(ctx, "")
-	if err != nil {
-		t.Errorf("Failed to run service: %v", err)
-	}
+						qDS, err = qDS.WithUser("ant")
+						require.NoError(t, err)
 
-	// Try to publish with the initialized publisher
-	err = srv.Publish(ctx, testPubRef, []byte("test message"))
-	if err != nil {
-		t.Errorf("Failed to publish with initialized publisher: %v", err)
-	}
+						qDS, err = qDS.WithPassword("s3cr3t")
+						require.NoError(t, err)
+
+						queueURL = qDS.
+							ExtendQuery("jetstream", "true").
+							ExtendQuery("subject", queueSubject).
+							ExtendQuery("stream_name", queueSubject).
+							ExtendQuery("stream_subjects", queueSubject).
+							ExtendQuery("consumer_durable_name", "Durable_"+queueSubject).
+							ExtendQuery("consumer_filter_subject", queueSubject).
+							ExtendQuery("consumer_ack_policy", "explicit").
+							ExtendQuery("consumer_deliver_policy", "all").
+							ExtendQuery("consumer_replay_policy", "instant").
+							ExtendQuery("stream_retention", "workqueue").
+							ExtendQuery("stream_storage", "file").
+							String()
+					} else {
+						queueURL = qDS.ExtendPath(queueSubject).String()
+					}
+				}
+
+				handler := &msgHandler{f: func(ctx context.Context, metadata map[string]string, message []byte) error {
+					return nil
+				}}
+
+				ctx, srv := frame.NewService(tc.serviceName, frametests.WithNoopDriver())
+
+				err = srv.Run(ctx, "")
+				require.NoError(t, err, "Service should start successfully")
+
+				err = srv.AddSubscriber(ctx, tc.topic, queueURL, handler)
+				require.NoError(t, err, "Adding subscriber should succeed")
+
+				subscriber, err := srv.GetSubscriber(tc.topic)
+				require.NoError(t, err)
+				require.NotNil(t, subscriber, "Subscriber should be registered")
+				require.True(t, subscriber.Initiated(), "Subscriber should be initiated")
+
+				srv.Stop(ctx)
+			})
+		}
+	})
 }
 
-func TestService_AddPublisher_InvalidURL(t *testing.T) {
-	// Test with an invalid URL scheme that should cause an error
-	ctx, srv := frame.NewService("Test Srv", frame.WithNoopDriver())
-	defer srv.Stop(ctx)
-
-	if err := srv.Run(ctx, ""); err != nil {
-		t.Errorf("We somehow fail to instantiate subscription ")
+// TestServiceAddSubscriberWithoutHandler tests adding subscriber without handler.
+func (s *QueueTestSuite) TestServiceAddSubscriberWithoutHandler() {
+	testCases := []struct {
+		name        string
+		serviceName string
+		topic       string
+		queueURL    string
+	}{
+		{
+			name:        "add subscriber without handler",
+			serviceName: "Test Srv",
+			topic:       "test-no-handler",
+			queueURL:    "mem://topicA",
+		},
 	}
 
-	// Attempt to add a publisher with an invalid URL scheme
-	reference := "invalid-pub"
-	queueURL := "invalid://topic" // This scheme is not registered
+	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependancyOption) {
+		for _, tc := range testCases {
+			t.Run(tc.name, func(t *testing.T) {
+				var err error
 
-	// This should fail because the invalid URL can't be initialized
-	err := srv.AddPublisher(ctx, reference, queueURL)
-	if err == nil {
-		t.Error("Expected error when adding publisher with invalid URL, but got nil")
-	}
+				ctx := t.Context()
+				queue := dep.ByIsQueue(ctx)
+
+				queueURL := tc.queueURL
+				if queue != nil {
+
+					queueSubject := strings.Replace(queueURL, "mem://", "", 1)
+
+					qDS := queue.GetDS(ctx)
+					if qDS.IsNats() {
+
+						qDS, err = qDS.WithUser("ant")
+						require.NoError(t, err)
+
+						qDS, err = qDS.WithPassword("s3cr3t")
+						require.NoError(t, err)
+
+						queueURL = qDS.
+							ExtendQuery("jetstream", "true").
+							ExtendQuery("subject", queueSubject).
+							ExtendQuery("stream_name", queueSubject).
+							ExtendQuery("stream_subjects", queueSubject).
+							ExtendQuery("consumer_durable_name", "Durable_"+queueSubject).
+							ExtendQuery("consumer_filter_subject", queueSubject).
+							ExtendQuery("consumer_ack_policy", "explicit").
+							ExtendQuery("consumer_deliver_policy", "all").
+							ExtendQuery("consumer_replay_policy", "instant").
+							ExtendQuery("stream_retention", "workqueue").
+							ExtendQuery("stream_storage", "file").
+							String()
+					} else {
+						queueURL = qDS.ExtendPath(queueSubject).String()
+					}
+				}
+
+				ctx, srv := frame.NewService(tc.serviceName, frametests.WithNoopDriver())
+
+				err = srv.Run(ctx, "")
+				require.NoError(t, err, "Service should start successfully")
+
+				err = srv.AddSubscriber(ctx, tc.topic, queueURL)
+				require.NoError(t, err, "Adding subscriber without handler should be ok as its effectively a pull subscriber now")
+			})
+		}
+	})
 }
 
-func TestService_AddSubscriber(t *testing.T) {
-	ctx, srv := frame.NewService("Test Srv", frame.WithNoopDriver())
-	defer srv.Stop(ctx)
-
-	if err := srv.Run(ctx, ""); err != nil {
-		t.Errorf("We somehow fail to instantiate subscription ")
+// TestServiceAddSubscriberInvalidURL tests adding subscriber with invalid URL.
+func (s *QueueTestSuite) TestServiceAddSubscriberInvalidURL() {
+	testCases := []struct {
+		name        string
+		serviceName string
+		topic       string
+		queueURL    string
+	}{
+		{
+			name:        "add subscriber with invalid URL",
+			serviceName: "Test Srv",
+			topic:       "test-invalid-url",
+			queueURL:    "invalid://url",
+		},
 	}
 
-	// Test case 1: Add a new subscriber
-	reference := "new-subscriber"
-	queueURL := "mem://topicS"
-	handler := &msgHandler{f: func(ctx context.Context, metadata map[string]string, message []byte) error {
-		util.Log(ctx).WithField("metadata", metadata).WithField("message", string(message)).Info("Received message")
-		return nil
-	}}
+	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependancyOption) {
+		for _, tc := range testCases {
+			t.Run(tc.name, func(t *testing.T) {
+				handler := &msgHandler{f: func(ctx context.Context, metadata map[string]string, message []byte) error {
+					return nil
+				}}
 
-	// First register a publisher to create the topic
-	pubOpt := frame.WithRegisterPublisher(reference, queueURL)
-	pubOpt(ctx, srv)
+				ctx, srv := frame.NewService(tc.serviceName, frametests.WithNoopDriver())
 
-	// Run the service to initialize the publisher
-	err := srv.Run(ctx, "")
-	if err != nil {
-		t.Errorf("Failed to run service: %v", err)
-		return
-	}
+				err := srv.Run(ctx, "")
+				require.NoError(t, err, "Service should start successfully")
 
-	// Now add the subscriber
-	err = srv.AddSubscriber(ctx, reference, queueURL, handler)
-	if err != nil {
-		t.Errorf("Failed to add a new subscriber: %v", err)
-	}
-
-	// Verify the subscriber was added
-	sub, err := srv.GetSubscriber(reference)
-	if err != nil {
-		t.Errorf("Failed to get subscriber: %v", err)
-	}
-	if sub == nil {
-		t.Error("Subscriber was not added successfully")
-	}
-
-	// Test case 2: Add a subscriber that already exists
-	err = srv.AddSubscriber(ctx, reference, queueURL, handler)
-	if err != nil {
-		t.Errorf("Expected no error when adding an existing subscriber, got: %v", err)
-	}
-}
-func TestService_AddSubscriberWithoutHandler(t *testing.T) {
-	noHandlerRef := "no-handlers-sub"
-	noHandlerURL := "mem://topicNoHandler"
-
-	optTopic := frame.WithRegisterPublisher(noHandlerRef, noHandlerURL)
-
-	ctx, srv := frame.NewService("Test Srv 2", optTopic, frame.WithNoopDriver())
-	defer srv.Stop(ctx)
-
-	if err := srv.Run(ctx, ""); err != nil {
-		t.Errorf("We somehow fail to instantiate subscription ")
-	}
-
-	// Run the service to initialize the publisher
-	err := srv.Run(ctx, "")
-	if err != nil {
-		t.Errorf("Failed to run service: %v", err)
-		return
-	}
-
-	// Now add the subscriber
-	err = srv.AddSubscriber(ctx, noHandlerRef, noHandlerURL)
-	if err != nil {
-		t.Errorf("Failed to add subscriber without handlers: %v", err)
-	}
-
-	// Verify it was added
-	sub, err := srv.GetSubscriber(noHandlerRef)
-	if err != nil {
-		t.Errorf("Failed to get subscriber: %v", err)
-	}
-	if sub == nil {
-		t.Error("Subscriber without handlers was not added successfully")
-	}
-
-	// Clean up
-}
-
-func TestService_AddSubscriber_InvalidURL(t *testing.T) {
-	// Test with an invalid URL scheme that should cause an error
-	ctx, srv := frame.NewService("Test Srv", frame.WithNoopDriver())
-	defer srv.Stop(ctx)
-
-	if err := srv.Run(ctx, ""); err != nil {
-		t.Errorf("We somehow fail to instantiate subscription ")
-	}
-
-	// Attempt to add a subscriber with an invalid URL scheme
-	reference := "invalid-sub"
-	queueURL := "invalid://topic" // This scheme is not registered
-	handler := &msgHandler{f: func(ctx context.Context, metadata map[string]string, message []byte) error {
-		util.Log(ctx).WithField("metadata", metadata).WithField("message", string(message)).Info("Received message")
-		return nil
-	}}
-
-	// This should fail because the invalid URL can't be initialized
-	err := srv.AddSubscriber(ctx, reference, queueURL, handler)
-	if err == nil {
-		t.Error("Expected error when adding subscriber with invalid URL, but got nil")
-		srv.Stop(ctx) // Clean up if the test somehow passes
-	}
+				err = srv.AddSubscriber(ctx, tc.topic, tc.queueURL, handler)
+				require.Error(t, err, "Adding subscriber with invalid URL should fail")
+			})
+		}
+	})
 }

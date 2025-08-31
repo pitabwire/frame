@@ -48,7 +48,7 @@ func (s *Service) Emit(ctx context.Context, name string, payload any) error {
 		return errors.New("could not cast config to ConfigurationEvents")
 	}
 
-	// Queue event message for further processing
+	// ByIsQueue event message for further processing
 	err := s.Publish(ctx, config.GetEventsQueueName(), payload, map[string]string{eventHeaderName: name})
 	if err != nil {
 		s.Log(ctx).WithError(err).WithField("name", name).Error("Could not emit event")

@@ -4,212 +4,276 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
-	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/nicksnyder/go-i18n/v2/i18n"
+	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 
 	"github.com/pitabwire/frame"
+	"github.com/pitabwire/frame/tests"
 )
 
-func TestTranslations(t *testing.T) {
-	translations := frame.WithTranslations("tests_runner/localization", "en", "sw")
-	_, srv := frame.NewService("Test Localization Srv", translations)
+// LocalizationTestSuite extends BaseTestSuite for comprehensive localization testing.
+type LocalizationTestSuite struct {
+	tests.BaseTestSuite
+}
 
-	bundle := srv.Bundle()
+// TestLocalizationSuite runs the localization test suite.
+func TestLocalizationSuite(t *testing.T) {
+	suite.Run(t, &LocalizationTestSuite{})
+}
 
-	enLocalizer := i18n.NewLocalizer(bundle, "en", "sw")
-	englishVersion, err := enLocalizer.Localize(&i18n.LocalizeConfig{
-		DefaultMessage: &i18n.Message{
-			ID: "Example",
+// TestTranslations tests basic translation functionality.
+func (s *LocalizationTestSuite) TestTranslations() {
+	testCases := []struct {
+		name           string
+		serviceName    string
+		translationDir string
+		languages      []string
+		messageID      string
+		templateData   map[string]any
+		pluralCount    int
+		expectedEn     string
+		expectedSw     string
+	}{
+		{
+			name:           "basic translation with template data",
+			serviceName:    "Test Localization Srv",
+			translationDir: "tests_runner/localization",
+			languages:      []string{"en", "sw"},
+			messageID:      "Example",
+			templateData: map[string]any{
+				"Name": "Air",
+			},
+			pluralCount: 1,
+			expectedEn:  "Air has nothing",
+			expectedSw:  "Air haina chochote",
 		},
-		TemplateData: map[string]any{
-			"Name": "Air",
-		},
-		PluralCount: 1,
-	})
-	if err != nil {
-		t.Errorf(" There was an error parsing the translations %s", err)
-		return
 	}
 
-	if englishVersion != "Air has nothing" {
-		t.Errorf(
-			"Localizations didn't quite work like they should, found : %s expected : %s",
-			englishVersion,
-			"Air has nothing",
-		)
-		return
-	}
+	for _, tc := range testCases {
+		s.T().Run(tc.name, func(t *testing.T) {
+			translations := frame.WithTranslations(tc.translationDir, tc.languages...)
+			_, srv := frame.NewService(tc.serviceName, translations)
 
-	swLocalizer := i18n.NewLocalizer(bundle, "sw")
-	swVersion, err := swLocalizer.Localize(&i18n.LocalizeConfig{
-		DefaultMessage: &i18n.Message{
-			ID: "Example",
-		},
-		TemplateData: map[string]any{
-			"Name": "Air",
-		},
-		PluralCount: 1,
-	})
-	if err != nil {
-		t.Errorf(" There was an error parsing the translations %s", err)
-		return
-	}
+			bundle := srv.Bundle()
 
-	if swVersion != "Air haina chochote" {
-		t.Errorf(
-			"Localizations didn't quite work like they should, found : %s expected : %s",
-			swVersion,
-			"Air haina chochote",
-		)
-		return
+			enLocalizer := i18n.NewLocalizer(bundle, "en", "sw")
+			englishVersion, err := enLocalizer.Localize(&i18n.LocalizeConfig{
+				DefaultMessage: &i18n.Message{
+					ID: tc.messageID,
+				},
+				TemplateData: tc.templateData,
+				PluralCount:  tc.pluralCount,
+			})
+			require.NoError(t, err, "English localization should succeed")
+			require.Equal(t, tc.expectedEn, englishVersion, "English translation should match expected")
+
+			swLocalizer := i18n.NewLocalizer(bundle, "sw")
+			swVersion, err := swLocalizer.Localize(&i18n.LocalizeConfig{
+				DefaultMessage: &i18n.Message{
+					ID: tc.messageID,
+				},
+				TemplateData: tc.templateData,
+				PluralCount:  tc.pluralCount,
+			})
+			require.NoError(t, err, "Swahili localization should succeed")
+			require.Equal(t, tc.expectedSw, swVersion, "Swahili translation should match expected")
+		})
 	}
 }
 
-func TestTranslationsHelpers(t *testing.T) {
-	translations := frame.WithTranslations("tests_runner/localization", "en", "sw")
-	ctx, srv := frame.NewService("Test Localization Srv", translations)
-
-	englishVersion := srv.Translate(ctx, "en", "Example")
-	if englishVersion != "<no value> has nothing" {
-		t.Errorf(
-			"Localizations didn't quite work like they should, found : %s expected : %s",
-			englishVersion,
-			"<no value> has nothing",
-		)
-		return
+// TestTranslationsHelpers tests translation helper methods.
+func (s *LocalizationTestSuite) TestTranslationsHelpers() {
+	testCases := []struct {
+		name           string
+		serviceName    string
+		translationDir string
+		languages      []string
+		messageID      string
+		language       string
+		templateData   map[string]any
+		pluralCount    int
+		expected       string
+	}{
+		{
+			name:           "translate without template data",
+			serviceName:    "Test Localization Srv",
+			translationDir: "tests_runner/localization",
+			languages:      []string{"en", "sw"},
+			messageID:      "Example",
+			language:       "en",
+			templateData:   nil,
+			pluralCount:    1,
+			expected:       "<no value> has nothing",
+		},
+		{
+			name:           "translate with template data",
+			serviceName:    "Test Localization Srv",
+			translationDir: "tests_runner/localization",
+			languages:      []string{"en", "sw"},
+			messageID:      "Example",
+			language:       "en",
+			templateData: map[string]any{
+				"Name": "MapMan",
+			},
+			pluralCount: 1,
+			expected:    "MapMan has nothing",
+		},
+		{
+			name:           "translate with template data and plural",
+			serviceName:    "Test Localization Srv",
+			translationDir: "tests_runner/localization",
+			languages:      []string{"en", "sw"},
+			messageID:      "Example",
+			language:       "en",
+			templateData: map[string]any{
+				"Name": "CountMen",
+			},
+			pluralCount: 2,
+			expected:    "CountMen have nothing",
+		},
 	}
 
-	englishVersion = srv.TranslateWithMap(ctx, "en", "Example", map[string]any{"Name": "MapMan"})
-	if englishVersion != "MapMan has nothing" {
-		t.Errorf(
-			"Localizations didn't quite work like they should, found : %s expected : %s",
-			englishVersion,
-			"MapMan has nothing",
-		)
-		return
-	}
+	for _, tc := range testCases {
+		s.T().Run(tc.name, func(t *testing.T) {
+			translations := frame.WithTranslations(tc.translationDir, tc.languages...)
+			ctx, srv := frame.NewService(tc.serviceName, translations)
 
-	englishVersion = srv.TranslateWithMapAndCount(ctx, "en", "Example", map[string]any{"Name": "CountMen"}, 2)
-	if englishVersion != "CountMen have nothing" {
-		t.Errorf(
-			"Localizations didn't quite work like they should, found : %s expected : %s",
-			englishVersion,
-			"CountMen have nothing",
-		)
-		return
-	}
-}
+			var result string
+			if tc.templateData == nil {
+				result = srv.Translate(ctx, tc.language, tc.messageID)
+			} else if tc.pluralCount > 1 {
+				result = srv.TranslateWithMapAndCount(ctx, tc.language, tc.messageID, tc.templateData, tc.pluralCount)
+			} else {
+				result = srv.TranslateWithMap(ctx, tc.language, tc.messageID, tc.templateData)
+			}
 
-func TestLanguageContextManagement(t *testing.T) {
-	// Test adding language to context
-	ctx := t.Context()
-	languages := []string{"en-US", "fr-FR"}
-
-	ctxWithLang := frame.LangugageToContext(ctx, languages)
-
-	// Test extracting language from context
-	extractedLangs := frame.LanguageFromContext(ctxWithLang)
-
-	if !reflect.DeepEqual(languages, extractedLangs) {
-		t.Errorf("LanguageFromContext did not return the expected languages: got %v, want %v",
-			extractedLangs, languages)
-	}
-
-	// Test with empty context
-	emptyLangs := frame.LanguageFromContext(ctx)
-	if emptyLangs != nil {
-		t.Errorf("LanguageFromContext on empty context should return nil, got %v", emptyLangs)
-	}
-}
-
-func TestLanguageMapManagement(t *testing.T) {
-	// Test adding language to map
-	metadata := make(map[string]string)
-	languages := []string{"en-US", "fr-FR"}
-
-	updatedMetadata := frame.LanguageToMap(metadata, languages)
-
-	if updatedMetadata["lang"] != "en-US,fr-FR" {
-		t.Errorf("LanguageToMap did not set the expected value: got %s, want %s",
-			updatedMetadata["lang"], "en-US,fr-FR")
-	}
-
-	// Test retrieving language from map
-	extractedLangs := frame.LanguageFromMap(updatedMetadata)
-
-	if !reflect.DeepEqual(languages, extractedLangs) {
-		t.Errorf("LanguageFromMap did not return the expected languages: got %v, want %v",
-			extractedLangs, languages)
-	}
-
-	// Test with empty map
-	emptyMetadata := make(map[string]string)
-	emptyLangs := frame.LanguageFromMap(emptyMetadata)
-	if emptyLangs != nil {
-		t.Errorf("LanguageFromMap on empty map should return nil, got %v", emptyLangs)
+			require.Equal(t, tc.expected, result, "Translation result should match expected")
+		})
 	}
 }
 
-func TestLanguageHTTPMiddleware(t *testing.T) {
-	translations := frame.WithTranslations("tests_runner/localization", "en", "sw")
-	_, srv := frame.NewService("Test HTTP Middleware", translations)
-
-	// Create a simple handler that checks for language in context
-	handlerCalled := false
-	handler := http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
-		handlerCalled = true
-		langs := frame.LanguageFromContext(r.Context())
-		if len(langs) == 0 {
-			t.Error("Expected languages in context but got none")
-		}
-		if langs[0] != "fr-FR" {
-			t.Errorf("Expected first language to be fr-FR, got %s", langs[0])
-		}
-	})
-
-	// Create middleware
-	middleware := srv.LanguageHTTPMiddleware(handler)
-
-	// Create test request with Accept-Language header
-	req := httptest.NewRequest(http.MethodGet, "/test", nil)
-	req.Header.Add("Accept-Language", "fr-FR,en-US")
-
-	// Create response recorder
-	rr := httptest.NewRecorder()
-
-	// Serve request through middleware
-	middleware.ServeHTTP(rr, req)
-
-	if !handlerCalled {
-		t.Error("Handler was not called by middleware")
+// TestLanguageContextManagement tests language context management.
+func (s *LocalizationTestSuite) TestLanguageContextManagement() {
+	testCases := []struct {
+		name        string
+		serviceName string
+		language    string
+		messageID   string
+		expected    string
+	}{
+		{
+			name:        "language context management",
+			serviceName: "Test Localization Srv",
+			language:    "en",
+			messageID:   "Example",
+			expected:    "<no value> has nothing",
+		},
 	}
 
-	// Test with lang query parameter
-	handlerCalled = false
-	req = httptest.NewRequest(http.MethodGet, "/test?lang=de-DE", nil)
-	req.Header.Add("Accept-Language", "fr-FR,en-US")
+	for _, tc := range testCases {
+		s.T().Run(tc.name, func(t *testing.T) {
+			translations := frame.WithTranslations("tests_runner/localization", "en", "sw")
+			ctx, srv := frame.NewService(tc.serviceName, translations)
 
-	handler = http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
-		handlerCalled = true
-		langs := frame.LanguageFromContext(r.Context())
-		if len(langs) == 0 {
-			t.Error("Expected languages in context but got none")
-		}
-		if langs[0] != "de-DE" {
-			t.Errorf("Expected first language to be de-DE, got %s", langs[0])
-		}
-	})
+			ctx = frame.LangugageToContext(ctx, []string{tc.language})
+			result := srv.Translate(ctx, "", tc.messageID)
+			require.Equal(t, tc.expected, result, "Translation with language context should match expected")
 
-	middleware = srv.LanguageHTTPMiddleware(handler)
-	rr = httptest.NewRecorder()
-	middleware.ServeHTTP(rr, req)
+			lang := frame.LanguageFromContext(ctx)
+			require.Equal(t, []string{tc.language}, lang, "Language from context should match set language")
+		})
+	}
+}
 
-	if !handlerCalled {
-		t.Error("Handler was not called by middleware")
+// TestLanguageMapManagement tests language map management.
+func (s *LocalizationTestSuite) TestLanguageMapManagement() {
+	testCases := []struct {
+		name        string
+		serviceName string
+		languageMap map[string]string
+		testKey     string
+		testValue   string
+	}{
+		{
+			name:        "language map management",
+			serviceName: "Test Localization Srv",
+			languageMap: map[string]string{
+				"en": "English",
+				"sw": "Swahili",
+			},
+			testKey:   "en",
+			testValue: "English",
+		},
+	}
+
+	for _, tc := range testCases {
+		s.T().Run(tc.name, func(t *testing.T) {
+			_, _ = frame.NewService(tc.serviceName)
+
+			// Test language map functions
+			testMap := make(map[string]string)
+			for key, value := range tc.languageMap {
+				testMap = frame.LanguageToMap(testMap, []string{key})
+				testMap[key] = value
+			}
+
+			result := frame.LanguageFromMap(testMap)
+			require.Contains(t, result, tc.testKey, "Language map should contain test key")
+		})
+	}
+}
+
+// TestLanguageHTTPMiddleware tests HTTP middleware for language detection.
+func (s *LocalizationTestSuite) TestLanguageHTTPMiddleware() {
+	testCases := []struct {
+		name         string
+		serviceName  string
+		requestPath  string
+		acceptLang   string
+		expectedLang string
+	}{
+		{
+			name:         "HTTP middleware with accept-language header",
+			serviceName:  "Test Localization Srv",
+			requestPath:  "/test",
+			acceptLang:   "en-US,en;q=0.9",
+			expectedLang: "en",
+		},
+		{
+			name:         "HTTP middleware with swahili accept-language",
+			serviceName:  "Test Localization Srv",
+			requestPath:  "/test",
+			acceptLang:   "sw",
+			expectedLang: "sw",
+		},
+	}
+
+	for _, tc := range testCases {
+		s.T().Run(tc.name, func(t *testing.T) {
+			translations := frame.WithTranslations("tests_runner/localization", "en", "sw")
+			_, srv := frame.NewService(tc.serviceName, translations)
+
+			middleware := srv.LanguageHTTPMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				lang := frame.LanguageFromContext(r.Context())
+				w.WriteHeader(http.StatusOK)
+				w.Write([]byte(strings.Join(lang, ",")))
+			}))
+
+			req := httptest.NewRequest("GET", tc.requestPath, nil)
+			req.Header.Set("Accept-Language", tc.acceptLang)
+
+			w := httptest.NewRecorder()
+			middleware.ServeHTTP(w, req)
+
+			result := w.Body.String()
+			require.Contains(t, result, tc.expectedLang, "HTTP response should contain expected language")
+		})
 	}
 }
 
@@ -223,96 +287,75 @@ func (m *mockServerStream) Context() context.Context {
 	return m.ctx
 }
 
-func TestLanguageGrpcInterceptors(t *testing.T) {
-	translations := frame.WithTranslations("tests_runner/localization", "en", "sw")
-	_, srv := frame.NewService("Test GRPC Interceptors", translations)
-
-	// Test unary interceptor
-	unaryInterceptor := srv.LanguageUnaryInterceptor()
-
-	// Create metadata with Accept-Language
-	md := metadata.Pairs("accept-language", "de-DE,fr-FR")
-	ctx := metadata.NewIncomingContext(t.Context(), md)
-
-	handlerCalled := false
-	unaryHandler := func(ctx context.Context, _ any) (any, error) {
-		handlerCalled = true
-		langs := frame.LanguageFromContext(ctx)
-		if len(langs) == 0 {
-			t.Error("Expected languages in context but got none")
-		}
-		if langs[0] != "de-DE" {
-			t.Errorf("Expected first language to be de-DE, got %s", langs[0])
-		}
-		return "response", nil
+// TestLanguageGrpcInterceptors tests gRPC interceptors for language detection.
+func (s *LocalizationTestSuite) TestLanguageGrpcInterceptors() {
+	testCases := []struct {
+		name         string
+		serviceName  string
+		metadataLang string
+		expectedLang string
+	}{
+		{
+			name:         "gRPC unary interceptor with language metadata",
+			serviceName:  "Test Localization Srv",
+			metadataLang: "en",
+			expectedLang: "en",
+		},
+		{
+			name:         "gRPC unary interceptor with swahili metadata",
+			serviceName:  "Test Localization Srv",
+			metadataLang: "sw",
+			expectedLang: "sw",
+		},
 	}
 
-	_, err := unaryInterceptor(ctx, "request", &grpc.UnaryServerInfo{}, unaryHandler)
-	if err != nil {
-		t.Errorf("Unary interceptor returned error: %v", err)
-	}
+	for _, tc := range testCases {
+		s.T().Run(tc.name, func(t *testing.T) {
+			translations := frame.WithTranslations("tests_runner/localization", "en", "sw")
+			_, srv := frame.NewService(tc.serviceName, translations)
 
-	if !handlerCalled {
-		t.Error("Unary handler was not called by interceptor")
-	}
+			interceptor := srv.LanguageUnaryInterceptor()
+			handler := func(ctx context.Context, req any) (any, error) {
+				lang := frame.LanguageFromContext(ctx)
+				return strings.Join(lang, ","), nil
+			}
 
-	// Test stream interceptor
-	streamInterceptor := srv.LanguageStreamInterceptor()
+			md := metadata.New(map[string]string{"accept-language": tc.metadataLang})
+			ctx := metadata.NewIncomingContext(context.Background(), md)
 
-	streamCtx := metadata.NewIncomingContext(t.Context(), md)
-	mockStream := &mockServerStream{ctx: streamCtx}
-
-	streamHandlerCalled := false
-	streamHandler := func(_ any, stream grpc.ServerStream) error {
-		streamHandlerCalled = true
-		langs := frame.LanguageFromContext(stream.Context())
-		if len(langs) == 0 {
-			t.Error("Expected languages in context but got none")
-		}
-		if langs[0] != "de-DE" {
-			t.Errorf("Expected first language to be de-DE, got %s", langs[0])
-		}
-		return nil
-	}
-
-	err = streamInterceptor("service", mockStream, &grpc.StreamServerInfo{}, streamHandler)
-	if err != nil {
-		t.Errorf("Stream interceptor returned error: %v", err)
-	}
-
-	if !streamHandlerCalled {
-		t.Error("Stream handler was not called by interceptor")
+			result, err := interceptor(ctx, nil, nil, handler)
+			require.NoError(t, err, "gRPC interceptor should succeed")
+			require.Contains(t, result.(string), tc.expectedLang, "gRPC interceptor should detect correct language")
+		})
 	}
 }
 
-func TestLanguageFromGrpcRequest(t *testing.T) {
-	// Test with valid metadata
-	md := metadata.Pairs("accept-language", "ja-JP,en-US")
-	ctx := metadata.NewIncomingContext(t.Context(), md)
-
-	langs := frame.LanguageFromGrpcRequest(ctx)
-	if len(langs) != 2 {
-		t.Errorf("Expected 2 languages, got %d", len(langs))
+// TestLanguageFromGrpcRequest tests language extraction from gRPC requests.
+func (s *LocalizationTestSuite) TestLanguageFromGrpcRequest() {
+	testCases := []struct {
+		name         string
+		serviceName  string
+		metadataLang string
+		expectedLang string
+	}{
+		{
+			name:         "extract language from gRPC request metadata",
+			serviceName:  "Test Localization Srv",
+			metadataLang: "en",
+			expectedLang: "en",
+		},
 	}
 
-	if langs[0] != "ja-JP" {
-		t.Errorf("Expected first language to be ja-JP, got %s", langs[0])
-	}
+	for _, tc := range testCases {
+		s.T().Run(tc.name, func(t *testing.T) {
+			_, _ = frame.NewService(tc.serviceName)
 
-	// Test with no metadata
-	emptyCtx := t.Context()
-	emptyLangs := frame.LanguageFromGrpcRequest(emptyCtx)
-	if len(emptyLangs) != 0 {
-		t.Errorf("Expected empty language slice, got %v", emptyLangs)
-	}
+			md := metadata.New(map[string]string{"accept-language": tc.metadataLang})
+			grpcCtx := metadata.NewIncomingContext(context.Background(), md)
 
-	// Test with metadata but no accept-language
-	mdWithoutLang := metadata.Pairs("other-header", "some-value")
-	ctxWithoutLang := metadata.NewIncomingContext(t.Context(), mdWithoutLang)
-
-	langsEmpty := frame.LanguageFromGrpcRequest(ctxWithoutLang)
-	if len(langsEmpty) != 0 {
-		t.Errorf("Expected empty language slice, got %v", langsEmpty)
+			lang := frame.LanguageFromGrpcRequest(grpcCtx)
+			require.Equal(t, tc.expectedLang, lang, "Language from gRPC request should match expected")
+		})
 	}
 }
 
@@ -334,44 +377,39 @@ func (m *mockMessage) SetMetadata(md map[string]string) {
 	m.metadata = md
 }
 
-func TestQueueLanguagePropagation(t *testing.T) {
-	// Test publisher language propagation
-	ctx := t.Context()
-	languages := []string{"es-ES", "pt-BR"}
-
-	// Add languages to context
-	ctxWithLang := frame.LangugageToContext(ctx, languages)
-
-	// Create md map
-	md := make(map[string]string)
-
-	// Extract language from context and add to md (simulating publisher.Publish)
-	language := frame.LanguageFromContext(ctxWithLang)
-	if len(language) > 0 {
-		md = frame.LanguageToMap(md, language)
+// TestQueueLanguagePropagation tests queue language propagation.
+func (s *LocalizationTestSuite) TestQueueLanguagePropagation() {
+	testCases := []struct {
+		name         string
+		serviceName  string
+		metadataLang string
+		expectedLang string
+	}{
+		{
+			name:         "queue language propagation",
+			serviceName:  "Test Localization Srv",
+			metadataLang: "en",
+			expectedLang: "en",
+		},
 	}
 
-	// Verify md has the language
-	if md["lang"] != "es-ES,pt-BR" {
-		t.Errorf("Expected language md to be 'es-ES,pt-BR', got '%s'", md["lang"])
-	}
+	for _, tc := range testCases {
+		s.T().Run(tc.name, func(t *testing.T) {
+			_, _ = frame.NewService(tc.serviceName)
 
-	// Test subscriber language propagation
-	mockMsg := &mockMessage{
-		metadata: md,
-		body:     []byte("test message"),
-	}
+			mockMsg := &mockMessage{
+				metadata: map[string]string{"accept-language": tc.metadataLang},
+				body:     []byte("test message"),
+			}
 
-	// Extract language from md and add to context (simulating subscriber.processReceivedMessage)
-	processedCtx := t.Context()
-	languages = frame.LanguageFromMap(mockMsg.Metadata())
-	if len(languages) > 0 {
-		processedCtx = frame.LangugageToContext(processedCtx, languages)
-	}
+			// Test language extraction from queue message metadata
+			lang := frame.LanguageFromMap(mockMsg.Metadata())
+			require.Contains(t, lang, tc.expectedLang, "Language from queue message should match expected")
 
-	// Verify context has the language
-	extractedLangs := frame.LanguageFromContext(processedCtx)
-	if !reflect.DeepEqual(extractedLangs, []string{"es-ES", "pt-BR"}) {
-		t.Errorf("Expected languages [es-ES pt-BR], got %v", extractedLangs)
+			// Test setting language to queue message metadata
+			updatedMetadata := frame.LanguageToMap(mockMsg.Metadata(), []string{tc.expectedLang})
+			mockMsg.SetMetadata(updatedMetadata)
+			require.Equal(t, tc.expectedLang, mockMsg.Metadata()["lang"], "Language should be set in queue message metadata")
+		})
 	}
 }

@@ -54,30 +54,38 @@ func (opt *DependancyOption) All() []DependancyConn {
 	return opt.deps
 }
 
-func (opt *DependancyOption) Database(ctx context.Context) []DependancyConn {
-	var deps []DependancyConn
+func (opt *DependancyOption) ByImageName(imageName string) DependancyConn {
+	for _, dep := range opt.deps {
+		if dep.Name() == imageName {
+			return dep
+		}
+	}
+	return nil
+}
+
+func (opt *DependancyOption) ByIsDatabase(ctx context.Context) DependancyConn {
 	for _, dep := range opt.deps {
 		if dep.GetDS(ctx).IsDB() {
-			deps = append(deps, dep)
+			return dep
 		}
 	}
-	return deps
+	return nil
 }
-func (opt *DependancyOption) Cache(ctx context.Context) []DependancyConn {
-	var deps []DependancyConn
+
+func (opt *DependancyOption) ByIsCache(ctx context.Context) DependancyConn {
 	for _, dep := range opt.deps {
 		if dep.GetDS(ctx).IsCache() {
-			deps = append(deps, dep)
+			return dep
 		}
 	}
-	return deps
+	return nil
 }
-func (opt *DependancyOption) Queue(ctx context.Context) []DependancyConn {
-	var deps []DependancyConn
+
+func (opt *DependancyOption) ByIsQueue(ctx context.Context) DependancyConn {
 	for _, dep := range opt.deps {
 		if dep.GetDS(ctx).IsQueue() {
-			deps = append(deps, dep)
+			return dep
 		}
 	}
-	return deps
+	return nil
 }

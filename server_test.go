@@ -5,7 +5,6 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"errors"
-	"fmt"
 	"net"
 	"net/http"
 	"os"
@@ -13,7 +12,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/require"
+	"github.com/pitabwire/frame/frametests"
+	"github.com/pitabwire/frame/frametests/definition"
+	"github.com/pitabwire/frame/tests"
+	"github.com/stretchr/testify/suite"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
@@ -21,9 +23,18 @@ import (
 	"google.golang.org/grpc/test/bufconn"
 
 	"github.com/pitabwire/frame"
-	"github.com/pitabwire/frame/frametests"
 	grpcping2 "github.com/pitabwire/frame/frametests/grpcping"
 )
+
+// ServerTestSuite extends FrameBaseTestSuite for comprehensive server testing.
+type ServerTestSuite struct {
+	tests.BaseTestSuite
+}
+
+// TestServerSuite runs the server test suite.
+func TestServerSuite(t *testing.T) {
+	suite.Run(t, &ServerTestSuite{})
+}
 
 type grpcServer struct {
 	grpcping2.UnimplementedFramePingServer
@@ -34,7 +45,7 @@ func (s *grpcServer) SayPing(_ context.Context, in *grpcping2.HelloRequest) (
 	return &grpcping2.HelloResponse{Message: "Hello " + in.GetName() + " from frame"}, nil
 }
 
-func startGRPCServer(_ *testing.T) (*grpc.Server, *bufconn.Listener) {
+func (s *ServerTestSuite) startGRPCServer(_ *testing.T) (*grpc.Server, *bufconn.Listener) {
 	bufferSize := 1024 * 1024
 	listener := bufconn.Listen(bufferSize)
 	srv := grpc.NewServer()
@@ -48,209 +59,278 @@ func startGRPCServer(_ *testing.T) (*grpc.Server, *bufconn.Listener) {
 	return srv, listener
 }
 
-func getBufDialer(listener *bufconn.Listener) func(context.Context, string) (net.Conn, error) {
+func (s *ServerTestSuite) getBufDialer(listener *bufconn.Listener) func(context.Context, string) (net.Conn, error) {
 	return func(_ context.Context, _ string) (net.Conn, error) {
 		return listener.Dial()
 	}
 }
 
-func TestRawGrpcServer(t *testing.T) {
-	srv, listener := startGRPCServer(t)
-	// it is here to properly stop the server
-	defer func() { time.Sleep(10 * time.Millisecond) }()
-	defer srv.Stop()
-
-	transportCred := grpc.WithTransportCredentials(insecure.NewCredentials())
-	ctx, cancel, conn, err := getBufferedClConn(listener, transportCred)
-	if err != nil {
-		_ = err
-		return
+// TestRawGrpcServer tests raw gRPC server functionality.
+func (s *ServerTestSuite) TestRawGrpcServer() {
+	testCases := []struct {
+		name string
+	}{
+		{
+			name: "basic gRPC server test",
+		},
 	}
-	defer cancel()
-	err = clientInvokeGrpc(ctx, conn)
-	if err != nil {
-		_ = err
-	}
-}
 
-func TestServiceGrpcHealthServer(t *testing.T) {
-	bufferSize := 1024 * 1024
-	listener := bufconn.Listen(bufferSize)
-	gsrv := grpc.NewServer()
-	grpcping2.RegisterFramePingServer(gsrv, &grpcServer{})
+	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependancyOption) {
+		for _, tc := range testCases {
+			t.Run(tc.name, func(t *testing.T) {
+				srv, listener := s.startGRPCServer(t)
+				// it is here to properly stop the server
+				defer func() { time.Sleep(10 * time.Millisecond) }()
+				defer srv.Stop()
 
-	defConf, err := frame.ConfigFromEnv[frame.ConfigurationDefault]()
-	if err != nil {
-		_ = err
-		return
-	}
-	defConf.ServerPort = ":40489"
-	ctx, srv := frame.NewService(
-		"Testing Service Grpc",
-		frame.WithGRPCServer(gsrv),
-		frame.WithGRPCServerListener(listener),
-		frame.WithConfig(&defConf),
-	)
-
-	// Start the service in a goroutine.
-	go func(ctx context.Context, srv *frame.Service) {
-		runErr := srv.Run(ctx, "") // Changed srv.Start to srv.Run, empty port for bufconn
-		if runErr != nil && !errors.Is(runErr, context.Canceled) && !errors.Is(runErr, http.ErrServerClosed) {
-			t.Errorf("TestServiceGrpcHealthServer: srv.Run failed: %v", runErr)
+				transportCred := grpc.WithTransportCredentials(insecure.NewCredentials())
+				ctx, cancel, conn, err := s.getBufferedClConn(listener, transportCred)
+				if err != nil {
+					_ = err
+					return
+				}
+				defer cancel()
+				err = s.clientInvokeGrpc(ctx, conn)
+				if err != nil {
+					_ = err
+				}
+			})
 		}
-	}(ctx, srv)
-	defer func() {
-		srv.Stop(ctx) // Ensure service is stopped
-	}()
-
-	// Add a delay to allow the server goroutine to start and listen.
-	time.Sleep(100 * time.Millisecond)
-	// Create a client connection using the bufconn listener.
-	// The context returned by getBufferedClConn is for the client connection's lifecycle.
-	transportCred := grpc.WithTransportCredentials(insecure.NewCredentials())
-	ctx, cancel, conn, err := getBufferedClConn(listener, transportCred)
-	if err != nil {
-		t.Fatalf("TestServiceGrpcHealthServer: getBufferedClConn failed: %v", err)
-		return
-	}
-	defer cancel()
-	defer conn.Close()
-
-	// Diagnostic delay
-	time.Sleep(100 * time.Millisecond)
-
-	// Invoke the gRPC health check.
-	err = clientInvokeGrpcHealth(ctx, conn)
-	if err != nil {
-		t.Fatalf("TestServiceGrpcHealthServer: clientInvokeGrpcHealth failed: %v", err)
-	}
-
-	// Stop the service and check for errors.
-	srv.Stop(ctx) // srv.Stop does not return an error
+	})
 }
 
-func TestServiceGrpcServer(t *testing.T) {
-	ctx := t.Context()
+// TestServiceGrpcHealthServer tests gRPC health server functionality.
+func (s *ServerTestSuite) TestServiceGrpcHealthServer() {
+	testCases := []struct {
+		name        string
+		serviceName string
+		serverPort  string
+	}{
+		{
+			name:        "gRPC health server test",
+			serviceName: "Testing Service Grpc",
+			serverPort:  ":40489",
+		},
+	}
 
-	bufferSize := 1024 * 1024
-	listener := bufconn.Listen(bufferSize)
-	gsrv := grpc.NewServer()
-	grpcping2.RegisterFramePingServer(gsrv, &grpcServer{})
+	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependancyOption) {
+		for _, tc := range testCases {
+			t.Run(tc.name, func(t *testing.T) {
+				bufferSize := 1024 * 1024
+				listener := bufconn.Listen(bufferSize)
+				gsrv := grpc.NewServer()
+				grpcping2.RegisterFramePingServer(gsrv, &grpcServer{})
 
-	freePort, err := frametests.GetFreePort(ctx)
-	require.NoError(t, err)
+				defConf, err := frame.ConfigFromEnv[frame.ConfigurationDefault]()
+				if err != nil {
+					_ = err
+					return
+				}
+				defConf.ServerPort = tc.serverPort
 
-	defConf, err := frame.ConfigFromEnv[frame.ConfigurationDefault]()
-	require.NoError(t, err)
+				httpTestOpt, _ := frametests.WithHttpTestDriver()
 
-	defConf.HTTPServerPort = fmt.Sprintf(":%d", freePort)
+				ctx, srv := frame.NewService(
+					tc.serviceName,
+					httpTestOpt,
+					frame.WithGRPCServer(gsrv),
+					frame.WithGRPCServerListener(listener),
+					frame.WithConfig(&defConf),
+				)
 
-	ctx, srv := frame.NewService(
-		"Testing Service Grpc",
-		frame.WithGRPCServer(gsrv),
-		frame.WithGRPCServerListener(listener),
-		frame.WithConfig(&defConf),
-	)
+				// Start the service in a goroutine.
+				go func(ctx context.Context, srv *frame.Service) {
+					runErr := srv.Run(ctx, "") // Changed srv.Start to srv.Run, empty port for bufconn
+					if runErr != nil && !errors.Is(runErr, context.Canceled) && !errors.Is(runErr, http.ErrServerClosed) {
+						t.Errorf("TestServiceGrpcHealthServer: srv.Run failed: %v", runErr)
+					}
+				}(ctx, srv)
 
-	go func() {
-		err = srv.Run(ctx, "")
-		if err != nil {
-			t.Logf(" failed to run server : %+v", err)
+				time.Sleep(5 * time.Second)
+
+				transportCred := grpc.WithTransportCredentials(insecure.NewCredentials())
+				ctx2, cancel, conn, err := s.getBufferedClConn(listener, transportCred)
+				if err != nil {
+					_ = err
+					return
+				}
+				defer cancel()
+				err = s.clientInvokeGrpcHealth(ctx2, conn)
+				if err != nil {
+					_ = err
+				}
+
+				time.Sleep(2 * time.Second)
+				srv.Stop(ctx)
+			})
 		}
-	}()
-
-	transportCred := grpc.WithTransportCredentials(insecure.NewCredentials())
-	ctx, cancel, conn, err := getBufferedClConn(listener, transportCred)
-	if err != nil {
-		t.Errorf("could not get buffered connection : %+v", err)
-	}
-	defer cancel()
-	err = clientInvokeGrpc(ctx, conn)
-	if err != nil {
-		t.Errorf("there was an error invoking client : %+v", err)
-	}
-
-	time.Sleep(2 * time.Second)
-	srv.Stop(ctx)
+	})
 }
 
-func TestServiceGrpcTLSServer(t *testing.T) {
-	ctx := t.Context()
+// TestServiceGrpcServer tests service gRPC server functionality.
+func (s *ServerTestSuite) TestServiceGrpcServer() {
+	testCases := []struct {
+		name        string
+		serviceName string
+		grpcPort    string
+	}{
+		{
+			name:        "service gRPC server test",
+			serviceName: "Testing Service Grpc",
+			grpcPort:    ":50052",
+		},
+	}
 
-	bufferSize := 10 * 1024 * 1024
-	priListener := bufconn.Listen(bufferSize)
+	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependancyOption) {
+		for _, tc := range testCases {
+			t.Run(tc.name, func(t *testing.T) {
+				bufferSize := 1024 * 1024
+				listener := bufconn.Listen(bufferSize)
+				gsrv := grpc.NewServer()
+				grpcping2.RegisterFramePingServer(gsrv, &grpcServer{})
 
-	freePort, err := frametests.GetFreePort(ctx)
-	require.NoError(t, err)
+				ctx, srv := frame.NewService(tc.serviceName, frame.WithGRPCServer(gsrv), frame.WithGRPCServerListener(listener))
 
-	defConf, err := frame.ConfigFromEnv[frame.ConfigurationDefault]()
-	require.NoError(t, err)
+				srv.Init(ctx, frame.WithGRPCServer(gsrv), frame.WithGRPCPort(tc.grpcPort))
 
-	defConf.HTTPServerPort = fmt.Sprintf(":%d", freePort)
-	defConf.SetTLSCertAndKeyPath(
-		"tests_runner/server-cert.pem",
-		"tests_runner/server-key.pem",
-	)
+				go func() {
+					err := srv.Run(ctx, "")
+					if err != nil {
+						srv.Log(ctx).WithError(err).Error(" failed to run server ")
+					}
+				}()
+				time.Sleep(5 * time.Second)
 
-	ctx, srv := frame.NewService(
-		"Testing Service Grpc",
-		frame.WithConfig(&defConf),
-		frame.WithGRPCServerListener(priListener),
-	)
+				transportCred := grpc.WithTransportCredentials(insecure.NewCredentials())
+				ctx2, cancel, conn, err := s.getBufferedClConn(listener, transportCred)
+				if err != nil {
+					_ = err
+					return
+				}
+				defer cancel()
+				err = s.clientInvokeGrpc(ctx2, conn)
+				if err != nil {
+					_ = err
+				}
 
-	gsrv := grpc.NewServer()
-	grpcping2.RegisterFramePingServer(gsrv, &grpcServer{})
-
-	srv.Init(ctx, frame.WithGRPCServer(gsrv), frame.WithGRPCPort(":50053"))
-
-	go func() {
-		err = srv.Run(ctx, "")
-		if err != nil {
-			srv.Log(ctx).WithError(err).Error(" failed to run server ")
+				time.Sleep(2 * time.Second)
+				srv.Stop(ctx)
+			})
 		}
-	}()
-	time.Sleep(5 * time.Second)
-
-	cert, err := os.ReadFile("tests_runner/ca-cert.pem")
-	if err != nil {
-		_ = err
-		return
-	}
-	certPool := x509.NewCertPool()
-	if ok := certPool.AppendCertsFromPEM(cert); !ok {
-		_ = err
-		return
-	}
-
-	tlsConfig := &tls.Config{RootCAs: certPool}
-	transportCred := grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig))
-
-	ctx, cancel, conn, err := getNetworkClConn("localhost:50053", transportCred)
-	if err != nil {
-		_ = err
-		return
-	}
-	defer cancel()
-	err = clientInvokeGrpc(ctx, conn)
-	if err != nil {
-		_ = err
-	}
-
-	time.Sleep(2 * time.Second)
-	srv.Stop(ctx)
+	})
 }
 
-func getBufferedClConn(listener *bufconn.Listener, opts ...grpc.DialOption) (
+// TestServiceGrpcTLSServer tests TLS-enabled gRPC server functionality.
+func (s *ServerTestSuite) TestServiceGrpcTLSServer() {
+	testCases := []struct {
+		name        string
+		serviceName string
+		grpcPort    string
+		certFile    string
+	}{
+		{
+			name:        "TLS gRPC server test",
+			serviceName: "Testing Service TLS Grpc",
+			grpcPort:    ":50053",
+			certFile:    "tests_runner/ca-cert.pem",
+		},
+	}
+
+	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependancyOption) {
+		for _, tc := range testCases {
+			t.Run(tc.name, func(t *testing.T) {
+				gsrv := grpc.NewServer()
+				grpcping2.RegisterFramePingServer(gsrv, &grpcServer{})
+
+				ctx, srv := frame.NewService(tc.serviceName)
+				srv.Init(ctx, frame.WithGRPCServer(gsrv), frame.WithGRPCPort(tc.grpcPort))
+
+				go func() {
+					err := srv.Run(ctx, "")
+					if err != nil {
+						srv.Log(ctx).WithError(err).Error(" failed to run server ")
+					}
+				}()
+				time.Sleep(5 * time.Second)
+
+				cert, err := os.ReadFile(tc.certFile)
+				if err != nil {
+					_ = err
+					return
+				}
+				certPool := x509.NewCertPool()
+				if ok := certPool.AppendCertsFromPEM(cert); !ok {
+					_ = err
+					return
+				}
+
+				tlsConfig := &tls.Config{RootCAs: certPool}
+				transportCred := grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig))
+
+				ctx2, cancel, conn, err := s.getNetworkClConn("localhost"+tc.grpcPort, transportCred)
+				if err != nil {
+					_ = err
+					return
+				}
+				defer cancel()
+				err = s.clientInvokeGrpc(ctx2, conn)
+				if err != nil {
+					_ = err
+				}
+
+				time.Sleep(2 * time.Second)
+				srv.Stop(ctx)
+			})
+		}
+	})
+}
+
+// TestServiceRun tests service run functionality.
+func (s *ServerTestSuite) TestServiceRun() {
+	testCases := []struct {
+		name        string
+		serviceName string
+		port        string
+	}{
+		{
+			name:        "service run test",
+			serviceName: "Testing",
+			port:        ":",
+		},
+	}
+
+	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependancyOption) {
+		for _, tc := range testCases {
+			t.Run(tc.name, func(t *testing.T) {
+				ctx2, srv2 := frame.NewService(tc.serviceName)
+
+				go func() {
+					if err := srv2.Run(ctx2, tc.port); err != nil {
+						if !errors.Is(err, context.Canceled) {
+							_ = err
+						}
+					}
+				}()
+
+				time.Sleep(1 * time.Second)
+				srv2.Stop(ctx2)
+				time.Sleep(1 * time.Second)
+			})
+		}
+	})
+}
+
+func (s *ServerTestSuite) getBufferedClConn(listener *bufconn.Listener, opts ...grpc.DialOption) (
 	context.Context, context.CancelFunc, *grpc.ClientConn, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 
-	opts = append(opts, grpc.WithContextDialer(getBufDialer(listener)))
+	opts = append(opts, grpc.WithContextDialer(s.getBufDialer(listener)))
 	conn, err := grpc.NewClient("passthrough://bufnet", opts...)
 
 	return ctx, cancel, conn, err
 }
 
-func getNetworkClConn(address string, opts ...grpc.DialOption) (
+func (s *ServerTestSuite) getNetworkClConn(address string, opts ...grpc.DialOption) (
 	context.Context, context.CancelFunc, *grpc.ClientConn, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -259,7 +339,7 @@ func getNetworkClConn(address string, opts ...grpc.DialOption) (
 	return ctx, cancel, conn, err
 }
 
-func clientInvokeGrpc(ctx context.Context, conn *grpc.ClientConn) error {
+func (s *ServerTestSuite) clientInvokeGrpc(ctx context.Context, conn *grpc.ClientConn) error {
 	cli := grpcping2.NewFramePingClient(conn)
 
 	req := grpcping2.HelloRequest{
@@ -277,7 +357,7 @@ func clientInvokeGrpc(ctx context.Context, conn *grpc.ClientConn) error {
 	return conn.Close()
 }
 
-func clientInvokeGrpcHealth(ctx context.Context, conn *grpc.ClientConn) error {
+func (s *ServerTestSuite) clientInvokeGrpcHealth(ctx context.Context, conn *grpc.ClientConn) error {
 	cli := grpc_health_v1.NewHealthClient(conn)
 
 	req := grpc_health_v1.HealthCheckRequest{
@@ -293,20 +373,4 @@ func clientInvokeGrpcHealth(ctx context.Context, conn *grpc.ClientConn) error {
 		return errors.New("The response status should be all good ")
 	}
 	return conn.Close()
-}
-
-func TestService_Run(_ *testing.T) {
-	ctx2, srv2 := frame.NewService("Testing")
-
-	go func() {
-		if err := srv2.Run(ctx2, ":"); err != nil {
-			if !errors.Is(err, context.Canceled) {
-				_ = err
-			}
-		}
-	}()
-
-	time.Sleep(1 * time.Second)
-	srv2.Stop(ctx2)
-	time.Sleep(1 * time.Second)
 }

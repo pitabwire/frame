@@ -17,7 +17,7 @@ const (
 	OryKetoImage = "oryd/keto:latest"
 
 	KetoConfiguration = `
-version: v0.12.0
+version: v0.14.0
 
 dsn: memory
 
@@ -36,8 +36,6 @@ log:
 namespaces:
   - id: 0
     name: files
-    config:
-      location: file://etc/config/keto_namespaces
 
 `
 )
@@ -75,7 +73,7 @@ func (d *dependancy) migrateContainer(
 ) error {
 	containerRequest := testcontainers.ContainerRequest{
 		Image: d.Name(),
-		Cmd:   []string{"migrate", "sql", "up", "--read-from-env", "--yes"},
+		Cmd:   []string{"migrate", "up", "-y"},
 		Env: map[string]string{
 			"LOG_LEVEL": "debug",
 			"DSN":       databaseURL,
@@ -109,8 +107,8 @@ func (d *dependancy) migrateContainer(
 }
 
 func (d *dependancy) Setup(ctx context.Context, ntwk *testcontainers.DockerNetwork) error {
-	if len(d.Opts().Dependencies) == 0 || !d.Opts().Dependencies[0].GetInternalDS(ctx).IsDB() {
-		return errors.New("no Database dependencies was supplied")
+	if len(d.Opts().Dependencies) == 0 || !d.Opts().Dependencies[0].GetDS(ctx).IsDB() {
+		return errors.New("no ByIsDatabase dependencies was supplied")
 	}
 
 	databaseURL := d.Opts().Dependencies[0].GetInternalDS(ctx).String()
@@ -121,7 +119,7 @@ func (d *dependancy) Setup(ctx context.Context, ntwk *testcontainers.DockerNetwo
 
 	containerRequest := testcontainers.ContainerRequest{
 		Image: d.Name(),
-		Cmd:   []string{"serve", "all", "--config", "/etc/config/keto.yml", "--dev"},
+		Cmd:   []string{"serve", "--config", "/etc/config/keto.yml"},
 		Env: d.Opts().Env(map[string]string{
 			"LOG_LEVEL":                 "debug",
 			"LOG_LEAK_SENSITIVE_VALUES": "true",

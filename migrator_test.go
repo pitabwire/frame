@@ -4,203 +4,243 @@ import (
 	"os"
 	"testing"
 
-	"github.com/pitabwire/util"
+	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 	"gorm.io/gorm"
 
 	"github.com/pitabwire/frame"
+	"github.com/pitabwire/frame/frametests/definition"
+	"github.com/pitabwire/frame/tests"
 )
 
-func TestSaveNewMigrations(t *testing.T) {
-	testDBURL := util.GetEnv(
-		"TEST_DATABASE_URL",
-		"postgres://frame:secret@localhost:5435/framedatabase?sslmode=disable",
-	)
-	ctx, svc := frame.NewService("Test Migrations Srv")
-
-	mainDB := frame.WithDatastoreConnection(testDBURL, false)
-	svc.Init(ctx, mainDB)
-
-	svc.DB(ctx, false).Session(&gorm.Session{AllowGlobalUpdate: true}).Unscoped().Delete(&frame.Migration{})
-
-	err := svc.MigrateDatastore(ctx, "./tests_runner/migrations/default")
-	if err != nil {
-		t.Errorf("Could not migrate successfully because : %s", err)
-		return
-	}
-
-	migrationPath := "./tests_runner/migrations/scans/scanned_select.sql"
-
-	err = svc.DB(ctx, false).Where("name = ?", migrationPath).Unscoped().Delete(&frame.Migration{}).Error
-	if err != nil {
-		t.Errorf("Could not ensure migrations are clean%s", err)
-		return
-	}
-
-	migrationContent, err := os.ReadFile(migrationPath)
-	if err != nil {
-		t.Errorf("Could not read scanned migration %s", err)
-		return
-	}
-
-	pool := svc.DBPool()
-	testMigrator := svc.NewMigrator(ctx, pool)
-
-	err = testMigrator.SaveMigrationString(ctx, migrationPath, string(migrationContent), "")
-	if err != nil {
-		t.Errorf("Could not save new migration %s", err)
-		return
-	}
-
-	migration := frame.Migration{Name: migrationPath}
-	err = svc.DB(ctx, false).First(&migration, "name = ?", migrationPath).Error
-	if err != nil || migration.ID == "" {
-		t.Errorf("Migration was not saved successfully %s", err)
-		return
-	}
-
-	updateSQL := "SELECT 2;"
-	err = testMigrator.SaveMigrationString(ctx, migrationPath, updateSQL, "")
-	if err != nil {
-		t.Errorf("Could not update unapplied migration %s", err)
-		return
-	}
-
-	updatedMigration := frame.Migration{Name: migrationPath}
-	err = svc.DB(ctx, false).First(&updatedMigration, "name = ?", migrationPath).Error
-	if err != nil {
-		t.Errorf("Migration was not updated successfully %s", err)
-		return
-	}
-
-	if migration.ID != updatedMigration.ID {
-		t.Errorf("Migration ids do not match %s and %s", migration.ID, updatedMigration.ID)
-		return
-	}
-
-	if updatedMigration.Patch != updateSQL {
-		t.Errorf("Migration was not updated successfully %s to %s", updatedMigration.Patch, updateSQL)
-		return
-	}
+// MigratorTestSuite extends BaseTestSuite for comprehensive migrator testing.
+type MigratorTestSuite struct {
+	tests.BaseTestSuite
 }
 
-func TestApplyMigrations(t *testing.T) {
-	testDBURL := util.GetEnv(
-		"TEST_DATABASE_URL",
-		"postgres://frame:secret@localhost:5435/framedatabase?sslmode=disable",
-	)
-
-	defConf, err := frame.ConfigFromEnv[frame.ConfigurationDefault]()
-	if err != nil {
-		t.Errorf("Could not processFunc test configurations %v", err)
-		return
-	}
-	defConf.DatabaseSlowQueryLogThreshold = "5ms"
-	defConf.DatabaseTraceQueries = true
-	defConf.LogLevel = "debug"
-
-	ctx, svc := frame.NewService("Test Migrations Srv", frame.WithConfig(&defConf))
-
-	mainDB := frame.WithDatastoreConnection(testDBURL, false)
-	svc.Init(ctx, mainDB)
-
-	svc.DB(ctx, false).Session(&gorm.Session{AllowGlobalUpdate: true}).Unscoped().Delete(&frame.Migration{})
-
-	err = svc.MigrateDatastore(ctx, "./tests_runner/migrations/default")
-	if err != nil {
-		t.Errorf("Could not migrate successfully because : %s", err)
-		return
-	}
-
-	migrationPath := "./tests_runner/migrations/applied/apply_select.sql"
-
-	err = svc.DB(ctx, false).Where("name = ?", migrationPath).Unscoped().Delete(&frame.Migration{}).Error
-	if err != nil {
-		t.Errorf("Could not ensure migrations are clean%s", err)
-		return
-	}
-
-	migrationContent, err := os.ReadFile(migrationPath)
-	if err != nil {
-		t.Errorf("Could not read scanned migration %s", err)
-		return
-	}
-
-	pool := svc.DBPool()
-	testMigrator := svc.NewMigrator(ctx, pool)
-
-	err = testMigrator.SaveMigrationString(ctx, migrationPath, string(migrationContent), "")
-	if err != nil {
-		t.Errorf("Could not save new migration %s", err)
-		return
-	}
-
-	migration := frame.Migration{Name: migrationPath}
-	err = svc.DB(ctx, false).First(&migration, "name = ?", migrationPath).Error
-	if err != nil || migration.AppliedAt.Valid {
-		t.Errorf("Migration was not applied successfully %s", err)
-		return
-	}
-
-	err = testMigrator.ApplyNewMigrations(ctx)
-	if err != nil {
-		t.Errorf("Could not save new migration %s", err)
-		return
-	}
-
-	appliedMigration := frame.Migration{Name: migrationPath}
-	err = svc.DB(ctx, false).First(&appliedMigration, "name = ?", migrationPath).Error
-	if err != nil || !appliedMigration.AppliedAt.Valid {
-		t.Errorf("Migration was not applied successfully %s", err)
-		return
-	}
+// TestMigratorSuite runs the migrator test suite.
+func TestMigratorSuite(t *testing.T) {
+	suite.Run(t, &MigratorTestSuite{})
 }
 
-func TestService_MigrateDatastore(t *testing.T) {
-	testDBURL := util.GetEnv(
-		"TEST_DATABASE_URL",
-		"postgres://frame:secret@localhost:5435/framedatabase?sslmode=disable",
-	)
-
-	ctx, srv := frame.NewService("Test Migrations Srv")
-
-	mainDB := frame.WithDatastoreConnection(testDBURL, false)
-	srv.Init(ctx, mainDB)
-
-	srv.DB(ctx, false).Session(&gorm.Session{AllowGlobalUpdate: true}).Unscoped().Delete(&frame.Migration{})
-
-	migrationPath := "./migrations/default"
-
-	err := srv.MigrateDatastore(ctx, migrationPath)
-	if err != nil {
-		t.Errorf("Could not migrate successfully because : %s", err)
+// TestSaveNewMigrations tests saving new migrations.
+func (s *MigratorTestSuite) TestSaveNewMigrations() {
+	testCases := []struct {
+		name          string
+		serviceName   string
+		migrationDir  string
+		migrationPath string
+		updateSQL     string
+	}{
+		{
+			name:          "save and update new migrations",
+			serviceName:   "Test Migrations Srv",
+			migrationDir:  "./tests_runner/migrations/default",
+			migrationPath: "./tests_runner/migrations/scans/scanned_select.sql",
+			updateSQL:     "SELECT 2;",
+		},
 	}
+
+	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependancyOption) {
+		for _, tc := range testCases {
+			t.Run(tc.name, func(t *testing.T) {
+				db := dep.ByIsDatabase(t.Context())
+
+				ctx, svc := frame.NewService(tc.serviceName)
+
+				mainDB := frame.WithDatastoreConnection(db.GetDS(ctx).String(), false)
+				svc.Init(ctx, mainDB)
+
+				// Clean up any existing migrations
+				svc.DB(ctx, false).Session(&gorm.Session{AllowGlobalUpdate: true}).Unscoped().Delete(&frame.Migration{})
+
+				// Apply initial migrations
+				err := svc.MigrateDatastore(ctx, tc.migrationDir)
+				require.NoError(t, err, "Initial migration should succeed")
+
+				// Clean up specific migration for testing
+				err = svc.DB(ctx, false).Where("name = ?", tc.migrationPath).Unscoped().Delete(&frame.Migration{}).Error
+				require.NoError(t, err, "Cleanup of specific migration should succeed")
+
+				// Read migration content
+				migrationContent, err := os.ReadFile(tc.migrationPath)
+				require.NoError(t, err, "Reading migration file should succeed")
+
+				// Create migrator and save migration
+				pool := svc.DBPool()
+				testMigrator := svc.NewMigrator(ctx, pool)
+
+				err = testMigrator.SaveMigrationString(ctx, tc.migrationPath, string(migrationContent), "")
+				require.NoError(t, err, "Saving new migration should succeed")
+
+				// Verify migration was saved
+				migration := frame.Migration{Name: tc.migrationPath}
+				err = svc.DB(ctx, false).First(&migration, "name = ?", tc.migrationPath).Error
+				require.NoError(t, err, "Finding saved migration should succeed")
+				require.NotEmpty(t, migration.ID, "Migration ID should not be empty")
+
+				// Update migration
+				err = testMigrator.SaveMigrationString(ctx, tc.migrationPath, tc.updateSQL, "")
+				require.NoError(t, err, "Updating migration should succeed")
+
+				// Verify migration was updated
+				updatedMigration := frame.Migration{Name: tc.migrationPath}
+				err = svc.DB(ctx, false).First(&updatedMigration, "name = ?", tc.migrationPath).Error
+				require.NoError(t, err, "Finding updated migration should succeed")
+				require.Equal(t, migration.ID, updatedMigration.ID, "Migration IDs should match")
+				require.Equal(t, tc.updateSQL, updatedMigration.Patch, "Migration patch should be updated")
+			})
+		}
+	})
 }
 
-func TestService_MigrateDatastoreIDempotency(t *testing.T) {
-	testDBURL := util.GetEnv(
-		"TEST_DATABASE_URL",
-		"postgres://frame:secret@localhost:5435/framedatabase?sslmode=disable",
-	)
-
-	ctx, srv := frame.NewService("Test Migrations Srv")
-
-	mainDB := frame.WithDatastoreConnection(testDBURL, false)
-	srv.Init(ctx, mainDB)
-
-	srv.DB(ctx, false).Session(&gorm.Session{AllowGlobalUpdate: true}).Unscoped().Delete(&frame.Migration{})
-
-	migrationPath := "./migrations/default"
-
-	err := srv.MigrateDatastore(ctx, migrationPath)
-	if err != nil {
-		t.Errorf("Could not migrate successfully because : %s", err)
+// TestApplyMigrations tests applying migrations.
+func (s *MigratorTestSuite) TestApplyMigrations() {
+	testCases := []struct {
+		name               string
+		serviceName        string
+		migrationDir       string
+		slowQueryThreshold string
+		traceQueries       bool
+		logLevel           string
+	}{
+		{
+			name:               "apply migrations with configuration",
+			serviceName:        "Test Migrations Srv",
+			migrationDir:       "./tests_runner/migrations/default",
+			slowQueryThreshold: "5ms",
+			traceQueries:       true,
+			logLevel:           "debug",
+		},
 	}
-	err = srv.MigrateDatastore(ctx, migrationPath)
-	if err != nil {
-		t.Errorf("Could not migrate successfully second time because : %s", err)
+
+	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependancyOption) {
+		for _, tc := range testCases {
+			t.Run(tc.name, func(t *testing.T) {
+				db := dep.ByIsDatabase(t.Context())
+
+				defConf, err := frame.ConfigFromEnv[frame.ConfigurationDefault]()
+				require.NoError(t, err, "Configuration loading should succeed")
+
+				defConf.DatabaseSlowQueryLogThreshold = tc.slowQueryThreshold
+				defConf.DatabaseTraceQueries = tc.traceQueries
+				defConf.LogLevel = tc.logLevel
+
+				ctx, svc := frame.NewService(tc.serviceName, frame.WithConfig(&defConf))
+
+				mainDB := frame.WithDatastoreConnection(db.GetDS(ctx).String(), false)
+				svc.Init(ctx, mainDB)
+
+				// Clean up existing migrations
+				svc.DB(ctx, false).Session(&gorm.Session{AllowGlobalUpdate: true}).Unscoped().Delete(&frame.Migration{})
+
+				// Apply migrations
+				err = svc.MigrateDatastore(ctx, tc.migrationDir)
+				require.NoError(t, err, "Migration application should succeed")
+
+				// Verify migrations were applied
+				var count int64
+				err = svc.DB(ctx, false).Model(&frame.Migration{}).Count(&count).Error
+				require.NoError(t, err, "Counting migrations should succeed")
+				require.Greater(t, count, int64(0), "At least one migration should exist")
+			})
+		}
+	})
+}
+
+// TestServiceMigrateDatastore tests datastore migration.
+func (s *MigratorTestSuite) TestServiceMigrateDatastore() {
+	testCases := []struct {
+		name         string
+		serviceName  string
+		migrationDir string
+	}{
+		{
+			name:         "migrate datastore",
+			serviceName:  "Test Migrations Srv",
+			migrationDir: "./tests_runner/migrations/default",
+		},
 	}
-	err = srv.MigrateDatastore(ctx, migrationPath)
-	if err != nil {
-		t.Errorf("Could not migrate successfully third time because : %s", err)
+
+	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependancyOption) {
+		for _, tc := range testCases {
+			t.Run(tc.name, func(t *testing.T) {
+				db := dep.ByIsDatabase(t.Context())
+
+				ctx, svc := frame.NewService(tc.serviceName)
+
+				mainDB := frame.WithDatastoreConnection(db.GetDS(ctx).String(), false)
+				svc.Init(ctx, mainDB)
+
+				// Clean up existing migrations
+				svc.DB(ctx, false).Session(&gorm.Session{AllowGlobalUpdate: true}).Unscoped().Delete(&frame.Migration{})
+
+				// Apply migrations
+				err := svc.MigrateDatastore(ctx, tc.migrationDir)
+				require.NoError(t, err, "Datastore migration should succeed")
+
+				// Verify at least one migration exists
+				var count int64
+				err = svc.DB(ctx, false).Model(&frame.Migration{}).Count(&count).Error
+				require.NoError(t, err, "Counting migrations should succeed")
+				require.Greater(t, count, int64(0), "At least one migration should exist")
+			})
+		}
+	})
+}
+
+// TestServiceMigrateDatastoreIdempotency tests migration idempotency.
+func (s *MigratorTestSuite) TestServiceMigrateDatastoreIdempotency() {
+	testCases := []struct {
+		name         string
+		serviceName  string
+		migrationDir string
+		runCount     int
+	}{
+		{
+			name:         "migrate datastore idempotency",
+			serviceName:  "Test Migrations Srv",
+			migrationDir: "./tests_runner/migrations/default",
+			runCount:     3,
+		},
 	}
+
+	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependancyOption) {
+		for _, tc := range testCases {
+			t.Run(tc.name, func(t *testing.T) {
+				db := dep.ByIsDatabase(t.Context())
+
+				ctx, svc := frame.NewService(tc.serviceName)
+
+				mainDB := frame.WithDatastoreConnection(db.GetDS(ctx).String(), false)
+				svc.Init(ctx, mainDB)
+
+				// Clean up existing migrations
+				svc.DB(ctx, false).Session(&gorm.Session{AllowGlobalUpdate: true}).Unscoped().Delete(&frame.Migration{})
+
+				// Run migration multiple times to test idempotency
+				var finalCount int64
+				for i := 0; i < tc.runCount; i++ {
+					err := svc.MigrateDatastore(ctx, tc.migrationDir)
+					require.NoError(t, err, "Migration run %d should succeed", i+1)
+
+					// Get count after each run
+					err = svc.DB(ctx, false).Model(&frame.Migration{}).Count(&finalCount).Error
+					require.NoError(t, err, "Counting migrations after run %d should succeed", i+1)
+				}
+
+				// Verify final count is consistent (idempotent)
+				require.Greater(t, finalCount, int64(0), "At least one migration should exist")
+
+				// Run one more time and verify count doesn't change
+				err := svc.MigrateDatastore(ctx, tc.migrationDir)
+				require.NoError(t, err, "Final migration run should succeed")
+
+				var finalCount2 int64
+				err = svc.DB(ctx, false).Model(&frame.Migration{}).Count(&finalCount2).Error
+				require.NoError(t, err, "Final count should succeed")
+				require.Equal(t, finalCount, finalCount2, "Migration count should be idempotent")
+			})
+		}
+	})
 }

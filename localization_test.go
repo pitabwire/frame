@@ -293,19 +293,19 @@ func (s *LocalizationTestSuite) TestLanguageGrpcInterceptors() {
 		name         string
 		serviceName  string
 		metadataLang string
-		expectedLang string
+		expectedLang []string
 	}{
 		{
 			name:         "gRPC unary interceptor with language metadata",
 			serviceName:  "Test Localization Srv",
 			metadataLang: "en",
-			expectedLang: "en",
+			expectedLang: []string{"en"},
 		},
 		{
 			name:         "gRPC unary interceptor with swahili metadata",
 			serviceName:  "Test Localization Srv",
 			metadataLang: "sw",
-			expectedLang: "sw",
+			expectedLang: []string{"sw"},
 		},
 	}
 
@@ -325,7 +325,7 @@ func (s *LocalizationTestSuite) TestLanguageGrpcInterceptors() {
 
 			result, err := interceptor(ctx, nil, nil, handler)
 			require.NoError(t, err, "gRPC interceptor should succeed")
-			require.Contains(t, result.(string), tc.expectedLang, "gRPC interceptor should detect correct language")
+			require.Contains(t, result.(string), tc.expectedLang[0], "gRPC interceptor should detect correct language")
 		})
 	}
 }
@@ -336,22 +336,22 @@ func (s *LocalizationTestSuite) TestLanguageFromGrpcRequest() {
 		name         string
 		serviceName  string
 		metadataLang string
-		expectedLang string
+		expectedLang []string
 	}{
 		{
 			name:         "extract language from gRPC request metadata",
 			serviceName:  "Test Localization Srv",
 			metadataLang: "en",
-			expectedLang: "en",
+			expectedLang: []string{"en"},
 		},
 	}
 
 	for _, tc := range testCases {
 		s.T().Run(tc.name, func(t *testing.T) {
-			_, _ = frame.NewService(tc.serviceName)
+			ctx, _ := frame.NewService(tc.serviceName)
 
 			md := metadata.New(map[string]string{"accept-language": tc.metadataLang})
-			grpcCtx := metadata.NewIncomingContext(context.Background(), md)
+			grpcCtx := metadata.NewIncomingContext(ctx, md)
 
 			lang := frame.LanguageFromGrpcRequest(grpcCtx)
 			require.Equal(t, tc.expectedLang, lang, "Language from gRPC request should match expected")
@@ -383,13 +383,13 @@ func (s *LocalizationTestSuite) TestQueueLanguagePropagation() {
 		name         string
 		serviceName  string
 		metadataLang string
-		expectedLang string
+		expectedLang []string
 	}{
 		{
 			name:         "queue language propagation",
 			serviceName:  "Test Localization Srv",
 			metadataLang: "en",
-			expectedLang: "en",
+			expectedLang: []string{"en"},
 		},
 	}
 
@@ -404,12 +404,12 @@ func (s *LocalizationTestSuite) TestQueueLanguagePropagation() {
 
 			// Test language extraction from queue message metadata
 			lang := frame.LanguageFromMap(mockMsg.Metadata())
-			require.Contains(t, lang, tc.expectedLang, "Language from queue message should match expected")
+			require.Contains(t, lang, tc.expectedLang[0], "Language from queue message should match expected")
 
 			// Test setting language to queue message metadata
-			updatedMetadata := frame.LanguageToMap(mockMsg.Metadata(), []string{tc.expectedLang})
+			updatedMetadata := frame.LanguageToMap(mockMsg.Metadata(), []string{tc.expectedLang[0]})
 			mockMsg.SetMetadata(updatedMetadata)
-			require.Equal(t, tc.expectedLang, mockMsg.Metadata()["lang"], "Language should be set in queue message metadata")
+			require.Equal(t, tc.expectedLang[0], mockMsg.Metadata()["lang"], "Language should be set in queue message metadata")
 		})
 	}
 }

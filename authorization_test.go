@@ -37,21 +37,23 @@ func initResources(_ context.Context) []definition.TestResource {
 
 	hydra := testoryhydra.NewWithOpts(
 		testoryhydra.HydraConfiguration, definition.WithDependancies(pg),
-		definition.WithEnableLogging(false), definition.WithUseHostMode(true))
+		definition.WithEnableLogging(false),
+		definition.WithUseHostMode(false))
 
 	keto := testoryketo.NewWithOpts(
 		testoryketo.KetoConfiguration, definition.WithDependancies(pg),
-		definition.WithEnableLogging(false), definition.WithUseHostMode(true))
+		definition.WithEnableLogging(true),
+		definition.WithUseHostMode(false))
 
 	resources := []definition.TestResource{pg, queue, hydra, keto}
 	return resources
 }
 
-func (bs *AuthorizationTestSuite) SetupSuite() {
-	if bs.InitResourceFunc == nil {
-		bs.InitResourceFunc = initResources
+func (s *AuthorizationTestSuite) SetupSuite() {
+	if s.InitResourceFunc == nil {
+		s.InitResourceFunc = initResources
 	}
-	bs.BaseTestSuite.SetupSuite()
+	s.BaseTestSuite.SetupSuite()
 }
 
 // TestAuthorizationSuite runs the authorization test suite.
@@ -99,7 +101,6 @@ func (s *AuthorizationTestSuite) authorizationControlListWrite(ctx context.Conte
 func (s *AuthorizationTestSuite) TestAuthorizationControlListWrite() {
 	testCases := []struct {
 		name        string
-		path        string
 		action      string
 		subject     string
 		expectError bool
@@ -107,7 +108,6 @@ func (s *AuthorizationTestSuite) TestAuthorizationControlListWrite() {
 	}{
 		{
 			name:        "successful authorization write",
-			path:        "/admin/relation-tuples",
 			action:      "read",
 			subject:     "tested",
 			expectError: false,
@@ -125,7 +125,6 @@ func (s *AuthorizationTestSuite) TestAuthorizationControlListWrite() {
 		},
 		{
 			name:        "write with missing claims",
-			path:        "/admin/relation-tuples",
 			action:      "read",
 			subject:     "tested",
 			expectError: true,
@@ -141,14 +140,25 @@ func (s *AuthorizationTestSuite) TestAuthorizationControlListWrite() {
 				ctx := t.Context()
 				keto := dep.ByImageName(testoryketo.OryKetoImage) // Keto is treated as a queue service
 
+				ketoUri := keto.GetDS(ctx)
+				ketoAdminUri := ketoUri.ExtendPath("admin/relation-tuples")
+
+				portMapping, err := keto.PortMapping(ctx, "4466/tcp")
+				require.NoError(t, err)
+
+				ketoReadUri := ketoUri.ExtendPath("/relation-tuples/check")
+				ketoReadUri, err = ketoReadUri.ChangePort(portMapping)
+				require.NoError(t, err)
+
 				// Setup service and context
 				ctx, srv := frame.NewService("Test Srv", frame.WithConfig(&frame.ConfigurationDefault{
-					AuthorizationServiceWriteURI: keto.GetDS(ctx).String(),
+					AuthorizationServiceWriteURI: ketoAdminUri.String(),
+					AuthorizationServiceReadURI:  ketoReadUri.String(),
 				}))
 				ctx = frame.SvcToContext(ctx, srv)
 				ctx = tc.setupClaims(ctx)
 
-				err := s.authorizationControlListWrite(ctx, keto.GetDS(ctx).String(), tc.action, tc.subject)
+				err = s.authorizationControlListWrite(ctx, ketoAdminUri.String(), tc.action, tc.subject)
 
 				if tc.expectError {
 					require.Error(t, err, "expected authorization write to fail")
@@ -164,7 +174,6 @@ func (s *AuthorizationTestSuite) TestAuthorizationControlListWrite() {
 func (s *AuthorizationTestSuite) TestAuthHasAccess() {
 	testCases := []struct {
 		name         string
-		paths        []string
 		action       string
 		subject      string
 		checkSubject string
@@ -175,7 +184,6 @@ func (s *AuthorizationTestSuite) TestAuthHasAccess() {
 	}{
 		{
 			name:         "successful access check with existing permission",
-			paths:        []string{"/admin/relation-tuples", "/relation-tuples/check"},
 			action:       "read",
 			subject:      "reader",
 			checkSubject: "reader",
@@ -196,7 +204,6 @@ func (s *AuthorizationTestSuite) TestAuthHasAccess() {
 		},
 		{
 			name:         "access check with non-existing permission",
-			paths:        []string{"/admin/relation-tuples", "/relation-tuples/check"},
 			action:       "read",
 			subject:      "reader",
 			checkSubject: "nonexistent",
@@ -223,17 +230,21 @@ func (s *AuthorizationTestSuite) TestAuthHasAccess() {
 				ctx := t.Context()
 				keto := dep.ByImageName(testoryketo.OryKetoImage) // Keto is treated as a queue service
 
+				ketoUri := keto.GetDS(ctx)
+				ketoAdminUri := ketoUri.ExtendPath("admin/relation-tuples")
+				ketoReadUri := ketoUri.ExtendPath("/relation-tuples/check")
+
 				// Setup service and context
 				ctx, srv := frame.NewService("Test Srv", frame.WithConfig(
 					&frame.ConfigurationDefault{
-						AuthorizationServiceReadURI:  keto.GetDS(ctx).String(),
-						AuthorizationServiceWriteURI: keto.GetDS(ctx).String(),
+						AuthorizationServiceReadURI:  ketoReadUri.String(),
+						AuthorizationServiceWriteURI: ketoAdminUri.String(),
 					}))
 				ctx = frame.SvcToContext(ctx, srv)
 				ctx = tc.setupClaims(ctx)
 
 				// First write the permission
-				err := s.authorizationControlListWrite(ctx, keto.GetDS(ctx).String(), tc.action, tc.subject)
+				err := s.authorizationControlListWrite(ctx, ketoAdminUri.String(), tc.action, tc.subject)
 				if tc.subject == tc.checkSubject { // Only expect success if we're checking the subject we wrote
 					require.NoError(t, err, "authorization write should succeed for setup")
 				}

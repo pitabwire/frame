@@ -111,14 +111,20 @@ func (d *postgreSQLDependancy) GetRandomisedDS(
 	ctx context.Context,
 	randomisedPrefix string,
 ) (frame.DataSource, func(context.Context), error) {
-	connectionURI, err := d.GetDS(ctx).ToURI()
+	return CreateDatabase(ctx, d.GetDS(ctx), randomisedPrefix)
+}
+
+// CreateDatabase Creates another database with a suffix dbname on the connection supplied
+func CreateDatabase(ctx context.Context, connection frame.DataSource, DBName string) (frame.DataSource, func(context.Context), error) {
+
+	connectionURI, err := connection.ToURI()
 	if err != nil {
 		return "", func(_ context.Context) {}, err
 	}
 
-	newDatabaseName := suffixedDatabaseName(connectionURI, randomisedPrefix)
+	newDBName := suffixedDatabaseName(connectionURI, DBName)
 
-	connectionURI, err = ensureDatabaseExists(ctx, connectionURI, newDatabaseName)
+	connectionURI, err = ensureDatabaseExists(ctx, connectionURI, newDBName)
 	if err != nil {
 		return "", func(_ context.Context) {}, err
 	}

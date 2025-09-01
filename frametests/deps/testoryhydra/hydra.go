@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/pitabwire/frame/frametests/deps/testpostgres"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
 
@@ -148,8 +149,15 @@ func (d *dependancy) Setup(ctx context.Context, ntwk *testcontainers.DockerNetwo
 		return errors.New("no ByIsDatabase dependencies was supplied")
 	}
 
-	databaseURL := d.Opts().Dependencies[0].GetInternalDS(ctx).String()
-	err := d.migrateContainer(ctx, ntwk, databaseURL)
+	hydraDatabase, cleanupFunc, err := testpostgres.CreateDatabase(ctx, d.Opts().Dependencies[0].GetInternalDS(ctx), "hydra")
+	if err != nil {
+		return err
+	}
+
+	defer cleanupFunc(ctx)
+
+	databaseURL := hydraDatabase.String()
+	err = d.migrateContainer(ctx, ntwk, databaseURL)
 	if err != nil {
 		return err
 	}

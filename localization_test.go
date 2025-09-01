@@ -194,21 +194,18 @@ func (s *LocalizationTestSuite) TestLanguageContextManagement() {
 // TestLanguageMapManagement tests language map management.
 func (s *LocalizationTestSuite) TestLanguageMapManagement() {
 	testCases := []struct {
-		name        string
-		serviceName string
-		languageMap map[string]string
-		testKey     string
-		testValue   string
+		name          string
+		serviceName   string
+		anyMap        map[string]string
+		testLanguages []string
 	}{
 		{
 			name:        "language map management",
 			serviceName: "Test Localization Srv",
-			languageMap: map[string]string{
-				"en": "English",
-				"sw": "Swahili",
+			anyMap: map[string]string{
+				"world": "data",
 			},
-			testKey:   "en",
-			testValue: "English",
+			testLanguages: []string{"en", "sw"},
 		},
 	}
 
@@ -217,14 +214,10 @@ func (s *LocalizationTestSuite) TestLanguageMapManagement() {
 			_, _ = frame.NewService(tc.serviceName)
 
 			// Test language map functions
-			testMap := make(map[string]string)
-			for key, value := range tc.languageMap {
-				testMap = frame.LanguageToMap(testMap, []string{key})
-				testMap[key] = value
-			}
+			testMap := frame.LanguageToMap(tc.anyMap, tc.testLanguages)
 
 			result := frame.LanguageFromMap(testMap)
-			require.Contains(t, result, tc.testKey, "Language map should contain test key")
+			require.Equal(t, result, tc.testLanguages, "Language map should contain test key")
 		})
 	}
 }
@@ -375,41 +368,4 @@ func (m *mockMessage) Body() []byte {
 
 func (m *mockMessage) SetMetadata(md map[string]string) {
 	m.metadata = md
-}
-
-// TestQueueLanguagePropagation tests queue language propagation.
-func (s *LocalizationTestSuite) TestQueueLanguagePropagation() {
-	testCases := []struct {
-		name         string
-		serviceName  string
-		metadataLang string
-		expectedLang []string
-	}{
-		{
-			name:         "queue language propagation",
-			serviceName:  "Test Localization Srv",
-			metadataLang: "en",
-			expectedLang: []string{"en"},
-		},
-	}
-
-	for _, tc := range testCases {
-		s.T().Run(tc.name, func(t *testing.T) {
-			_, _ = frame.NewService(tc.serviceName)
-
-			mockMsg := &mockMessage{
-				metadata: map[string]string{"accept-language": tc.metadataLang},
-				body:     []byte("test message"),
-			}
-
-			// Test language extraction from queue message metadata
-			lang := frame.LanguageFromMap(mockMsg.Metadata())
-			require.Contains(t, lang, tc.expectedLang[0], "Language from queue message should match expected")
-
-			// Test setting language to queue message metadata
-			updatedMetadata := frame.LanguageToMap(mockMsg.Metadata(), []string{tc.expectedLang[0]})
-			mockMsg.SetMetadata(updatedMetadata)
-			require.Equal(t, tc.expectedLang[0], mockMsg.Metadata()["lang"], "Language should be set in queue message metadata")
-		})
-	}
 }

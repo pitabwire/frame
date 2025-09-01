@@ -86,7 +86,7 @@ func (s *QueueTestSuite) TestServiceRegisterPublisherNotInitialized() {
 				queueURL := tc.queueURL
 				if queue != nil {
 
-					queueSubject := strings.Replace(queueURL, "mem://", "", 1)
+					queueSubject := strings.Replace(queueURL, "mem://", "", 1) + dep.Prefix()
 
 					qDS := queue.GetDS(ctx)
 					if qDS.IsNats() {
@@ -155,7 +155,7 @@ func (s *QueueTestSuite) TestServiceRegisterPublisher() {
 				queueURL := tc.queueURL
 				if queue != nil {
 
-					queueSubject := strings.Replace(queueURL, "mem://", "", 1)
+					queueSubject := strings.Replace(queueURL, "mem://", "", 1) + dep.Prefix()
 
 					qDS := queue.GetDS(ctx)
 					if qDS.IsNats() {
@@ -236,7 +236,7 @@ func (s *QueueTestSuite) TestServiceRegisterPublisherMultiple() {
 					queueURL := tc.queueURLs[i]
 					if queue != nil {
 
-						queueSubject := strings.Replace(queueURL, "mem://", "", 1)
+						queueSubject := strings.Replace(queueURL, "mem://", "", 1) + dep.Prefix()
 
 						qDS := queue.GetDS(ctx)
 						if qDS.IsNats() {
@@ -334,7 +334,7 @@ func (s *QueueTestSuite) TestServiceRegisterSubscriber() {
 				queueURL := tc.queueURL
 				if queue != nil {
 
-					queueSubject := strings.Replace(queueURL, "mem://", "", 1)
+					queueSubject := strings.Replace(queueURL, "mem://", "", 1) + dep.Prefix()
 
 					qDS := queue.GetDS(ctx)
 					if qDS.IsNats() {
@@ -412,7 +412,7 @@ func (s *QueueTestSuite) TestServiceRegisterSubscriberValidateMessages() {
 				queueURL := tc.queueURL
 				if queue != nil {
 
-					queueSubject := strings.Replace(queueURL, "mem://", "", 1)
+					queueSubject := strings.Replace(queueURL, "mem://", "", 1) + dep.Prefix()
 
 					qDS := queue.GetDS(ctx)
 					if qDS.IsNats() {
@@ -614,7 +614,7 @@ func (s *QueueTestSuite) TestServiceRegisterSubscriberWithError() {
 				queueURL := tc.queueURL
 				if queue != nil {
 
-					queueSubject := strings.Replace(queueURL, "mem://", "", 1)
+					queueSubject := strings.Replace(queueURL, "mem://", "", 1) + dep.Prefix()
 
 					qDS := queue.GetDS(ctx)
 					if qDS.IsNats() {
@@ -720,7 +720,7 @@ func (s *QueueTestSuite) TestServiceRegisterSubscriberContextCancelWorks() {
 				queueURL := tc.queueURL
 				if queue != nil {
 
-					queueSubject := strings.Replace(queueURL, "mem://", "", 1)
+					queueSubject := strings.Replace(queueURL, "mem://", "", 1) + dep.Prefix()
 
 					qDS := queue.GetDS(ctx)
 					if qDS.IsNats() {
@@ -798,7 +798,7 @@ func (s *QueueTestSuite) TestServiceAddPublisher() {
 				queueURL := tc.queueURL
 				if queue != nil {
 
-					queueSubject := strings.Replace(queueURL, "mem://", "", 1)
+					queueSubject := strings.Replace(queueURL, "mem://", "", 1) + dep.Prefix()
 
 					qDS := queue.GetDS(ctx)
 					if qDS.IsNats() {
@@ -902,7 +902,7 @@ func (s *QueueTestSuite) TestServiceAddSubscriber() {
 				queueURL := tc.queueURL
 				if queue != nil {
 
-					queueSubject := strings.Replace(queueURL, "mem://", "", 1)
+					queueSubject := strings.Replace(queueURL, "mem://", "", 1) + dep.Prefix()
 
 					qDS := queue.GetDS(ctx)
 					if qDS.IsNats() {
@@ -981,7 +981,7 @@ func (s *QueueTestSuite) TestServiceAddSubscriberWithoutHandler() {
 				queueURL := tc.queueURL
 				if queue != nil {
 
-					queueSubject := strings.Replace(queueURL, "mem://", "", 1)
+					queueSubject := strings.Replace(queueURL, "mem://", "", 1) + dep.Prefix()
 
 					qDS := queue.GetDS(ctx)
 					if qDS.IsNats() {

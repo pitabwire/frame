@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/pitabwire/frame/frametests/deps/testpostgres"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
 
@@ -35,6 +36,8 @@ log:
 
 namespaces:
   - id: 0
+    name: default
+  - id: 1
     name: files
 
 `
@@ -71,18 +74,18 @@ func (d *dependancy) migrateContainer(
 	ntwk *testcontainers.DockerNetwork,
 	databaseURL string,
 ) error {
+
 	containerRequest := testcontainers.ContainerRequest{
 		Image: d.Name(),
-		Cmd:   []string{"migrate", "up", "-y"},
+		Cmd:   []string{"migrate", "up", "--yes"},
 		Env: map[string]string{
 			"LOG_LEVEL": "debug",
 			"DSN":       databaseURL,
 		},
-
 		Files: []testcontainers.ContainerFile{
 			{
 				Reader:            strings.NewReader(d.configuration),
-				ContainerFilePath: "/etc/config/keto.yml",
+				ContainerFilePath: "/home/ory/keto.yml",
 				FileMode:          definition.ContainerFileMode,
 			},
 		},
@@ -111,15 +114,23 @@ func (d *dependancy) Setup(ctx context.Context, ntwk *testcontainers.DockerNetwo
 		return errors.New("no ByIsDatabase dependencies was supplied")
 	}
 
-	databaseURL := d.Opts().Dependencies[0].GetInternalDS(ctx).String()
-	err := d.migrateContainer(ctx, ntwk, databaseURL)
+	ketoDb, cleanupFunc, err := testpostgres.CreateDatabase(ctx, d.Opts().Dependencies[0].GetInternalDS(ctx), "keto")
+	if err != nil {
+		return err
+	}
+
+	defer cleanupFunc(ctx)
+
+	databaseURL := ketoDb.String()
+
+	err = d.migrateContainer(ctx, ntwk, databaseURL)
 	if err != nil {
 		return err
 	}
 
 	containerRequest := testcontainers.ContainerRequest{
 		Image: d.Name(),
-		Cmd:   []string{"serve", "--config", "/etc/config/keto.yml"},
+		Cmd:   []string{"serve", "--config", "/home/ory/keto.yml"},
 		Env: d.Opts().Env(map[string]string{
 			"LOG_LEVEL":                 "debug",
 			"LOG_LEAK_SENSITIVE_VALUES": "true",
@@ -128,7 +139,7 @@ func (d *dependancy) Setup(ctx context.Context, ntwk *testcontainers.DockerNetwo
 		Files: []testcontainers.ContainerFile{
 			{
 				Reader:            strings.NewReader(d.configuration),
-				ContainerFilePath: "/etc/config/keto.yml",
+				ContainerFilePath: "/home/ory/keto.yml",
 				FileMode:          definition.ContainerFileMode,
 			},
 		},

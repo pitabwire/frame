@@ -4,7 +4,6 @@ import (
 	"context"
 	"io"
 	"net/http"
-	"strings"
 	"testing"
 
 	"github.com/pitabwire/util"
@@ -52,63 +51,59 @@ func (h *HydraImageSetupTestSuite) TestHydraImageSetup() {
 		definition.NewDependancyOption("hydra setup", "hydra_t", h.Resources()),
 	}
 
-	frametests.WithTestDependancies(h.T(), depOptions, func(t *testing.T, depOpt *definition.DependancyOption) {
-		testCases := []struct {
-			name      string
-			path      string
-			portToUse string
-			status    int
-		}{
-			{
-				name:      "Liveness check to hydra",
-				path:      "/health/alive",
-				portToUse: "4445/tcp",
-				status:    200,
-			},
-			{
-				name:      "Successfull ready hydra",
-				path:      "/health/ready",
-				portToUse: "4445/tcp",
-				status:    200,
-			},
-			{
-				name:      "Straight to hydra admin",
-				path:      "",
-				portToUse: "4445/tcp",
-				status:    404,
-			},
-			{
-				name:      "Straight to hydra",
-				path:      "",
-				portToUse: "4444/tcp",
-				status:    404,
-			},
-			{
-				name:      "Open ID Configuration admin",
-				path:      "/.well-known/openid-configuration",
-				portToUse: "4445/tcp",
-				status:    404,
-			},
-			{
-				name:      "Open ID Configuration",
-				path:      "/.well-known/openid-configuration",
-				portToUse: "4444/tcp",
-				status:    200,
-			},
-			{
-				name:      "Json Web Keys path",
-				path:      "/.well-known/jwks.json",
-				portToUse: "4444/tcp",
-				status:    200,
-			},
-		}
+	testCases := []struct {
+		name      string
+		path      string
+		portToUse string
+		status    int
+	}{
+		{
+			name:      "Liveness check to hydra",
+			path:      "/health/alive",
+			portToUse: "4445/tcp",
+			status:    200,
+		},
+		{
+			name:      "Successfull ready hydra",
+			path:      "/health/ready",
+			portToUse: "4445/tcp",
+			status:    200,
+		},
+		{
+			name:      "Straight to hydra admin",
+			path:      "",
+			portToUse: "4445/tcp",
+			status:    404,
+		},
+		{
+			name:      "Straight to hydra",
+			path:      "",
+			portToUse: "4444/tcp",
+			status:    404,
+		},
+		{
+			name:      "Open ID Configuration admin",
+			path:      "/.well-known/openid-configuration",
+			portToUse: "4445/tcp",
+			status:    404,
+		},
+		{
+			name:      "Open ID Configuration",
+			path:      "/.well-known/openid-configuration",
+			portToUse: "4444/tcp",
+			status:    200,
+		},
+		{
+			name:      "Json Web Keys path",
+			path:      "/.well-known/jwks.json",
+			portToUse: "4444/tcp",
+			status:    200,
+		},
+	}
 
-		var depCon definition.DependancyConn
-		for _, res := range depOpt.All() {
-			if strings.Contains(res.GetDS(h.T().Context()).String(), "http") {
-				depCon = res
-			}
-		}
+	frametests.WithTestDependancies(h.T(), depOptions, func(t *testing.T, depOpt *definition.DependancyOption) {
+
+		depCon := depOpt.ByImageName(testoryhydra.OryHydraImage)
 
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {

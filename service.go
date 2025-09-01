@@ -535,5 +535,3 @@ func (s *Service) sendStopError(ctx context.Context, err error) {
 		s.errorChannel <- err
 	}
 }
-
-// TLSEnabled checks if the service is configured to run with TLS.

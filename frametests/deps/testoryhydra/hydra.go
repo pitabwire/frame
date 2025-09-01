@@ -56,7 +56,7 @@ oauth2:
 
 secrets:
   system:
-    - youReallyNeedToChangeThis
+    - NzItNDQ5ZS04MTBkLWM0ODBjNjhjZ
 
 oidc:
   dynamic_client_registration:
@@ -107,7 +107,7 @@ func (d *dependancy) migrateContainer(
 ) error {
 	containerRequest := testcontainers.ContainerRequest{
 		Image: d.Name(),
-		Cmd:   []string{"migrate", "sql", "up", "--read-from-env", "--yes"},
+		Cmd:   []string{"migrate", "sql", "up", "--read-from-env", "--yes", "--config", "/etc/config/hydra.yml"},
 		Env: map[string]string{
 			"LOG_LEVEL": "debug",
 			"DSN":       databaseURL,
@@ -123,11 +123,6 @@ func (d *dependancy) migrateContainer(
 	}
 
 	d.Configure(ctx, ntwk, &containerRequest)
-
-	containerRequest.ExposedPorts = []string{
-		"4445/tcp",
-		"4444/tcp",
-	}
 
 	hydraContainer, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
 		ContainerRequest: containerRequest,
@@ -145,16 +140,15 @@ func (d *dependancy) migrateContainer(
 }
 
 func (d *dependancy) Setup(ctx context.Context, ntwk *testcontainers.DockerNetwork) error {
+
 	if len(d.Opts().Dependencies) == 0 || !d.Opts().Dependencies[0].GetDS(ctx).IsDB() {
 		return errors.New("no ByIsDatabase dependencies was supplied")
 	}
 
-	hydraDatabase, cleanupFunc, err := testpostgres.CreateDatabase(ctx, d.Opts().Dependencies[0].GetInternalDS(ctx), "hydra")
+	hydraDatabase, _, err := testpostgres.CreateDatabase(ctx, d.Opts().Dependencies[0].GetInternalDS(ctx), "hydra")
 	if err != nil {
 		return err
 	}
-
-	defer cleanupFunc(ctx)
 
 	databaseURL := hydraDatabase.String()
 	err = d.migrateContainer(ctx, ntwk, databaseURL)

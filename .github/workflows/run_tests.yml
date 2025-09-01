@@ -13,13 +13,11 @@ jobs:
         with:
           go-version: 'stable'
       - name: Set up gotestfmt
-        uses: GoTestTools/gotestfmt-action@v2
+        uses: gotesttools/gotestfmt-action@v2
         with:
           # Optional: pass GITHUB_TOKEN to avoid rate limiting.
           token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Build and test using make file
-        run: |
-          set -euo pipefail
-          make build_setup
-          go test -json -v ./... 2>&1 | gotestfmt -hide all
-          make build_cleanup
+      - name: Run tests with coverage
+        env:
+          GOTOOLCHAIN: go1.25.0+auto
+        run: go test -p 1 -json -v ./... 2>&1 | gotestfmt -hide all

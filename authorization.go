@@ -9,7 +9,7 @@ import (
 )
 
 // AuthHasAccess binary check to confirm if subject can perform action specified.
-func AuthHasAccess(ctx context.Context, action string, subject string) (bool, error) {
+func AuthHasAccess(ctx context.Context, objectID, action string, subject string) (bool, error) {
 	authClaims := ClaimsFromContext(ctx)
 	service := Svc(ctx)
 
@@ -23,8 +23,8 @@ func AuthHasAccess(ctx context.Context, action string, subject string) (bool, er
 	}
 
 	payload := map[string]any{
-		"namespace":  authClaims.GetTenantID(),
-		"object":     authClaims.GetPartitionID(),
+		"namespace":  authClaims.GetPartitionID(),
+		"object":     objectID,
 		"relation":   action,
 		"subject_id": subject,
 	}

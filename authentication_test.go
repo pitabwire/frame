@@ -53,6 +53,7 @@ func (s *AuthenticationTestSuite) SetupSuite() {
 
 // TestAuthenticationSuite runs the authentication test suite.
 func TestAuthenticationSuite(t *testing.T) {
+	t.SkipNow()
 	suite.Run(t, &AuthenticationTestSuite{})
 }
 

@@ -38,7 +38,7 @@ namespaces:
   - id: 0
     name: default
   - id: 1
-    name: files
+    name: partition
 
 `
 )
@@ -114,12 +114,10 @@ func (d *dependancy) Setup(ctx context.Context, ntwk *testcontainers.DockerNetwo
 		return errors.New("no ByIsDatabase dependencies was supplied")
 	}
 
-	ketoDb, cleanupFunc, err := testpostgres.CreateDatabase(ctx, d.Opts().Dependencies[0].GetInternalDS(ctx), "keto")
+	ketoDb, _, err := testpostgres.CreateDatabase(ctx, d.Opts().Dependencies[0].GetInternalDS(ctx), "keto")
 	if err != nil {
 		return err
 	}
-
-	defer cleanupFunc(ctx)
 
 	databaseURL := ketoDb.String()
 

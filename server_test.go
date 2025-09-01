@@ -138,15 +138,10 @@ func (s *ServerTestSuite) TestServiceGrpcHealthServer() {
 					frame.WithConfig(&defConf),
 				)
 
-				// Start the service in a goroutine.
-				go func(ctx context.Context, srv *frame.Service) {
-					runErr := srv.Run(ctx, "") // Changed srv.Start to srv.Run, empty port for bufconn
-					if runErr != nil && !errors.Is(runErr, context.Canceled) && !errors.Is(runErr, http.ErrServerClosed) {
-						t.Errorf("TestServiceGrpcHealthServer: srv.Run failed: %v", runErr)
-					}
-				}(ctx, srv)
-
-				time.Sleep(5 * time.Second)
+				runErr := srv.Run(ctx, "") // Changed srv.Start to srv.Run, empty port for bufconn
+				if runErr != nil && !errors.Is(runErr, context.Canceled) && !errors.Is(runErr, http.ErrServerClosed) {
+					t.Errorf("TestServiceGrpcHealthServer: srv.Run failed: %v", runErr)
+				}
 
 				transportCred := grpc.WithTransportCredentials(insecure.NewCredentials())
 				ctx2, cancel, conn, err := s.getBufferedClConn(listener, transportCred)
@@ -160,7 +155,6 @@ func (s *ServerTestSuite) TestServiceGrpcHealthServer() {
 					_ = err
 				}
 
-				time.Sleep(2 * time.Second)
 				srv.Stop(ctx)
 			})
 		}
@@ -189,17 +183,16 @@ func (s *ServerTestSuite) TestServiceGrpcServer() {
 				gsrv := grpc.NewServer()
 				grpcping2.RegisterFramePingServer(gsrv, &grpcServer{})
 
-				ctx, srv := frame.NewService(tc.serviceName, frame.WithGRPCServer(gsrv), frame.WithGRPCServerListener(listener))
+				httpTestOpt, _ := frametests.WithHttpTestDriver()
+
+				ctx, srv := frame.NewService(tc.serviceName, httpTestOpt, frame.WithGRPCServer(gsrv), frame.WithGRPCServerListener(listener))
 
 				srv.Init(ctx, frame.WithGRPCServer(gsrv), frame.WithGRPCPort(tc.grpcPort))
 
-				go func() {
-					err := srv.Run(ctx, "")
-					if err != nil {
-						srv.Log(ctx).WithError(err).Error(" failed to run server ")
-					}
-				}()
-				time.Sleep(5 * time.Second)
+				err := srv.Run(ctx, "")
+				if err != nil {
+					srv.Log(ctx).WithError(err).Error(" failed to run server ")
+				}
 
 				transportCred := grpc.WithTransportCredentials(insecure.NewCredentials())
 				ctx2, cancel, conn, err := s.getBufferedClConn(listener, transportCred)
@@ -213,7 +206,6 @@ func (s *ServerTestSuite) TestServiceGrpcServer() {
 					_ = err
 				}
 
-				time.Sleep(2 * time.Second)
 				srv.Stop(ctx)
 			})
 		}
@@ -243,15 +235,15 @@ func (s *ServerTestSuite) TestServiceGrpcTLSServer() {
 				grpcping2.RegisterFramePingServer(gsrv, &grpcServer{})
 
 				ctx, srv := frame.NewService(tc.serviceName)
-				srv.Init(ctx, frame.WithGRPCServer(gsrv), frame.WithGRPCPort(tc.grpcPort))
 
-				go func() {
-					err := srv.Run(ctx, "")
-					if err != nil {
-						srv.Log(ctx).WithError(err).Error(" failed to run server ")
-					}
-				}()
-				time.Sleep(5 * time.Second)
+				httpTestOpt, _ := frametests.WithHttpTestDriver()
+
+				srv.Init(ctx, httpTestOpt, frame.WithGRPCServer(gsrv), frame.WithGRPCPort(tc.grpcPort))
+
+				err := srv.Run(ctx, "")
+				if err != nil {
+					srv.Log(ctx).WithError(err).Error(" failed to run server ")
+				}
 
 				cert, err := os.ReadFile(tc.certFile)
 				if err != nil {
@@ -302,15 +294,16 @@ func (s *ServerTestSuite) TestServiceRun() {
 	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependancyOption) {
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
-				ctx2, srv2 := frame.NewService(tc.serviceName)
 
-				go func() {
-					if err := srv2.Run(ctx2, tc.port); err != nil {
-						if !errors.Is(err, context.Canceled) {
-							_ = err
-						}
+				httpTestOpt, _ := frametests.WithHttpTestDriver()
+
+				ctx2, srv2 := frame.NewService(tc.serviceName, httpTestOpt)
+
+				if err := srv2.Run(ctx2, tc.port); err != nil {
+					if !errors.Is(err, context.Canceled) {
+						_ = err
 					}
-				}()
+				}
 
 				time.Sleep(1 * time.Second)
 				srv2.Stop(ctx2)

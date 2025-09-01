@@ -43,15 +43,6 @@ doc:    ## generate godocs and start a local documentation webserver on port 808
 generate_ping:
 	protoc --go_out=./ --go_opt=paths=source_relative --go-grpc_out=./ --go-grpc_opt=paths=source_relative grpcping/frameping.proto
 
-# this command will start docker components that we set in docker-compose.yml
-docker-setup: ## sets up docker container images
-	docker compose -f tests_runner/docker-compose.yml up -d
-
-# shutting down docker components
-docker-stop: ## stops all docker containers
-	docker compose -f tests_runner/docker-compose.yml down
-
-
 
 # this command will run all tests in the repo
 # INTEGRATION_TEST_SUITE_PATH is used to run specific tests in Golang,
@@ -87,6 +78,4 @@ gen_tls_certificates:
 			-CAkey tests_runner/ca-key.pem -CAcreateserial -out tests_runner/server-cert.pem
 
 
-build_setup: clean fmt vet gen_tls_certificates docker-setup  ## run all preliminary steps and tests the setup
-build_cleanup:  docker-stop ## run all preliminary steps and tests the setup
-build: build_setup tests build_cleanup ## run all preliminary steps and tests the setup
+build: tests ## run all preliminary steps and tests the setup

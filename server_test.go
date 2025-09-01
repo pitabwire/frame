@@ -12,8 +12,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pitabwire/frame"
 	"github.com/pitabwire/frame/frametests"
 	"github.com/pitabwire/frame/frametests/definition"
+	grpcping2 "github.com/pitabwire/frame/frametests/grpcping"
 	"github.com/pitabwire/frame/tests"
 	"github.com/stretchr/testify/suite"
 	"google.golang.org/grpc"
@@ -21,9 +23,6 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/test/bufconn"
-
-	"github.com/pitabwire/frame"
-	grpcping2 "github.com/pitabwire/frame/frametests/grpcping"
 )
 
 // ServerTestSuite extends FrameBaseTestSuite for comprehensive server testing.
@@ -185,7 +184,12 @@ func (s *ServerTestSuite) TestServiceGrpcServer() {
 
 				httpTestOpt, _ := frametests.WithHttpTestDriver()
 
-				ctx, srv := frame.NewService(tc.serviceName, httpTestOpt, frame.WithGRPCServer(gsrv), frame.WithGRPCServerListener(listener))
+				ctx, srv := frame.NewService(
+					tc.serviceName,
+					httpTestOpt,
+					frame.WithGRPCServer(gsrv),
+					frame.WithGRPCServerListener(listener),
+				)
 
 				srv.Init(ctx, frame.WithGRPCServer(gsrv), frame.WithGRPCPort(tc.grpcPort))
 
@@ -294,7 +298,6 @@ func (s *ServerTestSuite) TestServiceRun() {
 	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependancyOption) {
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
-
 				httpTestOpt, _ := frametests.WithHttpTestDriver()
 
 				ctx2, srv2 := frame.NewService(tc.serviceName, httpTestOpt)

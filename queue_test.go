@@ -9,13 +9,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pitabwire/frame/frametests"
-	"github.com/stretchr/testify/require"
-	"github.com/stretchr/testify/suite"
-
 	"github.com/pitabwire/frame"
+	"github.com/pitabwire/frame/frametests"
 	"github.com/pitabwire/frame/frametests/definition"
 	"github.com/pitabwire/frame/tests"
+	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 // QueueTestSuite extends BaseTestSuite for comprehensive queue testing.
@@ -77,7 +76,6 @@ func (s *QueueTestSuite) TestServiceRegisterPublisherNotInitialized() {
 	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependancyOption) {
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
-
 				var err error
 
 				ctx := t.Context()
@@ -85,12 +83,10 @@ func (s *QueueTestSuite) TestServiceRegisterPublisherNotInitialized() {
 
 				queueURL := tc.queueURL
 				if queue != nil {
-
 					queueSubject := strings.Replace(queueURL, "mem://", "", 1) + dep.Prefix()
 
 					qDS := queue.GetDS(ctx)
 					if qDS.IsNats() {
-
 						qDS, err = qDS.WithUser("ant")
 						require.NoError(t, err)
 
@@ -146,7 +142,6 @@ func (s *QueueTestSuite) TestServiceRegisterPublisher() {
 	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependancyOption) {
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
-
 				var err error
 
 				ctx := t.Context()
@@ -154,12 +149,10 @@ func (s *QueueTestSuite) TestServiceRegisterPublisher() {
 
 				queueURL := tc.queueURL
 				if queue != nil {
-
 					queueSubject := strings.Replace(queueURL, "mem://", "", 1) + dep.Prefix()
 
 					qDS := queue.GetDS(ctx)
 					if qDS.IsNats() {
-
 						qDS, err = qDS.WithUser("ant")
 						require.NoError(t, err)
 
@@ -225,22 +218,18 @@ func (s *QueueTestSuite) TestServiceRegisterPublisherMultiple() {
 	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependancyOption) {
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
-
 				var err error
 				ctx := t.Context()
 				queue := dep.ByIsQueue(ctx)
 
 				opts := []frame.Option{frametests.WithNoopDriver()}
 				for i, topic := range tc.topics {
-
 					queueURL := tc.queueURLs[i]
 					if queue != nil {
-
 						queueSubject := strings.Replace(queueURL, "mem://", "", 1) + dep.Prefix()
 
 						qDS := queue.GetDS(ctx)
 						if qDS.IsNats() {
-
 							qDS, err = qDS.WithUser("ant")
 							require.NoError(t, err)
 
@@ -333,12 +322,10 @@ func (s *QueueTestSuite) TestServiceRegisterSubscriber() {
 
 				queueURL := tc.queueURL
 				if queue != nil {
-
 					queueSubject := strings.Replace(queueURL, "mem://", "", 1) + dep.Prefix()
 
 					qDS := queue.GetDS(ctx)
 					if qDS.IsNats() {
-
 						qDS, err = qDS.WithUser("ant")
 						require.NoError(t, err)
 
@@ -411,12 +398,10 @@ func (s *QueueTestSuite) TestServiceRegisterSubscriberValidateMessages() {
 
 				queueURL := tc.queueURL
 				if queue != nil {
-
 					queueSubject := strings.Replace(queueURL, "mem://", "", 1) + dep.Prefix()
 
 					qDS := queue.GetDS(ctx)
 					if qDS.IsNats() {
-
 						qDS, err = qDS.WithUser("ant")
 						require.NoError(t, err)
 
@@ -504,7 +489,6 @@ func (s *QueueTestSuite) TestServiceSubscriberValidateJetstreamMessages() {
 	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependancyOption) {
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
-
 				var err error
 
 				ctx := t.Context()
@@ -512,12 +496,10 @@ func (s *QueueTestSuite) TestServiceSubscriberValidateJetstreamMessages() {
 
 				queueURL := "mem://" + tc.topic
 				if queue != nil {
-
 					queueSubject := tc.topic
 
 					qDS := queue.GetDS(ctx)
 					if qDS.IsNats() {
-
 						qDS, err = qDS.WithUser("ant")
 						require.NoError(t, err)
 
@@ -613,12 +595,10 @@ func (s *QueueTestSuite) TestServiceRegisterSubscriberWithError() {
 
 				queueURL := tc.queueURL
 				if queue != nil {
-
 					queueSubject := strings.Replace(queueURL, "mem://", "", 1) + dep.Prefix()
 
 					qDS := queue.GetDS(ctx)
 					if qDS.IsNats() {
-
 						qDS, err = qDS.WithUser("ant")
 						require.NoError(t, err)
 
@@ -719,12 +699,10 @@ func (s *QueueTestSuite) TestServiceRegisterSubscriberContextCancelWorks() {
 
 				queueURL := tc.queueURL
 				if queue != nil {
-
 					queueSubject := strings.Replace(queueURL, "mem://", "", 1) + dep.Prefix()
 
 					qDS := queue.GetDS(ctx)
 					if qDS.IsNats() {
-
 						qDS, err = qDS.WithUser("ant")
 						require.NoError(t, err)
 
@@ -797,12 +775,10 @@ func (s *QueueTestSuite) TestServiceAddPublisher() {
 
 				queueURL := tc.queueURL
 				if queue != nil {
-
 					queueSubject := strings.Replace(queueURL, "mem://", "", 1) + dep.Prefix()
 
 					qDS := queue.GetDS(ctx)
 					if qDS.IsNats() {
-
 						qDS, err = qDS.WithUser("ant")
 						require.NoError(t, err)
 
@@ -901,12 +877,10 @@ func (s *QueueTestSuite) TestServiceAddSubscriber() {
 
 				queueURL := tc.queueURL
 				if queue != nil {
-
 					queueSubject := strings.Replace(queueURL, "mem://", "", 1) + dep.Prefix()
 
 					qDS := queue.GetDS(ctx)
 					if qDS.IsNats() {
-
 						qDS, err = qDS.WithUser("ant")
 						require.NoError(t, err)
 
@@ -980,12 +954,10 @@ func (s *QueueTestSuite) TestServiceAddSubscriberWithoutHandler() {
 
 				queueURL := tc.queueURL
 				if queue != nil {
-
 					queueSubject := strings.Replace(queueURL, "mem://", "", 1) + dep.Prefix()
 
 					qDS := queue.GetDS(ctx)
 					if qDS.IsNats() {
-
 						qDS, err = qDS.WithUser("ant")
 						require.NoError(t, err)
 
@@ -1016,7 +988,11 @@ func (s *QueueTestSuite) TestServiceAddSubscriberWithoutHandler() {
 				require.NoError(t, err, "Service should start successfully")
 
 				err = srv.AddSubscriber(ctx, tc.topic, queueURL)
-				require.NoError(t, err, "Adding subscriber without handler should be ok as its effectively a pull subscriber now")
+				require.NoError(
+					t,
+					err,
+					"Adding subscriber without handler should be ok as its effectively a pull subscriber now",
+				)
 			})
 		}
 	})

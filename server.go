@@ -136,7 +136,6 @@ type grpcDriver struct {
 }
 
 func (gd *grpcDriver) ListenAndServe(addr string, h http.Handler) error {
-
 	go func(address string) {
 		ln, err2 := getListener(gd.ctx, address, "", "", gd.grpcListener)
 		if err2 != nil {
@@ -157,7 +156,6 @@ func (gd *grpcDriver) ListenAndServe(addr string, h http.Handler) error {
 }
 
 func (gd *grpcDriver) ListenAndServeTLS(addr, certFile, certKeyFile string, h http.Handler) error {
-
 	go func(address, certPath, certKeyPath string) {
 		ln, err2 := getListener(gd.ctx, address, certPath, certKeyPath, gd.grpcListener)
 		if err2 != nil {

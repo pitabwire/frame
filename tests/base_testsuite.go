@@ -43,8 +43,10 @@ func (bs *BaseTestSuite) SetupSuite() {
 }
 
 // WithTestDependancies Creates subtests with each known DependancyOption.
-func (bs *BaseTestSuite) WithTestDependancies(t *testing.T, testFn func(t *testing.T, dep *definition.DependancyOption)) {
-
+func (bs *BaseTestSuite) WithTestDependancies(
+	t *testing.T,
+	testFn func(t *testing.T, dep *definition.DependancyOption),
+) {
 	var allDeps []definition.DependancyConn
 	var queueDR definition.DependancyConn
 

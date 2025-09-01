@@ -5,14 +5,13 @@ import (
 	"strconv"
 	"testing"
 
+	"github.com/pitabwire/frame"
 	"github.com/pitabwire/frame/frametests"
 	"github.com/pitabwire/frame/frametests/definition"
 	"github.com/pitabwire/frame/tests"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"google.golang.org/protobuf/types/known/structpb"
-
-	"github.com/pitabwire/frame"
 )
 
 // DatastoreTestSuite extends FrameBaseTestSuite for comprehensive datastore testing.
@@ -40,10 +39,8 @@ func (s *DatastoreTestSuite) TestServiceDatastore() {
 	}
 
 	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependancyOption) {
-
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
-
 				db := dep.ByIsDatabase(t.Context())
 
 				ctx, srv := frame.NewService(tc.serviceName, frametests.WithNoopDriver())
@@ -65,10 +62,8 @@ func (s *DatastoreTestSuite) TestServiceDatastore() {
 
 				srv.Stop(ctx)
 			})
-
 		}
 	})
-
 }
 
 // TestServiceDatastoreSet tests datastore setup with configuration.
@@ -89,7 +84,6 @@ func (s *DatastoreTestSuite) TestServiceDatastoreSet() {
 	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependancyOption) {
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
-
 				ctx := t.Context()
 				db := dep.ByIsDatabase(ctx)
 				// Set environment variables
@@ -192,7 +186,12 @@ func (s *DatastoreTestSuite) TestServiceDatastoreRead() {
 
 				rd, _ := r.DB()
 				wd, _ := w.DB()
-				require.NotEqual(t, wd, rd, "read and write db services should be different when separate connections are set")
+				require.NotEqual(
+					t,
+					wd,
+					rd,
+					"read and write db services should be different when separate connections are set",
+				)
 			})
 		}
 	})
@@ -254,7 +253,11 @@ func (s *DatastoreTestSuite) TestDBPropertiesFromMap() {
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
 				got, _ := structpb.NewStruct(tc.propsMap)
-				require.True(t, s.compareMapsByValue(got.AsMap(), tc.want), "DBPropertiesFromMap result should match expected")
+				require.True(
+					t,
+					s.compareMapsByValue(got.AsMap(), tc.want),
+					"DBPropertiesFromMap result should match expected",
+				)
 			})
 		}
 	})

@@ -4,15 +4,14 @@ import (
 	"context"
 	"testing"
 
+	"github.com/pitabwire/frame"
+	"github.com/pitabwire/frame/frametests/definition"
 	"github.com/pitabwire/frame/frametests/deps/testnats"
 	"github.com/pitabwire/frame/frametests/deps/testoryhydra"
 	"github.com/pitabwire/frame/frametests/deps/testpostgres"
+	"github.com/pitabwire/frame/tests"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-
-	"github.com/pitabwire/frame"
-	"github.com/pitabwire/frame/frametests/definition"
-	"github.com/pitabwire/frame/tests"
 )
 
 // JwtTestSuite extends BaseTestSuite for comprehensive JWT testing.

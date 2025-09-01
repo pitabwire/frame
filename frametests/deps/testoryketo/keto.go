@@ -6,11 +6,10 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/pitabwire/frame/frametests/definition"
 	"github.com/pitabwire/frame/frametests/deps/testpostgres"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
-
-	"github.com/pitabwire/frame/frametests/definition"
 )
 
 const (
@@ -74,7 +73,6 @@ func (d *dependancy) migrateContainer(
 	ntwk *testcontainers.DockerNetwork,
 	databaseURL string,
 ) error {
-
 	containerRequest := testcontainers.ContainerRequest{
 		Image: d.Name(),
 		Cmd:   []string{"migrate", "up", "--yes"},

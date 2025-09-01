@@ -397,7 +397,6 @@ func (s *Service) applyCORSIfEnabled(_ context.Context, muxToWrap http.Handler) 
 }
 
 func (s *Service) initializeServerDrivers(ctx context.Context, httpPort string) {
-
 	if s.driver == nil {
 		s.driver = &defaultDriver{
 			ctx:  ctx,

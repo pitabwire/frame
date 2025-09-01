@@ -13,13 +13,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pitabwire/frame"
 	"github.com/pitabwire/frame/frametests"
 	"github.com/pitabwire/frame/frametests/definition"
 	"github.com/pitabwire/frame/tests"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-
-	"github.com/pitabwire/frame"
 )
 
 // ServiceTestSuite extends FrameBaseTestSuite for comprehensive service testing.
@@ -144,7 +143,7 @@ func (s *ServiceTestSuite) TestServiceAddCleanupMethod() {
 
 				a := 30
 
-				for i := 0; i < tc.cleanupCount; i++ {
+				for range tc.cleanupCount {
 					srv.AddCleanupMethod(func(_ context.Context) {
 						a++
 					})
@@ -272,7 +271,7 @@ func (s *ServiceTestSuite) TestServiceExitByOSSignal() {
 
 				go func(srv *frame.Service) {
 					err := srv.Run(ctx, ":")
-					require.True(t, errors.Is(err, context.Canceled), "service should exit correctly on context cancellation")
+					require.ErrorIs(t, err, context.Canceled, "service should exit correctly on context cancellation")
 				}(srv)
 
 				time.Sleep(1 * time.Second)

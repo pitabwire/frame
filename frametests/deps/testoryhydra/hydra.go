@@ -6,11 +6,10 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/pitabwire/frame/frametests/definition"
 	"github.com/pitabwire/frame/frametests/deps/testpostgres"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
-
-	"github.com/pitabwire/frame/frametests/definition"
 )
 
 const (
@@ -140,7 +139,6 @@ func (d *dependancy) migrateContainer(
 }
 
 func (d *dependancy) Setup(ctx context.Context, ntwk *testcontainers.DockerNetwork) error {
-
 	if len(d.Opts().Dependencies) == 0 || !d.Opts().Dependencies[0].GetDS(ctx).IsDB() {
 		return errors.New("no ByIsDatabase dependencies was supplied")
 	}

@@ -6,11 +6,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/require"
-	"github.com/stretchr/testify/suite"
-
 	"github.com/pitabwire/frame"
 	"github.com/pitabwire/frame/tests"
+	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 // QueueSubscriberMetricsTestSuite extends BaseTestSuite for comprehensive subscriber metrics testing.
@@ -215,10 +214,10 @@ func (s *QueueSubscriberMetricsTestSuite) TestSubscriberMetricsConcurrentAccess(
 			wg.Add(tc.goroutines)
 
 			// Start multiple goroutines performing operations
-			for i := 0; i < tc.goroutines; i++ {
+			for range tc.goroutines {
 				go func() {
 					defer wg.Done()
-					for j := 0; j < tc.operations; j++ {
+					for range tc.operations {
 						metrics.ActiveMessages.Add(1)
 						metrics.MessageCount.Add(1)
 						metrics.ProcessingTime.Add(1000000) // 1ms in nanoseconds
@@ -238,10 +237,20 @@ func (s *QueueSubscriberMetricsTestSuite) TestSubscriberMetricsConcurrentAccess(
 			// Verify final state
 			expectedTotal := int64(tc.goroutines * tc.operations)
 			require.Equal(t, expectedTotal, metrics.MessageCount.Load(), "Message count should match expected total")
-			require.Equal(t, expectedTotal, metrics.ActiveMessages.Load(), "Active messages should match expected total")
+			require.Equal(
+				t,
+				expectedTotal,
+				metrics.ActiveMessages.Load(),
+				"Active messages should match expected total",
+			)
 
 			expectedProcessingTime := expectedTotal * 1000000 // 1ms per operation
-			require.Equal(t, expectedProcessingTime, metrics.ProcessingTime.Load(), "Processing time should match expected total")
+			require.Equal(
+				t,
+				expectedProcessingTime,
+				metrics.ProcessingTime.Load(),
+				"Processing time should match expected total",
+			)
 		})
 	}
 }

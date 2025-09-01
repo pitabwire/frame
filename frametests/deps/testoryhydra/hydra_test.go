@@ -6,14 +6,13 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/pitabwire/util"
-	"github.com/stretchr/testify/require"
-	"github.com/stretchr/testify/suite"
-
 	"github.com/pitabwire/frame/frametests"
 	"github.com/pitabwire/frame/frametests/definition"
 	"github.com/pitabwire/frame/frametests/deps/testoryhydra"
 	"github.com/pitabwire/frame/frametests/deps/testpostgres"
+	"github.com/pitabwire/util"
+	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 // HydraImageSetupTestSuite extends FrameBaseTestSuite for comprehensive search testing.
@@ -102,7 +101,6 @@ func (h *HydraImageSetupTestSuite) TestHydraImageSetup() {
 	}
 
 	frametests.WithTestDependancies(h.T(), depOptions, func(t *testing.T, depOpt *definition.DependancyOption) {
-
 		depCon := depOpt.ByImageName(testoryhydra.OryHydraImage)
 
 		for _, tc := range testCases {

@@ -7,11 +7,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/require"
-	"github.com/stretchr/testify/suite"
-
 	"github.com/pitabwire/frame"
 	"github.com/pitabwire/frame/tests"
+	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 // WorkerPoolTestSuite extends BaseTestSuite for comprehensive worker pool testing.
@@ -72,12 +71,12 @@ func (s *WorkerPoolTestSuite) TestJobImplChannelOperations() {
 			// Verify we get an error when trying to write to a closed channel
 			err = job.WriteResult(ctx, "after close")
 			require.Error(t, err, "WriteResult should return an error when channel is closed")
-			require.True(t, errors.Is(err, frame.ErrWorkerPoolResultChannelIsClosed),
+			require.ErrorIs(t, err, frame.ErrWorkerPoolResultChannelIsClosed,
 				"WriteResult should return ErrWorkerPoolResultChannelIsClosed")
 
 			err = job.WriteError(ctx, errors.New("after close"))
 			require.Error(t, err, "WriteError should return an error when channel is closed")
-			require.True(t, errors.Is(err, frame.ErrWorkerPoolResultChannelIsClosed),
+			require.ErrorIs(t, err, frame.ErrWorkerPoolResultChannelIsClosed,
 				"WriteError should return ErrWorkerPoolResultChannelIsClosed")
 
 			// Drain the channel first
@@ -173,10 +172,10 @@ func (s *WorkerPoolTestSuite) TestJobImplChaoticConcurrentOperations() {
 			wg.Add(tc.goroutines)
 
 			// Start multiple goroutines that write and read
-			for i := 0; i < tc.goroutines; i++ {
+			for i := range tc.goroutines {
 				go func(id int) {
 					defer wg.Done()
-					for j := 0; j < tc.iterations; j++ {
+					for j := range tc.iterations {
 						select {
 						case <-ctx.Done():
 							return

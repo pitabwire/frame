@@ -6,13 +6,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pitabwire/frame/frametests"
-	"github.com/stretchr/testify/require"
-	"github.com/stretchr/testify/suite"
-
 	"github.com/pitabwire/frame"
+	"github.com/pitabwire/frame/frametests"
 	"github.com/pitabwire/frame/frametests/definition"
 	"github.com/pitabwire/frame/tests"
+	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 // EventsTestSuite extends BaseTestSuite for comprehensive events testing.
@@ -77,10 +76,8 @@ func (s *EventsTestSuite) TestServiceRegisterEventsWorks() {
 				require.NoError(t, err, "configuration loading should succeed")
 
 				if queue != nil {
-
 					qDS := queue.GetDS(ctx)
 					if qDS.IsNats() {
-
 						qDS, err = qDS.WithUser("ant")
 						require.NoError(t, err)
 
@@ -106,7 +103,12 @@ func (s *EventsTestSuite) TestServiceRegisterEventsWorks() {
 				}
 				cfg.EventsQueueName = tc.queueName
 				events := frame.WithRegisterEvents(&MessageToTest{})
-				ctx, srv := frame.NewService(tc.serviceName, events, frame.WithConfig(&cfg), frametests.WithNoopDriver())
+				ctx, srv := frame.NewService(
+					tc.serviceName,
+					events,
+					frame.WithConfig(&cfg),
+					frametests.WithNoopDriver(),
+				)
 
 				subs, _ := srv.GetSubscriber(cfg.EventsQueueName)
 				if subs != nil && subs.Initiated() {
@@ -161,10 +163,8 @@ func (s *EventsTestSuite) TestServiceEventsPublishingWorks() {
 
 				// Set queue connection from dependency
 				if queue != nil {
-
 					qDS := queue.GetDS(ctx)
 					if qDS.IsNats() {
-
 						qDS, err = qDS.WithUser("ant")
 						require.NoError(t, err)
 
@@ -203,7 +203,12 @@ func (s *EventsTestSuite) TestServiceEventsPublishingWorks() {
 
 				if len(tc.payload) > 0 {
 					time.Sleep(2 * time.Second)
-					require.Equal(t, tc.expectedCount, testEvent.Count, "event should be processed and count incremented")
+					require.Equal(
+						t,
+						tc.expectedCount,
+						testEvent.Count,
+						"event should be processed and count incremented",
+					)
 				}
 
 				srv.Stop(ctx)

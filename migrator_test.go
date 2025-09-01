@@ -4,13 +4,12 @@ import (
 	"os"
 	"testing"
 
-	"github.com/stretchr/testify/require"
-	"github.com/stretchr/testify/suite"
-	"gorm.io/gorm"
-
 	"github.com/pitabwire/frame"
 	"github.com/pitabwire/frame/frametests/definition"
 	"github.com/pitabwire/frame/tests"
+	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
+	"gorm.io/gorm"
 )
 
 // MigratorTestSuite extends BaseTestSuite for comprehensive migrator testing.
@@ -142,7 +141,7 @@ func (s *MigratorTestSuite) TestApplyMigrations() {
 				var count int64
 				err = svc.DB(ctx, false).Model(&frame.Migration{}).Count(&count).Error
 				require.NoError(t, err, "Counting migrations should succeed")
-				require.Greater(t, count, int64(0), "At least one migration should exist")
+				require.Positive(t, count, "At least one migration should exist")
 			})
 		}
 	})
@@ -183,7 +182,7 @@ func (s *MigratorTestSuite) TestServiceMigrateDatastore() {
 				var count int64
 				err = svc.DB(ctx, false).Model(&frame.Migration{}).Count(&count).Error
 				require.NoError(t, err, "Counting migrations should succeed")
-				require.Greater(t, count, int64(0), "At least one migration should exist")
+				require.Positive(t, count, "At least one migration should exist")
 			})
 		}
 	})
@@ -220,7 +219,7 @@ func (s *MigratorTestSuite) TestServiceMigrateDatastoreIdempotency() {
 
 				// Run migration multiple times to test idempotency
 				var finalCount int64
-				for i := 0; i < tc.runCount; i++ {
+				for i := range tc.runCount {
 					err := svc.MigrateDatastore(ctx, tc.migrationDir)
 					require.NoError(t, err, "Migration run %d should succeed", i+1)
 
@@ -230,7 +229,7 @@ func (s *MigratorTestSuite) TestServiceMigrateDatastoreIdempotency() {
 				}
 
 				// Verify final count is consistent (idempotent)
-				require.Greater(t, finalCount, int64(0), "At least one migration should exist")
+				require.Positive(t, finalCount, "At least one migration should exist")
 
 				// Run one more time and verify count doesn't change
 				err := svc.MigrateDatastore(ctx, tc.migrationDir)

@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/pitabwire/frame"
 	"github.com/pitabwire/frame/frametests/definition"
 	"github.com/pitabwire/frame/frametests/deps/testnats"
 	"github.com/pitabwire/frame/frametests/deps/testoryhydra"
@@ -16,8 +17,6 @@ import (
 	"github.com/pitabwire/frame/tests"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-
-	"github.com/pitabwire/frame"
 )
 
 // AuthorizationTestSuite extends FrameBaseTestSuite for comprehensive authorization testing.
@@ -62,7 +61,12 @@ func TestAuthorizationSuite(t *testing.T) {
 }
 
 // authorizationControlListWrite writes authorization control list entries.
-func (s *AuthorizationTestSuite) authorizationControlListWrite(ctx context.Context, writeServerURL string, objectId, action string, subject string) error {
+func (s *AuthorizationTestSuite) authorizationControlListWrite(
+	ctx context.Context,
+	writeServerURL string,
+	objectId, action string,
+	subject string,
+) error {
 	authClaims := frame.ClaimsFromContext(ctx)
 	service := frame.Svc(ctx)
 

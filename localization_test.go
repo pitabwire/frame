@@ -8,13 +8,12 @@ import (
 	"testing"
 
 	"github.com/nicksnyder/go-i18n/v2/i18n"
+	"github.com/pitabwire/frame"
+	"github.com/pitabwire/frame/tests"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
-
-	"github.com/pitabwire/frame"
-	"github.com/pitabwire/frame/tests"
 )
 
 // LocalizationTestSuite extends BaseTestSuite for comprehensive localization testing.
@@ -258,7 +257,7 @@ func (s *LocalizationTestSuite) TestLanguageHTTPMiddleware() {
 				w.Write([]byte(strings.Join(lang, ",")))
 			}))
 
-			req := httptest.NewRequest("GET", tc.requestPath, nil)
+			req := httptest.NewRequest(http.MethodGet, tc.requestPath, nil)
 			req.Header.Set("Accept-Language", tc.acceptLang)
 
 			w := httptest.NewRecorder()

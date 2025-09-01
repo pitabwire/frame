@@ -31,7 +31,6 @@ type testDriver struct {
 }
 
 func (t *testDriver) ListenAndServe(_ string, h http.Handler) error {
-
 	t.srv = httptest.NewServer(h)
 
 	return nil

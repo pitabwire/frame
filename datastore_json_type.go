@@ -8,13 +8,14 @@ import (
 	"fmt"
 	"sync"
 
+	"google.golang.org/protobuf/types/known/structpb"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 	"gorm.io/gorm/schema"
 )
 
-// JSONMap is a GORM-compatible map[string]interface{} that stores JSONB/JSON in a DB.
-type JSONMap map[string]interface{}
+// JSONMap is a GORM-compatible map[string]any that stores JSONB/JSON in a DB.
+type JSONMap map[string]any
 
 // bufferPool is used to minimize allocations for decoding.
 //
@@ -127,4 +128,8 @@ func (m *JSONMap) GormValue(_ context.Context, db *gorm.DB) clause.Expr {
 	default:
 		return gorm.Expr("?", data)
 	}
+}
+
+func (m *JSONMap) ToStructPB() (*structpb.Struct, error) {
+	return structpb.NewStruct(*m)
 }

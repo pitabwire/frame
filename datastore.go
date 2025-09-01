@@ -3,11 +3,9 @@ package frame
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/url"
-	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -261,79 +259,6 @@ func tenantPartition(ctx context.Context) func(db *gorm.DB) *gorm.DB {
 
 		return db.Where("tenant_id = ? AND partition_id = ?", authClaim.GetTenantID(), authClaim.GetPartitionID())
 	}
-}
-
-// DBPropertiesToMap converts the supplied db json content into a golang map.
-func DBPropertiesToMap(props JSONMap) map[string]string {
-	if props == nil {
-		return make(map[string]string, len(props))
-	}
-
-	payload := make(map[string]string, len(props))
-
-	for k, val := range props {
-		switch v := val.(type) {
-		case nil:
-			payload[k] = ""
-		case string:
-			payload[k] = v
-
-		case bool:
-			payload[k] = strconv.FormatBool(v)
-		case int, int64, int32, int16, int8:
-			iVal, ok := val.(int)
-			if !ok {
-				payload[k] = fmt.Sprintf("%v", val)
-				continue
-			}
-			payload[k] = strconv.FormatInt(int64(iVal), 10)
-
-		case float32, float64:
-			fVal, ok := val.(float64)
-			if !ok {
-				payload[k] = fmt.Sprintf("%v", val)
-				continue
-			}
-			payload[k] = strconv.FormatFloat(fVal, 'g', -1, 64)
-		default:
-
-			marVal, err1 := json.Marshal(val)
-			if err1 != nil {
-				payload[k] = fmt.Sprintf("%v", val)
-				continue
-			}
-			payload[k] = string(marVal)
-		}
-	}
-
-	return payload
-}
-
-// DBPropertiesFromMap converts a map into a JSONMap object.
-func DBPropertiesFromMap(propsMap map[string]string) JSONMap {
-	jsonMap := make(JSONMap)
-
-	if propsMap == nil {
-		return jsonMap
-	}
-
-	for k, val := range propsMap {
-		jsonMap[k] = val
-
-		if !strings.HasPrefix(val, "{") && !strings.HasPrefix(val, "[") {
-			continue
-		}
-
-		var prop any
-		// Determine if the JSON is an object or an array and unmarshal accordingly
-		if err := json.Unmarshal([]byte(val), &prop); err != nil {
-			continue
-		}
-
-		jsonMap[k] = prop
-	}
-
-	return jsonMap
 }
 
 // ErrorIsNoRows validate if supplied error is because of record missing in DB.

@@ -10,6 +10,7 @@ import (
 	"github.com/pitabwire/frame/tests"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"google.golang.org/protobuf/types/known/structpb"
 
 	"github.com/pitabwire/frame"
 )
@@ -225,18 +226,18 @@ func (s *DatastoreTestSuite) TestServiceDatastoreNotSet() {
 func (s *DatastoreTestSuite) TestDBPropertiesFromMap() {
 	testCases := []struct {
 		name     string
-		propsMap map[string]string
+		propsMap map[string]any
 		want     frame.JSONMap
 	}{
 		{
 			name: "happy case with various data types",
-			propsMap: map[string]string{
+			propsMap: map[string]any{
 				"a": "a",
 				"b": "751",
 				"c": "23.5",
 				"d": "true",
-				"e": "[23, 35, 37, 55]",
-				"f": "{\"x\": \"t\", \"y\": \"g\" }",
+				"e": []any{23, 35, 37, 55},
+				"f": map[string]any{"x": "t", "y": "g"},
 			},
 			want: frame.JSONMap{
 				"a": "a",
@@ -252,8 +253,8 @@ func (s *DatastoreTestSuite) TestDBPropertiesFromMap() {
 	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependancyOption) {
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
-				got := frame.DBPropertiesFromMap(tc.propsMap)
-				require.True(t, s.compareMapsByValue(got, tc.want), "DBPropertiesFromMap result should match expected")
+				got, _ := structpb.NewStruct(tc.propsMap)
+				require.True(t, s.compareMapsByValue(got.AsMap(), tc.want), "DBPropertiesFromMap result should match expected")
 			})
 		}
 	})
@@ -264,21 +265,21 @@ func (s *DatastoreTestSuite) TestDBPropertiesToMap() {
 	testCases := []struct {
 		name    string
 		dbProps frame.JSONMap
-		want    map[string]string
+		want    map[string]any
 	}{
 		{
 			name: "happy case with various data types",
-			want: map[string]string{
+			want: map[string]any{
 				"a": "a",
-				"b": "751",
+				"b": 751.0,
 				"c": "23.5",
 				"d": "true",
-				"e": "[23,35,37,55]",
-				"f": "{\"x\":\"t\",\"y\":\"g\"}",
+				"e": []any{23.0, 35.0, 37.0, 55.0},
+				"f": map[string]any{"x": "t", "y": "g"},
 			},
 			dbProps: frame.JSONMap{
 				"a": "a",
-				"b": "751",
+				"b": 751,
 				"c": "23.5",
 				"d": "true",
 				"e": []any{23, 35, 37, 55},
@@ -290,8 +291,8 @@ func (s *DatastoreTestSuite) TestDBPropertiesToMap() {
 	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependancyOption) {
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
-				got := frame.DBPropertiesToMap(tc.dbProps)
-				require.Equal(t, tc.want, got, "DBPropertiesToMap result should match expected")
+				got, _ := structpb.NewStruct(tc.dbProps)
+				require.Equal(t, tc.want, got.AsMap(), "DBPropertiesToMap result should match expected")
 			})
 		}
 	})

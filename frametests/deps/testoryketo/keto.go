@@ -6,10 +6,11 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/pitabwire/frame/frametests/definition"
-	"github.com/pitabwire/frame/frametests/deps/testpostgres"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
+
+	"github.com/pitabwire/frame/frametests/definition"
+	"github.com/pitabwire/frame/frametests/deps/testpostgres"
 )
 
 const (
@@ -112,12 +113,12 @@ func (d *dependancy) Setup(ctx context.Context, ntwk *testcontainers.DockerNetwo
 		return errors.New("no ByIsDatabase dependencies was supplied")
 	}
 
-	ketoDb, _, err := testpostgres.CreateDatabase(ctx, d.Opts().Dependencies[0].GetInternalDS(ctx), "keto")
+	ketoDB, _, err := testpostgres.CreateDatabase(ctx, d.Opts().Dependencies[0].GetInternalDS(ctx), "keto")
 	if err != nil {
 		return err
 	}
 
-	databaseURL := ketoDb.String()
+	databaseURL := ketoDB.String()
 
 	err = d.migrateContainer(ctx, ntwk, databaseURL)
 	if err != nil {

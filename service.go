@@ -425,7 +425,7 @@ func (s *Service) initializeServerDrivers(ctx context.Context, httpPort string) 
 
 		s.driver = &grpcDriver{
 			ctx:                ctx,
-			internalHttpDriver: s.driver, // Embed the fully configured defaultServer
+			internalHTTPDriver: s.driver, // Embed the fully configured defaultServer
 			grpcPort:           s.grpcPort,
 			grpcServer:         s.grpcServer,
 			grpcListener:       s.grpcListener, // Use the primary listener established for gRPC

@@ -7,10 +7,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/suite"
+
 	"github.com/pitabwire/frame"
 	"github.com/pitabwire/frame/tests"
-	"github.com/stretchr/testify/require"
-	"github.com/stretchr/testify/suite"
 )
 
 // WorkerPoolTestSuite extends BaseTestSuite for comprehensive worker pool testing.
@@ -21,22 +21,6 @@ type WorkerPoolTestSuite struct {
 // TestWorkerPoolSuite runs the worker pool test suite.
 func TestWorkerPoolSuite(t *testing.T) {
 	suite.Run(t, &WorkerPoolTestSuite{})
-}
-
-type fields struct {
-	test    string
-	counter int
-}
-
-func (f *fields) process(_ context.Context, _ frame.JobResultPipe[any]) error {
-	if f.test == "first error" {
-		f.counter++
-		f.test = "erred"
-		return errors.New("test error")
-	}
-
-	f.test = "confirmed"
-	return nil
 }
 
 // TestJobImplChannelOperations tests the JobImpl's channel operations.
@@ -50,39 +34,39 @@ func (s *WorkerPoolTestSuite) TestJobImplChannelOperations() {
 	}
 
 	for _, tc := range testCases {
-		s.T().Run(tc.name, func(t *testing.T) {
-			ctx := t.Context()
+		s.Run(tc.name, func() {
+			ctx := s.T().Context()
 
 			// Create a job
-			job := frame.NewJob(func(ctx context.Context, _ frame.JobResultPipe[any]) error {
+			job := frame.NewJob(func(_ context.Context, _ frame.JobResultPipe[any]) error {
 				return nil
 			})
 
 			// First verify we can write to the channel
 			err := job.WriteResult(ctx, "test result")
-			require.NoError(t, err, "WriteResult to open channel should succeed")
+			s.Require().NoError(err, "WriteResult to open channel should succeed")
 
 			err = job.WriteError(ctx, errors.New("test error"))
-			require.NoError(t, err, "WriteError to open channel should succeed")
+			s.Require().NoError(err, "WriteError to open channel should succeed")
 
 			// Now close the channel
 			job.Close()
 
 			// Verify we get an error when trying to write to a closed channel
 			err = job.WriteResult(ctx, "after close")
-			require.Error(t, err, "WriteResult should return an error when channel is closed")
-			require.ErrorIs(t, err, frame.ErrWorkerPoolResultChannelIsClosed,
+			s.Require().Error(err, "WriteResult should return an error when channel is closed")
+			s.Require().ErrorIs(err, frame.ErrWorkerPoolResultChannelIsClosed,
 				"WriteResult should return ErrWorkerPoolResultChannelIsClosed")
 
 			err = job.WriteError(ctx, errors.New("after close"))
-			require.Error(t, err, "WriteError should return an error when channel is closed")
-			require.ErrorIs(t, err, frame.ErrWorkerPoolResultChannelIsClosed,
+			s.Require().Error(err, "WriteError should return an error when channel is closed")
+			s.Require().ErrorIs(err, frame.ErrWorkerPoolResultChannelIsClosed,
 				"WriteError should return ErrWorkerPoolResultChannelIsClosed")
 
 			// Drain the channel first
 			for res := range job.ResultChan() {
 				// Just drain any existing messages
-				t.Logf("res: %+v", res)
+				s.T().Logf("res: %+v", res)
 			}
 		})
 	}
@@ -117,8 +101,8 @@ func (s *WorkerPoolTestSuite) TestJobImplSafeConcurrentOperations() {
 	}
 
 	for _, tc := range testCases {
-		s.T().Run(tc.name, func(t *testing.T) {
-			ctx, cancel := context.WithTimeout(t.Context(), tc.timeout)
+		s.Run(tc.name, func() {
+			ctx, cancel := context.WithTimeout(s.T().Context(), tc.timeout)
 			defer cancel()
 
 			job := frame.NewJobWithBuffer(func(_ context.Context, _ frame.JobResultPipe[any]) error {
@@ -126,24 +110,26 @@ func (s *WorkerPoolTestSuite) TestJobImplSafeConcurrentOperations() {
 			}, tc.buffer)
 
 			// Writer goroutine
-			go s.writeIntRangeAsResult(ctx, t, job, tc.writeCount)
+			go s.writeIntRangeAsResult(ctx, s.T(), job, tc.writeCount)
 
 			// Reader goroutine
 			go func() {
 				for res := range job.ResultChan() {
-					t.Logf("Received: %+v", res)
+					s.T().Logf("Received: %+v", res)
 				}
 			}()
 
 			// Wait for completion or timeout
 			<-ctx.Done()
-			require.True(t, errors.Is(ctx.Err(), context.DeadlineExceeded) || errors.Is(ctx.Err(), context.Canceled),
+			s.Require().True(errors.Is(ctx.Err(), context.DeadlineExceeded) || errors.Is(ctx.Err(), context.Canceled),
 				"Context should be done by timeout or cancellation")
 		})
 	}
 }
 
 // TestJobImplChaoticConcurrentOperations tests chaotic concurrent operations.
+//
+//nolint:gocognit
 func (s *WorkerPoolTestSuite) TestJobImplChaoticConcurrentOperations() {
 	testCases := []struct {
 		name       string
@@ -160,8 +146,8 @@ func (s *WorkerPoolTestSuite) TestJobImplChaoticConcurrentOperations() {
 	}
 
 	for _, tc := range testCases {
-		s.T().Run(tc.name, func(t *testing.T) {
-			ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
+		s.Run(tc.name, func() {
+			ctx, cancel := context.WithTimeout(s.T().Context(), 2*time.Second)
 			defer cancel()
 
 			job := frame.NewJobWithBuffer(func(_ context.Context, _ frame.JobResultPipe[any]) error {
@@ -182,7 +168,7 @@ func (s *WorkerPoolTestSuite) TestJobImplChaoticConcurrentOperations() {
 						default:
 							err := job.WriteResult(ctx, id*tc.iterations+j)
 							if err != nil {
-								t.Errorf("Goroutine %d failed to write: %v", id, err)
+								s.T().Errorf("Goroutine %d failed to write: %v", id, err)
 								return
 							}
 							time.Sleep(time.Millisecond)
@@ -224,8 +210,8 @@ func (s *WorkerPoolTestSuite) TestJobImplSafeChannelOperations() {
 	}
 
 	for _, tc := range testCases {
-		s.T().Run(tc.name, func(t *testing.T) {
-			ctx, cancel := context.WithTimeout(t.Context(), tc.timeout)
+		s.Run(tc.name, func() {
+			ctx, cancel := context.WithTimeout(s.T().Context(), tc.timeout)
 			defer cancel()
 
 			job := frame.NewJobWithBuffer(func(_ context.Context, _ frame.JobResultPipe[any]) error {
@@ -240,7 +226,7 @@ func (s *WorkerPoolTestSuite) TestJobImplSafeChannelOperations() {
 
 			err := job.WriteResult(ctx, "test")
 			if err != nil {
-				require.True(t, errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded),
+				s.Require().True(errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded),
 					"WriteResult should handle context cancellation gracefully")
 			}
 

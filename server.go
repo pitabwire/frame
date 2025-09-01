@@ -125,7 +125,7 @@ func (dd *defaultDriver) Shutdown(ctx context.Context) error {
 
 type grpcDriver struct {
 	ctx                context.Context
-	internalHttpDriver ServerDriver
+	internalHTTPDriver ServerDriver
 	grpcPort           string
 
 	errorChannel chan error
@@ -152,7 +152,7 @@ func (gd *grpcDriver) ListenAndServe(addr string, h http.Handler) error {
 		}
 	}(gd.grpcPort)
 
-	return gd.internalHttpDriver.ListenAndServe(addr, h)
+	return gd.internalHTTPDriver.ListenAndServe(addr, h)
 }
 
 func (gd *grpcDriver) ListenAndServeTLS(addr, certFile, certKeyFile string, h http.Handler) error {
@@ -173,7 +173,7 @@ func (gd *grpcDriver) ListenAndServeTLS(addr, certFile, certKeyFile string, h ht
 		}
 	}(gd.grpcPort, certFile, certKeyFile)
 
-	return gd.internalHttpDriver.ListenAndServeTLS(addr, certFile, certKeyFile, h)
+	return gd.internalHTTPDriver.ListenAndServeTLS(addr, certFile, certKeyFile, h)
 }
 
 func (gd *grpcDriver) Shutdown(ctx context.Context) error {
@@ -181,8 +181,8 @@ func (gd *grpcDriver) Shutdown(ctx context.Context) error {
 		gd.grpcServer.Stop()
 	}
 
-	if gd.internalHttpDriver != nil {
-		return gd.internalHttpDriver.Shutdown(ctx)
+	if gd.internalHTTPDriver != nil {
+		return gd.internalHTTPDriver.Shutdown(ctx)
 	}
 	return nil
 }

@@ -8,6 +8,9 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
+
 	"github.com/pitabwire/frame"
 	"github.com/pitabwire/frame/frametests/definition"
 	"github.com/pitabwire/frame/frametests/deps/testnats"
@@ -15,8 +18,6 @@ import (
 	"github.com/pitabwire/frame/frametests/deps/testoryketo"
 	"github.com/pitabwire/frame/frametests/deps/testpostgres"
 	"github.com/pitabwire/frame/tests"
-	"github.com/stretchr/testify/require"
-	"github.com/stretchr/testify/suite"
 )
 
 // AuthorizationTestSuite extends FrameBaseTestSuite for comprehensive authorization testing.
@@ -64,7 +65,7 @@ func TestAuthorizationSuite(t *testing.T) {
 func (s *AuthorizationTestSuite) authorizationControlListWrite(
 	ctx context.Context,
 	writeServerURL string,
-	objectId, action string,
+	objectID, action string,
 	subject string,
 ) error {
 	authClaims := frame.ClaimsFromContext(ctx)
@@ -76,7 +77,7 @@ func (s *AuthorizationTestSuite) authorizationControlListWrite(
 
 	payload := map[string]any{
 		"namespace":  authClaims.GetPartitionID(),
-		"object":     objectId,
+		"object":     objectID,
 		"relation":   action,
 		"subject_id": subject,
 	}
@@ -105,7 +106,7 @@ func (s *AuthorizationTestSuite) authorizationControlListWrite(
 func (s *AuthorizationTestSuite) TestAuthorizationControlListWrite() {
 	testCases := []struct {
 		name        string
-		objectId    string
+		objectID    string
 		action      string
 		subject     string
 		expectError bool
@@ -113,7 +114,7 @@ func (s *AuthorizationTestSuite) TestAuthorizationControlListWrite() {
 	}{
 		{
 			name:        "successful authorization write",
-			objectId:    "sedf233",
+			objectID:    "sedf233",
 			action:      "read",
 			subject:     "tested",
 			expectError: false,
@@ -131,7 +132,7 @@ func (s *AuthorizationTestSuite) TestAuthorizationControlListWrite() {
 		},
 		{
 			name:        "write with missing claims",
-			objectId:    "sedf234",
+			objectID:    "sedf234",
 			action:      "read",
 			subject:     "tested",
 			expectError: true,
@@ -147,25 +148,25 @@ func (s *AuthorizationTestSuite) TestAuthorizationControlListWrite() {
 				ctx := t.Context()
 				keto := dep.ByImageName(testoryketo.OryKetoImage) // Keto is treated as a queue service
 
-				ketoUri := keto.GetDS(ctx)
-				ketoAdminUri := ketoUri.ExtendPath("admin/relation-tuples")
+				ketoURI := keto.GetDS(ctx)
+				ketoAdminURI := ketoURI.ExtendPath("admin/relation-tuples")
 
 				portMapping, err := keto.PortMapping(ctx, "4466/tcp")
 				require.NoError(t, err)
 
-				ketoReadUri := ketoUri.ExtendPath("/relation-tuples/check")
-				ketoReadUri, err = ketoReadUri.ChangePort(portMapping)
+				ketoReadURI := ketoURI.ExtendPath("/relation-tuples/check")
+				ketoReadURI, err = ketoReadURI.ChangePort(portMapping)
 				require.NoError(t, err)
 
 				// Setup service and context
 				ctx, srv := frame.NewService("Test Srv", frame.WithConfig(&frame.ConfigurationDefault{
-					AuthorizationServiceWriteURI: ketoAdminUri.String(),
-					AuthorizationServiceReadURI:  ketoReadUri.String(),
+					AuthorizationServiceWriteURI: ketoAdminURI.String(),
+					AuthorizationServiceReadURI:  ketoReadURI.String(),
 				}))
 				ctx = frame.SvcToContext(ctx, srv)
 				ctx = tc.setupClaims(ctx)
 
-				err = s.authorizationControlListWrite(ctx, ketoAdminUri.String(), tc.objectId, tc.action, tc.subject)
+				err = s.authorizationControlListWrite(ctx, ketoAdminURI.String(), tc.objectID, tc.action, tc.subject)
 
 				if tc.expectError {
 					require.Error(t, err, "expected authorization write to fail")
@@ -181,7 +182,7 @@ func (s *AuthorizationTestSuite) TestAuthorizationControlListWrite() {
 func (s *AuthorizationTestSuite) TestAuthHasAccess() {
 	testCases := []struct {
 		name         string
-		objectId     string
+		objectID     string
 		action       string
 		subject      string
 		checkSubject string
@@ -192,7 +193,7 @@ func (s *AuthorizationTestSuite) TestAuthHasAccess() {
 	}{
 		{
 			name:         "successful access check with existing permission",
-			objectId:     "sedf433",
+			objectID:     "sedf433",
 			action:       "read",
 			subject:      "reader",
 			checkSubject: "reader",
@@ -213,7 +214,7 @@ func (s *AuthorizationTestSuite) TestAuthHasAccess() {
 		},
 		{
 			name:         "access check with non-existing permission",
-			objectId:     "sedf434",
+			objectID:     "sedf434",
 			action:       "read",
 			subject:      "reader",
 			checkSubject: "nonexistent",
@@ -240,33 +241,33 @@ func (s *AuthorizationTestSuite) TestAuthHasAccess() {
 				ctx := t.Context()
 				keto := dep.ByImageName(testoryketo.OryKetoImage) // Keto is treated as a queue service
 
-				ketoUri := keto.GetDS(ctx)
-				ketoAdminUri := ketoUri.ExtendPath("admin/relation-tuples")
+				ketoURI := keto.GetDS(ctx)
+				ketoAdminURI := ketoURI.ExtendPath("admin/relation-tuples")
 
-				ketoReadUri := ketoUri.ExtendPath("/relation-tuples/check")
+				ketoReadURI := ketoURI.ExtendPath("/relation-tuples/check")
 				portMapping, err := keto.PortMapping(ctx, "4466/tcp")
 				require.NoError(t, err)
 
-				ketoReadUri, err = ketoReadUri.ChangePort(portMapping)
+				ketoReadURI, err = ketoReadURI.ChangePort(portMapping)
 				require.NoError(t, err)
 
 				// Setup service and context
 				ctx, srv := frame.NewService("Test Srv", frame.WithConfig(
 					&frame.ConfigurationDefault{
-						AuthorizationServiceReadURI:  ketoReadUri.String(),
-						AuthorizationServiceWriteURI: ketoAdminUri.String(),
+						AuthorizationServiceReadURI:  ketoReadURI.String(),
+						AuthorizationServiceWriteURI: ketoAdminURI.String(),
 					}))
 				ctx = frame.SvcToContext(ctx, srv)
 				ctx = tc.setupClaims(ctx)
 
 				// First write the permission
-				err = s.authorizationControlListWrite(ctx, ketoAdminUri.String(), tc.objectId, tc.action, tc.subject)
+				err = s.authorizationControlListWrite(ctx, ketoAdminURI.String(), tc.objectID, tc.action, tc.subject)
 				if tc.subject == tc.checkSubject { // Only expect success if we're checking the subject we wrote
 					require.NoError(t, err, "authorization write should succeed for setup")
 				}
 
 				// Then check access
-				access, err := frame.AuthHasAccess(ctx, tc.objectId, tc.checkAction, tc.checkSubject)
+				access, err := frame.AuthHasAccess(ctx, tc.objectID, tc.checkAction, tc.checkSubject)
 
 				if tc.expectError {
 					require.Error(t, err, "expected access check to fail")

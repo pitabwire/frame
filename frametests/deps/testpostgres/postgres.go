@@ -11,11 +11,12 @@ import (
 
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/pitabwire/frame"
-	"github.com/pitabwire/frame/frametests/definition"
 	"github.com/testcontainers/testcontainers-go"
 	tcPostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/wait"
+
+	"github.com/pitabwire/frame"
+	"github.com/pitabwire/frame/frametests/definition"
 )
 
 const (
@@ -117,14 +118,14 @@ func (d *postgreSQLDependancy) GetRandomisedDS(
 func CreateDatabase(
 	ctx context.Context,
 	connection frame.DataSource,
-	DBName string,
+	dbName string,
 ) (frame.DataSource, func(context.Context), error) {
 	connectionURI, err := connection.ToURI()
 	if err != nil {
 		return "", func(_ context.Context) {}, err
 	}
 
-	newDBName := suffixedDatabaseName(connectionURI, DBName)
+	newDBName := suffixedDatabaseName(connectionURI, dbName)
 
 	connectionURI, err = ensureDatabaseExists(ctx, connectionURI, newDBName)
 	if err != nil {

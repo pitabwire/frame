@@ -6,10 +6,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/suite"
+
 	"github.com/pitabwire/frame"
 	"github.com/pitabwire/frame/tests"
-	"github.com/stretchr/testify/require"
-	"github.com/stretchr/testify/suite"
 )
 
 // QueueSubscriberMetricsTestSuite extends BaseTestSuite for comprehensive subscriber metrics testing.
@@ -63,7 +63,7 @@ func (s *QueueSubscriberMetricsTestSuite) TestSubscriberMetricsIsIdle() {
 	}
 
 	for _, tc := range testCases {
-		s.T().Run(tc.name, func(t *testing.T) {
+		s.Run(tc.name, func() {
 			metrics := &frame.SubscriberMetrics{
 				ActiveMessages: &atomic.Int64{},
 				LastActivity:   &atomic.Int64{},
@@ -74,7 +74,7 @@ func (s *QueueSubscriberMetricsTestSuite) TestSubscriberMetricsIsIdle() {
 
 			metrics.ActiveMessages.Store(tc.activeMessages)
 			result := metrics.IsIdle(tc.state)
-			require.Equal(t, tc.expectedIsIdle, result, "IsIdle() result should match expected")
+			s.Require().Equal(tc.expectedIsIdle, result, "IsIdle() result should match expected")
 		})
 	}
 }
@@ -112,7 +112,7 @@ func (s *QueueSubscriberMetricsTestSuite) TestSubscriberMetricsIdleTime() {
 	}
 
 	for _, tc := range testCases {
-		s.T().Run(tc.name, func(t *testing.T) {
+		s.Run(tc.name, func() {
 			metrics := &frame.SubscriberMetrics{
 				ActiveMessages: &atomic.Int64{},
 				LastActivity:   &atomic.Int64{},
@@ -128,10 +128,10 @@ func (s *QueueSubscriberMetricsTestSuite) TestSubscriberMetricsIdleTime() {
 			idleTime := metrics.IdleTime(tc.state)
 
 			if tc.expectedIdleTime == 0 {
-				require.Equal(t, time.Duration(0), idleTime, "Idle time should be 0")
+				s.Require().Equal(time.Duration(0), idleTime, "Idle time should be 0")
 			} else {
 				// Allow some tolerance for timing
-				require.True(t, idleTime >= tc.expectedIdleTime-500*time.Millisecond &&
+				s.Require().True(idleTime >= tc.expectedIdleTime-500*time.Millisecond &&
 					idleTime <= tc.expectedIdleTime+500*time.Millisecond,
 					"Idle time should be approximately %v, got %v", tc.expectedIdleTime, idleTime)
 			}
@@ -168,7 +168,7 @@ func (s *QueueSubscriberMetricsTestSuite) TestSubscriberMetricsAverageProcessing
 	}
 
 	for _, tc := range testCases {
-		s.T().Run(tc.name, func(t *testing.T) {
+		s.Run(tc.name, func() {
 			metrics := &frame.SubscriberMetrics{
 				ActiveMessages: &atomic.Int64{},
 				LastActivity:   &atomic.Int64{},
@@ -181,7 +181,7 @@ func (s *QueueSubscriberMetricsTestSuite) TestSubscriberMetricsAverageProcessing
 			metrics.MessageCount.Store(tc.messageCount)
 
 			average := metrics.AverageProcessingTime()
-			require.Equal(t, tc.expectedAverage, average, "Average processing time should match expected")
+			s.Require().Equal(tc.expectedAverage, average, "Average processing time should match expected")
 		})
 	}
 }
@@ -201,7 +201,7 @@ func (s *QueueSubscriberMetricsTestSuite) TestSubscriberMetricsConcurrentAccess(
 	}
 
 	for _, tc := range testCases {
-		s.T().Run(tc.name, func(t *testing.T) {
+		s.Run(tc.name, func() {
 			metrics := &frame.SubscriberMetrics{
 				ActiveMessages: &atomic.Int64{},
 				LastActivity:   &atomic.Int64{},
@@ -236,17 +236,15 @@ func (s *QueueSubscriberMetricsTestSuite) TestSubscriberMetricsConcurrentAccess(
 
 			// Verify final state
 			expectedTotal := int64(tc.goroutines * tc.operations)
-			require.Equal(t, expectedTotal, metrics.MessageCount.Load(), "Message count should match expected total")
-			require.Equal(
-				t,
+			s.Require().Equal(expectedTotal, metrics.MessageCount.Load(), "Message count should match expected total")
+			s.Require().Equal(
 				expectedTotal,
 				metrics.ActiveMessages.Load(),
 				"Active messages should match expected total",
 			)
 
 			expectedProcessingTime := expectedTotal * 1000000 // 1ms per operation
-			require.Equal(
-				t,
+			s.Require().Equal(
 				expectedProcessingTime,
 				metrics.ProcessingTime.Load(),
 				"Processing time should match expected total",

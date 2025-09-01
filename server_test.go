@@ -12,17 +12,18 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pitabwire/frame"
-	"github.com/pitabwire/frame/frametests"
-	"github.com/pitabwire/frame/frametests/definition"
-	grpcping2 "github.com/pitabwire/frame/frametests/grpcping"
-	"github.com/pitabwire/frame/tests"
 	"github.com/stretchr/testify/suite"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/test/bufconn"
+
+	"github.com/pitabwire/frame"
+	"github.com/pitabwire/frame/frametests"
+	"github.com/pitabwire/frame/frametests/definition"
+	grpcping2 "github.com/pitabwire/frame/frametests/grpcping"
+	"github.com/pitabwire/frame/tests"
 )
 
 // ServerTestSuite extends FrameBaseTestSuite for comprehensive server testing.
@@ -74,9 +75,9 @@ func (s *ServerTestSuite) TestRawGrpcServer() {
 		},
 	}
 
-	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependancyOption) {
+	s.WithTestDependancies(s.T(), func(t *testing.T, _ *definition.DependancyOption) {
 		for _, tc := range testCases {
-			t.Run(tc.name, func(t *testing.T) {
+			t.Run(tc.name, func(_ *testing.T) {
 				srv, listener := s.startGRPCServer(t)
 				// it is here to properly stop the server
 				defer func() { time.Sleep(10 * time.Millisecond) }()
@@ -112,9 +113,9 @@ func (s *ServerTestSuite) TestServiceGrpcHealthServer() {
 		},
 	}
 
-	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependancyOption) {
+	s.WithTestDependancies(s.T(), func(t *testing.T, _ *definition.DependancyOption) {
 		for _, tc := range testCases {
-			t.Run(tc.name, func(t *testing.T) {
+			t.Run(tc.name, func(_ *testing.T) {
 				bufferSize := 1024 * 1024
 				listener := bufconn.Listen(bufferSize)
 				gsrv := grpc.NewServer()
@@ -127,7 +128,7 @@ func (s *ServerTestSuite) TestServiceGrpcHealthServer() {
 				}
 				defConf.ServerPort = tc.serverPort
 
-				httpTestOpt, _ := frametests.WithHttpTestDriver()
+				httpTestOpt, _ := frametests.WithHTTPTestDriver()
 
 				ctx, srv := frame.NewService(
 					tc.serviceName,
@@ -174,15 +175,15 @@ func (s *ServerTestSuite) TestServiceGrpcServer() {
 		},
 	}
 
-	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependancyOption) {
+	s.WithTestDependancies(s.T(), func(t *testing.T, _ *definition.DependancyOption) {
 		for _, tc := range testCases {
-			t.Run(tc.name, func(t *testing.T) {
+			t.Run(tc.name, func(_ *testing.T) {
 				bufferSize := 1024 * 1024
 				listener := bufconn.Listen(bufferSize)
 				gsrv := grpc.NewServer()
 				grpcping2.RegisterFramePingServer(gsrv, &grpcServer{})
 
-				httpTestOpt, _ := frametests.WithHttpTestDriver()
+				httpTestOpt, _ := frametests.WithHTTPTestDriver()
 
 				ctx, srv := frame.NewService(
 					tc.serviceName,
@@ -217,6 +218,8 @@ func (s *ServerTestSuite) TestServiceGrpcServer() {
 }
 
 // TestServiceGrpcTLSServer tests TLS-enabled gRPC server functionality.
+//
+//nolint:gocognit
 func (s *ServerTestSuite) TestServiceGrpcTLSServer() {
 	testCases := []struct {
 		name        string
@@ -232,15 +235,15 @@ func (s *ServerTestSuite) TestServiceGrpcTLSServer() {
 		},
 	}
 
-	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependancyOption) {
+	s.WithTestDependancies(s.T(), func(t *testing.T, _ *definition.DependancyOption) {
 		for _, tc := range testCases {
-			t.Run(tc.name, func(t *testing.T) {
+			t.Run(tc.name, func(_ *testing.T) {
 				gsrv := grpc.NewServer()
 				grpcping2.RegisterFramePingServer(gsrv, &grpcServer{})
 
 				ctx, srv := frame.NewService(tc.serviceName)
 
-				httpTestOpt, _ := frametests.WithHttpTestDriver()
+				httpTestOpt, _ := frametests.WithHTTPTestDriver()
 
 				srv.Init(ctx, httpTestOpt, frame.WithGRPCServer(gsrv), frame.WithGRPCPort(tc.grpcPort))
 
@@ -295,10 +298,10 @@ func (s *ServerTestSuite) TestServiceRun() {
 		},
 	}
 
-	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependancyOption) {
+	s.WithTestDependancies(s.T(), func(t *testing.T, _ *definition.DependancyOption) {
 		for _, tc := range testCases {
-			t.Run(tc.name, func(t *testing.T) {
-				httpTestOpt, _ := frametests.WithHttpTestDriver()
+			t.Run(tc.name, func(_ *testing.T) {
+				httpTestOpt, _ := frametests.WithHTTPTestDriver()
 
 				ctx2, srv2 := frame.NewService(tc.serviceName, httpTestOpt)
 

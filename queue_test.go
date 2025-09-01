@@ -9,12 +9,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
+
 	"github.com/pitabwire/frame"
 	"github.com/pitabwire/frame/frametests"
 	"github.com/pitabwire/frame/frametests/definition"
 	"github.com/pitabwire/frame/tests"
-	"github.com/stretchr/testify/require"
-	"github.com/stretchr/testify/suite"
 )
 
 // QueueTestSuite extends BaseTestSuite for comprehensive queue testing.
@@ -43,7 +44,7 @@ func (s *QueueTestSuite) TestServiceRegisterPublisherNotSet() {
 		},
 	}
 
-	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependancyOption) {
+	s.WithTestDependancies(s.T(), func(t *testing.T, _ *definition.DependancyOption) {
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
 				ctx, srv := frame.NewService(tc.serviceName)
@@ -193,6 +194,8 @@ func (s *QueueTestSuite) TestServiceRegisterPublisher() {
 }
 
 // TestServiceRegisterPublisherMultiple tests multiple publishers.
+//
+//nolint:gocognit
 func (s *QueueTestSuite) TestServiceRegisterPublisherMultiple() {
 	testCases := []struct {
 		name         string
@@ -288,7 +291,7 @@ func (h *msgHandler) Handle(ctx context.Context, metadata map[string]string, mes
 
 type handlerWithError struct{}
 
-func (h *handlerWithError) Handle(ctx context.Context, metadata map[string]string, message []byte) error {
+func (h *handlerWithError) Handle(_ context.Context, _ map[string]string, _ []byte) error {
 	return errors.New("handler error")
 }
 
@@ -306,7 +309,7 @@ func (s *QueueTestSuite) TestServiceRegisterSubscriber() {
 			serviceName: "Test Srv",
 			topic:       "test-subscriber",
 			queueURL:    "mem://topicA",
-			handler: func(ctx context.Context, metadata map[string]string, message []byte) error {
+			handler: func(_ context.Context, _ map[string]string, _ []byte) error {
 				return nil
 			},
 		},
@@ -430,7 +433,7 @@ func (s *QueueTestSuite) TestServiceRegisterSubscriberValidateMessages() {
 				var mu sync.Mutex
 
 				handler := &msgHandler{
-					f: func(ctx context.Context, metadata map[string]string, message []byte) error {
+					f: func(_ context.Context, _ map[string]string, _ []byte) error {
 						mu.Lock()
 						receivedCount++
 						mu.Unlock()
@@ -466,6 +469,8 @@ func (s *QueueTestSuite) TestServiceRegisterSubscriberValidateMessages() {
 }
 
 // TestServiceSubscriberValidateJetstreamMessages tests Jetstream message validation.
+//
+//nolint:gocognit
 func (s *QueueTestSuite) TestServiceSubscriberValidateJetstreamMessages() {
 	testCases := []struct {
 		name        string
@@ -528,10 +533,9 @@ func (s *QueueTestSuite) TestServiceSubscriberValidateJetstreamMessages() {
 				var mu sync.Mutex
 
 				handler := &msgHandler{
-					f: func(ctx context.Context, metadata map[string]string, message []byte) error {
+					f: func(_ context.Context, _ map[string]string, message []byte) error {
 						var data map[string]interface{}
-						err := json.Unmarshal(message, &data)
-						if err != nil {
+						if err = json.Unmarshal(message, &data); err != nil {
 							return err
 						}
 						mu.Lock()
@@ -657,10 +661,10 @@ func (s *QueueTestSuite) TestServiceRegisterSubscriberInvalid() {
 		},
 	}
 
-	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependancyOption) {
+	s.WithTestDependancies(s.T(), func(t *testing.T, _ *definition.DependancyOption) {
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
-				handler := &msgHandler{f: func(ctx context.Context, metadata map[string]string, message []byte) error {
+				handler := &msgHandler{f: func(_ context.Context, _ map[string]string, _ []byte) error {
 					return nil
 				}}
 				opt := frame.WithRegisterSubscriber(tc.topic, tc.queueURL, handler)
@@ -727,7 +731,7 @@ func (s *QueueTestSuite) TestServiceRegisterSubscriberContextCancelWorks() {
 					}
 				}
 
-				handler := &msgHandler{f: func(ctx context.Context, metadata map[string]string, message []byte) error {
+				handler := &msgHandler{f: func(_ context.Context, _ map[string]string, _ []byte) error {
 					return nil
 				}}
 				opt := frame.WithRegisterSubscriber(tc.topic, queueURL, handler)
@@ -836,7 +840,7 @@ func (s *QueueTestSuite) TestServiceAddPublisherInvalidURL() {
 		},
 	}
 
-	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependancyOption) {
+	s.WithTestDependancies(s.T(), func(t *testing.T, _ *definition.DependancyOption) {
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
 				ctx, srv := frame.NewService(tc.serviceName, frametests.WithNoopDriver())
@@ -905,7 +909,7 @@ func (s *QueueTestSuite) TestServiceAddSubscriber() {
 					}
 				}
 
-				handler := &msgHandler{f: func(ctx context.Context, metadata map[string]string, message []byte) error {
+				handler := &msgHandler{f: func(_ context.Context, _ map[string]string, _ []byte) error {
 					return nil
 				}}
 
@@ -1014,10 +1018,10 @@ func (s *QueueTestSuite) TestServiceAddSubscriberInvalidURL() {
 		},
 	}
 
-	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependancyOption) {
+	s.WithTestDependancies(s.T(), func(t *testing.T, _ *definition.DependancyOption) {
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
-				handler := &msgHandler{f: func(ctx context.Context, metadata map[string]string, message []byte) error {
+				handler := &msgHandler{f: func(_ context.Context, _ map[string]string, _ []byte) error {
 					return nil
 				}}
 

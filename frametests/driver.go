@@ -6,8 +6,9 @@ import (
 	"net/http"
 	"net/http/httptest"
 
-	"github.com/pitabwire/frame"
 	"github.com/pitabwire/util"
+
+	"github.com/pitabwire/frame"
 )
 
 func GetFreePort(ctx context.Context) (int, error) {
@@ -49,8 +50,8 @@ func (t *testDriver) GetTestServer() *httptest.Server {
 	return t.srv
 }
 
-// WithHttpTestDriver uses a driver, mostly useful when writing tests against the frame service.
-func WithHttpTestDriver() (frame.Option, func() *httptest.Server) {
+// WithHTTPTestDriver uses a driver, mostly useful when writing tests against the frame service.
+func WithHTTPTestDriver() (frame.Option, func() *httptest.Server) {
 	driver := &testDriver{}
 	return frame.WithDriver(driver), driver.GetTestServer
 }

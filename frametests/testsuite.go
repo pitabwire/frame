@@ -4,13 +4,14 @@ import (
 	"context"
 	"testing"
 
-	"github.com/pitabwire/frame/frametests/definition"
 	"github.com/pitabwire/util"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/network"
 	"go.uber.org/mock/gomock"
+
+	"github.com/pitabwire/frame/frametests/definition"
 )
 
 // FrameBaseTestSuite provides a base test suite with all necessary test components.

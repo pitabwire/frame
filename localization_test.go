@@ -8,12 +8,11 @@ import (
 	"testing"
 
 	"github.com/nicksnyder/go-i18n/v2/i18n"
+	"github.com/stretchr/testify/suite"
+	"google.golang.org/grpc/metadata"
+
 	"github.com/pitabwire/frame"
 	"github.com/pitabwire/frame/tests"
-	"github.com/stretchr/testify/require"
-	"github.com/stretchr/testify/suite"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/metadata"
 )
 
 // LocalizationTestSuite extends BaseTestSuite for comprehensive localization testing.
@@ -55,7 +54,7 @@ func (s *LocalizationTestSuite) TestTranslations() {
 	}
 
 	for _, tc := range testCases {
-		s.T().Run(tc.name, func(t *testing.T) {
+		s.Run(tc.name, func() {
 			translations := frame.WithTranslations(tc.translationDir, tc.languages...)
 			_, srv := frame.NewService(tc.serviceName, translations)
 
@@ -69,8 +68,8 @@ func (s *LocalizationTestSuite) TestTranslations() {
 				TemplateData: tc.templateData,
 				PluralCount:  tc.pluralCount,
 			})
-			require.NoError(t, err, "English localization should succeed")
-			require.Equal(t, tc.expectedEn, englishVersion, "English translation should match expected")
+			s.Require().NoError(err, "English localization should succeed")
+			s.Require().Equal(tc.expectedEn, englishVersion, "English translation should match expected")
 
 			swLocalizer := i18n.NewLocalizer(bundle, "sw")
 			swVersion, err := swLocalizer.Localize(&i18n.LocalizeConfig{
@@ -80,8 +79,8 @@ func (s *LocalizationTestSuite) TestTranslations() {
 				TemplateData: tc.templateData,
 				PluralCount:  tc.pluralCount,
 			})
-			require.NoError(t, err, "Swahili localization should succeed")
-			require.Equal(t, tc.expectedSw, swVersion, "Swahili translation should match expected")
+			s.Require().NoError(err, "Swahili localization should succeed")
+			s.Require().Equal(tc.expectedSw, swVersion, "Swahili translation should match expected")
 		})
 	}
 }
@@ -139,20 +138,21 @@ func (s *LocalizationTestSuite) TestTranslationsHelpers() {
 	}
 
 	for _, tc := range testCases {
-		s.T().Run(tc.name, func(t *testing.T) {
+		s.Run(tc.name, func() {
 			translations := frame.WithTranslations(tc.translationDir, tc.languages...)
 			ctx, srv := frame.NewService(tc.serviceName, translations)
 
 			var result string
-			if tc.templateData == nil {
+			switch {
+			case tc.templateData == nil:
 				result = srv.Translate(ctx, tc.language, tc.messageID)
-			} else if tc.pluralCount > 1 {
+			case tc.pluralCount > 1:
 				result = srv.TranslateWithMapAndCount(ctx, tc.language, tc.messageID, tc.templateData, tc.pluralCount)
-			} else {
+			default:
 				result = srv.TranslateWithMap(ctx, tc.language, tc.messageID, tc.templateData)
 			}
 
-			require.Equal(t, tc.expected, result, "Translation result should match expected")
+			s.Require().Equal(tc.expected, result, "Translation result should match expected")
 		})
 	}
 }
@@ -176,16 +176,16 @@ func (s *LocalizationTestSuite) TestLanguageContextManagement() {
 	}
 
 	for _, tc := range testCases {
-		s.T().Run(tc.name, func(t *testing.T) {
+		s.Run(tc.name, func() {
 			translations := frame.WithTranslations("tests_runner/localization", "en", "sw")
 			ctx, srv := frame.NewService(tc.serviceName, translations)
 
 			ctx = frame.LangugageToContext(ctx, []string{tc.language})
 			result := srv.Translate(ctx, "", tc.messageID)
-			require.Equal(t, tc.expected, result, "Translation with language context should match expected")
+			s.Require().Equal(tc.expected, result, "Translation with language context should match expected")
 
 			lang := frame.LanguageFromContext(ctx)
-			require.Equal(t, []string{tc.language}, lang, "Language from context should match set language")
+			s.Require().Equal([]string{tc.language}, lang, "Language from context should match set language")
 		})
 	}
 }
@@ -209,14 +209,14 @@ func (s *LocalizationTestSuite) TestLanguageMapManagement() {
 	}
 
 	for _, tc := range testCases {
-		s.T().Run(tc.name, func(t *testing.T) {
+		s.Run(tc.name, func() {
 			_, _ = frame.NewService(tc.serviceName)
 
 			// Test language map functions
 			testMap := frame.LanguageToMap(tc.anyMap, tc.testLanguages)
 
 			result := frame.LanguageFromMap(testMap)
-			require.Equal(t, result, tc.testLanguages, "Language map should contain test key")
+			s.Require().Equal(result, tc.testLanguages, "Language map should contain test key")
 		})
 	}
 }
@@ -247,7 +247,7 @@ func (s *LocalizationTestSuite) TestLanguageHTTPMiddleware() {
 	}
 
 	for _, tc := range testCases {
-		s.T().Run(tc.name, func(t *testing.T) {
+		s.Run(tc.name, func() {
 			translations := frame.WithTranslations("tests_runner/localization", "en", "sw")
 			_, srv := frame.NewService(tc.serviceName, translations)
 
@@ -264,19 +264,9 @@ func (s *LocalizationTestSuite) TestLanguageHTTPMiddleware() {
 			middleware.ServeHTTP(w, req)
 
 			result := w.Body.String()
-			require.Contains(t, result, tc.expectedLang, "HTTP response should contain expected language")
+			s.Require().Contains(result, tc.expectedLang, "HTTP response should contain expected language")
 		})
 	}
-}
-
-// Mock ServerStream for testing stream interceptors.
-type mockServerStream struct {
-	grpc.ServerStream
-	ctx context.Context
-}
-
-func (m *mockServerStream) Context() context.Context {
-	return m.ctx
 }
 
 // TestLanguageGrpcInterceptors tests gRPC interceptors for language detection.
@@ -302,12 +292,12 @@ func (s *LocalizationTestSuite) TestLanguageGrpcInterceptors() {
 	}
 
 	for _, tc := range testCases {
-		s.T().Run(tc.name, func(t *testing.T) {
+		s.Run(tc.name, func() {
 			translations := frame.WithTranslations("tests_runner/localization", "en", "sw")
 			_, srv := frame.NewService(tc.serviceName, translations)
 
 			interceptor := srv.LanguageUnaryInterceptor()
-			handler := func(ctx context.Context, req any) (any, error) {
+			handler := func(ctx context.Context, _ any) (any, error) {
 				lang := frame.LanguageFromContext(ctx)
 				return strings.Join(lang, ","), nil
 			}
@@ -316,8 +306,8 @@ func (s *LocalizationTestSuite) TestLanguageGrpcInterceptors() {
 			ctx := metadata.NewIncomingContext(context.Background(), md)
 
 			result, err := interceptor(ctx, nil, nil, handler)
-			require.NoError(t, err, "gRPC interceptor should succeed")
-			require.Contains(t, result.(string), tc.expectedLang[0], "gRPC interceptor should detect correct language")
+			s.Require().NoError(err, "gRPC interceptor should succeed")
+			s.Require().Contains(result.(string), tc.expectedLang[0], "gRPC interceptor should detect correct language")
 		})
 	}
 }
@@ -339,32 +329,14 @@ func (s *LocalizationTestSuite) TestLanguageFromGrpcRequest() {
 	}
 
 	for _, tc := range testCases {
-		s.T().Run(tc.name, func(t *testing.T) {
+		s.Run(tc.name, func() {
 			ctx, _ := frame.NewService(tc.serviceName)
 
 			md := metadata.New(map[string]string{"accept-language": tc.metadataLang})
 			grpcCtx := metadata.NewIncomingContext(ctx, md)
 
 			lang := frame.LanguageFromGrpcRequest(grpcCtx)
-			require.Equal(t, tc.expectedLang, lang, "Language from gRPC request should match expected")
+			s.Require().Equal(tc.expectedLang, lang, "Language from gRPC request should match expected")
 		})
 	}
-}
-
-// Mock message for testing queue language propagation.
-type mockMessage struct {
-	metadata map[string]string
-	body     []byte
-}
-
-func (m *mockMessage) Metadata() map[string]string {
-	return m.metadata
-}
-
-func (m *mockMessage) Body() []byte {
-	return m.body
-}
-
-func (m *mockMessage) SetMetadata(md map[string]string) {
-	m.metadata = md
 }

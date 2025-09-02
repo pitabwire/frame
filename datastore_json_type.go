@@ -6,6 +6,7 @@ import (
 	"database/sql/driver"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"sync"
 
 	"google.golang.org/protobuf/types/known/structpb"
@@ -130,6 +131,34 @@ func (m *JSONMap) GormValue(_ context.Context, db *gorm.DB) clause.Expr {
 	}
 }
 
-func (m *JSONMap) ToStructPB() (*structpb.Struct, error) {
+func (m *JSONMap) ToProtoStruct() (*structpb.Struct, error) {
 	return structpb.NewStruct(*m)
+}
+
+// FromProtoStruct populates the JSONMap with data from a protocol buffer Struct.
+// If the receiver is nil, a new JSONMap will be created and returned.
+// If the input struct is nil, the receiver is returned unchanged.
+// Returns the receiver (or a new JSONMap if receiver was nil) for method chaining.
+func (m *JSONMap) FromProtoStruct(s *structpb.Struct) *JSONMap {
+    // Early return if no data to process
+    if s == nil {
+        return m
+    }
+    
+    // Initialize receiver if nil
+    if m == nil {
+        m = &JSONMap{}
+    }
+    
+    // Ensure map is initialized
+    if *m == nil {
+        *m = make(JSONMap)
+    }
+    
+    // Safely convert protobuf struct to map and merge
+    if srcMap := s.AsMap(); srcMap != nil {
+        maps.Insert(*m, maps.All(srcMap))
+    }
+    
+    return m
 }

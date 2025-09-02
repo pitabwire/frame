@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"maps"
 	"sync"
+	"unicode/utf8"
 
 	"google.golang.org/protobuf/types/known/structpb"
 	"gorm.io/gorm"
@@ -37,7 +38,7 @@ func (m *JSONMap) Value() (driver.Value, error) {
 }
 
 // Scan implements the sql.Scanner interface for database deserialization.
-func (m *JSONMap) Scan(value interface{}) error {
+func (m *JSONMap) Scan(value any) error {
 	if value == nil {
 		*m = make(JSONMap)
 		return nil
@@ -62,7 +63,7 @@ func (m *JSONMap) Scan(value interface{}) error {
 	decoder := json.NewDecoder(buf)
 	decoder.UseNumber()
 
-	var temp map[string]interface{}
+	var temp map[string]any
 	if err := decoder.Decode(&temp); err != nil {
 		return fmt.Errorf("jsonmap: decode error: %w", err)
 	}
@@ -85,7 +86,7 @@ func (m *JSONMap) UnmarshalJSON(data []byte) error {
 		*m = make(JSONMap)
 		return nil
 	}
-	var temp map[string]interface{}
+	var temp map[string]any
 	if err := json.Unmarshal(data, &temp); err != nil {
 		return err
 	}
@@ -115,12 +116,12 @@ func (m *JSONMap) GormDBDataType(db *gorm.DB, _ *schema.Field) string {
 // GormValue optimizes how values are rendered in SQL for specific dialects.
 func (m *JSONMap) GormValue(_ context.Context, db *gorm.DB) clause.Expr {
 	if m == nil {
-		return clause.Expr{SQL: "?", Vars: []interface{}{nil}}
+		return clause.Expr{SQL: "?", Vars: []any{nil}}
 	}
 
 	data, err := json.Marshal(*m)
 	if err != nil {
-		return clause.Expr{SQL: "?", Vars: []interface{}{nil}}
+		return clause.Expr{SQL: "?", Vars: []any{nil}}
 	}
 
 	switch db.Dialector.Name() {
@@ -131,8 +132,35 @@ func (m *JSONMap) GormValue(_ context.Context, db *gorm.DB) clause.Expr {
 	}
 }
 
-func (m *JSONMap) ToProtoStruct() (*structpb.Struct, error) {
-	return structpb.NewStruct(*m)
+// ToProtoStruct converts a JSONMap into a structpb.Struct safely and efficiently.
+func (m *JSONMap) ToProtoStruct() *structpb.Struct {
+	if m == nil {
+		return &structpb.Struct{Fields: make(map[string]*structpb.Value)}
+	}
+
+	refM := *m
+	fields := make(map[string]*structpb.Value, len(refM))
+
+	for k, v := range refM {
+		// Validate UTF-8 keys (skip invalid ones)
+		if !utf8.ValidString(k) {
+			// Consider using structured logging instead of fmt.Printf in production
+			fmt.Printf("ToProtoStruct: invalid UTF-8 in key %q\n", k)
+			continue
+		}
+
+		// Convert values
+		val, err := structpb.NewValue(v)
+		if err != nil {
+			// Skip unconvertible values instead of failing whole conversion
+			fmt.Printf("ToProtoStruct: failed to convert key %q, value %+v: %v\n", k, v, err)
+			continue
+		}
+
+		fields[k] = val
+	}
+
+	return &structpb.Struct{Fields: fields}
 }
 
 // FromProtoStruct populates the JSONMap with data from a protocol buffer Struct.
@@ -140,25 +168,25 @@ func (m *JSONMap) ToProtoStruct() (*structpb.Struct, error) {
 // If the input struct is nil, the receiver is returned unchanged.
 // Returns the receiver (or a new JSONMap if receiver was nil) for method chaining.
 func (m *JSONMap) FromProtoStruct(s *structpb.Struct) *JSONMap {
-    // Early return if no data to process
-    if s == nil {
-        return m
-    }
-    
-    // Initialize receiver if nil
-    if m == nil {
-        m = &JSONMap{}
-    }
-    
-    // Ensure map is initialized
-    if *m == nil {
-        *m = make(JSONMap)
-    }
-    
-    // Safely convert protobuf struct to map and merge
-    if srcMap := s.AsMap(); srcMap != nil {
-        maps.Insert(*m, maps.All(srcMap))
-    }
-    
-    return m
+	// Early return if no data to process
+	if s == nil {
+		return m
+	}
+
+	// Initialize receiver if nil
+	if m == nil {
+		m = &JSONMap{}
+	}
+
+	// Ensure map is initialized
+	if *m == nil {
+		*m = make(JSONMap)
+	}
+
+	// Safely convert protobuf struct to map and merge
+	if srcMap := s.AsMap(); srcMap != nil {
+		maps.Insert(*m, maps.All(srcMap))
+	}
+
+	return m
 }

@@ -476,14 +476,14 @@ func (s *QueueTestSuite) TestServiceSubscriberValidateJetstreamMessages() {
 		name        string
 		serviceName string
 		topic       string
-		messages    []map[string]interface{}
+		messages    []map[string]any
 		expectCount int
 	}{
 		{
 			name:        "validate Jetstream messages",
 			serviceName: "Test Srv",
 			topic:       "test-jetstream",
-			messages: []map[string]interface{}{
+			messages: []map[string]any{
 				{"id": 1, "data": "test1"},
 				{"id": 2, "data": "test2"},
 			},
@@ -534,7 +534,7 @@ func (s *QueueTestSuite) TestServiceSubscriberValidateJetstreamMessages() {
 
 				handler := &msgHandler{
 					f: func(_ context.Context, _ map[string]string, message []byte) error {
-						var data map[string]interface{}
+						var data map[string]any
 						if err = json.Unmarshal(message, &data); err != nil {
 							return err
 						}

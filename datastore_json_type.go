@@ -90,7 +90,7 @@ func (m *JSONMap) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &temp); err != nil {
 		return err
 	}
-	*m = JSONMap(temp)
+	*m = temp
 	return nil
 }
 
@@ -193,6 +193,25 @@ func (m *JSONMap) GetString(key string) string {
 	s, ok := val.(string)
 	if !ok {
 		return ""
+	}
+	return s
+}
+
+// GetFloat retrieves a string value from the JSONMap by key.
+// It returns the string and a boolean indicating if the value was found and is a string.
+func (m *JSONMap) GetFloat(key string) float64 {
+	if m == nil {
+		return 0
+	}
+
+	val, ok := (*m)[key]
+	if !ok {
+		return 0
+	}
+
+	s, ok := val.(float64)
+	if !ok {
+		return 0
 	}
 	return s
 }

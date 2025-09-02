@@ -107,7 +107,7 @@ func (eq *eventQueueHandler) Handle(ctx context.Context, header map[string]strin
 			processedPayload = clonedMsg
 		} else {
 			// Handle JSON unmarshaling with proper error context
-			if err := json.Unmarshal(payload, v); err != nil {
+			if err := json.Unmarshal(payload, &v); err != nil {
 				eq.service.Log(ctx).WithError(err).WithField("event", eventName).Error("Failed to unmarshal JSON payload")
 				return err
 			}

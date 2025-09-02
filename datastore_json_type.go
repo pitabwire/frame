@@ -132,14 +132,60 @@ func (m *JSONMap) GormValue(_ context.Context, db *gorm.DB) clause.Expr {
 	}
 }
 
+// Copy returns a deep copy of the JSONMap.
+// Nested maps and slices are recursively copied so that
+// the returned JSONMap can be modified without affecting the original.
+func (m *JSONMap) Copy() *JSONMap {
+	if m == nil || *m == nil {
+		return &JSONMap{}
+	}
+
+	out := make(JSONMap, len(*m))
+	for k, v := range *m {
+		out[k] = deepCopyValue(v)
+	}
+	return &out
+}
+
+// deepCopyValue handles recursive deep-copying for JSON-compatible values.
+func deepCopyValue(v any) any {
+	switch val := v.(type) {
+	case map[string]any:
+		cp := make(map[string]any, len(val))
+		for k, subv := range val {
+			cp[k] = deepCopyValue(subv)
+		}
+		return cp
+
+	case []any:
+		cp := make([]any, len(val))
+		for i, subv := range val {
+			cp[i] = deepCopyValue(subv)
+		}
+		return cp
+
+	// Primitive types are safe to reuse (immutable)
+	case string, float64, bool, nil, json.Number:
+		return val
+
+	// If you expect other types, you can either clone them or fallback to JSON encode/decode.
+	default:
+		// fallback: encode-decode (slower but safe for unknown structs)
+		data, _ := json.Marshal(val)
+		var out any
+		_ = json.Unmarshal(data, &out)
+		return out
+	}
+}
+
 // GetString retrieves a string value from the JSONMap by key.
 // It returns the string and a boolean indicating if the value was found and is a string.
-func (m JSONMap) GetString(key string) string {
+func (m *JSONMap) GetString(key string) string {
 	if m == nil {
 		return ""
 	}
 
-	val, ok := m[key]
+	val, ok := (*m)[key]
 	if !ok {
 		return ""
 	}
@@ -154,44 +200,35 @@ func (m JSONMap) GetString(key string) string {
 // Update merges all key-value pairs from update into the receiver.
 // If the receiver is nil, a new JSONMap is created.
 // Keys in update overwrite existing keys in the receiver.
-func (m JSONMap) Update(update JSONMap) JSONMap {
-	if update == nil {
-		return m
-	}
+func (m *JSONMap) Update(update *JSONMap) *JSONMap {
+	mCopy := m.Copy()
 
-	// Initialize receiver if nil
-	if m == nil {
-		nueM := make(JSONMap, len(update))
-		maps.Copy(nueM, update)
-		return nueM
+	if update == nil {
+		return mCopy
 	}
 
 	// Copy update into existing map
-	maps.Copy(m, update)
-	return m
+	maps.Copy(*mCopy, *update)
+	return mCopy
 }
 
 // ToProtoStruct converts a JSONMap into a structpb.Struct safely and efficiently.
-func (m JSONMap) ToProtoStruct() *structpb.Struct {
+func (m *JSONMap) ToProtoStruct() *structpb.Struct {
 	if m == nil {
 		return &structpb.Struct{Fields: make(map[string]*structpb.Value)}
 	}
 
-	fields := make(map[string]*structpb.Value, len(m))
+	fields := make(map[string]*structpb.Value, len(*m))
 
-	for k, v := range m {
+	for k, v := range *m {
 		// Validate UTF-8 keys (skip invalid ones)
 		if !utf8.ValidString(k) {
-			// Consider using structured logging instead of fmt.Printf in production
-			fmt.Printf("ToProtoStruct: invalid UTF-8 in key %q\n", k)
 			continue
 		}
 
 		// Convert values
 		val, err := structpb.NewValue(v)
 		if err != nil {
-			// Skip unconvertible values instead of failing whole conversion
-			fmt.Printf("ToProtoStruct: failed to convert key %q, value %+v: %v\n", k, v, err)
 			continue
 		}
 
@@ -205,25 +242,20 @@ func (m JSONMap) ToProtoStruct() *structpb.Struct {
 // If the receiver is nil, a new JSONMap will be created and returned.
 // If the input struct is nil, the receiver is returned unchanged.
 // Returns the receiver (or a new JSONMap if receiver was nil) for method chaining.
-func (m JSONMap) FromProtoStruct(s *structpb.Struct) JSONMap {
+func (m *JSONMap) FromProtoStruct(s *structpb.Struct) *JSONMap {
+	mCopy := m.Copy()
+
 	// Early return if no data to process
 	if s == nil {
-		return m
+		return mCopy
 	}
 
 	structMap := s.AsMap()
 	// Safely convert protobuf struct to map and merge
 	if structMap == nil {
-		return m
+		return mCopy
 	}
 
-	// Initialize receiver if nil
-	if m == nil {
-
-		nueM := make(JSONMap, len(structMap))
-		maps.Copy(nueM, structMap)
-		return nueM
-	}
-	maps.Copy(m, structMap)
-	return m
+	maps.Copy(*mCopy, structMap)
+	return mCopy
 }

@@ -132,36 +132,54 @@ func (m *JSONMap) GormValue(_ context.Context, db *gorm.DB) clause.Expr {
 	}
 }
 
+// GetString retrieves a string value from the JSONMap by key.
+// It returns the string and a boolean indicating if the value was found and is a string.
+func (m JSONMap) GetString(key string) string {
+	if m == nil {
+		return ""
+	}
+
+	val, ok := m[key]
+	if !ok {
+		return ""
+	}
+
+	s, ok := val.(string)
+	if !ok {
+		return ""
+	}
+	return s
+}
+
 // Update merges all key-value pairs from update into the receiver.
 // If the receiver is nil, a new JSONMap is created.
 // Keys in update overwrite existing keys in the receiver.
-func (m *JSONMap) Update(update *JSONMap) *JSONMap {
+func (m JSONMap) Update(update JSONMap) JSONMap {
 	if update == nil {
 		return m
 	}
 
 	// Initialize receiver if nil
-	if m == nil || *m == nil {
-		newMap := make(JSONMap, len(*update))
-		maps.Copy(newMap, *update)
-		return &newMap
+	if m == nil {
+		nueM := make(JSONMap, len(update))
+		maps.Copy(nueM, update)
+		return nueM
 	}
 
 	// Copy update into existing map
-	maps.Copy(*m, *update)
+	maps.Copy(m, update)
 	return m
 }
 
 // ToProtoStruct converts a JSONMap into a structpb.Struct safely and efficiently.
-func (m *JSONMap) ToProtoStruct() *structpb.Struct {
+func (m JSONMap) ToProtoStruct() *structpb.Struct {
 	if m == nil {
 		return &structpb.Struct{Fields: make(map[string]*structpb.Value)}
 	}
 
-	refM := *m
-	fields := make(map[string]*structpb.Value, len(refM))
+	fields := make(map[string]*structpb.Value, len(m))
 
-	for k, v := range refM {
+	for k, v := range m {
 		// Validate UTF-8 keys (skip invalid ones)
 		if !utf8.ValidString(k) {
 			// Consider using structured logging instead of fmt.Printf in production
@@ -187,26 +205,25 @@ func (m *JSONMap) ToProtoStruct() *structpb.Struct {
 // If the receiver is nil, a new JSONMap will be created and returned.
 // If the input struct is nil, the receiver is returned unchanged.
 // Returns the receiver (or a new JSONMap if receiver was nil) for method chaining.
-func (m *JSONMap) FromProtoStruct(s *structpb.Struct) *JSONMap {
+func (m JSONMap) FromProtoStruct(s *structpb.Struct) JSONMap {
 	// Early return if no data to process
 	if s == nil {
 		return m
 	}
 
+	structMap := s.AsMap()
+	// Safely convert protobuf struct to map and merge
+	if structMap == nil {
+		return m
+	}
+
 	// Initialize receiver if nil
 	if m == nil {
-		m = &JSONMap{}
-	}
 
-	// Ensure map is initialized
-	if *m == nil {
-		*m = make(JSONMap)
+		nueM := make(JSONMap, len(structMap))
+		maps.Copy(nueM, structMap)
+		return nueM
 	}
-
-	// Safely convert protobuf struct to map and merge
-	if srcMap := s.AsMap(); srcMap != nil {
-		maps.Insert(*m, maps.All(srcMap))
-	}
-
+	maps.Copy(m, structMap)
 	return m
 }

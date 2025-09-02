@@ -132,6 +132,26 @@ func (m *JSONMap) GormValue(_ context.Context, db *gorm.DB) clause.Expr {
 	}
 }
 
+// Update merges all key-value pairs from update into the receiver.
+// If the receiver is nil, a new JSONMap is created.
+// Keys in update overwrite existing keys in the receiver.
+func (m *JSONMap) Update(update *JSONMap) *JSONMap {
+	if update == nil {
+		return m
+	}
+
+	// Initialize receiver if nil
+	if m == nil || *m == nil {
+		newMap := make(JSONMap, len(*update))
+		maps.Copy(newMap, *update)
+		return &newMap
+	}
+
+	// Copy update into existing map
+	maps.Copy(*m, *update)
+	return m
+}
+
 // ToProtoStruct converts a JSONMap into a structpb.Struct safely and efficiently.
 func (m *JSONMap) ToProtoStruct() *structpb.Struct {
 	if m == nil {

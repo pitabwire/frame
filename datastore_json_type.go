@@ -135,16 +135,16 @@ func (m *JSONMap) GormValue(_ context.Context, db *gorm.DB) clause.Expr {
 // Copy returns a deep copy of the JSONMap.
 // Nested maps and slices are recursively copied so that
 // the returned JSONMap can be modified without affecting the original.
-func (m *JSONMap) Copy() *JSONMap {
+func (m *JSONMap) Copy() JSONMap {
 	if m == nil || *m == nil {
-		return &JSONMap{}
+		return JSONMap{}
 	}
 
 	out := make(JSONMap, len(*m))
 	for k, v := range *m {
 		out[k] = deepCopyValue(v)
 	}
-	return &out
+	return out
 }
 
 // deepCopyValue handles recursive deep-copying for JSON-compatible values.
@@ -200,7 +200,7 @@ func (m *JSONMap) GetString(key string) string {
 // Update merges all key-value pairs from update into the receiver.
 // If the receiver is nil, a new JSONMap is created.
 // Keys in update overwrite existing keys in the receiver.
-func (m *JSONMap) Update(update *JSONMap) *JSONMap {
+func (m *JSONMap) Update(update JSONMap) JSONMap {
 	mCopy := m.Copy()
 
 	if update == nil {
@@ -208,7 +208,7 @@ func (m *JSONMap) Update(update *JSONMap) *JSONMap {
 	}
 
 	// Copy update into existing map
-	maps.Copy(*mCopy, *update)
+	maps.Copy(mCopy, update)
 	return mCopy
 }
 
@@ -242,7 +242,7 @@ func (m *JSONMap) ToProtoStruct() *structpb.Struct {
 // If the receiver is nil, a new JSONMap will be created and returned.
 // If the input struct is nil, the receiver is returned unchanged.
 // Returns the receiver (or a new JSONMap if receiver was nil) for method chaining.
-func (m *JSONMap) FromProtoStruct(s *structpb.Struct) *JSONMap {
+func (m *JSONMap) FromProtoStruct(s *structpb.Struct) JSONMap {
 	mCopy := m.Copy()
 
 	// Early return if no data to process
@@ -256,6 +256,6 @@ func (m *JSONMap) FromProtoStruct(s *structpb.Struct) *JSONMap {
 		return mCopy
 	}
 
-	maps.Copy(*mCopy, structMap)
+	maps.Copy(mCopy, structMap)
 	return mCopy
 }

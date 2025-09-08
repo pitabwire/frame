@@ -4,7 +4,7 @@ go 1.25.0
 
 require (
 	github.com/BurntSushi/toml v1.5.0
-	github.com/XSAM/otelsql v0.39.0
+	github.com/XSAM/otelsql v0.40.0
 	github.com/caarlos0/env/v11 v11.3.1
 	github.com/docker/docker v28.4.0+incompatible
 	github.com/docker/go-connections v0.6.0

@@ -12,7 +12,7 @@ services:
 
   natsd:
     container_name: frame_nats
-    image: nats:2.11
+    image: nats:2.12
     restart: always
     ports:
       - "4225:4222"

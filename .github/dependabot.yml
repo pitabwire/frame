@@ -1,0 +1,45 @@
+version: 2
+updates:
+  # Enable version updates for Go modules
+  - package-ecosystem: "gomod"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    commit-message:
+      prefix: "deps"
+    # Auto-merge configuration
+    allow:
+      - dependency-type: "all"
+    # Enable auto-merge for all dependency types
+    labels:
+      - "dependencies"
+      - "auto-merge"
+    # Group updates to reduce PR noise
+    groups:
+      production-dependencies:
+        dependency-type: "production"
+        update-types:
+          - "minor"
+          - "patch"
+      development-dependencies:
+        dependency-type: "development"
+        update-types:
+          - "minor"
+          - "patch"
+      major-updates:
+        update-types:
+          - "major"
+
+  # Enable version updates for GitHub Actions
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      time: "09:00"
+    open-pull-requests-limit: 5
+    labels:
+      - "github-actions"
+      - "auto-merge"
+    commit-message:
+      prefix: "ci"
+      include: "scope"

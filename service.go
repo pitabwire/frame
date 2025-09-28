@@ -48,7 +48,7 @@ type Service struct {
 	version                    string
 	environment                string
 	logger                     *util.LogEntry
-	enableTracing              bool
+	disableTracing             bool
 	traceTextMap               propagation.TextMapPropagator
 	traceExporter              sdktrace.SpanExporter
 	traceSampler               sdktrace.Sampler
@@ -138,6 +138,10 @@ func NewServiceWithContext(ctx context.Context, name string, opts ...Option) (co
 
 	if defaultCfg.ServiceVersion != "" {
 		opts = append(opts, WithVersion(defaultCfg.ServiceVersion))
+	}
+
+	if defaultCfg.DisableOpenTelemetry {
+		opts = append(opts, WithDisableTracing())
 	}
 
 	opts = append(opts, WithLogger()) // Ensure logger is initialized early
@@ -299,6 +303,12 @@ func (s *Service) AddHealthCheck(checker Checker) {
 
 // Run keeps the service useful by handling incoming requests.
 func (s *Service) Run(ctx context.Context, address string) error {
+
+	err := s.initTracer(ctx)
+	if err != nil {
+		return err
+	}
+
 	pubSubErr := s.initPubsub(ctx)
 	if pubSubErr != nil {
 		return pubSubErr
@@ -435,10 +445,6 @@ func (s *Service) initializeServerDrivers(ctx context.Context, httpPort string) 
 
 // initServer starts the Service. It initializes server drivers (HTTP, gRPC).
 func (s *Service) initServer(ctx context.Context, httpPort string) error {
-	err := s.initTracer(ctx)
-	if err != nil {
-		return err
-	}
 
 	if s.healthCheckPath == "" ||
 		(s.healthCheckPath == "/" && s.handler != nil) {

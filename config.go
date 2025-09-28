@@ -83,6 +83,8 @@ type ConfigurationDefault struct {
 	LogColored        bool   `envDefault:"true"                      env:"LOG_COLORED"          yaml:"log_colored"`
 	LogShowStackTrace bool   `envDefault:"false"                     env:"LOG_SHOW_STACK_TRACE" yaml:"log_show_stack_trace"`
 
+	DisableOpenTelemetry bool `envDefault:"false"                     env:"DISABLE_OPENTELEMETRY" yaml:"disable_opentelemetry"`
+
 	ServiceName        string `envDefault:""     env:"SERVICE_NAME"         yaml:"service_name"`
 	ServiceEnvironment string `envDefault:""     env:"SERVICE_ENVIRONMENT"  yaml:"service_environment"`
 	ServiceVersion     string `envDefault:""     env:"SERVICE_VERSION"      yaml:"service_version"`

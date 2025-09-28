@@ -13,6 +13,8 @@ import (
 
 	_ "github.com/pitabwire/natspubsub" // required for NATS pubsub driver registration
 	"github.com/pitabwire/util"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/propagation"
 	"gocloud.dev/pubsub"
 	_ "gocloud.dev/pubsub/mempubsub" // required for in-memory pubsub driver registration
 	"google.golang.org/protobuf/proto"
@@ -113,7 +115,9 @@ func (p *publisher) Ref() string {
 func (p *publisher) Publish(ctx context.Context, payload any, headers ...map[string]string) error {
 	var err error
 
-	metadata := make(map[string]string)
+	metadata := propagation.MapCarrier{}
+	otel.GetTextMapPropagator().Inject(ctx, metadata)
+
 	for _, h := range headers {
 		maps.Copy(metadata, h)
 	}
@@ -426,7 +430,8 @@ func (s *subscriber) processReceivedMessage(ctx context.Context, msg *pubsub.Mes
 		var err error
 		defer s.metrics.closeMessage(time.Now(), err)
 
-		authClaim := ClaimsFromMap(msg.Metadata)
+		var metadata propagation.MapCarrier = msg.Metadata
+		authClaim := ClaimsFromMap(metadata)
 		var processedCtx context.Context
 		if authClaim != nil {
 			processedCtx = authClaim.ClaimsToContext(jobCtx)
@@ -434,13 +439,15 @@ func (s *subscriber) processReceivedMessage(ctx context.Context, msg *pubsub.Mes
 			processedCtx = jobCtx
 		}
 
-		languages := LanguageFromMap(msg.Metadata)
+		processedCtx = otel.GetTextMapPropagator().Extract(processedCtx, metadata)
+
+		languages := LanguageFromMap(metadata)
 		if len(languages) > 0 {
 			processedCtx = LangugageToContext(processedCtx, languages)
 		}
 
 		for _, worker := range s.handlers {
-			err = worker.Handle(processedCtx, msg.Metadata, msg.Body)
+			err = worker.Handle(processedCtx, metadata, msg.Body)
 			if err != nil {
 				logger := s.service.Log(processedCtx).
 					WithField("name", s.reference).

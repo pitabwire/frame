@@ -11,7 +11,6 @@ import (
 	"syscall"
 	"time"
 
-	ghandler "github.com/gorilla/handlers"
 	"github.com/nicksnyder/go-i18n/v2/i18n"
 	"github.com/pitabwire/util"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
@@ -34,9 +33,10 @@ func (c contextKey) String() string {
 const (
 	ctxKeyService = contextKey("serviceKey")
 
-	defaultHTTPReadTimeoutSeconds  = 15
-	defaultHTTPWriteTimeoutSeconds = 15
-	defaultHTTPIdleTimeoutSeconds  = 60
+	defaultHTTPReadTimeoutSeconds  = 5
+	defaultHTTPWriteTimeoutSeconds = 10
+	defaultHTTPTimeoutSeconds      = 30
+	defaultHTTPIdleTimeoutSeconds  = 90
 )
 
 // Service framework struct to hold together all application components
@@ -117,9 +117,10 @@ func NewServiceWithContext(ctx context.Context, name string, opts ...Option) (co
 		name:         name,
 		cancelFunc:   signalCancelFunc, // Store its cancel function
 		errorChannel: make(chan error, 1),
-		client: &http.Client{
-			Transport: otelhttp.NewTransport(http.DefaultTransport),
-		},
+		client: NewHTTPClient(
+			WithHTTPTimeout(time.Duration(defaultHTTPTimeoutSeconds)*time.Second),
+			WithHTTPIdleTimeout(time.Duration(defaultHTTPIdleTimeoutSeconds)*time.Second),
+		), // Use configurable HTTP client with defaults
 		logger: defaultLogger,
 
 		pool:        defaultPool,
@@ -140,7 +141,7 @@ func NewServiceWithContext(ctx context.Context, name string, opts ...Option) (co
 		opts = append(opts, WithVersion(defaultCfg.ServiceVersion))
 	}
 
-	if defaultCfg.DisableOpenTelemetry {
+	if defaultCfg.OpenTelemetryDisable {
 		opts = append(opts, WithDisableTracing())
 	}
 
@@ -203,6 +204,14 @@ func (s *Service) Environment() string {
 func WithEnvironment(environment string) Option {
 	return func(_ context.Context, s *Service) {
 		s.environment = environment
+	}
+}
+
+// WithHTTPClient configures the HTTP client used by the service.
+// This allows customizing the HTTP client's behavior such as timeout, transport, etc.
+func WithHTTPClient(opts ...HTTPOption) Option {
+	return func(_ context.Context, s *Service) {
+		s.client = NewHTTPClient(opts...)
 	}
 }
 
@@ -303,7 +312,6 @@ func (s *Service) AddHealthCheck(checker Checker) {
 
 // Run keeps the service useful by handling incoming requests.
 func (s *Service) Run(ctx context.Context, address string) error {
-
 	err := s.initTracer(ctx)
 	if err != nil {
 		return err
@@ -387,25 +395,6 @@ func (s *Service) createAndConfigureMux(_ context.Context) *http.ServeMux {
 	return mux
 }
 
-func (s *Service) applyCORSIfEnabled(_ context.Context, muxToWrap http.Handler) http.Handler {
-	config, ok := s.Config().(ConfigurationCORS)
-	if ok && config.IsCORSEnabled() {
-		corsOptions := []ghandler.CORSOption{
-			ghandler.AllowedHeaders(config.GetCORSAllowedHeaders()),
-			ghandler.ExposedHeaders(config.GetCORSExposedHeaders()),
-			ghandler.AllowedOrigins(config.GetCORSAllowedOrigins()),
-			ghandler.AllowedMethods(config.GetCORSAllowedMethods()),
-			ghandler.MaxAge(config.GetCORSMaxAge()),
-		}
-
-		if config.IsCORSAllowCredentials() {
-			corsOptions = append(corsOptions, ghandler.AllowCredentials())
-		}
-		return ghandler.CORS(corsOptions...)(muxToWrap)
-	}
-	return muxToWrap
-}
-
 func (s *Service) initializeServerDrivers(ctx context.Context, httpPort string) {
 	if s.driver == nil {
 		s.driver = &defaultDriver{
@@ -445,7 +434,6 @@ func (s *Service) initializeServerDrivers(ctx context.Context, httpPort string) 
 
 // initServer starts the Service. It initializes server drivers (HTTP, gRPC).
 func (s *Service) initServer(ctx context.Context, httpPort string) error {
-
 	if s.healthCheckPath == "" ||
 		(s.healthCheckPath == "/" && s.handler != nil) {
 		s.healthCheckPath = "/healthz"
@@ -458,8 +446,12 @@ func (s *Service) initServer(ctx context.Context, httpPort string) error {
 	}
 
 	s.startOnce.Do(func() {
-		baseMux := s.createAndConfigureMux(ctx)
-		s.handler = s.applyCORSIfEnabled(ctx, baseMux)
+		rootHandler := s.createAndConfigureMux(ctx)
+		if s.disableTracing {
+			s.handler = rootHandler
+		} else {
+			s.handler = otelhttp.NewHandler(rootHandler, "incoming_request")
+		}
 		s.initializeServerDrivers(ctx, httpPort)
 	})
 

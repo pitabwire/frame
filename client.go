@@ -9,14 +9,31 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/pitabwire/util"
 )
 
+// HTTPOption configures HTTP client behavior.
+type HTTPOption func(*httpConfig)
+
+// httpConfig holds HTTP client configuration.
+type httpConfig struct {
+	timeout time.Duration
+}
+
+// WithTimeout sets the request timeout.
+func WithTimeout(timeout time.Duration) HTTPOption {
+	return func(c *httpConfig) {
+		c.timeout = timeout
+	}
+}
+
 // InvokeRestService convenience method to call a http endpoint and utilize the raw results.
+// Options can be used to configure timeout and other HTTP client behavior.
 func (s *Service) InvokeRestService(ctx context.Context,
 	method string, endpointURL string, payload map[string]any,
-	headers map[string][]string) (int, []byte, error) {
+	headers map[string][]string, opts ...HTTPOption) (int, []byte, error) {
 	if headers == nil {
 		headers = map[string][]string{
 			"Content-Type": {"application/json"},
@@ -34,6 +51,19 @@ func (s *Service) InvokeRestService(ctx context.Context,
 		body = bytes.NewBuffer(postBody)
 	}
 
+	// Apply options
+	config := &httpConfig{}
+	for _, opt := range opts {
+		opt(config)
+	}
+
+	// Apply timeout if specified
+	if config.timeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, config.timeout)
+		defer cancel()
+	}
+
 	req, err := http.NewRequestWithContext(ctx, method, endpointURL, body)
 	if err != nil {
 		return 0, nil, err
@@ -41,9 +71,11 @@ func (s *Service) InvokeRestService(ctx context.Context,
 
 	req.Header = headers
 
-	reqDump, _ := httputil.DumpRequestOut(req, true)
-
-	s.Log(ctx).WithField("request", string(reqDump)).Debug("request out")
+	cfg, ok := s.Config().(ConfigurationLogLevel)
+	if ok && cfg.LoggingLevelIsDebug() {
+		reqDump, _ := httputil.DumpRequestOut(req, true)
+		s.Log(ctx).WithField("request", string(reqDump)).Debug("request out")
+	}
 
 	//nolint:bodyclose //this is done by util.CloseAndLogOnError()
 	resp, err := s.client.Do(req)
@@ -52,8 +84,10 @@ func (s *Service) InvokeRestService(ctx context.Context,
 	}
 	defer util.CloseAndLogOnError(ctx, resp.Body)
 
-	respDump, _ := httputil.DumpResponse(resp, true)
-	s.Log(ctx).WithField("response", string(respDump)).Debug("response in")
+	if ok && cfg.LoggingLevelIsDebug() {
+		respDump, _ := httputil.DumpResponse(resp, true)
+		s.Log(ctx).WithField("response", string(respDump)).Debug("response in")
+	}
 
 	response, err := io.ReadAll(resp.Body)
 
@@ -61,9 +95,10 @@ func (s *Service) InvokeRestService(ctx context.Context,
 }
 
 // InvokeRestServiceURLEncoded sends an HTTP request to the specified endpoint with a URL-encoded payload.
+// Options can be used to configure timeout and other HTTP client behavior.
 func (s *Service) InvokeRestServiceURLEncoded(ctx context.Context,
 	method string, endpointURL string, payload url.Values,
-	headers map[string]string) (int, []byte, error) {
+	headers map[string]string, opts ...HTTPOption) (int, []byte, error) {
 	if headers == nil {
 		headers = map[string]string{
 			"Content-Type": "application/x-www-form-urlencoded",
@@ -71,6 +106,19 @@ func (s *Service) InvokeRestServiceURLEncoded(ctx context.Context,
 	}
 
 	logger := s.Log(ctx).WithField("method", method).WithField("endpoint", endpointURL).WithField("header", headers)
+
+	// Apply options
+	config := &httpConfig{}
+	for _, opt := range opts {
+		opt(config)
+	}
+
+	// Apply timeout if specified
+	if config.timeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, config.timeout)
+		defer cancel()
+	}
 
 	req, err := http.NewRequestWithContext(ctx, method, endpointURL, strings.NewReader(payload.Encode()))
 	if err != nil {
@@ -81,20 +129,30 @@ func (s *Service) InvokeRestServiceURLEncoded(ctx context.Context,
 		req.Header.Set(key, val)
 	}
 
-	reqDump, _ := httputil.DumpRequestOut(req, true)
-	logger.WithField("request", string(reqDump)).Info("request out")
+	cfg, ok := s.Config().(ConfigurationLogLevel)
+	if ok && cfg.LoggingLevelIsDebug() {
+		reqDump, _ := httputil.DumpRequestOut(req, true)
+		logger.WithField("request", string(reqDump)).Debug("request out")
+	}
 
 	//nolint:bodyclose //this is done by util.CloseAndLogOnError()
-	resp, err := s.client.Do(req)
+	resp, err := s.HTTPClient().Do(req)
 	if err != nil {
 		return 0, nil, err
 	}
 	defer util.CloseAndLogOnError(ctx, resp.Body)
 
-	respDump, _ := httputil.DumpResponse(resp, true)
-	s.Log(ctx).WithField("response", string(respDump)).Info("response in")
+	if ok && cfg.LoggingLevelIsDebug() {
+		respDump, _ := httputil.DumpResponse(resp, true)
+		s.Log(ctx).WithField("response", string(respDump)).Debug("response in")
+	}
 
 	response, err := io.ReadAll(resp.Body)
 
 	return resp.StatusCode, response, err
+}
+
+// HTTPClient obtains an instrumented http client for making appropriate calls downstream.
+func (s *Service) HTTPClient() *http.Client {
+	return s.client
 }

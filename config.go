@@ -83,7 +83,8 @@ type ConfigurationDefault struct {
 	LogColored        bool   `envDefault:"true"                      env:"LOG_COLORED"          yaml:"log_colored"`
 	LogShowStackTrace bool   `envDefault:"false"                     env:"LOG_SHOW_STACK_TRACE" yaml:"log_show_stack_trace"`
 
-	DisableOpenTelemetry bool `envDefault:"false"                     env:"DISABLE_OPENTELEMETRY" yaml:"disable_opentelemetry"`
+	OpenTelemetryDisable    bool    `envDefault:"false" env:"OPENTELEMETRY_DISABLE"        yaml:"opentelemetry_disable"`
+	OpenTelemetryTraceRatio float64 `envDefault:"1"     env:"OPENTELEMETRY_TRACE_ID_RATIO" yaml:"opentelemetry_trace_id_ratio"`
 
 	ServiceName        string `envDefault:""     env:"SERVICE_NAME"         yaml:"service_name"`
 	ServiceEnvironment string `envDefault:""     env:"SERVICE_ENVIRONMENT"  yaml:"service_environment"`
@@ -99,14 +100,6 @@ type ConfigurationDefault struct {
 	WorkerPoolCapacity                int    `envDefault:"100" env:"WORKER_POOL_CAPACITY"                    yaml:"worker_pool_capacity"`
 	WorkerPoolCount                   int    `envDefault:"100" env:"WORKER_POOL_COUNT"                       yaml:"worker_pool_count"`
 	WorkerPoolExpiryDuration          string `envDefault:"1s"  env:"WORKER_POOL_EXPIRY_DURATION"             yaml:"worker_pool_expiry_duration"`
-
-	CORSEnabled          bool     `envDefault:"false"                     env:"CORS_ENABLED"           yaml:"cors_enabled"`
-	CORSAllowCredentials bool     `envDefault:"false"                     env:"CORS_ALLOW_CREDENTIALS" yaml:"cors_allow_credentials"`
-	CORSAllowedHeaders   []string `envDefault:"Authorization"             env:"CORS_ALLOWED_HEADERS"   yaml:"cors_allowed_headers"`
-	CORSExposedHeaders   []string `envDefault:"*"                         env:"CORS_EXPOSED_HEADERS"   yaml:"cors_exposed_headers"`
-	CORSAllowedOrigins   []string `envDefault:"*"                         env:"CORS_ALLOWED_ORIGINS"   yaml:"cors_allowed_origins"`
-	CORSAllowedMethods   []string `envDefault:"GET,HEAD,POST,PUT,OPTIONS" env:"CORS_ALLOWED_METHODS"   yaml:"cors_allowed_methods"`
-	CORSMaxAge           int      `envDefault:"3600"                      env:"CORS_MAX_AGE"           yaml:"cors_max_age"`
 
 	TLSCertificatePath    string `env:"TLS_CERTIFICATE_PATH"     yaml:"tls_certificate_path"`
 	TLSCertificateKeyPath string `env:"TLS_CERTIFICATE_KEY_PATH" yaml:"tls_certificate_key_path"`
@@ -233,6 +226,21 @@ func (c *ConfigurationDefault) GrpcPort() string {
 	return c.Port()
 }
 
+type ConfigurationTelemetry interface {
+	DisableOpenTelemetry() bool
+	SamplingRatio() float64
+}
+
+var _ ConfigurationTelemetry = new(ConfigurationDefault)
+
+func (c *ConfigurationDefault) DisableOpenTelemetry() bool {
+	return c.OpenTelemetryDisable
+}
+
+func (c *ConfigurationDefault) SamplingRatio() float64 {
+	return c.OpenTelemetryTraceRatio
+}
+
 type ConfigurationWorkerPool interface {
 	GetCPUFactor() int
 	GetCapacity() int
@@ -263,42 +271,6 @@ func (c *ConfigurationDefault) GetExpiryDuration() time.Duration {
 	}
 
 	return time.Second
-}
-
-type ConfigurationCORS interface {
-	IsCORSEnabled() bool
-	IsCORSAllowCredentials() bool
-	GetCORSAllowedHeaders() []string
-	GetCORSExposedHeaders() []string
-	GetCORSAllowedOrigins() []string
-	GetCORSAllowedMethods() []string
-	GetCORSMaxAge() int
-}
-
-var _ ConfigurationCORS = new(ConfigurationDefault)
-
-func (c *ConfigurationDefault) IsCORSEnabled() bool {
-	return c.CORSEnabled
-}
-
-func (c *ConfigurationDefault) IsCORSAllowCredentials() bool {
-	return c.CORSAllowCredentials
-}
-func (c *ConfigurationDefault) GetCORSMaxAge() int {
-	return c.CORSMaxAge
-}
-
-func (c *ConfigurationDefault) GetCORSAllowedHeaders() []string {
-	return c.CORSAllowedHeaders
-}
-func (c *ConfigurationDefault) GetCORSExposedHeaders() []string {
-	return c.CORSExposedHeaders
-}
-func (c *ConfigurationDefault) GetCORSAllowedOrigins() []string {
-	return c.CORSAllowedOrigins
-}
-func (c *ConfigurationDefault) GetCORSAllowedMethods() []string {
-	return c.CORSAllowedMethods
 }
 
 type ConfigurationOAUTH2 interface {

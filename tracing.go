@@ -15,7 +15,7 @@ import (
 	sdkmetrics "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
-	semconv "go.opentelemetry.io/otel/semconv/v1.34.0"
+	semconv "go.opentelemetry.io/otel/semconv/v1.37.0"
 )
 
 func (s *Service) initTracer(ctx context.Context) error {
@@ -23,7 +23,32 @@ func (s *Service) initTracer(ctx context.Context) error {
 		return nil
 	}
 
-	res, err := resource.Merge(
+	res, err := s.setupResource()
+	if err != nil {
+		return err
+	}
+
+	s.setupTextMapPropagator()
+	s.setupTraceSampler()
+
+	if err = s.setupTraceExporter(ctx); err != nil {
+		return err
+	}
+
+	if err = s.setupMetricsReader(ctx); err != nil {
+		return err
+	}
+
+	if err = s.setupLogsExporter(ctx); err != nil {
+		return err
+	}
+
+	return s.setupProviders(ctx, res)
+}
+
+// setupResource creates and returns the OpenTelemetry resource.
+func (s *Service) setupResource() (*resource.Resource, error) {
+	return resource.Merge(
 		resource.Default(),
 		resource.NewWithAttributes(
 			semconv.SchemaURL,
@@ -32,55 +57,81 @@ func (s *Service) initTracer(ctx context.Context) error {
 			semconv.DeploymentEnvironmentNameKey.String(s.environment),
 		),
 	)
+}
 
-	if err != nil {
-		return err
-	}
-
+// setupTextMapPropagator initializes the text map propagator if not already set.
+func (s *Service) setupTextMapPropagator() {
 	if s.traceTextMap == nil {
 		s.traceTextMap = autoprop.NewTextMapPropagator()
 	}
+}
 
+// setupTraceSampler initializes the trace sampler if not already set.
+func (s *Service) setupTraceSampler() {
 	if s.traceSampler == nil {
-		s.traceSampler = sdktrace.AlwaysSample()
-	}
+		traceIDRatio := 1.0
 
+		config, ok := s.Config().(ConfigurationTelemetry)
+		if ok {
+			traceIDRatio = config.SamplingRatio()
+		}
+
+		s.traceSampler = sdktrace.ParentBased(sdktrace.TraceIDRatioBased(traceIDRatio))
+	}
+}
+
+// setupTraceExporter initializes the trace exporter if not already set.
+func (s *Service) setupTraceExporter(ctx context.Context) error {
 	if s.traceExporter == nil {
 		if os.Getenv("OTEL_TRACES_EXPORTER") == "" {
 			_ = os.Setenv("OTEL_TRACES_EXPORTER", "none")
 		}
+		var err error
 		s.traceExporter, err = autoexport.NewSpanExporter(ctx)
 		if err != nil {
 			return err
 		}
 	}
+	return nil
+}
 
+// setupMetricsReader initializes the metrics reader if not already set.
+func (s *Service) setupMetricsReader(ctx context.Context) error {
 	if s.metricsReader == nil {
 		if os.Getenv("OTEL_METRICS_EXPORTER") == "" {
 			_ = os.Setenv("OTEL_METRICS_EXPORTER", "none")
 		}
+		var err error
 		s.metricsReader, err = autoexport.NewMetricReader(ctx)
 		if err != nil {
 			return err
 		}
 	}
+	return nil
+}
 
+// setupLogsExporter initializes the logs exporter if not already set.
+func (s *Service) setupLogsExporter(ctx context.Context) error {
 	if s.traceLogsExporter == nil {
-
 		if os.Getenv("OTEL_LOGS_EXPORTER") == "" {
 			_ = os.Setenv("OTEL_LOGS_EXPORTER", "none")
 		}
+		var err error
 		s.traceLogsExporter, err = autoexport.NewLogExporter(ctx)
 		if err != nil {
 			return err
 		}
 	}
+	return nil
+}
 
+// setupProviders initializes the OpenTelemetry providers and logger.
+func (s *Service) setupProviders(ctx context.Context, res *resource.Resource) error {
 	otel.SetTextMapPropagator(s.traceTextMap)
 
 	tp := sdktrace.NewTracerProvider(
 		sdktrace.WithSampler(s.traceSampler),
-		sdktrace.WithSyncer(s.traceExporter),
+		sdktrace.WithBatcher(s.traceExporter),
 		sdktrace.WithResource(res))
 
 	otel.SetTracerProvider(tp)
@@ -147,30 +198,4 @@ func WithTraceLogsExporter(exporter sdklogs.Exporter) Option {
 	return func(_ context.Context, s *Service) {
 		s.traceLogsExporter = exporter
 	}
-}
-
-// noopSpanExporter is a minimal noop implementation of sdktrace.SpanExporter
-type noopSpanExporter struct{}
-
-func (n *noopSpanExporter) ExportSpans(ctx context.Context, spans []sdktrace.ReadOnlySpan) error {
-	return nil
-}
-
-func (n *noopSpanExporter) Shutdown(ctx context.Context) error {
-	return nil
-}
-
-// noopLogExporter is a minimal noop implementation of sdklogs.Exporter
-type noopLogExporter struct{}
-
-func (n *noopLogExporter) Export(ctx context.Context, records []sdklogs.Record) error {
-	return nil
-}
-
-func (n *noopLogExporter) Shutdown(ctx context.Context) error {
-	return nil
-}
-
-func (n *noopLogExporter) ForceFlush(ctx context.Context) error {
-	return nil
 }

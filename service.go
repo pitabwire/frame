@@ -33,9 +33,10 @@ func (c contextKey) String() string {
 const (
 	ctxKeyService = contextKey("serviceKey")
 
-	defaultHTTPReadTimeoutSeconds  = 15
-	defaultHTTPWriteTimeoutSeconds = 15
-	defaultHTTPIdleTimeoutSeconds  = 60
+	defaultHTTPReadTimeoutSeconds  = 5
+	defaultHTTPWriteTimeoutSeconds = 10
+	defaultHTTPTimeoutSeconds      = 30
+	defaultHTTPIdleTimeoutSeconds  = 90
 )
 
 // Service framework struct to hold together all application components
@@ -116,9 +117,10 @@ func NewServiceWithContext(ctx context.Context, name string, opts ...Option) (co
 		name:         name,
 		cancelFunc:   signalCancelFunc, // Store its cancel function
 		errorChannel: make(chan error, 1),
-		client: &http.Client{
-			Transport: otelhttp.NewTransport(http.DefaultTransport),
-		},
+		client: NewHTTPClient(
+			WithHTTPTimeout(time.Duration(defaultHTTPTimeoutSeconds)*time.Second),
+			WithHTTPIdleTimeout(time.Duration(defaultHTTPIdleTimeoutSeconds)*time.Second),
+		), // Use configurable HTTP client with defaults
 		logger: defaultLogger,
 
 		pool:        defaultPool,
@@ -202,6 +204,14 @@ func (s *Service) Environment() string {
 func WithEnvironment(environment string) Option {
 	return func(_ context.Context, s *Service) {
 		s.environment = environment
+	}
+}
+
+// WithHTTPClient configures the HTTP client used by the service.
+// This allows customizing the HTTP client's behavior such as timeout, transport, etc.
+func WithHTTPClient(opts ...HTTPOption) Option {
+	return func(_ context.Context, s *Service) {
+		s.client = NewHTTPClient(opts...)
 	}
 }
 

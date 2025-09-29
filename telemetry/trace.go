@@ -2,7 +2,7 @@ package telemetry
 
 import (
 	"context"
-	"fmt"
+	"errors"
 	"time"
 
 	"github.com/pitabwire/util"
@@ -11,17 +11,18 @@ import (
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
-	"gocloud.dev/gcerrors"
+
+	"github.com/pitabwire/frame"
 )
 
 // Common attribute keys used across the frame.
 //
 //nolint:gochecknoglobals // OpenTelemetry attribute keys must be global for reuse
 var (
-	methodKey  = attribute.Key("app_method")
-	packageKey = attribute.Key("app_package")
-	statusKey  = attribute.Key("app_status")
-	errorKey   = attribute.Key("app_error")
+	AttrMethodKey  = attribute.Key("frame_method")
+	AttrPackageKey = attribute.Key("frame_package")
+	AttrStatusKey  = attribute.Key("frame_status")
+	AttrErrorKey   = attribute.Key("frame_error")
 )
 
 // contextKey is a custom type for context keys to avoid collisions.
@@ -32,24 +33,20 @@ const (
 	methodNameContextKey contextKey = "methodNameCtxKey"
 )
 
-// Tracer provides OpenTelemetry tracing for services.
-type Tracer struct {
+// tracer provides OpenTelemetry tracing for services.
+type tracer struct {
 	pkg            string
 	tracer         trace.Tracer
 	latencyMeasure metric.Float64Histogram
 }
 
-// NewTracer creates a new Tracer for a package.
-func NewTracer(pkg string) *Tracer {
-	attrs := []attribute.KeyValue{
-		packageKey.String(pkg),
-	}
+// NewTracer creates a new tracer for a package.
+func NewTracer(pkg string, options ...trace.TracerOption) frame.Tracer {
+	otelTracer := otel.Tracer(pkg, options...)
 
-	tracer := otel.Tracer(pkg, trace.WithInstrumentationAttributes(attrs...))
-
-	return &Tracer{
+	return &tracer{
 		pkg:            pkg,
-		tracer:         tracer,
+		tracer:         otelTracer,
 		latencyMeasure: LatencyMeasure(pkg),
 	}
 }
@@ -58,16 +55,22 @@ func NewTracer(pkg string) *Tracer {
 // The caller is responsible for ending the span.
 //
 //nolint:spancheck // OpenTelemetry spans are intentionally returned to caller for proper lifecycle management
-func (t *Tracer) Start(ctx context.Context, methodName string) (context.Context, trace.Span) {
-	fullName := t.pkg + "." + methodName
+func (t *tracer) Start(
+	ctx context.Context,
+	spanName string,
+	options ...trace.SpanStartOption,
+) (context.Context, trace.Span) {
+	fullName := t.pkg + "/" + spanName
 
-	sCtx, span := t.tracer.Start(ctx, fullName, trace.WithAttributes(methodKey.String(methodName)))
+	options = append(options, trace.WithAttributes(AttrMethodKey.String(spanName)))
+
+	sCtx, span := t.tracer.Start(ctx, spanName, options...)
 	sCtx = context.WithValue(sCtx, startTimeContextKey, time.Now())
 	return context.WithValue(sCtx, methodNameContextKey, fullName), span
 }
 
 // End completes a span with error information if applicable.
-func (t *Tracer) End(ctx context.Context, span trace.Span, err error) {
+func (t *tracer) End(ctx context.Context, span trace.Span, err error, options ...trace.SpanEndOption) {
 	startTimeValue := ctx.Value(startTimeContextKey)
 	startTime, ok := startTimeValue.(time.Time)
 	if !ok {
@@ -79,21 +82,20 @@ func (t *Tracer) End(ctx context.Context, span trace.Span, err error) {
 	}
 	elapsed := time.Since(startTime)
 
-	code := gcerrors.OK
-
 	if err != nil {
-		code = gcerrors.Code(err)
+		options = append(options, trace.WithStackTrace(true))
+
 		span.SetAttributes(
-			errorKey.String(err.Error()),
-			statusKey.String(fmt.Sprint(code)),
+			AttrErrorKey.String(err.Error()),
 		)
-		span.SetStatus(codes.Error, err.Error())
+
 		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 	} else {
 		span.SetStatus(codes.Ok, "")
 	}
 
-	span.End()
+	span.End(options...)
 
 	methodNameValue := ctx.Value(methodNameContextKey)
 	methodName, ok := methodNameValue.(string)
@@ -109,7 +111,20 @@ func (t *Tracer) End(ctx context.Context, span trace.Span, err error) {
 		float64(elapsed.Milliseconds()),
 
 		metric.WithAttributes(
-			statusKey.String(fmt.Sprint(code)),
-			methodKey.String(methodName)),
+			AttrStatusKey.String(ErrorCode(err)),
+			AttrMethodKey.String(methodName)),
 	)
+}
+
+func ErrorCode(err error) string {
+	if err == nil {
+		return "ok"
+	}
+	if errors.Is(err, context.Canceled) {
+		return "canceled"
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		return "deadline exceeded"
+	}
+	return "err"
 }

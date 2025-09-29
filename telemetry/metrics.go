@@ -74,7 +74,7 @@ func Views(pkg string) []sdkmetric.View {
 							Boundaries: defaultMillisecondsBoundaries,
 						},
 						AttributeFilter: func(kv attribute.KeyValue) bool {
-							return kv.Key == packageKey || kv.Key == methodKey
+							return kv.Key == AttrPackageKey || kv.Key == AttrMethodKey
 						},
 					}, true
 				}
@@ -92,7 +92,7 @@ func Views(pkg string) []sdkmetric.View {
 						Description: "Count of method calls by provider, method and status.",
 						Aggregation: sdkmetric.DefaultAggregationSelector(sdkmetric.InstrumentKindCounter),
 						AttributeFilter: func(kv attribute.KeyValue) bool {
-							return kv.Key == methodKey || kv.Key == statusKey
+							return kv.Key == AttrMethodKey || kv.Key == AttrStatusKey
 						},
 					}, true
 				}
@@ -124,7 +124,7 @@ func CounterView(pkg string, meterName string, description string) []sdkmetric.V
 // LatencyMeasure returns the measure for method call latency used by Go CDK APIs.
 func LatencyMeasure(pkg string) metric.Float64Histogram {
 	attrs := []attribute.KeyValue{
-		packageKey.String(pkg),
+		AttrPackageKey.String(pkg),
 	}
 
 	pkgMeter := otel.Meter(pkg, metric.WithInstrumentationAttributes(attrs...))
@@ -147,7 +147,7 @@ func LatencyMeasure(pkg string) metric.Float64Histogram {
 // DimensionlessMeasure creates a simple counter specifically for dimensionless measurements.
 func DimensionlessMeasure(pkg string, meterName string, description string) metric.Int64Counter {
 	attrs := []attribute.KeyValue{
-		packageKey.String(pkg),
+		AttrPackageKey.String(pkg),
 	}
 
 	pkgMeter := otel.Meter(pkg, metric.WithInstrumentationAttributes(attrs...))
@@ -169,7 +169,7 @@ func DimensionlessMeasure(pkg string, meterName string, description string) metr
 // BytesMeasure creates a counter for bytes measurements.
 func BytesMeasure(pkg string, meterName string, description string) metric.Int64Counter {
 	attrs := []attribute.KeyValue{
-		packageKey.String(pkg),
+		AttrPackageKey.String(pkg),
 	}
 
 	pkgMeter := otel.Meter(pkg, metric.WithInstrumentationAttributes(attrs...))

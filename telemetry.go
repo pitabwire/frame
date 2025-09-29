@@ -16,7 +16,13 @@ import (
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.37.0"
+	"go.opentelemetry.io/otel/trace"
 )
+
+type Tracer interface {
+	Start(ctx context.Context, methodName string, options ...trace.SpanStartOption) (context.Context, trace.Span)
+	End(ctx context.Context, span trace.Span, err error, options ...trace.SpanEndOption)
+}
 
 func (s *Service) initTracer(ctx context.Context) error {
 	if s.disableTracing {

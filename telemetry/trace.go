@@ -15,19 +15,13 @@ import (
 )
 
 // Common attribute keys used across the frame.
+//
+//nolint:gochecknoglobals // OpenTelemetry attribute keys must be global for reuse
 var (
-	methodKey = attribute.Key(
-		"app_method",
-	) //nolint:gochecknoglobals // OpenTelemetry attribute keys must be global for reuse
-	packageKey = attribute.Key(
-		"app_package",
-	) //nolint:gochecknoglobals // OpenTelemetry attribute keys must be global for reuse
-	statusKey = attribute.Key(
-		"app_status",
-	) //nolint:gochecknoglobals // OpenTelemetry attribute keys must be global for reuse
-	errorKey = attribute.Key(
-		"app_error",
-	) //nolint:gochecknoglobals // OpenTelemetry attribute keys must be global for reuse
+	methodKey  = attribute.Key("app_method")
+	packageKey = attribute.Key("app_package")
+	statusKey  = attribute.Key("app_status")
+	errorKey   = attribute.Key("app_error")
 )
 
 // contextKey is a custom type for context keys to avoid collisions.

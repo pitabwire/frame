@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/pitabwire/util"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -15,15 +16,26 @@ import (
 
 // Common attribute keys used across the frame.
 var (
-	methodKey  = attribute.Key("app_method")
-	packageKey = attribute.Key("app_package")
-	statusKey  = attribute.Key("app_status")
-	errorKey   = attribute.Key("app_error")
+	methodKey = attribute.Key(
+		"app_method",
+	) //nolint:gochecknoglobals // OpenTelemetry attribute keys must be global for reuse
+	packageKey = attribute.Key(
+		"app_package",
+	) //nolint:gochecknoglobals // OpenTelemetry attribute keys must be global for reuse
+	statusKey = attribute.Key(
+		"app_status",
+	) //nolint:gochecknoglobals // OpenTelemetry attribute keys must be global for reuse
+	errorKey = attribute.Key(
+		"app_error",
+	) //nolint:gochecknoglobals // OpenTelemetry attribute keys must be global for reuse
 )
 
+// contextKey is a custom type for context keys to avoid collisions.
+type contextKey string
+
 const (
-	startTimeContextKey  = "spanStartTimeCtxKey"
-	methodNameContextKey = "methodNameCtxKey"
+	startTimeContextKey  contextKey = "spanStartTimeCtxKey"
+	methodNameContextKey contextKey = "methodNameCtxKey"
 )
 
 // Tracer provides OpenTelemetry tracing for services.
@@ -35,7 +47,6 @@ type Tracer struct {
 
 // NewTracer creates a new Tracer for a package.
 func NewTracer(pkg string) *Tracer {
-
 	attrs := []attribute.KeyValue{
 		packageKey.String(pkg),
 	}
@@ -50,6 +61,9 @@ func NewTracer(pkg string) *Tracer {
 }
 
 // Start creates and starts a new span and returns the updated context and span.
+// The caller is responsible for ending the span.
+//
+//nolint:spancheck // OpenTelemetry spans are intentionally returned to caller for proper lifecycle management
 func (t *Tracer) Start(ctx context.Context, methodName string) (context.Context, trace.Span) {
 	fullName := t.pkg + "." + methodName
 
@@ -60,7 +74,15 @@ func (t *Tracer) Start(ctx context.Context, methodName string) (context.Context,
 
 // End completes a span with error information if applicable.
 func (t *Tracer) End(ctx context.Context, span trace.Span, err error) {
-	startTime := ctx.Value(startTimeContextKey).(time.Time)
+	startTimeValue := ctx.Value(startTimeContextKey)
+	startTime, ok := startTimeValue.(time.Time)
+	if !ok {
+		util.Log(ctx).Error(
+			"invalid startTime context value",
+			"value", startTimeValue,
+		)
+		return
+	}
 	elapsed := time.Since(startTime)
 
 	code := gcerrors.OK
@@ -79,7 +101,15 @@ func (t *Tracer) End(ctx context.Context, span trace.Span, err error) {
 
 	span.End()
 
-	methodName := ctx.Value(methodNameContextKey).(string)
+	methodNameValue := ctx.Value(methodNameContextKey)
+	methodName, ok := methodNameValue.(string)
+	if !ok {
+		util.Log(ctx).Error(
+			"invalid methodName context value",
+			"value", methodNameValue,
+		)
+		return
+	}
 
 	t.latencyMeasure.Record(ctx,
 		float64(elapsed.Milliseconds()),

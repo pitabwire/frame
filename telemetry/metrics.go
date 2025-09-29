@@ -15,22 +15,52 @@ import (
 const (
 	unitDimensionless = "1"
 	unitMilliseconds  = "ms"
-	unitBytes         = "By"
+	unitBytes         = "B" // Changed from "By" to "B"
 )
 
 var (
-	defaultMillisecondsBoundaries = []float64{
-		0.0, 0.1, 0.2, 0.4, 0.6, 0.8, 1.0,
-		2.0, 3.0, 4.0, 5.0, 6.0, 8.0, 10.0,
-		13.0, 16.0, 20.0, 25.0, 30.0, 40.0,
-		50.0, 65.0, 80.0, 100.0, 130.0, 160.0,
-		200.0, 250.0, 300.0, 400.0, 500.0,
-		650.0, 800.0, 1000.0, 2000.0, 5000.0, 10000.0,
+	defaultMillisecondsBoundaries = []float64{ //nolint:gochecknoglobals // OpenTelemetry histogram boundaries must be global for reuse
+		0.0,
+		0.1,
+		0.2,
+		0.4,
+		0.6,
+		0.8,
+		1.0,
+		2.0,
+		3.0,
+		4.0,
+		5.0,
+		6.0,
+		8.0,
+		10.0,
+		13.0,
+		16.0,
+		20.0,
+		25.0,
+		30.0,
+		40.0,
+		50.0,
+		65.0,
+		80.0,
+		100.0,
+		130.0,
+		160.0,
+		200.0,
+		250.0,
+		300.0,
+		400.0,
+		500.0,
+		650.0,
+		800.0,
+		1000.0,
+		2000.0,
+		5000.0,
+		10000.0,
 	}
 )
 
 func Views(pkg string) []sdkmetric.View {
-
 	return []sdkmetric.View{
 
 		// View for latency histogram.
@@ -93,7 +123,6 @@ func CounterView(pkg string, meterName string, description string) []sdkmetric.V
 
 // LatencyMeasure returns the measure for method call latency used by Go CDK APIs.
 func LatencyMeasure(pkg string) metric.Float64Histogram {
-
 	attrs := []attribute.KeyValue{
 		packageKey.String(pkg),
 	}
@@ -117,14 +146,17 @@ func LatencyMeasure(pkg string) metric.Float64Histogram {
 
 // DimensionlessMeasure creates a simple counter specifically for dimensionless measurements.
 func DimensionlessMeasure(pkg string, meterName string, description string) metric.Int64Counter {
-
 	attrs := []attribute.KeyValue{
 		packageKey.String(pkg),
 	}
 
 	pkgMeter := otel.Meter(pkg, metric.WithInstrumentationAttributes(attrs...))
 
-	m, err := pkgMeter.Int64Counter(pkg+meterName, metric.WithDescription(description), metric.WithUnit(unitDimensionless))
+	m, err := pkgMeter.Int64Counter(
+		pkg+meterName,
+		metric.WithDescription(description),
+		metric.WithUnit(unitDimensionless),
+	)
 
 	if err != nil {
 		// The only possible errors are from invalid key or value names,
@@ -136,7 +168,6 @@ func DimensionlessMeasure(pkg string, meterName string, description string) metr
 
 // BytesMeasure creates a counter for bytes measurements.
 func BytesMeasure(pkg string, meterName string, description string) metric.Int64Counter {
-
 	attrs := []attribute.KeyValue{
 		packageKey.String(pkg),
 	}

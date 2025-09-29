@@ -35,19 +35,19 @@ const (
 
 // tracer provides OpenTelemetry tracing for services.
 type tracer struct {
-	pkg            string
+	name           string
 	tracer         trace.Tracer
 	latencyMeasure metric.Float64Histogram
 }
 
 // NewTracer creates a new tracer for a package.
-func NewTracer(pkg string, options ...trace.TracerOption) frame.Tracer {
-	otelTracer := otel.Tracer(pkg, options...)
+func NewTracer(name string, options ...trace.TracerOption) frame.Tracer {
+	otelTracer := otel.Tracer(name, options...)
 
 	return &tracer{
-		pkg:            pkg,
+		name:           name,
 		tracer:         otelTracer,
-		latencyMeasure: LatencyMeasure(pkg),
+		latencyMeasure: LatencyMeasure(name),
 	}
 }
 
@@ -60,7 +60,7 @@ func (t *tracer) Start(
 	spanName string,
 	options ...trace.SpanStartOption,
 ) (context.Context, trace.Span) {
-	fullName := t.pkg + "/" + spanName
+	fullName := t.name + "/" + spanName
 
 	options = append(options, trace.WithAttributes(AttrMethodKey.String(spanName)))
 

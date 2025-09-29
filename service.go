@@ -450,7 +450,7 @@ func (s *Service) initServer(ctx context.Context, httpPort string) error {
 		if s.disableTracing {
 			s.handler = rootHandler
 		} else {
-			s.handler = otelhttp.NewHandler(rootHandler, "incoming_request")
+			s.handler = otelhttp.NewHandler(rootHandler, s.Name())
 		}
 		s.initializeServerDrivers(ctx, httpPort)
 	})

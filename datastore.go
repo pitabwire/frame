@@ -12,8 +12,7 @@ import (
 	"time"
 
 	"github.com/XSAM/otelsql"
-	"go.opentelemetry.io/otel/attribute"
-	semconv "go.opentelemetry.io/otel/semconv/v1.30.0"
+	semconv "go.opentelemetry.io/otel/semconv/v1.37.0"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
@@ -324,11 +323,26 @@ func WithDatastoreConnectionWithName(name string, postgresqlConnection string, r
 		conn, err := otelsql.Open("pgx", cleanedPostgresqlDSN,
 			otelsql.WithAttributes(
 				semconv.DBSystemNamePostgreSQL,
-				attribute.String("service.name", s.name),
+				semconv.ServiceName(s.Name()),
+				semconv.ServiceVersion(s.Version()),
+				semconv.DeploymentEnvironmentName(s.Environment()),
 			),
 		)
 		if err != nil {
 			s.Log(ctx).WithError(err).WithField("dsn", postgresqlConnection).Error("could not connect to pg now")
+			return
+		}
+
+		err = otelsql.RegisterDBStatsMetrics(conn,
+			otelsql.WithAttributes(
+				semconv.DBSystemNamePostgreSQL,
+				semconv.ServiceName(s.Name()),
+				semconv.ServiceVersion(s.Version()),
+				semconv.DeploymentEnvironmentName(s.Environment()),
+			),
+		)
+		if err != nil {
+			s.Log(ctx).WithError(err).Error("could not setup db metrics")
 			return
 		}
 

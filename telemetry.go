@@ -3,12 +3,14 @@ package frame
 import (
 	"context"
 	"os"
+	"runtime"
 
 	"github.com/pitabwire/util"
 	"go.opentelemetry.io/contrib/bridges/otelslog"
 	"go.opentelemetry.io/contrib/exporters/autoexport"
 	"go.opentelemetry.io/contrib/propagators/autoprop"
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/log/global"
 	"go.opentelemetry.io/otel/propagation"
 	sdklogs "go.opentelemetry.io/otel/sdk/log"
@@ -54,15 +56,17 @@ func (s *Service) initTracer(ctx context.Context) error {
 
 // setupResource creates and returns the OpenTelemetry resource.
 func (s *Service) setupResource() (*resource.Resource, error) {
-	return resource.Merge(
-		resource.Default(),
-		resource.NewWithAttributes(
-			semconv.SchemaURL,
-			semconv.ServiceNameKey.String(s.name),
-			semconv.ServiceVersionKey.String(s.version),
-			semconv.DeploymentEnvironmentNameKey.String(s.environment),
-		),
-	)
+	attrs := []attribute.KeyValue{
+		semconv.ServiceName(s.Name()),
+		semconv.ServiceVersion(s.Version()),
+		semconv.ServiceNamespace(s.Environment()),
+		semconv.DeploymentEnvironmentName(s.Environment()),
+		semconv.ProcessPID(os.Getpid()),
+		semconv.ProcessRuntimeName("go"),
+		semconv.ProcessRuntimeVersion(runtime.Version()),
+	}
+
+	return resource.Merge(resource.Default(), resource.NewWithAttributes(semconv.SchemaURL, attrs...))
 }
 
 // setupTextMapPropagator initializes the text map propagator if not already set.
@@ -155,8 +159,10 @@ func (s *Service) setupProviders(ctx context.Context, res *resource.Resource) er
 	)
 	global.SetLoggerProvider(lp)
 
-	logHandler := otelslog.NewHandler("", otelslog.WithSource(true),
-		otelslog.WithLoggerProvider(lp), otelslog.WithAttributes(res.Attributes()...))
+	logHandler := otelslog.NewHandler("",
+		otelslog.WithSource(true),
+		otelslog.WithLoggerProvider(lp),
+		otelslog.WithAttributes(res.Attributes()...))
 	log := util.NewLogger(ctx, util.WithLogHandler(logHandler))
 	log.WithField("service", s.Name())
 	s.logger = log

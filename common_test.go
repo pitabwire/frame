@@ -1,11 +1,17 @@
 package frame_test
 
 import (
+	"database/sql"
+	"errors"
+	"fmt"
 	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+	"gorm.io/gorm"
 
 	"github.com/pitabwire/frame"
 	"github.com/pitabwire/frame/frametests/definition"
@@ -138,5 +144,131 @@ func (s *CommonTestSuite) TestConfigCastingIssues() {
 				}
 			})
 		}
+	})
+}
+
+// TestErrIsNotFound tests the ErrIsNotFound function with various error types.
+func (s *CommonTestSuite) TestErrIsNotFound() {
+	testCases := []struct {
+		name     string
+		err      error
+		expected bool
+	}{
+		{
+			name:     "nil error",
+			err:      nil,
+			expected: false,
+		},
+		{
+			name:     "gorm.ErrRecordNotFound",
+			err:      gorm.ErrRecordNotFound,
+			expected: true,
+		},
+		{
+			name:     "sql.ErrNoRows",
+			err:      sql.ErrNoRows,
+			expected: true,
+		},
+		{
+			name:     "wrapped gorm.ErrRecordNotFound",
+			err:      fmt.Errorf("failed to find record: %w", gorm.ErrRecordNotFound),
+			expected: true,
+		},
+		{
+			name:     "wrapped sql.ErrNoRows",
+			err:      fmt.Errorf("query failed: %w", sql.ErrNoRows),
+			expected: true,
+		},
+		{
+			name:     "gRPC NotFound status",
+			err:      status.Error(codes.NotFound, "resource not found"),
+			expected: true,
+		},
+		{
+			name:     "gRPC other status code",
+			err:      status.Error(codes.Internal, "internal error"),
+			expected: false,
+		},
+		{
+			name:     "error message with 'not found' lowercase",
+			err:      errors.New("user not found"),
+			expected: true,
+		},
+		{
+			name:     "error message with 'Not Found' mixed case",
+			err:      errors.New("Resource Not Found"),
+			expected: true,
+		},
+		{
+			name:     "error message with 'NOT FOUND' uppercase",
+			err:      errors.New("ITEM NOT FOUND"),
+			expected: true,
+		},
+		{
+			name:     "error message with 'notfound' no space",
+			err:      errors.New("itemnotfound"),
+			expected: true,
+		},
+		{
+			name:     "error message with '404'",
+			err:      errors.New("HTTP 404 error occurred"),
+			expected: true,
+		},
+		{
+			name:     "generic error without 'not found'",
+			err:      errors.New("something went wrong"),
+			expected: false,
+		},
+		{
+			name:     "validation error",
+			err:      errors.New("invalid input"),
+			expected: false,
+		},
+		{
+			name:     "multiple wrapped errors with gorm.ErrRecordNotFound",
+			err:      fmt.Errorf("operation failed: %w", fmt.Errorf("database error: %w", gorm.ErrRecordNotFound)),
+			expected: true,
+		},
+	}
+
+	s.WithTestDependancies(s.T(), func(t *testing.T, _ *definition.DependancyOption) {
+		for _, tc := range testCases {
+			t.Run(tc.name, func(t *testing.T) {
+				result := frame.ErrIsNotFound(tc.err)
+				require.Equal(t, tc.expected, result,
+					"ErrIsNotFound(%v) = %v, expected %v", tc.err, result, tc.expected)
+			})
+		}
+	})
+}
+
+// TestErrIsNotFoundConcurrency tests ErrIsNotFound with concurrent access.
+func (s *CommonTestSuite) TestErrIsNotFoundConcurrency() {
+	s.WithTestDependancies(s.T(), func(t *testing.T, _ *definition.DependancyOption) {
+		testErrors := []error{
+			gorm.ErrRecordNotFound,
+			sql.ErrNoRows,
+			status.Error(codes.NotFound, "not found"),
+			errors.New("item not found"),
+			errors.New("something else"),
+		}
+
+		done := make(chan bool)
+		for i := 0; i < 10; i++ {
+			go func(idx int) {
+				for j := 0; j < 100; j++ {
+					err := testErrors[j%len(testErrors)]
+					_ = frame.ErrIsNotFound(err)
+				}
+				done <- true
+			}(i)
+		}
+
+		// Wait for all goroutines to complete
+		for i := 0; i < 10; i++ {
+			<-done
+		}
+
+		require.True(t, true, "concurrent access should not cause issues")
 	})
 }

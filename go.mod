@@ -6,7 +6,7 @@ require (
 	github.com/BurntSushi/toml v1.5.0
 	github.com/XSAM/otelsql v0.40.0
 	github.com/caarlos0/env/v11 v11.3.1
-	github.com/docker/docker v28.4.0+incompatible
+	github.com/docker/docker v28.5.0+incompatible
 	github.com/docker/go-connections v0.6.0
 	github.com/golang-jwt/jwt/v5 v5.3.0
 	github.com/grpc-ecosystem/go-grpc-middleware/v2 v2.3.2
@@ -38,7 +38,7 @@ require (
 	golang.org/x/net v0.44.0
 	golang.org/x/text v0.29.0
 	google.golang.org/grpc v1.75.1
-	google.golang.org/protobuf v1.36.9
+	google.golang.org/protobuf v1.36.10
 	gorm.io/driver/postgres v1.6.0
 	gorm.io/gorm v1.31.0
 )
@@ -66,7 +66,7 @@ require (
 	github.com/go-ole/go-ole v1.3.0 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/googleapis/gax-go/v2 v2.15.0 // indirect
-	github.com/grpc-ecosystem/grpc-gateway/v2 v2.27.2 // indirect
+	github.com/grpc-ecosystem/grpc-gateway/v2 v2.27.3 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
 	github.com/jackc/puddle/v2 v2.2.2 // indirect
@@ -85,7 +85,7 @@ require (
 	github.com/moby/term v0.5.2 // indirect
 	github.com/morikuni/aec v1.0.0 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
-	github.com/nats-io/nats.go v1.46.0 // indirect
+	github.com/nats-io/nats.go v1.46.1 // indirect
 	github.com/nats-io/nkeys v0.4.11 // indirect
 	github.com/nats-io/nuid v1.0.1 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
@@ -98,7 +98,7 @@ require (
 	github.com/prometheus/common v0.66.1 // indirect
 	github.com/prometheus/otlptranslator v1.0.0 // indirect
 	github.com/prometheus/procfs v0.17.0 // indirect
-	github.com/shirou/gopsutil/v4 v4.25.8 // indirect
+	github.com/shirou/gopsutil/v4 v4.25.9 // indirect
 	github.com/sirupsen/logrus v1.9.3 // indirect
 	github.com/tklauser/go-sysconf v0.3.15 // indirect
 	github.com/tklauser/numcpus v0.10.0 // indirect
@@ -127,8 +127,8 @@ require (
 	golang.org/x/sync v0.17.0 // indirect
 	golang.org/x/sys v0.36.0 // indirect
 	golang.org/x/xerrors v0.0.0-20240903120638-7835f813f4da // indirect
-	google.golang.org/api v0.250.0 // indirect
-	google.golang.org/genproto/googleapis/api v0.0.0-20250825161204-c5933d9347a5 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20250908214217-97024824d090 // indirect
+	google.golang.org/api v0.251.0 // indirect
+	google.golang.org/genproto/googleapis/api v0.0.0-20250929231259-57b25ae835d4 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20250929231259-57b25ae835d4 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )

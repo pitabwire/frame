@@ -164,8 +164,7 @@ func (s *Service) setupProviders(ctx context.Context, res *resource.Resource) er
 		otelslog.WithLoggerProvider(lp),
 		otelslog.WithAttributes(res.Attributes()...))
 	log := util.NewLogger(ctx, util.WithLogHandler(logHandler))
-	log.WithField("service", s.Name())
-	s.logger = log
+	s.logger = log.WithField("service", s.Name())
 
 	return nil
 }

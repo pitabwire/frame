@@ -149,6 +149,11 @@ func NewServiceWithContext(ctx context.Context, name string, opts ...Option) (co
 
 	service.Init(ctx, opts...) // Apply all options, using the signal-aware context
 
+	err = service.initTracer(ctx)
+	if err != nil {
+		service.logger.WithError(err).Panic("could not setup application telemetry")
+	}
+
 	// Prepare context to be returned, embedding service and config
 	ctx = SvcToContext(ctx, service)
 	ctx = ConfigToContext(ctx, service.Config())
@@ -312,10 +317,6 @@ func (s *Service) AddHealthCheck(checker Checker) {
 
 // Run keeps the service useful by handling incoming requests.
 func (s *Service) Run(ctx context.Context, address string) error {
-	err := s.initTracer(ctx)
-	if err != nil {
-		return err
-	}
 
 	pubSubErr := s.initPubsub(ctx)
 	if pubSubErr != nil {

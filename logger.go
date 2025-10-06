@@ -12,9 +12,8 @@ import (
 )
 
 // WithLogger Option that helps with initialization of our internal dbLogger.
-func WithLogger() Option {
+func WithLogger(opts ...util.Option) Option {
 	return func(ctx context.Context, s *Service) {
-		var opts []util.Option
 
 		if s.Config() != nil {
 			config, ok := s.Config().(ConfigurationLogLevel)

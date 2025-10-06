@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"testing"
 
+	"github.com/pitabwire/util"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"google.golang.org/protobuf/types/known/structpb"
@@ -113,12 +114,17 @@ func (s *DatastoreTestSuite) TestServiceDatastoreRunQuery() {
 	testCases := []struct {
 		name        string
 		query       string
-		expectError bool
+		expectError require.ErrorAssertionFunc
 	}{
 		{
 			name:        "run invalid query",
 			query:       "SELECT 1 FROM",
-			expectError: true,
+			expectError: require.Error,
+		},
+		{
+			name:        "run invalid query",
+			query:       "SELECT 1 ;",
+			expectError: require.NoError,
 		},
 	}
 
@@ -143,11 +149,13 @@ func (s *DatastoreTestSuite) TestServiceDatastoreRunQuery() {
 				r := srv.DB(ctx, true)
 				require.NotNil(t, r, "read database should be available")
 
-				_, err = w.Raw(tc.query).Rows()
-				if tc.expectError {
-					require.Error(t, err, "expected query to fail")
-				} else {
-					require.NoError(t, err, "query should succeed")
+				rows, err := w.Raw(tc.query).Rows()
+				tc.expectError(t, err, "error assertion on query failed")
+
+				if rows != nil {
+					err = rows.Err()
+					tc.expectError(t, err, "error assertion on query failed")
+					util.CloseAndLogOnError(ctx, rows, "couldn't close rows")
 				}
 			})
 		}

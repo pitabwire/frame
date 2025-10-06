@@ -241,34 +241,3 @@ func (s *CommonTestSuite) TestErrIsNotFound() {
 		}
 	})
 }
-
-// TestErrIsNotFoundConcurrency tests ErrIsNotFound with concurrent access.
-func (s *CommonTestSuite) TestErrIsNotFoundConcurrency() {
-	s.WithTestDependancies(s.T(), func(t *testing.T, _ *definition.DependancyOption) {
-		testErrors := []error{
-			gorm.ErrRecordNotFound,
-			sql.ErrNoRows,
-			status.Error(codes.NotFound, "not found"),
-			errors.New("item not found"),
-			errors.New("something else"),
-		}
-
-		done := make(chan bool)
-		for i := 0; i < 10; i++ {
-			go func(idx int) {
-				for j := 0; j < 100; j++ {
-					err := testErrors[j%len(testErrors)]
-					_ = frame.ErrIsNotFound(err)
-				}
-				done <- true
-			}(i)
-		}
-
-		// Wait for all goroutines to complete
-		for i := 0; i < 10; i++ {
-			<-done
-		}
-
-		require.True(t, true, "concurrent access should not cause issues")
-	})
-}

@@ -317,7 +317,6 @@ func (s *Service) AddHealthCheck(checker Checker) {
 
 // Run keeps the service useful by handling incoming requests.
 func (s *Service) Run(ctx context.Context, address string) error {
-
 	pubSubErr := s.initPubsub(ctx)
 	if pubSubErr != nil {
 		return pubSubErr

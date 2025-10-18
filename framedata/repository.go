@@ -11,6 +11,7 @@ import (
 // BaseRepository provides generic CRUD operations for any model type.
 // T is the model type (e.g., *models.Room).
 type BaseRepository[T any] interface {
+	Svc() *frame.Service
 	GetByID(ctx context.Context, id string) (T, error)
 	GetLastestBy(ctx context.Context, properties map[string]any) (T, error)
 	GetAllBy(ctx context.Context, properties map[string]any, offset, limit int) ([]T, error)
@@ -36,20 +37,24 @@ func NewBaseRepository[T frame.BaseModelI](service *frame.Service, modelFactory 
 	}
 }
 
+func (br *baseRepository[T]) Svc() *frame.Service {
+	return br.service
+}
+
 // GetByID retrieves an entity by its ID.
 func (br *baseRepository[T]) GetByID(ctx context.Context, id string) (T, error) {
 	entity := br.modelFactory()
-	err := br.service.DB(ctx, true).First(entity, "id = ?", id).Error
+	err := br.Svc().DB(ctx, true).First(entity, "id = ?", id).Error
 	return entity, err
 }
 
 // Save creates or updates an entity.
 func (br *baseRepository[T]) Save(ctx context.Context, entity T) error {
 	if entity.GetVersion() <= 0 {
-		return br.service.DB(ctx, false).Create(entity).Error
+		return br.Svc().DB(ctx, false).Create(entity).Error
 	}
 
-	return br.service.DB(ctx, false).Save(entity).Error
+	return br.Svc().DB(ctx, false).Save(entity).Error
 }
 
 // Delete soft deletes an entity by its ID.
@@ -58,20 +63,20 @@ func (br *baseRepository[T]) Delete(ctx context.Context, id string) error {
 	if err != nil {
 		return err
 	}
-	return br.service.DB(ctx, false).Delete(entity).Error
+	return br.Svc().DB(ctx, false).Delete(entity).Error
 }
 
 // Count returns the total number of entities.
 func (br *baseRepository[T]) Count(ctx context.Context) (int64, error) {
 	var count int64
 	entity := br.modelFactory()
-	err := br.service.DB(ctx, true).Model(entity).Count(&count).Error
+	err := br.Svc().DB(ctx, true).Model(entity).Count(&count).Error
 	return count, err
 }
 
 func (br *baseRepository[T]) GetLastestBy(ctx context.Context, properties map[string]any) (T, error) {
 	entity := br.modelFactory()
-	query := br.service.DB(ctx, true)
+	query := br.Svc().DB(ctx, true)
 
 	for key, value := range properties {
 		query.Where(fmt.Sprintf("%s = ?", key), value)
@@ -84,7 +89,7 @@ func (br *baseRepository[T]) GetLastestBy(ctx context.Context, properties map[st
 func (br *baseRepository[T]) GetAllBy(ctx context.Context, properties map[string]any, offset, limit int) ([]T, error) {
 	var entities []T
 
-	query := br.service.DB(ctx, true).Offset(offset)
+	query := br.Svc().DB(ctx, true).Offset(offset)
 
 	if limit > 0 {
 		query = query.Limit(limit)
@@ -104,7 +109,7 @@ func (br *baseRepository[T]) Search(ctx context.Context, query *SearchQuery) (fr
 
 		paginator := query.Pagination
 
-		db := br.service.DB(ctx, true).
+		db := br.Svc().DB(ctx, true).
 			Limit(paginator.Limit).Offset(paginator.Offset)
 
 		var startAt any

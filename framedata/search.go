@@ -11,7 +11,7 @@ const defaultBatchSize = 50
 type SearchQuery struct {
 	ProfileID   string
 	Query       string
-	QueryFields map[string]string // We query with the value of query but use value as operator
+	QueryFields map[string]string // We query with the value of query but use value as operator: {'id': ' = ?', 'name': ' LIKE ?', 'props': ' @@ plainto_tsquery(?)'}
 	Fields      map[string]any
 
 	Pagination *Paginator

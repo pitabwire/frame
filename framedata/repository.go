@@ -136,11 +136,12 @@ func (br *baseRepository[T]) Search(ctx context.Context, query *SearchQuery) (fr
 
 		if query.Query != "" {
 			for searchField, oprt := range query.QueryFields {
-				db = db.Where(fmt.Sprintf(" %s %s ? ", searchField, oprt), query.Query)
+				db = db.Where(fmt.Sprintf(" %s %s ", searchField, oprt), query.Query)
 			}
 		}
 
 		err := db.Find(&entities).Error
+
 		return entities, err
 	})
 }

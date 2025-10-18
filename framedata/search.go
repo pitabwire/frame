@@ -9,9 +9,10 @@ import (
 const defaultBatchSize = 50
 
 type SearchQuery struct {
-	ProfileID string
-	Query     string
-	Fields    map[string]any
+	ProfileID   string
+	Query       string
+	QueryFields map[string]string // We query with the value of query but use value as operator
+	Fields      map[string]any
 
 	Pagination *Paginator
 }
@@ -68,9 +69,9 @@ func (p *Paginator) Stop(loadedCount int) bool {
 
 func StableSearch[T any](
 	ctx context.Context, svc *frame.Service,
-	query *SearchQuery, searchFunc func(ctx context.Context, query *SearchQuery) ([]*T, error),
-) (frame.JobResultPipe[[]*T], error) {
-	job := frame.NewJob(func(ctx context.Context, jobResult frame.JobResultPipe[[]*T]) error {
+	query *SearchQuery, searchFunc func(ctx context.Context, query *SearchQuery) ([]T, error),
+) (frame.JobResultPipe[[]T], error) {
+	job := frame.NewJob(func(ctx context.Context, jobResult frame.JobResultPipe[[]T]) error {
 		paginator := query.Pagination
 		for paginator.CanLoad() {
 			resultList, err := searchFunc(ctx, query)

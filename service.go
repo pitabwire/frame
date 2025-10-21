@@ -22,6 +22,8 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/reflection"
+
+	"github.com/pitabwire/frame/cache"
 )
 
 type contextKey string
@@ -76,6 +78,7 @@ type Service struct {
 	cleanup                    func(ctx context.Context)
 	eventRegistry              map[string]EventI
 	configuration              any
+	cacheManager               *cache.Manager
 	startOnce                  sync.Once
 	stopMutex                  sync.Mutex
 }

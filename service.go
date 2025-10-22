@@ -143,8 +143,8 @@ func NewServiceWithContext(ctx context.Context, name string, opts ...Option) (co
 		pool:        defaultPool,
 		poolOptions: defaultPoolOpts,
 
-		securityManager: securityManager.NewManager(ctx, &cfg, invoker),
-		queue:           q,
+		configuration: &cfg,
+		queue:         q,
 	}
 
 	if cfg.ServiceName != "" {
@@ -166,6 +166,13 @@ func NewServiceWithContext(ctx context.Context, name string, opts ...Option) (co
 	opts = append(opts, WithLogger()) // Ensure logger is initialized early
 
 	svc.Init(ctx, opts...) // Apply all options, using the signal-aware context
+
+	// Create security manager AFTER options are applied so it gets the correct config
+	finalCfg, ok := svc.Config().(*config.ConfigurationDefault)
+	if !ok {
+		finalCfg = &cfg
+	}
+	svc.securityManager = securityManager.NewManager(ctx, finalCfg, invoker)
 
 	err = svc.initTracer(ctx)
 	if err != nil {

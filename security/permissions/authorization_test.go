@@ -208,13 +208,12 @@ func (s *AuthorizationTestSuite) TestAuthHasAccess() {
 			setupClaims: func(ctx context.Context, subject string) context.Context {
 				authClaim := security.AuthenticationClaims{
 					Ext: map[string]any{
-						"sub":          subject,
 						"partition_id": "partition",
 						"tenant_id":    "default",
 						"access_id":    "access",
 					},
 				}
-				authClaim.Subject = "profile"
+				authClaim.Subject = subject
 				return authClaim.ClaimsToContext(ctx)
 			},
 		},
@@ -230,13 +229,12 @@ func (s *AuthorizationTestSuite) TestAuthHasAccess() {
 			setupClaims: func(ctx context.Context, subject string) context.Context {
 				authClaim := security.AuthenticationClaims{
 					Ext: map[string]any{
-						"sub":          subject,
 						"partition_id": "partition",
 						"tenant_id":    "default",
 						"access_id":    "access",
 					},
 				}
-				authClaim.Subject = "profile"
+				authClaim.Subject = subject
 				return authClaim.ClaimsToContext(ctx)
 			},
 		},

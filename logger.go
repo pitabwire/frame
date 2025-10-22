@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 
+	config2 "github.com/pitabwire/frame/config"
 	"github.com/pitabwire/util"
 )
 
@@ -11,7 +12,7 @@ import (
 func WithLogger(opts ...util.Option) Option {
 	return func(ctx context.Context, s *Service) {
 		if s.Config() != nil {
-			config, ok := s.Config().(ConfigurationLogLevel)
+			config, ok := s.Config().(config2.ConfigurationLogLevel)
 			if ok {
 				logLevelStr := config.LoggingLevel()
 				logLevel, err := util.ParseLevel(logLevelStr)

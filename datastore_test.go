@@ -5,15 +5,15 @@ import (
 	"strconv"
 	"testing"
 
+	"github.com/pitabwire/frame"
+	"github.com/pitabwire/frame/config"
+	"github.com/pitabwire/frame/frametests"
+	"github.com/pitabwire/frame/frametests/definition"
+	"github.com/pitabwire/frame/tests"
 	"github.com/pitabwire/util"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"google.golang.org/protobuf/types/known/structpb"
-
-	"github.com/pitabwire/frame"
-	"github.com/pitabwire/frame/frametests"
-	"github.com/pitabwire/frame/frametests/definition"
-	"github.com/pitabwire/frame/tests"
 )
 
 // DatastoreTestSuite extends FrameBaseTestSuite for comprehensive datastore testing.
@@ -91,7 +91,7 @@ func (s *DatastoreTestSuite) TestServiceDatastoreSet() {
 				// Set environment variables
 				t.Setenv("DATABASE_URL", db.GetDS(ctx).String())
 
-				defConf, err := frame.ConfigFromEnv[frame.ConfigurationDefault]()
+				defConf, err := config.FromEnv[config.ConfigurationDefault]()
 				require.NoError(t, err, "configuration loading should succeed")
 
 				defConf.DatabaseTraceQueries = tc.traceQueries
@@ -135,7 +135,7 @@ func (s *DatastoreTestSuite) TestServiceDatastoreRunQuery() {
 
 				t.Setenv("DATABASE_URL", db.GetDS(t.Context()).String())
 
-				defConf, err := frame.ConfigFromEnv[frame.ConfigurationDefault]()
+				defConf, err := config.FromEnv[config.ConfigurationDefault]()
 				require.NoError(t, err, "configuration loading should succeed")
 
 				defConf.DatabaseTraceQueries = true

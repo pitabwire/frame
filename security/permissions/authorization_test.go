@@ -1,4 +1,4 @@
-package frame_test
+package permissions_test
 
 import (
 	"context"
@@ -8,16 +8,18 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/stretchr/testify/require"
-	"github.com/stretchr/testify/suite"
-
 	"github.com/pitabwire/frame"
+	"github.com/pitabwire/frame/client"
+	"github.com/pitabwire/frame/config"
 	"github.com/pitabwire/frame/frametests/definition"
 	"github.com/pitabwire/frame/frametests/deps/testnats"
 	"github.com/pitabwire/frame/frametests/deps/testoryhydra"
 	"github.com/pitabwire/frame/frametests/deps/testoryketo"
 	"github.com/pitabwire/frame/frametests/deps/testpostgres"
+	"github.com/pitabwire/frame/security"
 	"github.com/pitabwire/frame/tests"
+	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 // AuthorizationTestSuite extends FrameBaseTestSuite for comprehensive authorization testing.
@@ -68,8 +70,11 @@ func (s *AuthorizationTestSuite) authorizationControlListWrite(
 	objectID, action string,
 	subject string,
 ) error {
-	authClaims := frame.ClaimsFromContext(ctx)
-	service := frame.Svc(ctx)
+	authClaims := security.ClaimsFromContext(ctx)
+
+	cfg := config.FromContext[config.ConfigurationLogLevel](ctx)
+
+	invoker := client.NewInvoker(cfg, client.NewHTTPClient())
 
 	if authClaims == nil {
 		return errors.New("only authenticated requests should be used to check authorization")
@@ -82,7 +87,7 @@ func (s *AuthorizationTestSuite) authorizationControlListWrite(
 		"subject_id": subject,
 	}
 
-	status, result, err := service.InvokeRestService(ctx,
+	status, result, err := invoker.InvokeRestService(ctx,
 		http.MethodPut, writeServerURL, payload, nil)
 
 	if err != nil {
@@ -119,7 +124,7 @@ func (s *AuthorizationTestSuite) TestAuthorizationControlListWrite() {
 			subject:     "tested",
 			expectError: false,
 			setupClaims: func(ctx context.Context) context.Context {
-				authClaim := frame.AuthenticationClaims{
+				authClaim := security.AuthenticationClaims{
 					Ext: map[string]any{
 						"partition_id": "partition",
 						"tenant_id":    "default",
@@ -159,11 +164,11 @@ func (s *AuthorizationTestSuite) TestAuthorizationControlListWrite() {
 				require.NoError(t, err)
 
 				// Setup service and context
-				ctx, srv := frame.NewService("Test Srv", frame.WithConfig(&frame.ConfigurationDefault{
+				ctx, srv := frame.NewService("Test Srv", frame.WithConfig(&config.ConfigurationDefault{
 					AuthorizationServiceWriteURI: ketoAdminURI.String(),
 					AuthorizationServiceReadURI:  ketoReadURI.String(),
 				}))
-				ctx = frame.SvcToContext(ctx, srv)
+				ctx = frame.ToContext(ctx, srv)
 				ctx = tc.setupClaims(ctx)
 
 				err = s.authorizationControlListWrite(ctx, ketoAdminURI.String(), tc.objectID, tc.action, tc.subject)
@@ -189,7 +194,7 @@ func (s *AuthorizationTestSuite) TestAuthHasAccess() {
 		checkAction  string
 		expectAccess bool
 		expectError  bool
-		setupClaims  func(context.Context) context.Context
+		setupClaims  func(context.Context, string) context.Context
 	}{
 		{
 			name:         "successful access check with existing permission",
@@ -200,9 +205,10 @@ func (s *AuthorizationTestSuite) TestAuthHasAccess() {
 			checkAction:  "read",
 			expectAccess: true,
 			expectError:  false,
-			setupClaims: func(ctx context.Context) context.Context {
-				authClaim := frame.AuthenticationClaims{
+			setupClaims: func(ctx context.Context, subject string) context.Context {
+				authClaim := security.AuthenticationClaims{
 					Ext: map[string]any{
+						"sub":          subject,
 						"partition_id": "partition",
 						"tenant_id":    "default",
 						"access_id":    "access",
@@ -221,9 +227,10 @@ func (s *AuthorizationTestSuite) TestAuthHasAccess() {
 			checkAction:  "read",
 			expectAccess: false,
 			expectError:  true,
-			setupClaims: func(ctx context.Context) context.Context {
-				authClaim := frame.AuthenticationClaims{
+			setupClaims: func(ctx context.Context, subject string) context.Context {
+				authClaim := security.AuthenticationClaims{
 					Ext: map[string]any{
+						"sub":          subject,
 						"partition_id": "partition",
 						"tenant_id":    "default",
 						"access_id":    "access",
@@ -253,21 +260,23 @@ func (s *AuthorizationTestSuite) TestAuthHasAccess() {
 
 				// Setup service and context
 				ctx, srv := frame.NewService("Test Srv", frame.WithConfig(
-					&frame.ConfigurationDefault{
+					&config.ConfigurationDefault{
 						AuthorizationServiceReadURI:  ketoReadURI.String(),
 						AuthorizationServiceWriteURI: ketoAdminURI.String(),
 					}))
-				ctx = frame.SvcToContext(ctx, srv)
-				ctx = tc.setupClaims(ctx)
 
+				ctx = tc.setupClaims(ctx, tc.checkSubject)
+
+				sm := srv.Security()
 				// First write the permission
 				err = s.authorizationControlListWrite(ctx, ketoAdminURI.String(), tc.objectID, tc.action, tc.subject)
 				if tc.subject == tc.checkSubject { // Only expect success if we're checking the subject we wrote
 					require.NoError(t, err, "authorization write should succeed for setup")
 				}
 
+				authorizer := sm.GetAuthorizer(ctx)
 				// Then check access
-				access, err := frame.AuthHasAccess(ctx, tc.objectID, tc.checkAction, tc.checkSubject)
+				access, err := authorizer.HasAccess(ctx, tc.objectID, tc.checkAction)
 
 				if tc.expectError {
 					require.Error(t, err, "expected access check to fail")

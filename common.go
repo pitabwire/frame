@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pitabwire/frame/security"
 	"github.com/pitabwire/util"
 	"github.com/rs/xid"
 	"google.golang.org/grpc/codes"
@@ -42,7 +43,7 @@ func (model *BaseModel) GenID(ctx context.Context) {
 
 	model.ID = util.IDString()
 
-	authClaim := ClaimsFromContext(ctx)
+	authClaim := security.ClaimsFromContext(ctx)
 	if authClaim == nil {
 		return
 	}

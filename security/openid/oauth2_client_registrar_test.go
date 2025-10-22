@@ -1,18 +1,18 @@
-package frame_test
+package openid_test
 
 import (
 	"context"
 	"testing"
 
-	"github.com/stretchr/testify/require"
-	"github.com/stretchr/testify/suite"
-
 	"github.com/pitabwire/frame"
+	"github.com/pitabwire/frame/config"
 	"github.com/pitabwire/frame/frametests/definition"
 	"github.com/pitabwire/frame/frametests/deps/testnats"
 	"github.com/pitabwire/frame/frametests/deps/testoryhydra"
 	"github.com/pitabwire/frame/frametests/deps/testpostgres"
 	"github.com/pitabwire/frame/tests"
+	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 // JwtTestSuite extends BaseTestSuite for comprehensive JWT testing.
@@ -79,11 +79,14 @@ func (s *JwtTestSuite) TestServiceRegisterForJwtWithParams() {
 				ctx := t.Context()
 				hydra := dep.ByImageName(testoryhydra.OryHydraImage)
 
-				ctx, srv := frame.NewService(tc.serviceName, frame.WithConfig(&frame.ConfigurationDefault{
+				ctx, srv := frame.NewService(tc.serviceName, frame.WithConfig(&config.ConfigurationDefault{
 					Oauth2ServiceAdminURI: hydra.GetDS(ctx).String(),
 				}))
 
-				response, err := srv.RegisterForJwtWithParams(
+				sm := srv.Security()
+				clientRegistrar := sm.GetOauth2ClientRegistrar(ctx)
+
+				response, err := clientRegistrar.RegisterForJwtWithParams(
 					ctx, hydra.GetDS(ctx).String(), tc.clientName, tc.clientID, tc.clientSecret,
 					"", []string{}, map[string]string{})
 
@@ -95,10 +98,10 @@ func (s *JwtTestSuite) TestServiceRegisterForJwtWithParams() {
 				require.NoError(t, err, "JWT registration should succeed")
 				require.NotEmpty(t, response, "JWT registration response should not be empty")
 
-				srv.SetJwtClient(response)
+				sm.SetJwtClient(response)
 				srv.Log(ctx).WithField("client id", response).Info("successfully registered for JWT")
 
-				err = srv.UnRegisterForJwt(ctx, hydra.GetDS(ctx).String(), srv.JwtClientID())
+				err = clientRegistrar.UnRegisterForJwt(ctx, hydra.GetDS(ctx).String(), sm.JwtClientID())
 				require.NoError(t, err, "JWT unregistration should succeed")
 			})
 		}

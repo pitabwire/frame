@@ -2,10 +2,12 @@ package frame
 
 import (
 	"os"
+
+	config2 "github.com/pitabwire/frame/config"
 )
 
 func (s *Service) TLSEnabled() bool {
-	config, ok := s.Config().(ConfigurationTLS)
+	config, ok := s.Config().(config2.ConfigurationTLS)
 	if !ok {
 		return false
 	}

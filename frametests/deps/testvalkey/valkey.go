@@ -4,10 +4,9 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/pitabwire/frame/frametests/definition"
 	"github.com/testcontainers/testcontainers-go"
 	tcValKey "github.com/testcontainers/testcontainers-go/modules/valkey"
-
-	"github.com/pitabwire/frame/frametests/definition"
 )
 
 const (

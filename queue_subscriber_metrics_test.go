@@ -6,10 +6,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/suite"
-
 	"github.com/pitabwire/frame"
 	"github.com/pitabwire/frame/tests"
+	"github.com/stretchr/testify/suite"
 )
 
 // QueueSubscriberMetricsTestSuite extends BaseTestSuite for comprehensive subscriber metrics testing.

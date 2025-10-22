@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/panjf2000/ants/v2"
+	"github.com/pitabwire/frame/config"
 	"github.com/pitabwire/util"
 	"github.com/rs/xid"
 )
@@ -124,7 +125,7 @@ type WorkerPool interface {
 	Shutdown()
 }
 
-func defaultWorkerPoolOpts(cfg ConfigurationWorkerPool, log *util.LogEntry) *WorkerPoolOptions {
+func defaultWorkerPoolOpts(cfg config.ConfigurationWorkerPool, log *util.LogEntry) *WorkerPoolOptions {
 	return &WorkerPoolOptions{
 		Concurrency:        runtime.NumCPU() * cfg.GetCPUFactor(),
 		SinglePoolCapacity: cfg.GetCapacity(),

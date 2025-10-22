@@ -12,6 +12,8 @@ import (
 	"time"
 
 	"github.com/XSAM/otelsql"
+	"github.com/pitabwire/frame/config"
+	"github.com/pitabwire/frame/security"
 	semconv "go.opentelemetry.io/otel/semconv/v1.37.0"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -246,12 +248,12 @@ func (s *Pool) CanMigrate() bool {
 
 func tenantPartition(ctx context.Context) func(db *gorm.DB) *gorm.DB {
 	return func(db *gorm.DB) *gorm.DB {
-		authClaim := ClaimsFromContext(ctx)
+		authClaim := security.ClaimsFromContext(ctx)
 		if authClaim == nil {
 			return db
 		}
 
-		skipTenancyChecksOnClaims := IsTenancyChecksOnClaimSkipped(ctx)
+		skipTenancyChecksOnClaims := security.IsTenancyChecksOnClaimSkipped(ctx)
 		if skipTenancyChecksOnClaims {
 			return db
 		}
@@ -314,10 +316,10 @@ func WithDatastoreConnectionWithName(name string, postgresqlConnection string, r
 		preferSimpleProtocol := true
 		skipDefaultTransaction := true
 
-		dbConfig, _ := s.Config().(ConfigurationDatabase)
-		if dbConfig != nil {
-			preferSimpleProtocol = dbConfig.PreferSimpleProtocol()
-			skipDefaultTransaction = dbConfig.SkipDefaultTransaction()
+		dbCfg, _ := s.Config().(config.ConfigurationDatabase)
+		if dbCfg != nil {
+			preferSimpleProtocol = dbCfg.PreferSimpleProtocol()
+			skipDefaultTransaction = dbCfg.SkipDefaultTransaction()
 		}
 
 		conn, err := otelsql.Open("pgx", cleanedPostgresqlDSN,
@@ -371,12 +373,12 @@ func WithDatastoreConnectionWithName(name string, postgresqlConnection string, r
 
 		s.dataStores.Store(name, store)
 
-		if dbConfig != nil {
-			store.shouldDoMigrations = dbConfig.DoDatabaseMigrate()
+		if dbCfg != nil {
+			store.shouldDoMigrations = dbCfg.DoDatabaseMigrate()
 			store.SetPoolConfig(
-				dbConfig.GetMaxOpenConnections(),
-				dbConfig.GetMaxIdleConnections(),
-				dbConfig.GetMaxConnectionLifeTimeInSeconds(),
+				dbCfg.GetMaxOpenConnections(),
+				dbCfg.GetMaxIdleConnections(),
+				dbCfg.GetMaxConnectionLifeTimeInSeconds(),
 			)
 		}
 	}
@@ -384,18 +386,18 @@ func WithDatastoreConnectionWithName(name string, postgresqlConnection string, r
 
 func WithDatastore() Option {
 	return func(ctx context.Context, s *Service) {
-		config, ok := s.Config().(ConfigurationDatabase)
+		cfg, ok := s.Config().(config.ConfigurationDatabase)
 		if !ok {
 			s.Log(ctx).Warn("configuration object not of type : ConfigurationDatabase")
 			return
 		}
 
-		for _, primaryDBURL := range config.GetDatabasePrimaryHostURL() {
+		for _, primaryDBURL := range cfg.GetDatabasePrimaryHostURL() {
 			primaryDatabase := WithDatastoreConnection(primaryDBURL, false)
 			primaryDatabase(ctx, s)
 		}
 
-		for _, replicaDBURL := range config.GetDatabaseReplicaHostURL() {
+		for _, replicaDBURL := range cfg.GetDatabaseReplicaHostURL() {
 			replicaDatabase := WithDatastoreConnection(replicaDBURL, true)
 			replicaDatabase(ctx, s)
 		}

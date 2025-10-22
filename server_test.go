@@ -12,18 +12,18 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pitabwire/frame"
+	"github.com/pitabwire/frame/config"
+	"github.com/pitabwire/frame/frametests"
+	"github.com/pitabwire/frame/frametests/definition"
+	grpcping2 "github.com/pitabwire/frame/frametests/grpcping"
+	"github.com/pitabwire/frame/tests"
 	"github.com/stretchr/testify/suite"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/test/bufconn"
-
-	"github.com/pitabwire/frame"
-	"github.com/pitabwire/frame/frametests"
-	"github.com/pitabwire/frame/frametests/definition"
-	grpcping2 "github.com/pitabwire/frame/frametests/grpcping"
-	"github.com/pitabwire/frame/tests"
 )
 
 // ServerTestSuite extends FrameBaseTestSuite for comprehensive server testing.
@@ -121,7 +121,7 @@ func (s *ServerTestSuite) TestServiceGrpcHealthServer() {
 				gsrv := grpc.NewServer()
 				grpcping2.RegisterFramePingServer(gsrv, &grpcServer{})
 
-				defConf, err := frame.ConfigFromEnv[frame.ConfigurationDefault]()
+				defConf, err := config.FromEnv[config.ConfigurationDefault]()
 				if err != nil {
 					_ = err
 					return

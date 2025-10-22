@@ -1,4 +1,4 @@
-package frame
+package config
 
 import (
 	"context"
@@ -16,37 +16,38 @@ import (
 	"github.com/pitabwire/util"
 )
 
+type contextKey string
+
+func (c contextKey) String() string {
+	return "frame/config/" + string(c)
+}
+
 const (
 	ctxKeyConfiguration = contextKey("configurationKey")
 	httpStatusOKClass   = 2
 	// DefaultSlowQueryThresholdMilliseconds is defined in datastore_logger.go.
+
+	DefaultSlowQueryThreshold = 200 * time.Millisecond
 )
 
-// WithConfig Option that helps to specify or override the configuration object of our service.
-func WithConfig(config any) Option {
-	return func(_ context.Context, s *Service) {
-		s.configuration = config
-	}
-}
-
-func (s *Service) Config() any {
-	return s.configuration
-}
-
-// ConfigToContext adds service configuration to the current supplied context.
-func ConfigToContext(ctx context.Context, config any) context.Context {
+// ToContext adds service configuration to the current supplied context.
+func ToContext(ctx context.Context, config any) context.Context {
 	return context.WithValue(ctx, ctxKeyConfiguration, config)
 }
 
-// Cfg extracts service configuration from the supplied context if any exist.
-func Cfg(ctx context.Context) any {
-	return ctx.Value(ctxKeyConfiguration)
+// FromContext extracts service configuration from the supplied context if any exist.
+func FromContext[T any](ctx context.Context) T {
+	if cfg, ok := ctx.Value(ctxKeyConfiguration).(T); ok {
+		return cfg
+	}
+	var zero T
+	return zero
 }
 
-// ConfigLoadWithOIDC convenience method to process configs.
-func ConfigLoadWithOIDC[T any](ctx context.Context) (T, error) {
+// LoadWithOIDC convenience method to process configs.
+func LoadWithOIDC[T any](ctx context.Context) (T, error) {
 	var cfg T
-	cfg, err := ConfigFromEnv[T]()
+	cfg, err := FromEnv[T]()
 	if err != nil {
 		return cfg, err
 	}
@@ -66,13 +67,13 @@ func ConfigLoadWithOIDC[T any](ctx context.Context) (T, error) {
 	return cfg, nil
 }
 
-// ConfigFromEnv convenience method to process configs.
-func ConfigFromEnv[T any]() (T, error) {
+// FromEnv convenience method to process configs.
+func FromEnv[T any]() (T, error) {
 	return env.ParseAs[T]()
 }
 
-// ConfigFillEnv convenience method to fill a config object with environment data.
-func ConfigFillEnv(v any) error {
+// FillEnv convenience method to fill a config object with environment data.
+func FillEnv(v any) error {
 	return env.Parse(v)
 }
 
@@ -135,6 +136,24 @@ type ConfigurationDefault struct {
 	EventsQueueURL  string `envDefault:"mem://frame.events.internal_._queue" env:"EVENTS_QUEUE_URL"  yaml:"events_queue_url"`
 
 	oidcMap OIDCMap `env:"-" yaml:"-"`
+}
+
+type ConfigurationService interface {
+	Name() string
+	Environment() string
+	Version() string
+}
+
+var _ ConfigurationService = new(ConfigurationDefault)
+
+func (c *ConfigurationDefault) Name() string {
+	return c.ServiceName
+}
+func (c *ConfigurationDefault) Environment() string {
+	return c.ServiceEnvironment
+}
+func (c *ConfigurationDefault) Version() string {
+	return c.ServiceVersion
 }
 
 type ConfigurationSecurity interface {

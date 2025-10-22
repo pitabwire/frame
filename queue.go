@@ -11,6 +11,9 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/pitabwire/frame/config"
+	"github.com/pitabwire/frame/localization"
+	"github.com/pitabwire/frame/security"
 	_ "github.com/pitabwire/natspubsub" // required for NATS pubsub driver registration
 	"github.com/pitabwire/util"
 	"go.opentelemetry.io/otel"
@@ -122,14 +125,14 @@ func (p *publisher) Publish(ctx context.Context, payload any, headers ...map[str
 		maps.Copy(metadata, h)
 	}
 
-	authClaim := ClaimsFromContext(ctx)
+	authClaim := security.ClaimsFromContext(ctx)
 	if authClaim != nil {
 		maps.Copy(metadata, authClaim.AsMetadata())
 	}
 
-	language := LanguageFromContext(ctx)
+	language := localization.FromContext(ctx)
 	if len(language) > 0 {
-		metadata = LanguageToMap(metadata, language)
+		metadata = localization.ToMap(metadata, language)
 	}
 
 	var message []byte
@@ -431,7 +434,7 @@ func (s *subscriber) processReceivedMessage(ctx context.Context, msg *pubsub.Mes
 		defer s.metrics.closeMessage(time.Now(), err)
 
 		var metadata propagation.MapCarrier = msg.Metadata
-		authClaim := ClaimsFromMap(metadata)
+		authClaim := security.ClaimsFromMap(metadata)
 		var processedCtx context.Context
 		if authClaim != nil {
 			processedCtx = authClaim.ClaimsToContext(jobCtx)
@@ -441,9 +444,9 @@ func (s *subscriber) processReceivedMessage(ctx context.Context, msg *pubsub.Mes
 
 		processedCtx = otel.GetTextMapPropagator().Extract(processedCtx, metadata)
 
-		languages := LanguageFromMap(metadata)
+		languages := localization.FromMap(metadata)
 		if len(languages) > 0 {
-			processedCtx = LangugageToContext(processedCtx, languages)
+			processedCtx = localization.ToContext(processedCtx, languages)
 		}
 
 		for _, worker := range s.handlers {
@@ -620,7 +623,7 @@ func (s *Service) setupEventsQueueIfNeeded(ctx context.Context) error {
 		service: s,
 	}
 
-	config, ok := s.Config().(ConfigurationEvents)
+	cfg, ok := s.Config().(config.ConfigurationEvents)
 	if !ok {
 		errMsg := "configuration object does not implement ConfigurationEvents, cannot setup events queue"
 		s.Log(ctx).Error(errMsg)
@@ -628,13 +631,13 @@ func (s *Service) setupEventsQueueIfNeeded(ctx context.Context) error {
 	}
 
 	eventsQueueSubscriberOpt := WithRegisterSubscriber(
-		config.GetEventsQueueName(),
-		config.GetEventsQueueURL(),
+		cfg.GetEventsQueueName(),
+		cfg.GetEventsQueueURL(),
 		&eventsQueueHandler,
 	)
 	eventsQueueSubscriberOpt(ctx, s) // This registers the subscriber
 
-	eventsQueuePublisherOpt := WithRegisterPublisher(config.GetEventsQueueName(), config.GetEventsQueueURL())
+	eventsQueuePublisherOpt := WithRegisterPublisher(cfg.GetEventsQueueName(), cfg.GetEventsQueueURL())
 	eventsQueuePublisherOpt(ctx, s) // This registers the publisher
 
 	// Note: Actual initialization of this specific subscriber and publisher

@@ -13,14 +13,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-	"github.com/stretchr/testify/suite"
-
 	"github.com/pitabwire/frame"
 	"github.com/pitabwire/frame/frametests"
 	"github.com/pitabwire/frame/frametests/definition"
 	"github.com/pitabwire/frame/tests"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 // ServiceTestSuite extends FrameBaseTestSuite for comprehensive service testing.
@@ -109,10 +108,10 @@ func (s *ServiceTestSuite) TestFromContext() {
 				_, srv := frame.NewService(tc.serviceName)
 
 				if tc.setService {
-					ctx = frame.SvcToContext(ctx, srv)
+					ctx = frame.ToContext(ctx, srv)
 				}
 
-				retrievedSrv := frame.Svc(ctx)
+				retrievedSrv := frame.FromContext(ctx)
 
 				if tc.expectNil {
 					require.Nil(t, retrievedSrv, "service should not be found in context")

@@ -3,7 +3,6 @@ package frame
 import (
 	"context"
 	"errors"
-	"fmt"
 	"net"
 	"net/http"
 	"os/signal"
@@ -12,6 +11,12 @@ import (
 	"time"
 
 	"github.com/nicksnyder/go-i18n/v2/i18n"
+	"github.com/pitabwire/frame/cache"
+	"github.com/pitabwire/frame/client"
+	"github.com/pitabwire/frame/config"
+	"github.com/pitabwire/frame/localization"
+	"github.com/pitabwire/frame/security"
+	securityManager "github.com/pitabwire/frame/security/manager"
 	"github.com/pitabwire/util"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel/propagation"
@@ -22,8 +27,6 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/reflection"
-
-	"github.com/pitabwire/frame/cache"
 )
 
 type contextKey string
@@ -45,21 +48,23 @@ const (
 // An instance of this type scoped to stay for the lifetime of the application.
 // It is pushed and pulled from contexts to make it easy to pass around.
 type Service struct {
-	name                       string
-	jwtClient                  map[string]any
-	version                    string
-	environment                string
-	logger                     *util.LogEntry
-	disableTracing             bool
-	traceTextMap               propagation.TextMapPropagator
-	traceExporter              sdktrace.SpanExporter
-	traceSampler               sdktrace.Sampler
-	metricsReader              sdkmetrics.Reader
-	traceLogsExporter          sdklogs.Exporter
-	handler                    http.Handler
-	cancelFunc                 context.CancelFunc
-	errorChannelMutex          sync.Mutex
-	errorChannel               chan error
+	name           string
+	jwtClient      map[string]any
+	version        string
+	environment    string
+	logger         *util.LogEntry
+	disableTracing bool
+
+	traceTextMap      propagation.TextMapPropagator
+	traceExporter     sdktrace.SpanExporter
+	traceSampler      sdktrace.Sampler
+	metricsReader     sdkmetrics.Reader
+	traceLogsExporter sdklogs.Exporter
+	handler           http.Handler
+	cancelFunc        context.CancelFunc
+	errorChannelMutex sync.Mutex
+	errorChannel      chan error
+
 	backGroundClient           func(ctx context.Context) error
 	pool                       WorkerPool
 	poolOptions                *WorkerPoolOptions
@@ -77,10 +82,15 @@ type Service struct {
 	startup                    func(ctx context.Context, s *Service)
 	cleanup                    func(ctx context.Context)
 	eventRegistry              map[string]EventI
-	configuration              any
-	cacheManager               *cache.Manager
-	startOnce                  sync.Once
-	stopMutex                  sync.Mutex
+
+	configuration any
+
+	localizationManager localization.Manager
+	securityManager     security.Manager
+	cacheManager        *cache.Manager
+
+	startOnce sync.Once
+	stopMutex sync.Mutex
 }
 
 type Option func(ctx context.Context, service *Service)
@@ -106,9 +116,9 @@ func NewServiceWithContext(ctx context.Context, name string, opts ...Option) (co
 	defaultLogger := util.Log(ctx)
 	ctx = util.ContextWithLogger(ctx, defaultLogger)
 
-	defaultCfg, _ := ConfigFromEnv[ConfigurationDefault]()
+	cfg, _ := config.FromEnv[config.ConfigurationDefault]()
 
-	defaultPoolOpts := defaultWorkerPoolOpts(&defaultCfg, defaultLogger)
+	defaultPoolOpts := defaultWorkerPoolOpts(&cfg, defaultLogger)
 	defaultPool, err := setupWorkerPool(ctx, defaultPoolOpts)
 	if err != nil {
 		defaultLogger.WithError(err).Panic("could not create a default worker pool")
@@ -116,61 +126,66 @@ func NewServiceWithContext(ctx context.Context, name string, opts ...Option) (co
 
 	q := newQueue(ctx)
 
-	service := &Service{
+	defaultClient := client.NewHTTPClient(
+		client.WithHTTPTimeout(time.Duration(defaultHTTPTimeoutSeconds)*time.Second),
+		client.WithHTTPIdleTimeout(time.Duration(defaultHTTPIdleTimeoutSeconds)*time.Second),
+	)
+
+	invoker := client.NewInvoker(&cfg, defaultClient)
+
+	svc := &Service{
 		name:         name,
 		cancelFunc:   signalCancelFunc, // Store its cancel function
 		errorChannel: make(chan error, 1),
-		client: NewHTTPClient(
-			WithHTTPTimeout(time.Duration(defaultHTTPTimeoutSeconds)*time.Second),
-			WithHTTPIdleTimeout(time.Duration(defaultHTTPIdleTimeoutSeconds)*time.Second),
-		), // Use configurable HTTP client with defaults
-		logger: defaultLogger,
+		client:       defaultClient,
+		logger:       defaultLogger,
 
 		pool:        defaultPool,
 		poolOptions: defaultPoolOpts,
 
-		queue: q,
+		securityManager: securityManager.NewManager(ctx, &cfg, invoker),
+		queue:           q,
 	}
 
-	if defaultCfg.ServiceName != "" {
-		opts = append(opts, WithName(defaultCfg.ServiceName))
+	if cfg.ServiceName != "" {
+		opts = append(opts, WithName(cfg.ServiceName))
 	}
 
-	if defaultCfg.ServiceEnvironment != "" {
-		opts = append(opts, WithEnvironment(defaultCfg.ServiceEnvironment))
+	if cfg.ServiceEnvironment != "" {
+		opts = append(opts, WithEnvironment(cfg.ServiceEnvironment))
 	}
 
-	if defaultCfg.ServiceVersion != "" {
-		opts = append(opts, WithVersion(defaultCfg.ServiceVersion))
+	if cfg.ServiceVersion != "" {
+		opts = append(opts, WithVersion(cfg.ServiceVersion))
 	}
 
-	if defaultCfg.OpenTelemetryDisable {
+	if cfg.OpenTelemetryDisable {
 		opts = append(opts, WithDisableTracing())
 	}
 
 	opts = append(opts, WithLogger()) // Ensure logger is initialized early
 
-	service.Init(ctx, opts...) // Apply all options, using the signal-aware context
+	svc.Init(ctx, opts...) // Apply all options, using the signal-aware context
 
-	err = service.initTracer(ctx)
+	err = svc.initTracer(ctx)
 	if err != nil {
-		service.logger.WithError(err).Panic("could not setup application telemetry")
+		svc.logger.WithError(err).Panic("could not setup application telemetry")
 	}
 
-	// Prepare context to be returned, embedding service and config
-	ctx = SvcToContext(ctx, service)
-	ctx = ConfigToContext(ctx, service.Config())
-	ctx = util.ContextWithLogger(ctx, service.logger)
-	return ctx, service
+	// Prepare context to be returned, embedding svc and config
+	ctx = ToContext(ctx, svc)
+	ctx = config.ToContext(ctx, svc.Config())
+	ctx = util.ContextWithLogger(ctx, svc.logger)
+	return ctx, svc
 }
 
-// SvcToContext pushes a service instance into the supplied context for easier propagation.
-func SvcToContext(ctx context.Context, service *Service) context.Context {
+// ToContext pushes a service instance into the supplied context for easier propagation.
+func ToContext(ctx context.Context, service *Service) context.Context {
 	return context.WithValue(ctx, ctxKeyService, service)
 }
 
-// Svc obtains a service instance being propagated through the context.
-func Svc(ctx context.Context) *Service {
+// FromContext obtains a service instance being propagated through the context.
+func FromContext(ctx context.Context) *Service {
 	service, ok := ctx.Value(ctxKeyService).(*Service)
 	if !ok {
 		return nil
@@ -217,59 +232,18 @@ func WithEnvironment(environment string) Option {
 
 // WithHTTPClient configures the HTTP client used by the service.
 // This allows customizing the HTTP client's behavior such as timeout, transport, etc.
-func WithHTTPClient(opts ...HTTPOption) Option {
+func WithHTTPClient(opts ...client.HTTPOption) Option {
 	return func(_ context.Context, s *Service) {
-		s.client = NewHTTPClient(opts...)
+		s.client = client.NewHTTPClient(opts...)
 	}
-}
-
-// JwtClient gets the authenticated jwt client if configured at startup.
-func (s *Service) JwtClient() map[string]any {
-	return s.jwtClient
-}
-
-// SetJwtClient sets the authenticated jwt client.
-func (s *Service) SetJwtClient(jwtCli map[string]any) {
-	s.jwtClient = jwtCli
-}
-
-// JwtClientID gets the authenticated JWT client ID if configured at startup.
-func (s *Service) JwtClientID() string {
-	clientID, ok := s.jwtClient["client_id"].(string)
-	if ok {
-		return clientID
-	}
-	oauth2Config, sok := s.Config().(ConfigurationOAUTH2)
-	if sok {
-		clientID = oauth2Config.GetOauth2ServiceClientID()
-		if clientID != "" {
-			return clientID
-		}
-	}
-
-	clientID = s.Name()
-	if s.Environment() != "" {
-		clientID = fmt.Sprintf("%s_%s", s.Name(), s.Environment())
-	}
-
-	return clientID
-}
-
-// JwtClientSecret gets the authenticated jwt client if configured at startup.
-func (s *Service) JwtClientSecret() string {
-	clientSecret, ok := s.jwtClient["client_secret"].(string)
-	if ok {
-		return clientSecret
-	}
-	oauth2Config, sok := s.Config().(ConfigurationOAUTH2)
-	if sok {
-		return oauth2Config.GetOauth2ServiceClientSecret()
-	}
-	return ""
 }
 
 func (s *Service) H() http.Handler {
 	return s.handler
+}
+
+func (s *Service) Security() security.Manager {
+	return s.securityManager
 }
 
 // Init evaluates the options provided as arguments and supplies them to the service object.
@@ -359,18 +333,18 @@ func (s *Service) determineHTTPPort(currentPort string) string {
 		return currentPort
 	}
 
-	config, ok := s.Config().(ConfigurationPorts)
+	cfg, ok := s.Config().(config.ConfigurationPorts)
 	if !ok {
 		// Assuming s.TLSEnabled() checks if TLS cert/key paths are configured.
 		// This part might need adjustment if s.TLSEnabled() is not available
 		// or if direct check on ConfigurationTLS is preferred.
-		tlsConfig, tlsOk := s.Config().(ConfigurationTLS)
-		if tlsOk && tlsConfig.TLSCertPath() != "" && tlsConfig.TLSCertKeyPath() != "" {
+		tlsCfg, tlsOk := s.Config().(config.ConfigurationTLS)
+		if tlsOk && tlsCfg.TLSCertPath() != "" && tlsCfg.TLSCertKeyPath() != "" {
 			return ":https"
 		}
 		return "http" // Existing logic; consider ":http" or a default port like ":8080"
 	}
-	return config.HTTPPort()
+	return cfg.HTTPPort()
 }
 
 func (s *Service) determineGRPCPort(currentPort string) string {
@@ -378,11 +352,11 @@ func (s *Service) determineGRPCPort(currentPort string) string {
 		return currentPort
 	}
 
-	config, ok := s.Config().(ConfigurationPorts)
+	cfg, ok := s.Config().(config.ConfigurationPorts)
 	if !ok {
 		return ":50051" // Default gRPC port
 	}
-	return config.GrpcPort()
+	return cfg.GrpcPort()
 }
 
 func (s *Service) createAndConfigureMux(_ context.Context) *http.ServeMux {
@@ -463,7 +437,7 @@ func (s *Service) initServer(ctx context.Context, httpPort string) error {
 	}
 
 	if s.TLSEnabled() {
-		config, ok := s.Config().(ConfigurationTLS)
+		cfg, ok := s.Config().(config.ConfigurationTLS)
 		if !ok {
 			return errors.New("TLS is enabled but configuration does not implement ConfigurationTLS")
 		}
@@ -471,7 +445,7 @@ func (s *Service) initServer(ctx context.Context, httpPort string) error {
 		if !ok {
 			return errors.New("driver does not implement internal.TLSServer for TLS mode")
 		}
-		return tlsServer.ListenAndServeTLS(httpPort, config.TLSCertPath(), config.TLSCertKeyPath(), s.handler)
+		return tlsServer.ListenAndServeTLS(httpPort, cfg.TLSCertPath(), cfg.TLSCertKeyPath(), s.handler)
 	}
 
 	nonTLSServer, ok := s.driver.(driver.Server)

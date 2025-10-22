@@ -4,13 +4,13 @@ import (
 	"os"
 	"testing"
 
+	"github.com/pitabwire/frame"
+	"github.com/pitabwire/frame/config"
+	"github.com/pitabwire/frame/frametests/definition"
+	"github.com/pitabwire/frame/tests"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"gorm.io/gorm"
-
-	"github.com/pitabwire/frame"
-	"github.com/pitabwire/frame/frametests/definition"
-	"github.com/pitabwire/frame/tests"
 )
 
 // MigratorTestSuite extends BaseTestSuite for comprehensive migrator testing.
@@ -119,7 +119,7 @@ func (s *MigratorTestSuite) TestApplyMigrations() {
 			t.Run(tc.name, func(t *testing.T) {
 				db := dep.ByIsDatabase(t.Context())
 
-				defConf, err := frame.ConfigFromEnv[frame.ConfigurationDefault]()
+				defConf, err := config.FromEnv[config.ConfigurationDefault]()
 				require.NoError(t, err, "Configuration loading should succeed")
 
 				defConf.DatabaseSlowQueryLogThreshold = tc.slowQueryThreshold

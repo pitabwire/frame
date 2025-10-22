@@ -6,13 +6,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/require"
-	"github.com/stretchr/testify/suite"
-
 	"github.com/pitabwire/frame"
+	"github.com/pitabwire/frame/config"
 	"github.com/pitabwire/frame/frametests"
 	"github.com/pitabwire/frame/frametests/definition"
 	"github.com/pitabwire/frame/tests"
+	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 // EventsTestSuite extends BaseTestSuite for comprehensive events testing.
@@ -73,7 +73,7 @@ func (s *EventsTestSuite) TestServiceRegisterEventsWorks() {
 				ctx := t.Context()
 				queue := dep.ByIsQueue(t.Context())
 
-				cfg, err := frame.ConfigFromEnv[frame.ConfigurationDefault]()
+				cfg, err := config.FromEnv[config.ConfigurationDefault]()
 				require.NoError(t, err, "configuration loading should succeed")
 
 				if queue != nil {
@@ -159,7 +159,7 @@ func (s *EventsTestSuite) TestServiceEventsPublishingWorks() {
 				ctx := t.Context()
 				queue := dep.ByIsQueue(ctx)
 
-				cfg, err := frame.ConfigFromEnv[frame.ConfigurationDefault]()
+				cfg, err := config.FromEnv[config.ConfigurationDefault]()
 				require.NoError(t, err, "configuration loading should succeed")
 
 				// Set queue connection from dependency

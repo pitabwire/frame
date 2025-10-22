@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 
+	config2 "github.com/pitabwire/frame/config"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -42,7 +43,7 @@ func WithRegisterEvents(events ...EventI) Option {
 
 // Emit a simple method used to deploy.
 func (s *Service) Emit(ctx context.Context, name string, payload any) error {
-	config, ok := s.Config().(ConfigurationEvents)
+	config, ok := s.Config().(config2.ConfigurationEvents)
 	if !ok {
 		s.Log(ctx).Warn("configuration object not of type : ConfigurationDefault")
 		return errors.New("could not cast config to ConfigurationEvents")

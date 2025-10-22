@@ -1,4 +1,4 @@
-package frame_test
+package localization_test
 
 import (
 	"context"
@@ -8,11 +8,13 @@ import (
 	"testing"
 
 	"github.com/nicksnyder/go-i18n/v2/i18n"
+	"github.com/pitabwire/frame"
+	"github.com/pitabwire/frame/localization"
+	lgrpc "github.com/pitabwire/frame/localization/interceptors/grpc"
+	lhttp "github.com/pitabwire/frame/localization/interceptors/http"
+	"github.com/pitabwire/frame/tests"
 	"github.com/stretchr/testify/suite"
 	"google.golang.org/grpc/metadata"
-
-	"github.com/pitabwire/frame"
-	"github.com/pitabwire/frame/tests"
 )
 
 // LocalizationTestSuite extends BaseTestSuite for comprehensive localization testing.
@@ -41,7 +43,7 @@ func (s *LocalizationTestSuite) TestTranslations() {
 		{
 			name:           "basic translation with template data",
 			serviceName:    "Test Localization Srv",
-			translationDir: "tests_runner/localization",
+			translationDir: "test_data",
 			languages:      []string{"en", "sw"},
 			messageID:      "Example",
 			templateData: map[string]any{
@@ -55,10 +57,9 @@ func (s *LocalizationTestSuite) TestTranslations() {
 
 	for _, tc := range testCases {
 		s.Run(tc.name, func() {
-			translations := frame.WithTranslations(tc.translationDir, tc.languages...)
-			_, srv := frame.NewService(tc.serviceName, translations)
+			lm := localization.NewManager(tc.translationDir, tc.languages...)
 
-			bundle := srv.Bundle()
+			bundle := lm.Bundle()
 
 			enLocalizer := i18n.NewLocalizer(bundle, "en", "sw")
 			englishVersion, err := enLocalizer.Localize(&i18n.LocalizeConfig{
@@ -101,7 +102,7 @@ func (s *LocalizationTestSuite) TestTranslationsHelpers() {
 		{
 			name:           "translate without template data",
 			serviceName:    "Test Localization Srv",
-			translationDir: "tests_runner/localization",
+			translationDir: "test_data",
 			languages:      []string{"en", "sw"},
 			messageID:      "Example",
 			language:       "en",
@@ -112,7 +113,7 @@ func (s *LocalizationTestSuite) TestTranslationsHelpers() {
 		{
 			name:           "translate with template data",
 			serviceName:    "Test Localization Srv",
-			translationDir: "tests_runner/localization",
+			translationDir: "test_data",
 			languages:      []string{"en", "sw"},
 			messageID:      "Example",
 			language:       "en",
@@ -125,7 +126,7 @@ func (s *LocalizationTestSuite) TestTranslationsHelpers() {
 		{
 			name:           "translate with template data and plural",
 			serviceName:    "Test Localization Srv",
-			translationDir: "tests_runner/localization",
+			translationDir: "test_data",
 			languages:      []string{"en", "sw"},
 			messageID:      "Example",
 			language:       "en",
@@ -139,17 +140,18 @@ func (s *LocalizationTestSuite) TestTranslationsHelpers() {
 
 	for _, tc := range testCases {
 		s.Run(tc.name, func() {
-			translations := frame.WithTranslations(tc.translationDir, tc.languages...)
-			ctx, srv := frame.NewService(tc.serviceName, translations)
+
+			ctx := context.Background()
+			lm := localization.NewManager(tc.translationDir, tc.languages...)
 
 			var result string
 			switch {
 			case tc.templateData == nil:
-				result = srv.Translate(ctx, tc.language, tc.messageID)
+				result = lm.Translate(ctx, tc.language, tc.messageID)
 			case tc.pluralCount > 1:
-				result = srv.TranslateWithMapAndCount(ctx, tc.language, tc.messageID, tc.templateData, tc.pluralCount)
+				result = lm.TranslateWithMapAndCount(ctx, tc.language, tc.messageID, tc.templateData, tc.pluralCount)
 			default:
-				result = srv.TranslateWithMap(ctx, tc.language, tc.messageID, tc.templateData)
+				result = lm.TranslateWithMap(ctx, tc.language, tc.messageID, tc.templateData)
 			}
 
 			s.Require().Equal(tc.expected, result, "Translation result should match expected")
@@ -177,14 +179,15 @@ func (s *LocalizationTestSuite) TestLanguageContextManagement() {
 
 	for _, tc := range testCases {
 		s.Run(tc.name, func() {
-			translations := frame.WithTranslations("tests_runner/localization", "en", "sw")
-			ctx, srv := frame.NewService(tc.serviceName, translations)
 
-			ctx = frame.LangugageToContext(ctx, []string{tc.language})
-			result := srv.Translate(ctx, "", tc.messageID)
+			ctx := context.Background()
+			lm := localization.NewManager("test_data", "en", "sw")
+
+			ctx = localization.ToContext(ctx, []string{tc.language})
+			result := lm.Translate(ctx, "", tc.messageID)
 			s.Require().Equal(tc.expected, result, "Translation with language context should match expected")
 
-			lang := frame.LanguageFromContext(ctx)
+			lang := localization.FromContext(ctx)
 			s.Require().Equal([]string{tc.language}, lang, "Language from context should match set language")
 		})
 	}
@@ -213,9 +216,9 @@ func (s *LocalizationTestSuite) TestLanguageMapManagement() {
 			_, _ = frame.NewService(tc.serviceName)
 
 			// Test language map functions
-			testMap := frame.LanguageToMap(tc.anyMap, tc.testLanguages)
+			testMap := localization.ToMap(tc.anyMap, tc.testLanguages)
 
-			result := frame.LanguageFromMap(testMap)
+			result := localization.FromMap(testMap)
 			s.Require().Equal(result, tc.testLanguages, "Language map should contain test key")
 		})
 	}
@@ -248,11 +251,10 @@ func (s *LocalizationTestSuite) TestLanguageHTTPMiddleware() {
 
 	for _, tc := range testCases {
 		s.Run(tc.name, func() {
-			translations := frame.WithTranslations("tests_runner/localization", "en", "sw")
-			_, srv := frame.NewService(tc.serviceName, translations)
+			// lm := localization.NewManager("test_data", "en", "sw")
 
-			middleware := srv.LanguageHTTPMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				lang := frame.LanguageFromContext(r.Context())
+			middleware := lhttp.LanguageHTTPMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				lang := localization.FromContext(r.Context())
 				w.WriteHeader(http.StatusOK)
 				w.Write([]byte(strings.Join(lang, ",")))
 			}))
@@ -293,12 +295,11 @@ func (s *LocalizationTestSuite) TestLanguageGrpcInterceptors() {
 
 	for _, tc := range testCases {
 		s.Run(tc.name, func() {
-			translations := frame.WithTranslations("tests_runner/localization", "en", "sw")
-			_, srv := frame.NewService(tc.serviceName, translations)
+			// lm := localization.NewManager("test_data", "en", "sw")
 
-			interceptor := srv.LanguageUnaryInterceptor()
+			interceptor := lgrpc.LanguageUnaryInterceptor()
 			handler := func(ctx context.Context, _ any) (any, error) {
-				lang := frame.LanguageFromContext(ctx)
+				lang := localization.FromContext(ctx)
 				return strings.Join(lang, ","), nil
 			}
 
@@ -335,7 +336,7 @@ func (s *LocalizationTestSuite) TestLanguageFromGrpcRequest() {
 			md := metadata.New(map[string]string{"accept-language": tc.metadataLang})
 			grpcCtx := metadata.NewIncomingContext(ctx, md)
 
-			lang := frame.LanguageFromGrpcRequest(grpcCtx)
+			lang := localization.ExtractLanguageFromGrpcRequest(grpcCtx)
 			s.Require().Equal(tc.expectedLang, lang, "Language from gRPC request should match expected")
 		})
 	}

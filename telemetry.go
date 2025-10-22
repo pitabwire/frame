@@ -5,6 +5,7 @@ import (
 	"os"
 	"runtime"
 
+	config2 "github.com/pitabwire/frame/config"
 	"github.com/pitabwire/util"
 	"go.opentelemetry.io/contrib/bridges/otelslog"
 	"go.opentelemetry.io/contrib/exporters/autoexport"
@@ -81,7 +82,7 @@ func (s *Service) setupTraceSampler() {
 	if s.traceSampler == nil {
 		traceIDRatio := 1.0
 
-		config, ok := s.Config().(ConfigurationTelemetry)
+		config, ok := s.Config().(config2.ConfigurationTelemetry)
 		if ok {
 			traceIDRatio = config.SamplingRatio()
 		}

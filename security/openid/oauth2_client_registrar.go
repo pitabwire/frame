@@ -1,4 +1,4 @@
-package frame
+package openid
 
 import (
 	"context"
@@ -7,24 +7,48 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+
+	"github.com/pitabwire/frame/client"
+	"github.com/pitabwire/frame/config"
+	"github.com/pitabwire/frame/security"
+	"github.com/pitabwire/util"
 )
 
 const ConstSystemScopeInternal = "system_int"
 const ConstSystemScopeExternal = "system_ext"
 
+type clientRegistrar struct {
+	serviceName        string
+	serviceEnvironment string
+	cfg                config.ConfigurationOAUTH2
+
+	invoker client.HTTPInvoker
+}
+
+func NewClientRegistrar(serviceName, serviceEnvironment string,
+	cfg config.ConfigurationOAUTH2) security.Oauth2ClientRegistrar {
+
+	return &clientRegistrar{
+		serviceName:        serviceName,
+		serviceEnvironment: serviceEnvironment,
+		cfg:                cfg,
+	}
+}
+
 // RegisterForJwt function hooks in jwt client registration to make sure service is authenticated.
-func (s *Service) RegisterForJwt(ctx context.Context) error {
-	oauth2Config, ok := s.Config().(ConfigurationOAUTH2)
-	if !ok {
+func (s *clientRegistrar) RegisterForJwt(ctx context.Context, iClientHolder security.InternalOauth2ClientHolder) error {
+
+	if s.cfg == nil {
 		return nil
 	}
+	oauth2Config := s.cfg
 	oauth2ServiceAdminHost := oauth2Config.GetOauth2ServiceAdminURI()
 
 	clientID := oauth2Config.GetOauth2ServiceClientID()
 	if clientID == "" {
-		clientID = s.Name()
-		if s.Environment() != "" {
-			clientID = fmt.Sprintf("%s_%s", s.Name(), s.Environment())
+		clientID = s.serviceName
+		if s.serviceEnvironment != "" {
+			clientID = fmt.Sprintf("%s_%s", s.serviceName, s.serviceEnvironment)
 		}
 	}
 
@@ -36,32 +60,32 @@ func (s *Service) RegisterForJwt(ctx context.Context) error {
 		audienceList := strings.Split(oauth2Audience, ",")
 
 		jwtClient, err := s.RegisterForJwtWithParams(ctx,
-			oauth2ServiceAdminHost, s.Name(), clientID, clientSecret,
+			oauth2ServiceAdminHost, s.serviceName, clientID, clientSecret,
 			ConstSystemScopeInternal, audienceList, map[string]string{})
 		if err != nil {
 			return err
 		}
 
-		s.SetJwtClient(jwtClient)
+		iClientHolder.SetJwtClient(jwtClient)
 	}
 
 	return nil
 }
 
 // RegisterForJwtWithParams registers for JWT with the given parameters. This is useful for situations where one may need to register external applications for access token generation.
-func (s *Service) RegisterForJwtWithParams(ctx context.Context,
+func (s *clientRegistrar) RegisterForJwtWithParams(ctx context.Context,
 	oauth2ServiceAdminHost string, clientName string, clientID string, clientSecret string,
 	scope string, audienceList []string, metadata map[string]string) (map[string]any, error) {
 	oauth2AdminURI := fmt.Sprintf("%s/admin/clients", oauth2ServiceAdminHost)
 	oauth2AdminIDUri := fmt.Sprintf("%s/%s", oauth2AdminURI, clientID)
 
-	status, response, err := s.InvokeRestService(ctx, http.MethodGet, oauth2AdminIDUri, nil, nil)
+	status, response, err := s.invoker.InvokeRestService(ctx, http.MethodGet, oauth2AdminIDUri, nil, nil)
 	if err != nil {
-		s.Log(ctx).WithError(err).Error("could not get existing clients")
+		util.Log(ctx).WithError(err).Error("could not get existing clients")
 		return nil, err
 	}
 	if status != http.StatusNotFound && (status > 299 || status < 200) {
-		s.Log(ctx).
+		util.Log(ctx).
 			WithField("status", status).
 			WithField("result", string(response)).
 			Error(" invalid response from oauth2 server")
@@ -73,7 +97,7 @@ func (s *Service) RegisterForJwtWithParams(ctx context.Context,
 		var existingClient map[string]any
 		err = json.Unmarshal(response, &existingClient)
 		if err != nil {
-			s.Log(ctx).WithError(err).WithField("payload", string(response)).
+			util.Log(ctx).WithError(err).WithField("payload", string(response)).
 				Error("could not unmarshal existing clients")
 			return nil, err
 		}
@@ -95,14 +119,14 @@ func (s *Service) RegisterForJwtWithParams(ctx context.Context,
 		payload["scope"] = scope
 	}
 
-	status, response, err = s.InvokeRestService(ctx, http.MethodPost, oauth2AdminURI, payload, nil)
+	status, response, err = s.invoker.InvokeRestService(ctx, http.MethodPost, oauth2AdminURI, payload, nil)
 	if err != nil {
-		s.Log(ctx).WithError(err).Error("could not create a new client")
+		util.Log(ctx).WithError(err).Error("could not create a new client")
 		return nil, err
 	}
 
 	if status > 299 || status < 200 {
-		s.Log(ctx).
+		util.Log(ctx).
 			WithField("status", status).
 			WithField("result", string(response)).
 			Error(" invalid response from server")
@@ -113,7 +137,7 @@ func (s *Service) RegisterForJwtWithParams(ctx context.Context,
 	var newClient map[string]any
 	err = json.Unmarshal(response, &newClient)
 	if err != nil {
-		s.Log(ctx).WithError(err).Error("could not un marshal new client")
+		util.Log(ctx).WithError(err).Error("could not un marshal new client")
 		return nil, err
 	}
 
@@ -121,13 +145,13 @@ func (s *Service) RegisterForJwtWithParams(ctx context.Context,
 }
 
 // UnRegisterForJwt utilizing client id we de register external applications for access token generation.
-func (s *Service) UnRegisterForJwt(ctx context.Context,
+func (s *clientRegistrar) UnRegisterForJwt(ctx context.Context,
 	oauth2ServiceAdminHost string, clientID string) error {
 	oauth2AdminURI := fmt.Sprintf("%s%s/%s", oauth2ServiceAdminHost, "/admin/clients", clientID)
 
-	status, result, err := s.InvokeRestService(ctx, http.MethodDelete, oauth2AdminURI, make(map[string]any), nil)
+	status, result, err := s.invoker.InvokeRestService(ctx, http.MethodDelete, oauth2AdminURI, make(map[string]any), nil)
 	if err != nil {
-		s.Log(ctx).
+		util.Log(ctx).
 			WithError(err).
 			WithField("status", status).
 			WithField("result", string(result)).

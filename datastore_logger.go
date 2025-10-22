@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/lmittmann/tint"
+	"github.com/pitabwire/frame/config"
 	"github.com/pitabwire/util"
 	glogger "gorm.io/gorm/logger"
 )
@@ -16,19 +17,17 @@ const (
 	tintAttrCodeDuration = 214
 	tintAttrCodeRows     = 12
 	tintAttrCodeQuery    = 2
-
-	DefaultSlowQueryThreshold = 200 * time.Millisecond
 )
 
 func datbaseLogger(ctx context.Context, s *Service) glogger.Interface {
 	logQueries := false
-	slowQueryThreshold := DefaultSlowQueryThreshold
+	slowQueryThreshold := config.DefaultSlowQueryThreshold
 	if s.Config() != nil {
-		config, ok := s.Config().(ConfigurationDatabase)
+		cfg, ok := s.Config().(config.ConfigurationDatabase)
 		if ok {
-			slowQueryThreshold = config.GetDatabaseSlowQueryLogThreshold()
+			slowQueryThreshold = cfg.GetDatabaseSlowQueryLogThreshold()
 		}
-		logQueries = config.CanDatabaseTraceQueries()
+		logQueries = cfg.CanDatabaseTraceQueries()
 	}
 
 	return &dbLogger{

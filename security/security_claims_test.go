@@ -1,18 +1,19 @@
-package frame_test
+package security_test
 
 import (
 	"context"
 	"testing"
 
-	"github.com/stretchr/testify/require"
-	"github.com/stretchr/testify/suite"
-
 	"github.com/pitabwire/frame"
+	"github.com/pitabwire/frame/config"
 	"github.com/pitabwire/frame/frametests/definition"
 	"github.com/pitabwire/frame/frametests/deps/testnats"
 	"github.com/pitabwire/frame/frametests/deps/testoryhydra"
 	"github.com/pitabwire/frame/frametests/deps/testpostgres"
+	"github.com/pitabwire/frame/security"
 	"github.com/pitabwire/frame/tests"
+	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 const sampleAccessKey = "eyJhbGciOiJSUzI1NiIsImtpZCI6InB1YmxpYzpmODg2ZDBmNy0zYmY0LTQzMzgtOGU4Yy01ZjhjNmVlNGM3MWQiLCJ0eXAiOiJKV1QifQ.eyJhdF9oYXNoIjoicUdqdV91YnRuUkRyaGZ6WEppVzl3dyIsImF1ZCI6WyJjMmY0ajdhdTZzN2Y5MXVxbm9rZyJdLCJhdXRoX3RpbWUiOjE2MjIzMDk0OTUsImV4cCI6MTgwMjMwOTQ5OSwiaWF0IjoxNjIyMzA5NDk5LCJpc3MiOiJodHRwOi8vMTI3LjAuMC4xOjQ0NDQvIiwianRpIjoiZjM5ZGIzYTEtMmU3Ni00YzQyLWEyMmItMTg5NThiYTg3MjM1Iiwibm9uY2UiOiIiLCJyYXQiOjE2MjIzMDk0ODgsInNpZCI6ImNhNmM2NmE3LTg3MDItNDRjZS1hMTllLWRkZDJkYzQ4Y2E3MiIsInN1YiI6ImMyb2hoYzNuZGJtMGI2Y2g5dGUwIn0.BKh_m7fXaMlqXNLGisQ7vBtubgfws7h-oo9L_HXuUuY9mPs20dZ7HlQp_s-jxbdh1oDFxzRsoklbgmHglHCHBimDT3hkFPiZUmsqHtGM5P2neRBXD5ogWTjPBY_piIxu7JoB_GbFF1mZiy7Q7Lw_NpObvtLT3VC-wMMJ0fZDkyQY0hiFzLaUXVjJ96X0y0Vs0ExrcSQPnuT8CYQlhkO3qaRbKOM8p8C8IzHrmJg3N96IiZc8Vy9H9cbkmCfNlIvHx1zTIZbwyPbTjp43kI_Eo8fMmbdK_XkTnxouGtArVWoW1jjG6t4UgYafm42QJPJJvwIY2uwAg0x6B-1KwC9GgoxCGGWXRiWt9vL9ALxMpDRIxYqo2sh0OcVObvYsCTFKF8ekl5RSrvlAeu8QSkVXLvdBlaCHfvxHm2po32s6j7zvzXeuczxuiAj54Gd_7QWPwHu-2TW2gnG3oa5nbTofcmNb7Qm2QoGptIgx80gMJiCVGLCfv2UUwqZRoLzF9XkWiXKWRCq6dM4QYEIa6dyxT4BRb04W1Qcq_90Y8IsmWsXm3AQptILtDfEok93UIfnT5YnyDhAh4QmVlwCgzwokNlyd9vGtauKUZyIIKLyZ8GPCldou75GD7t4ZByUcRdHStuTvJEqJ98Fe85VolW8rubqIiN_uEzTNq5vWdFT5boo"
@@ -76,7 +77,7 @@ func (s *AuthenticationTestSuite) TestAuthenticationFromContext() {
 		{
 			name: "context with claims should return claims",
 			setupContext: func(ctx context.Context) context.Context {
-				claims := &frame.AuthenticationClaims{}
+				claims := &security.AuthenticationClaims{}
 				return claims.ClaimsToContext(ctx)
 			},
 			expectClaims:  true,
@@ -88,7 +89,7 @@ func (s *AuthenticationTestSuite) TestAuthenticationFromContext() {
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
 				ctx := tc.setupContext(t.Context())
-				claims := frame.ClaimsFromContext(ctx)
+				claims := security.ClaimsFromContext(ctx)
 
 				if tc.expectClaims {
 					require.NotNil(t, claims, "expected claims to be present in context")
@@ -140,9 +141,10 @@ func (s *AuthenticationTestSuite) TestSimpleAuthenticate() {
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
 				ctx, srv := frame.NewService("Test Srv", frame.WithConfig(
-					&frame.ConfigurationDefault{Oauth2WellKnownJwkData: sampleWellKnownJwk}))
+					&config.ConfigurationDefault{Oauth2WellKnownJwkData: sampleWellKnownJwk}))
 
-				ctx2, err := srv.Authenticate(ctx, tc.accessKey, tc.audience, tc.issuer)
+				sm := srv.Security()
+				ctx2, err := sm.GetAuthenticator(ctx).Authenticate(ctx, tc.accessKey, security.WithAudience(tc.audience), security.WithIssuer(tc.issuer))
 
 				if tc.expectError {
 					require.Error(t, err, "expected authentication to fail")
@@ -152,7 +154,7 @@ func (s *AuthenticationTestSuite) TestSimpleAuthenticate() {
 				require.NoError(t, err, "authentication should succeed")
 
 				if tc.expectClaims {
-					claims := frame.ClaimsFromContext(ctx2)
+					claims := security.ClaimsFromContext(ctx2)
 					require.NotNil(t, claims, "expected authentication claims in context")
 				}
 			})
@@ -180,7 +182,7 @@ func (s *AuthenticationTestSuite) TestSimpleAuthenticateWithOIDC() {
 				t.Setenv("OAUTH2_SERVICE_URI", tc.serviceURI)
 
 				ctx := t.Context()
-				cfg, err := frame.ConfigLoadWithOIDC[frame.ConfigurationDefault](ctx)
+				cfg, err := config.LoadWithOIDC[config.ConfigurationDefault](ctx)
 
 				if tc.expectError {
 					require.Error(t, err, "expected OIDC configuration to fail")
@@ -208,14 +210,14 @@ func (s *AuthenticationTestSuite) TestAuthenticateWithTenantClaims() {
 		audience    string
 		issuer      string
 		expectError bool
-		checkClaims func(*testing.T, frame.AuthenticationClaims)
+		checkClaims func(*testing.T, security.AuthenticationClaims)
 	}{
 		{
 			name:      "tenant claims authentication",
 			accessKey: tenantAccessKey,
 			audience:  "",
 			issuer:    "https://oauth2.stawi.io/",
-			checkClaims: func(t *testing.T, claims frame.AuthenticationClaims) {
+			checkClaims: func(t *testing.T, claims security.AuthenticationClaims) {
 				require.NotEmpty(t, claims.GetTenantID(), "tenant ID should be present")
 				require.NotEmpty(t, claims.GetPartitionID(), "partition ID should be present")
 				require.NotEmpty(t, claims.GetAccessID(), "access ID should be present")
@@ -228,9 +230,10 @@ func (s *AuthenticationTestSuite) TestAuthenticateWithTenantClaims() {
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
 				ctx, srv := frame.NewService("Tenant Srv", frame.WithConfig(
-					&frame.ConfigurationDefault{Oauth2WellKnownJwkData: tenantWellKnownJwk}))
+					&config.ConfigurationDefault{Oauth2WellKnownJwkData: tenantWellKnownJwk}))
 
-				ctx2, err := srv.Authenticate(ctx, tc.accessKey, tc.audience, tc.issuer)
+				sm := srv.Security()
+				ctx2, err := sm.GetAuthenticator(ctx).Authenticate(ctx, tc.accessKey, security.WithAudience(tc.audience), security.WithIssuer(tc.issuer))
 
 				if tc.expectError {
 					require.Error(t, err, "expected authentication to fail")
@@ -239,7 +242,7 @@ func (s *AuthenticationTestSuite) TestAuthenticateWithTenantClaims() {
 
 				require.NoError(t, err, "authentication should succeed")
 
-				claims := frame.ClaimsFromContext(ctx2)
+				claims := security.ClaimsFromContext(ctx2)
 				require.NotNil(t, claims, "expected authentication claims in context")
 
 				if tc.checkClaims != nil {

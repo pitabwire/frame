@@ -5,8 +5,9 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/pitabwire/frame/cache"
 	"github.com/valkey-io/valkey-go"
+
+	"github.com/pitabwire/frame/cache"
 )
 
 // Options contains configuration for Valkey cache.

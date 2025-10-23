@@ -8,9 +8,10 @@ import (
 	"time"
 
 	"github.com/lmittmann/tint"
-	"github.com/pitabwire/frame/config"
 	"github.com/pitabwire/util"
 	glogger "gorm.io/gorm/logger"
+
+	"github.com/pitabwire/frame/config"
 )
 
 const (

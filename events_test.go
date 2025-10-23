@@ -6,13 +6,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
+
 	"github.com/pitabwire/frame"
 	"github.com/pitabwire/frame/config"
 	"github.com/pitabwire/frame/frametests"
 	"github.com/pitabwire/frame/frametests/definition"
 	"github.com/pitabwire/frame/tests"
-	"github.com/stretchr/testify/require"
-	"github.com/stretchr/testify/suite"
 )
 
 // EventsTestSuite extends BaseTestSuite for comprehensive events testing.
@@ -111,7 +112,9 @@ func (s *EventsTestSuite) TestServiceRegisterEventsWorks() {
 					frametests.WithNoopDriver(),
 				)
 
-				subs, _ := srv.GetSubscriber(cfg.EventsQueueName)
+				qm := srv.Queue(ctx)
+
+				subs, _ := qm.GetSubscriber(cfg.EventsQueueName)
 				if subs != nil && subs.Initiated() {
 					t.Fatalf("Subscription to event queue is invalid")
 				}
@@ -119,7 +122,7 @@ func (s *EventsTestSuite) TestServiceRegisterEventsWorks() {
 				err = srv.Run(ctx, "")
 				require.NoError(t, err, "service should run without error")
 
-				subs, _ = srv.GetSubscriber(cfg.EventsQueueName)
+				subs, _ = qm.GetSubscriber(cfg.EventsQueueName)
 				require.True(t, subs.Initiated(), "subscription to event queue should be initiated")
 
 				srv.Stop(ctx)

@@ -4,13 +4,14 @@ import (
 	"os"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
+	"gorm.io/gorm"
+
 	"github.com/pitabwire/frame"
 	"github.com/pitabwire/frame/config"
 	"github.com/pitabwire/frame/frametests/definition"
 	"github.com/pitabwire/frame/tests"
-	"github.com/stretchr/testify/require"
-	"github.com/stretchr/testify/suite"
-	"gorm.io/gorm"
 )
 
 // MigratorTestSuite extends BaseTestSuite for comprehensive migrator testing.

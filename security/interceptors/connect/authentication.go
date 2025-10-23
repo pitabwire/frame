@@ -6,8 +6,9 @@ import (
 	"strings"
 
 	"connectrpc.com/connect"
-	"github.com/pitabwire/frame/security"
 	"github.com/pitabwire/util"
+
+	"github.com/pitabwire/frame/security"
 )
 
 const (
@@ -32,7 +33,6 @@ type AuthInterceptor struct {
 
 // NewAuthInterceptor creates a new authentication interceptor.
 func NewAuthInterceptor(authenticator security.Authenticator) *AuthInterceptor {
-
 	return &AuthInterceptor{
 		authenticator: authenticator,
 	}
@@ -60,7 +60,6 @@ func (a *AuthInterceptor) extractToken(authHeader string) (string, error) {
 
 // authenticate performs the authentication check.
 func (a *AuthInterceptor) authenticate(ctx context.Context, authHeader string) (context.Context, error) {
-
 	logger := util.Log(ctx).WithField("has_auth_header", authHeader != "")
 
 	token, err := a.extractToken(authHeader)

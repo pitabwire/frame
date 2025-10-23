@@ -7,13 +7,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/suite"
+
 	"github.com/pitabwire/frame/cache"
 	cacheredis "github.com/pitabwire/frame/cache/redis"
 	cachevalkey "github.com/pitabwire/frame/cache/valkey"
 	"github.com/pitabwire/frame/frametests"
 	"github.com/pitabwire/frame/frametests/definition"
 	testvalkey "github.com/pitabwire/frame/frametests/deps/testvalkey"
-	"github.com/stretchr/testify/suite"
 )
 
 // CacheTestSuite runs all cache tests against different implementations.
@@ -378,7 +379,7 @@ func (s *CacheTestSuite) TestGenericCache() {
 	manager.AddCache("users", cache.NewInMemoryCache())
 
 	// Get typed cache
-	userCache, ok := cache.GetCache[string, User](manager, "users", nil, nil)
+	userCache, ok := cache.GetCache[string, User](manager, "users", nil)
 	s.True(ok)
 
 	// Store user
@@ -400,7 +401,7 @@ func (s *CacheTestSuite) TestGenericCache() {
 	s.False(found)
 }
 
-// Test Cache Manager.
+// Test Cache manager.
 func (s *CacheTestSuite) TestCacheManager() {
 	ctx := context.Background()
 

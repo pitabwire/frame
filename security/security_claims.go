@@ -18,13 +18,6 @@ const ctxKeySecondaryAuthenticationClaim = contextKey("secondaryAuthenticationCl
 const ctxKeySkipTenancyCheckOnClaim = contextKey("skipTenancyCheckOnClaimKey")
 const ctxKeyAuthenticationJwt = contextKey("authenticationJwtKey")
 
-const (
-	bearerScheme         = "Bearer"
-	bearerTokenParts     = 2
-	grpcAuthHeader       = "authorization"
-	grpcAuthSchemeBearer = "bearer"
-)
-
 // JwtToContext adds authentication jwt to the current supplied context.
 func JwtToContext(ctx context.Context, jwt string) context.Context {
 	return context.WithValue(ctx, ctxKeyAuthenticationJwt, jwt)

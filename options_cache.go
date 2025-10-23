@@ -41,7 +41,7 @@ func WithInMemoryCache(name string) Option {
 }
 
 // CacheManager returns the service's cache manager.
-func (s *Service) CacheManager() *cache.Manager {
+func (s *Service) CacheManager() cache.Manager {
 	return s.cacheManager
 }
 

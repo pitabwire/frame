@@ -10,7 +10,7 @@ import (
 	"github.com/pitabwire/frame/security/permissions"
 )
 
-// managerImpl is the concrete implementation of the Manager interface
+// managerImpl is the concrete implementation of the Manager interface.
 type managerImpl struct {
 	jwtClient          map[string]any
 	serviceName        string
@@ -21,11 +21,10 @@ type managerImpl struct {
 	authorizer         security.Authorizer
 }
 
-// NewManager creates and returns a new security Manager
-func NewManager(ctx context.Context,
+// NewManager creates and returns a new security Manager.
+func NewManager(_ context.Context,
 	cfg *config.ConfigurationDefault,
 	invoker client.HTTPInvoker) security.Manager {
-
 	return &managerImpl{
 		serviceName:        cfg.Name(),
 		serviceEnvironment: cfg.Environment(),

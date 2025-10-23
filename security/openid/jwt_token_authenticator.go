@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/golang-jwt/jwt/v5"
+
 	"github.com/pitabwire/frame/config"
 	"github.com/pitabwire/frame/security"
 )
@@ -25,8 +26,11 @@ func NewJwtTokenAuthenticator(cfg config.ConfigurationOAUTH2) security.Authentic
 	}
 }
 
-func (a *jwtTokenAuthenticator) Authenticate(ctx context.Context, jwtToken string, options ...security.AuthOption) (context.Context, error) {
-
+func (a *jwtTokenAuthenticator) Authenticate(
+	ctx context.Context,
+	jwtToken string,
+	options ...security.AuthOption,
+) (context.Context, error) {
 	securityOpts := security.AuthOptions{
 		Audience:        a.cfg.GetOauth2ServiceAudience(),
 		Issuer:          a.cfg.GetOauth2Issuer(),

@@ -7,15 +7,17 @@ import (
 	"strconv"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
+
 	"github.com/pitabwire/frame"
 	"github.com/pitabwire/frame/framedata"
 	"github.com/pitabwire/frame/frametests"
 	"github.com/pitabwire/frame/frametests/definition"
 	"github.com/pitabwire/frame/frametests/deps/testnats"
 	"github.com/pitabwire/frame/frametests/deps/testpostgres"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-	"github.com/stretchr/testify/suite"
+	"github.com/pitabwire/frame/workerpool"
 )
 
 // SearchTestSuite extends FrameBaseTestSuite for comprehensive search testing.
@@ -420,7 +422,7 @@ func (s *SearchTestSuite) runStableSearchTests(t *testing.T, depOpt *definition.
 }
 
 // handleErrorCase handles error test cases.
-func (s *SearchTestSuite) handleErrorCase(t *testing.T, err error, jobPipe frame.JobResultPipe[[]*TestItem]) {
+func (s *SearchTestSuite) handleErrorCase(t *testing.T, err error, jobPipe workerpool.JobResultPipe[[]*TestItem]) {
 	if err == nil {
 		// Wait for job to complete and check for errors
 		var hasError bool
@@ -440,7 +442,7 @@ func (s *SearchTestSuite) handleErrorCase(t *testing.T, err error, jobPipe frame
 func (s *SearchTestSuite) handleSuccessCase(
 	t *testing.T,
 	err error,
-	jobPipe frame.JobResultPipe[[]*TestItem],
+	jobPipe workerpool.JobResultPipe[[]*TestItem],
 	expectedItems int,
 ) {
 	require.NoError(t, err)
@@ -948,7 +950,7 @@ func (s *SearchTestSuite) validateErrorTestResult(
 	t *testing.T,
 	expectErr bool,
 	err error,
-	jobPipe frame.JobResultPipe[[]*TestItem],
+	jobPipe workerpool.JobResultPipe[[]*TestItem],
 ) {
 	if !expectErr {
 		require.NoError(t, err)

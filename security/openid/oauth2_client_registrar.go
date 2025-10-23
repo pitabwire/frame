@@ -8,10 +8,11 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/pitabwire/util"
+
 	"github.com/pitabwire/frame/client"
 	"github.com/pitabwire/frame/config"
 	"github.com/pitabwire/frame/security"
-	"github.com/pitabwire/util"
 )
 
 const ConstSystemScopeInternal = "system_int"
@@ -27,7 +28,6 @@ type clientRegistrar struct {
 
 func NewClientRegistrar(serviceName, serviceEnvironment string,
 	cfg config.ConfigurationOAUTH2) security.Oauth2ClientRegistrar {
-
 	return &clientRegistrar{
 		serviceName:        serviceName,
 		serviceEnvironment: serviceEnvironment,
@@ -37,7 +37,6 @@ func NewClientRegistrar(serviceName, serviceEnvironment string,
 
 // RegisterForJwt function hooks in jwt client registration to make sure service is authenticated.
 func (s *clientRegistrar) RegisterForJwt(ctx context.Context, iClientHolder security.InternalOauth2ClientHolder) error {
-
 	if s.cfg == nil {
 		return nil
 	}
@@ -149,7 +148,13 @@ func (s *clientRegistrar) UnRegisterForJwt(ctx context.Context,
 	oauth2ServiceAdminHost string, clientID string) error {
 	oauth2AdminURI := fmt.Sprintf("%s%s/%s", oauth2ServiceAdminHost, "/admin/clients", clientID)
 
-	status, result, err := s.invoker.InvokeRestService(ctx, http.MethodDelete, oauth2AdminURI, make(map[string]any), nil)
+	status, result, err := s.invoker.InvokeRestService(
+		ctx,
+		http.MethodDelete,
+		oauth2AdminURI,
+		make(map[string]any),
+		nil,
+	)
 	if err != nil {
 		util.Log(ctx).
 			WithError(err).

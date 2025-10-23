@@ -6,12 +6,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/pitabwire/frame/security"
 	"github.com/pitabwire/util"
 	"github.com/rs/xid"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"gorm.io/gorm"
+
+	"github.com/pitabwire/frame/security"
 )
 
 type BaseModelI interface {

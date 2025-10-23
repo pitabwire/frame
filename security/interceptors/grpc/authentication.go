@@ -4,12 +4,19 @@ import (
 	"context"
 	"strings"
 
-	"github.com/pitabwire/frame/security"
 	"github.com/pitabwire/util"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
+
+	"github.com/pitabwire/frame/security"
+)
+
+const (
+	bearerTokenParts     = 2
+	grpcAuthHeader       = "authorization"
+	grpcAuthSchemeBearer = "bearer"
 )
 
 func grpcJwtTokenExtractor(ctx context.Context) (string, error) {
@@ -18,15 +25,15 @@ func grpcJwtTokenExtractor(ctx context.Context) (string, error) {
 		return "", status.Error(codes.Unauthenticated, "no metadata was saved in context before")
 	}
 
-	vv, ok := requestMetadata["authorization"]
+	vv, ok := requestMetadata[grpcAuthHeader]
 	if !ok {
 		return "", status.Error(codes.Unauthenticated, "no authorization key found in request metadata")
 	}
 
 	extractedJwtToken := strings.Split(vv[0], " ")
 
-	if len(extractedJwtToken) != 2 ||
-		strings.ToLower(extractedJwtToken[0]) != "bearer" ||
+	if len(extractedJwtToken) != bearerTokenParts ||
+		strings.ToLower(extractedJwtToken[0]) != grpcAuthSchemeBearer ||
 		extractedJwtToken[1] == "" {
 		return "", status.Error(codes.Unauthenticated, "authorization header is invalid")
 	}
@@ -49,10 +56,12 @@ func getGrpcMetadata(ctx context.Context, key string) string {
 }
 
 // UnaryAuthInterceptor Simple grpc interceptor to extract the jwt supplied via authorization bearer token and verify the authentication claims in the token.
-func UnaryAuthInterceptor(authenticator security.Authenticator, opts ...security.AuthOption) grpc.UnaryServerInterceptor {
+func UnaryAuthInterceptor(
+	authenticator security.Authenticator,
+	opts ...security.AuthOption,
+) grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req any,
 		_ *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
-
 		securityOpts := security.AuthOptions{
 			DisableSecurity: false,
 		}
@@ -108,7 +117,10 @@ func (s *serverStreamWrapper) Context() context.Context {
 // authenticate a JWT from the stream's context. It returns a (potentially wrapped)
 // grpc.ServerStream with an updated context and any error encountered.
 func ensureAuthenticatedStreamContext(
-	ss grpc.ServerStream, authenticator security.Authenticator, opts ...security.AuthOption) (grpc.ServerStream, error) {
+	ss grpc.ServerStream,
+	authenticator security.Authenticator,
+	opts ...security.AuthOption,
+) (grpc.ServerStream, error) {
 	// If claims are already in the context, use the original stream.
 	ctx := ss.Context() // Original context from the incoming stream.
 
@@ -164,7 +176,10 @@ func ensureAuthenticatedStreamContext(
 }
 
 // StreamAuthInterceptor An authentication claims extractor that will always verify the information flowing in the streams as true jwt claims.
-func StreamAuthInterceptor(authenticator security.Authenticator, opts ...security.AuthOption) grpc.StreamServerInterceptor {
+func StreamAuthInterceptor(
+	authenticator security.Authenticator,
+	opts ...security.AuthOption,
+) grpc.StreamServerInterceptor {
 	return func(srv any, ss grpc.ServerStream, _ *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
 		authenticatedStream, err := ensureAuthenticatedStreamContext(ss, authenticator, opts...)
 		if err != nil {

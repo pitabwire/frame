@@ -10,13 +10,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/nicksnyder/go-i18n/v2/i18n"
-	"github.com/pitabwire/frame/cache"
-	"github.com/pitabwire/frame/client"
-	"github.com/pitabwire/frame/config"
-	"github.com/pitabwire/frame/localization"
-	"github.com/pitabwire/frame/security"
-	securityManager "github.com/pitabwire/frame/security/manager"
 	"github.com/pitabwire/util"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel/propagation"
@@ -27,6 +20,16 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/reflection"
+
+	"github.com/pitabwire/frame/cache"
+	"github.com/pitabwire/frame/client"
+	"github.com/pitabwire/frame/config"
+	"github.com/pitabwire/frame/events"
+	"github.com/pitabwire/frame/localization"
+	"github.com/pitabwire/frame/queue"
+	"github.com/pitabwire/frame/security"
+	securityManager "github.com/pitabwire/frame/security/manager"
+	"github.com/pitabwire/frame/workerpool"
 )
 
 type contextKey string
@@ -48,8 +51,8 @@ const (
 // An instance of this type scoped to stay for the lifetime of the application.
 // It is pushed and pulled from contexts to make it easy to pass around.
 type Service struct {
-	name           string
-	jwtClient      map[string]any
+	name string
+
 	version        string
 	environment    string
 	logger         *util.LogEntry
@@ -62,32 +65,33 @@ type Service struct {
 	traceLogsExporter sdklogs.Exporter
 	handler           http.Handler
 	cancelFunc        context.CancelFunc
+
 	errorChannelMutex sync.Mutex
 	errorChannel      chan error
 
-	backGroundClient           func(ctx context.Context) error
-	pool                       WorkerPool
-	poolOptions                *WorkerPoolOptions
+	backGroundClient func(ctx context.Context) error
+
 	driver                     ServerDriver
 	grpcServer                 *grpc.Server
 	grpcServerEnableReflection bool
 	grpcListener               net.Listener
 	grpcPort                   string
 	client                     *http.Client
-	queue                      *queue
 	dataStores                 sync.Map
-	bundle                     *i18n.Bundle
-	healthCheckers             []Checker
-	healthCheckPath            string
-	startup                    func(ctx context.Context, s *Service)
-	cleanup                    func(ctx context.Context)
-	eventRegistry              map[string]EventI
+
+	healthCheckers  []Checker
+	healthCheckPath string
+	startup         func(ctx context.Context, s *Service)
+	cleanup         func(ctx context.Context)
 
 	configuration any
 
+	workerPoolManager   workerpool.Manager
 	localizationManager localization.Manager
 	securityManager     security.Manager
-	cacheManager        *cache.Manager
+	cacheManager        cache.Manager
+	queueManager        queue.Manager
+	eventsManager       events.Manager
 
 	startOnce sync.Once
 	stopMutex sync.Mutex
@@ -113,18 +117,10 @@ func NewServiceWithContext(ctx context.Context, name string, opts ...Option) (co
 		syscall.SIGQUIT)
 
 	var err error
-	defaultLogger := util.Log(ctx)
-	ctx = util.ContextWithLogger(ctx, defaultLogger)
+	log := util.Log(ctx)
+	ctx = util.ContextWithLogger(ctx, log)
 
 	cfg, _ := config.FromEnv[config.ConfigurationDefault]()
-
-	defaultPoolOpts := defaultWorkerPoolOpts(&cfg, defaultLogger)
-	defaultPool, err := setupWorkerPool(ctx, defaultPoolOpts)
-	if err != nil {
-		defaultLogger.WithError(err).Panic("could not create a default worker pool")
-	}
-
-	q := newQueue(ctx)
 
 	defaultClient := client.NewHTTPClient(
 		client.WithHTTPTimeout(time.Duration(defaultHTTPTimeoutSeconds)*time.Second),
@@ -138,13 +134,11 @@ func NewServiceWithContext(ctx context.Context, name string, opts ...Option) (co
 		cancelFunc:   signalCancelFunc, // Store its cancel function
 		errorChannel: make(chan error, 1),
 		client:       defaultClient,
-		logger:       defaultLogger,
+		logger:       log,
 
-		pool:        defaultPool,
-		poolOptions: defaultPoolOpts,
+		queueManager: queue.NewQueueManager(ctx),
 
 		configuration: &cfg,
-		queue:         q,
 	}
 
 	if cfg.ServiceName != "" {
@@ -174,15 +168,22 @@ func NewServiceWithContext(ctx context.Context, name string, opts ...Option) (co
 	}
 	svc.securityManager = securityManager.NewManager(ctx, finalCfg, invoker)
 
+	svc.workerPoolManager = workerpool.NewManager(ctx, &cfg, svc.sendStopError)
+
+	err = svc.setupEventsQueueIfNeeded(ctx)
+	if err != nil {
+		log.WithError(err).Panic("could not setup application events")
+	}
+
 	err = svc.initTracer(ctx)
 	if err != nil {
-		svc.logger.WithError(err).Panic("could not setup application telemetry")
+		log.WithError(err).Panic("could not setup application telemetry")
 	}
 
 	// Prepare context to be returned, embedding svc and config
 	ctx = ToContext(ctx, svc)
 	ctx = config.ToContext(ctx, svc.Config())
-	ctx = util.ContextWithLogger(ctx, svc.logger)
+	ctx = util.ContextWithLogger(ctx, log)
 	return ctx, svc
 }
 
@@ -301,7 +302,7 @@ func (s *Service) AddHealthCheck(checker Checker) {
 
 // Run keeps the service useful by handling incoming requests.
 func (s *Service) Run(ctx context.Context, address string) error {
-	pubSubErr := s.initPubsub(ctx)
+	pubSubErr := s.queueManager.Init(ctx)
 	if pubSubErr != nil {
 		return pubSubErr
 	}
@@ -481,12 +482,6 @@ func (s *Service) Stop(ctx context.Context) {
 	// Call user-defined cleanup functions first.
 	if s.cleanup != nil {
 		s.cleanup(ctx)
-	}
-
-	// Release the worker pool.
-	if s.pool != nil {
-		s.logger.Info("shutting down worker pool")
-		s.pool.Shutdown()
 	}
 
 	// Close the internal error channel to signal Run to exit if it's blocked on it.

@@ -35,7 +35,7 @@ func DefaultValidationOptions() ValidationOptions {
 	}
 }
 
-// LanguageInterceptor implements connect.Interceptor for protovalidate validation.
+// ValidationInterceptor implements connect.Interceptor for protovalidate validation.
 type ValidationInterceptor struct {
 	validator protovalidate.Validator
 	opts      ValidationOptions

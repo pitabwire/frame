@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/pitabwire/frame"
+	"github.com/pitabwire/frame/workerpool"
 )
 
 const defaultBatchSize = 50
@@ -70,8 +71,8 @@ func (p *Paginator) Stop(loadedCount int) bool {
 func StableSearch[T any](
 	ctx context.Context, svc *frame.Service,
 	query *SearchQuery, searchFunc func(ctx context.Context, query *SearchQuery) ([]T, error),
-) (frame.JobResultPipe[[]T], error) {
-	job := frame.NewJob(func(ctx context.Context, jobResult frame.JobResultPipe[[]T]) error {
+) (workerpool.JobResultPipe[[]T], error) {
+	job := workerpool.NewJob(func(ctx context.Context, jobResult workerpool.JobResultPipe[[]T]) error {
 		paginator := query.Pagination
 		for paginator.CanLoad() {
 			resultList, err := searchFunc(ctx, query)
@@ -91,7 +92,7 @@ func StableSearch[T any](
 		return nil
 	})
 
-	err := frame.SubmitJob(ctx, svc, job)
+	err := workerpool.SubmitJob(ctx, svc.WorkManager(), job)
 	if err != nil {
 		return nil, err
 	}

@@ -8,13 +8,14 @@ import (
 	"testing"
 
 	"github.com/nicksnyder/go-i18n/v2/i18n"
+	"github.com/stretchr/testify/suite"
+	"google.golang.org/grpc/metadata"
+
 	"github.com/pitabwire/frame"
 	"github.com/pitabwire/frame/localization"
 	lgrpc "github.com/pitabwire/frame/localization/interceptors/grpc"
 	lhttp "github.com/pitabwire/frame/localization/interceptors/http"
 	"github.com/pitabwire/frame/tests"
-	"github.com/stretchr/testify/suite"
-	"google.golang.org/grpc/metadata"
 )
 
 // LocalizationTestSuite extends BaseTestSuite for comprehensive localization testing.
@@ -140,7 +141,6 @@ func (s *LocalizationTestSuite) TestTranslationsHelpers() {
 
 	for _, tc := range testCases {
 		s.Run(tc.name, func() {
-
 			ctx := context.Background()
 			lm := localization.NewManager(tc.translationDir, tc.languages...)
 
@@ -179,7 +179,6 @@ func (s *LocalizationTestSuite) TestLanguageContextManagement() {
 
 	for _, tc := range testCases {
 		s.Run(tc.name, func() {
-
 			ctx := context.Background()
 			lm := localization.NewManager("test_data", "en", "sw")
 

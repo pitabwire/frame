@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"connectrpc.com/connect"
+
 	"github.com/pitabwire/frame/localization"
 )
 
@@ -13,14 +14,12 @@ type LanguageInterceptor struct {
 
 // NewLanguageInterceptor creates a new validation interceptor with default options.
 func NewLanguageInterceptor() (*LanguageInterceptor, error) {
-
 	return &LanguageInterceptor{}, nil
 }
 
 // WrapUnary validates unary requests and responses.
 func (l *LanguageInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
 	return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-
 		l := localization.ExtractLanguageFromHTTPHeader(req.Header())
 
 		ctx = localization.ToContext(ctx, l)
@@ -58,7 +57,6 @@ type languageStreamConn struct {
 
 // Receive validates incoming stream messages.
 func (v *languageStreamConn) Receive(msg any) error {
-
 	l := localization.ExtractLanguageFromHTTPHeader(v.StreamingHandlerConn.RequestHeader())
 
 	v.ctx = localization.ToContext(v.ctx, l)

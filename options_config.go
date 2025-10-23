@@ -4,7 +4,7 @@ import (
 	"context"
 )
 
-// WithTranslation Option that helps to specify or override the configuration object of our service.
+// WithConfig Option that helps to specify or override the configuration object of our service.
 func WithConfig(config any) Option {
 	return func(_ context.Context, s *Service) {
 		s.configuration = config

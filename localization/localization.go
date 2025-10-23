@@ -167,7 +167,6 @@ func ExtractLanguageFromHTTPRequest(req *http.Request) []string {
 }
 
 func ExtractLanguageFromHTTPHeader(req http.Header) []string {
-
 	acceptLanguageHeader := req.Get("Accept-Language")
 	return strings.Split(acceptLanguageHeader, ",")
 }

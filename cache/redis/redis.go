@@ -6,8 +6,9 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/pitabwire/frame/cache"
 	"github.com/redis/go-redis/v9"
+
+	"github.com/pitabwire/frame/cache"
 )
 
 // Options contains configuration for Redis cache.

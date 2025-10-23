@@ -12,11 +12,12 @@ import (
 	"time"
 
 	"github.com/XSAM/otelsql"
-	"github.com/pitabwire/frame/config"
-	"github.com/pitabwire/frame/security"
 	semconv "go.opentelemetry.io/otel/semconv/v1.37.0"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
+
+	"github.com/pitabwire/frame/config"
+	"github.com/pitabwire/frame/security"
 )
 
 const defaultStoreName = "__default__"

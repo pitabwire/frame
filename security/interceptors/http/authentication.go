@@ -4,20 +4,24 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/pitabwire/frame/security"
 	"github.com/pitabwire/util"
+
+	"github.com/pitabwire/frame/security"
 )
 
 const (
-	bearerScheme     = "Bearer"
+	bearerScheme     = "Bearer "
 	bearerTokenParts = 2
 )
 
 // AuthenticationMiddleware is an HTTP middleware that verifies and extracts authentication
 // data supplied in a JWT as an Authorization bearer token.
-func AuthenticationMiddleware(next http.Handler, authenticator security.Authenticator, opts ...security.AuthOption) http.Handler {
+func AuthenticationMiddleware(
+	next http.Handler,
+	authenticator security.Authenticator,
+	opts ...security.AuthOption,
+) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-
 		ctx := r.Context()
 
 		securityOpts := security.AuthOptions{
@@ -42,7 +46,7 @@ func AuthenticationMiddleware(next http.Handler, authenticator security.Authenti
 
 		logger := util.Log(r.Context()).WithField("authorization_header", authorizationHeader)
 
-		if authorizationHeader == "" || !strings.HasPrefix(authorizationHeader, "Bearer ") {
+		if authorizationHeader == "" || !strings.HasPrefix(authorizationHeader, bearerScheme) {
 			logger.WithField("available_headers", r.Header).
 				Debug(" AuthenticationMiddleware -- could not authenticate missing token")
 			http.Error(w, "An authorization header is required", http.StatusUnauthorized)

@@ -1,4 +1,4 @@
-package frame_test
+package workerpool_test
 
 import (
 	"context"
@@ -7,9 +7,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pitabwire/frame"
-	"github.com/pitabwire/frame/tests"
 	"github.com/stretchr/testify/suite"
+
+	"github.com/pitabwire/frame/tests"
+	"github.com/pitabwire/frame/workerpool"
 )
 
 // WorkerPoolTestSuite extends BaseTestSuite for comprehensive worker pool testing.
@@ -37,7 +38,7 @@ func (s *WorkerPoolTestSuite) TestJobImplChannelOperations() {
 			ctx := s.T().Context()
 
 			// Create a job
-			job := frame.NewJob(func(_ context.Context, _ frame.JobResultPipe[any]) error {
+			job := workerpool.NewJob(func(_ context.Context, _ workerpool.JobResultPipe[any]) error {
 				return nil
 			})
 
@@ -54,12 +55,12 @@ func (s *WorkerPoolTestSuite) TestJobImplChannelOperations() {
 			// Verify we get an error when trying to write to a closed channel
 			err = job.WriteResult(ctx, "after close")
 			s.Require().Error(err, "WriteResult should return an error when channel is closed")
-			s.Require().ErrorIs(err, frame.ErrWorkerPoolResultChannelIsClosed,
+			s.Require().ErrorIs(err, workerpool.ErrWorkerPoolResultChannelIsClosed,
 				"WriteResult should return ErrWorkerPoolResultChannelIsClosed")
 
 			err = job.WriteError(ctx, errors.New("after close"))
 			s.Require().Error(err, "WriteError should return an error when channel is closed")
-			s.Require().ErrorIs(err, frame.ErrWorkerPoolResultChannelIsClosed,
+			s.Require().ErrorIs(err, workerpool.ErrWorkerPoolResultChannelIsClosed,
 				"WriteError should return ErrWorkerPoolResultChannelIsClosed")
 
 			// Drain the channel first
@@ -71,7 +72,12 @@ func (s *WorkerPoolTestSuite) TestJobImplChannelOperations() {
 	}
 }
 
-func (s *WorkerPoolTestSuite) writeIntRangeAsResult(ctx context.Context, t *testing.T, job frame.Job[any], count int) {
+func (s *WorkerPoolTestSuite) writeIntRangeAsResult(
+	ctx context.Context,
+	t *testing.T,
+	job workerpool.Job[any],
+	count int,
+) {
 	for i := range count {
 		if err := job.WriteResult(ctx, i); err != nil {
 			t.Errorf("Failed to write result: %v", err)
@@ -104,7 +110,7 @@ func (s *WorkerPoolTestSuite) TestJobImplSafeConcurrentOperations() {
 			ctx, cancel := context.WithTimeout(s.T().Context(), tc.timeout)
 			defer cancel()
 
-			job := frame.NewJobWithBuffer(func(_ context.Context, _ frame.JobResultPipe[any]) error {
+			job := workerpool.NewJobWithBuffer(func(_ context.Context, _ workerpool.JobResultPipe[any]) error {
 				return nil
 			}, tc.buffer)
 
@@ -149,7 +155,7 @@ func (s *WorkerPoolTestSuite) TestJobImplChaoticConcurrentOperations() {
 			ctx, cancel := context.WithTimeout(s.T().Context(), 2*time.Second)
 			defer cancel()
 
-			job := frame.NewJobWithBuffer(func(_ context.Context, _ frame.JobResultPipe[any]) error {
+			job := workerpool.NewJobWithBuffer(func(_ context.Context, _ workerpool.JobResultPipe[any]) error {
 				return nil
 			}, tc.buffer)
 
@@ -213,7 +219,7 @@ func (s *WorkerPoolTestSuite) TestJobImplSafeChannelOperations() {
 			ctx, cancel := context.WithTimeout(s.T().Context(), tc.timeout)
 			defer cancel()
 
-			job := frame.NewJobWithBuffer(func(_ context.Context, _ frame.JobResultPipe[any]) error {
+			job := workerpool.NewJobWithBuffer(func(_ context.Context, _ workerpool.JobResultPipe[any]) error {
 				return nil
 			}, tc.buffer)
 

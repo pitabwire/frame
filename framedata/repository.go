@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/pitabwire/frame"
+	"github.com/pitabwire/frame/workerpool"
 )
 
 // BaseRepository provides generic CRUD operations for any model type.
@@ -15,7 +16,7 @@ type BaseRepository[T any] interface {
 	GetByID(ctx context.Context, id string) (T, error)
 	GetLastestBy(ctx context.Context, properties map[string]any) (T, error)
 	GetAllBy(ctx context.Context, properties map[string]any, offset, limit int) ([]T, error)
-	Search(ctx context.Context, query *SearchQuery) (frame.JobResultPipe[[]T], error)
+	Search(ctx context.Context, query *SearchQuery) (workerpool.JobResultPipe[[]T], error)
 	Count(ctx context.Context) (int64, error)
 	Save(ctx context.Context, entity T) error
 	Delete(ctx context.Context, id string) error
@@ -103,7 +104,7 @@ func (br *baseRepository[T]) GetAllBy(ctx context.Context, properties map[string
 	return entities, err
 }
 
-func (br *baseRepository[T]) Search(ctx context.Context, query *SearchQuery) (frame.JobResultPipe[[]T], error) {
+func (br *baseRepository[T]) Search(ctx context.Context, query *SearchQuery) (workerpool.JobResultPipe[[]T], error) {
 	return StableSearch[T](ctx, br.service, query, func(ctx context.Context, query *SearchQuery) ([]T, error) {
 		var entities []T
 

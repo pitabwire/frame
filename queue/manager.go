@@ -6,40 +6,56 @@ import (
 	"sync"
 
 	"github.com/pitabwire/util"
+
+	"github.com/pitabwire/frame/workerpool"
 )
 
-type queue struct {
+type queueManager struct {
 	stopMutex            sync.Mutex
 	publishQueueMap      *sync.Map
 	subscriptionQueueMap *sync.Map
+	initialized          bool
+	initMutex            sync.Mutex
+
+	workPool workerpool.Manager
 }
 
-func NewQueueManager(_ context.Context) Manager {
-	q := &queue{
+func NewQueueManager(_ context.Context, workPool workerpool.Manager) Manager {
+	q := &queueManager{
 		publishQueueMap:      &sync.Map{},
 		subscriptionQueueMap: &sync.Map{},
+
+		workPool: workPool,
 	}
 
 	return q
 }
 
-func (s *queue) AddPublisher(ctx context.Context, reference string, queueURL string) error {
+func (s *queueManager) AddPublisher(ctx context.Context, reference string, queueURL string) error {
 	pub, _ := s.GetPublisher(reference)
 	if pub != nil {
 		return nil
 	}
 
 	pub = newPublisher(reference, queueURL)
-	err := pub.Init(ctx)
-	if err != nil {
-		return err
+
+	// Only initialize immediately if queueManager manager has already been initialized
+	s.initMutex.Lock()
+	alreadyInitialized := s.initialized
+	s.initMutex.Unlock()
+
+	if alreadyInitialized {
+		err := pub.Init(ctx)
+		if err != nil {
+			return err
+		}
 	}
 
 	s.publishQueueMap.Store(reference, pub)
 	return nil
 }
 
-func (s *queue) DiscardPublisher(ctx context.Context, reference string) error {
+func (s *queueManager) DiscardPublisher(ctx context.Context, reference string) error {
 	var err error
 	pub, _ := s.GetPublisher(reference)
 	if pub != nil {
@@ -50,7 +66,7 @@ func (s *queue) DiscardPublisher(ctx context.Context, reference string) error {
 	return err
 }
 
-func (s *queue) GetPublisher(reference string) (Publisher, error) {
+func (s *queueManager) GetPublisher(reference string) (Publisher, error) {
 	pub, ok := s.publishQueueMap.Load(reference)
 	if !ok {
 		return nil, fmt.Errorf("publisher %s not found", reference)
@@ -62,7 +78,7 @@ func (s *queue) GetPublisher(reference string) (Publisher, error) {
 	return pVal, nil
 }
 
-func (s *queue) AddSubscriber(
+func (s *queueManager) AddSubscriber(
 	ctx context.Context,
 	reference string,
 	queueURL string,
@@ -73,10 +89,18 @@ func (s *queue) AddSubscriber(
 		return nil
 	}
 
-	subs := newSubscriber(reference, queueURL, handlers...)
-	err := s.initSubscriber(ctx, subs)
-	if err != nil {
-		return err
+	subs := newSubscriber(s.workPool, reference, queueURL, handlers...)
+
+	// Only initialize immediately if queueManager manager has already been initialized
+	s.initMutex.Lock()
+	alreadyInitialized := s.initialized
+	s.initMutex.Unlock()
+
+	if alreadyInitialized {
+		err := s.initSubscriber(ctx, subs)
+		if err != nil {
+			return err
+		}
 	}
 
 	s.subscriptionQueueMap.Store(reference, subs)
@@ -84,7 +108,7 @@ func (s *queue) AddSubscriber(
 	return nil
 }
 
-func (s *queue) DiscardSubscriber(ctx context.Context, reference string) error {
+func (s *queueManager) DiscardSubscriber(ctx context.Context, reference string) error {
 	var err error
 	sub, _ := s.GetSubscriber(reference)
 	if sub != nil {
@@ -95,7 +119,7 @@ func (s *queue) DiscardSubscriber(ctx context.Context, reference string) error {
 	return err
 }
 
-func (s *queue) GetSubscriber(reference string) (Subscriber, error) {
+func (s *queueManager) GetSubscriber(reference string) (Subscriber, error) {
 	sub, ok := s.subscriptionQueueMap.Load(reference)
 	if !ok {
 		return nil, fmt.Errorf("subscriber %s not found", reference)
@@ -107,8 +131,8 @@ func (s *queue) GetSubscriber(reference string) (Subscriber, error) {
 	return sVal, nil
 }
 
-// Publish ByIsQueue method to write a new message into the queue pre initialized with the supplied reference.
-func (s *queue) Publish(ctx context.Context, reference string, payload any, headers ...map[string]string) error {
+// Publish ByIsQueue method to write a new message into the queueManager pre initialized with the supplied reference.
+func (s *queueManager) Publish(ctx context.Context, reference string, payload any, headers ...map[string]string) error {
 	pub, err := s.GetPublisher(reference)
 	if err != nil {
 		return err
@@ -117,7 +141,7 @@ func (s *queue) Publish(ctx context.Context, reference string, payload any, head
 	return pub.Publish(ctx, payload, headers...)
 }
 
-func (s *queue) initSubscriber(ctx context.Context, sub Subscriber) error {
+func (s *queueManager) initSubscriber(ctx context.Context, sub Subscriber) error {
 	s.stopMutex.Lock()
 	defer s.stopMutex.Unlock()
 
@@ -125,7 +149,7 @@ func (s *queue) initSubscriber(ctx context.Context, sub Subscriber) error {
 }
 
 // initializeRegisteredPublishers iterates over and initializes all registered publishers.
-func (s *queue) initializeRegisteredPublishers(ctx context.Context) error {
+func (s *queueManager) initializeRegisteredPublishers(ctx context.Context) error {
 	var initErrors []error
 	s.publishQueueMap.Range(func(key, value any) bool {
 		pub, ok := value.(*publisher)
@@ -154,7 +178,7 @@ func (s *queue) initializeRegisteredPublishers(ctx context.Context) error {
 }
 
 // initializeRegisteredSubscribers iterates over and initializes all registered subscribers.
-func (s *queue) initializeRegisteredSubscribers(ctx context.Context) error {
+func (s *queueManager) initializeRegisteredSubscribers(ctx context.Context) error {
 	var initErrors []error
 	s.subscriptionQueueMap.Range(func(key, value any) bool {
 		sub, ok := value.(Subscriber)
@@ -180,10 +204,10 @@ func (s *queue) initializeRegisteredSubscribers(ctx context.Context) error {
 	return nil
 }
 
-func (s *queue) Init(ctx context.Context) error {
+func (s *queueManager) Init(ctx context.Context) error {
 	if s == nil {
 		util.Log(ctx).Debug(
-			"No generic queue backend configured (s.queue is nil), skipping further pub/sub initialization.",
+			"No generic queueManager backend configured (s.queueManager is nil), skipping further pub/sub initialization.",
 		)
 		return nil
 	}
@@ -197,6 +221,11 @@ func (s *queue) Init(ctx context.Context) error {
 		// Errors logged by helper
 		return fmt.Errorf("failed during subscriber initialization: %w", err)
 	}
+
+	// Mark queueManager as initialized
+	s.initMutex.Lock()
+	s.initialized = true
+	s.initMutex.Unlock()
 
 	util.Log(ctx).Info("Pub/Sub system initialized successfully.")
 	return nil

@@ -11,9 +11,13 @@ import (
 // WithRegisterEvents registers events for the service. All events are unique and shouldn't share a name otherwise the last one registered will take precedence.
 func WithRegisterEvents(evt ...events.EventI) Option {
 	return func(_ context.Context, s *Service) {
-		for _, event := range evt {
-			s.eventsManager.Add(event)
-		}
+		// Events manager is initialized in setupEventsQueue after options are applied
+		// so defer event registration to pre-start phase
+		s.AddPreStartMethod(func(_ context.Context, svc *Service) {
+			for _, event := range evt {
+				svc.eventsManager.Add(event)
+			}
+		})
 	}
 }
 
@@ -35,12 +39,10 @@ func (s *Service) Emit(ctx context.Context, name string, payload any) error {
 	return nil
 }
 
-// setupEventsQueueIfNeeded sets up the default events queue publisher and subscriber
+// setupEventsQueue sets up the default events queue publisher and subscriber
 // if an event registry is configured for the service.
-func (s *Service) setupEventsQueueIfNeeded(ctx context.Context) error {
-	if s.eventsManager == nil {
-		s.eventsManager = events.NewManager(ctx)
-	}
+func (s *Service) setupEventsQueue(ctx context.Context) error {
+	s.eventsManager = events.NewManager(ctx)
 
 	cfg, ok := s.Config().(config.ConfigurationEvents)
 	if !ok {

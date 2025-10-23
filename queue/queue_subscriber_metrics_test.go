@@ -10,7 +10,7 @@ package queue_test
 //
 // 	"github.com/pitabwire/frame"
 // 	"github.com/pitabwire/frame/frametests/definition"
-// 	"github.com/pitabwire/frame/queue"
+// 	"github.com/pitabwire/frame/queueManager"
 // 	"github.com/pitabwire/frame/tests"
 // 	"github.com/stretchr/testify/require"
 // 	"github.com/stretchr/testify/suite"
@@ -21,7 +21,7 @@ package queue_test
 // 	tests.BaseTestSuite
 // }
 //
-// // TestQueueSubscriberMetricsSuite runs the queue subscriber metrics test suite.
+// // TestQueueSubscriberMetricsSuite runs the queueManager subscriber metrics test suite.
 // func TestQueueSubscriberMetricsSuite(t *testing.T) {
 // 	suite.Run(t, &QueueSubscriberMetricsTestSuite{})
 // }
@@ -30,37 +30,37 @@ package queue_test
 // func (s *QueueSubscriberMetricsTestSuite) TestSubscriberMetricsIsIdle() {
 // 	testCases := []struct {
 // 		name           string
-// 		state          queue.SubscriberState
+// 		state          queueManager.SubscriberState
 // 		activeMessages int64
 // 		expectedIsIdle bool
 // 	}{
 // 		{
 // 			name:           "Waiting state with zero active messages",
-// 			state:          queue.SubscriberStateWaiting,
+// 			state:          queueManager.SubscriberStateWaiting,
 // 			activeMessages: 0,
 // 			expectedIsIdle: true,
 // 		},
 // 		{
 // 			name:           "Waiting state with active messages",
-// 			state:          queue.SubscriberStateWaiting,
+// 			state:          queueManager.SubscriberStateWaiting,
 // 			activeMessages: 1,
 // 			expectedIsIdle: false,
 // 		},
 // 		{
 // 			name:           "Processing state with zero active messages",
-// 			state:          queue.SubscriberStateProcessing,
+// 			state:          queueManager.SubscriberStateProcessing,
 // 			activeMessages: 0,
 // 			expectedIsIdle: false,
 // 		},
 // 		{
 // 			name:           "Error state with zero active messages",
-// 			state:          queue.SubscriberStateInError,
+// 			state:          queueManager.SubscriberStateInError,
 // 			activeMessages: 0,
 // 			expectedIsIdle: false,
 // 		},
 // 		{
 // 			name:           "Edge case: Waiting state with negative active messages",
-// 			state:          queue.SubscriberStateWaiting,
+// 			state:          queueManager.SubscriberStateWaiting,
 // 			activeMessages: -1,
 // 			expectedIsIdle: true, // Negative active messages should be treated as zero
 // 		},
@@ -68,7 +68,7 @@ package queue_test
 //
 // 	for _, tc := range testCases {
 // 		s.Run(tc.name, func() {
-// 			metrics := &queue.SubscriberMetrics{
+// 			metrics := &queueManager.SubscriberMetrics{
 // 				ActiveMessages: &atomic.Int64{},
 // 				LastActivity:   &atomic.Int64{},
 // 				ProcessingTime: &atomic.Int64{},
@@ -88,28 +88,28 @@ package queue_test
 // 	testCases := []struct {
 // 		name             string
 // 		lastActivityAgo  time.Duration
-// 		state            queue.SubscriberState
+// 		state            queueManager.SubscriberState
 // 		activeMessages   int64
 // 		expectedIdleTime time.Duration
 // 	}{
 // 		{
 // 			name:             "idle time when waiting with no active messages",
 // 			lastActivityAgo:  10 * time.Second,
-// 			state:            queue.SubscriberStateWaiting,
+// 			state:            queueManager.SubscriberStateWaiting,
 // 			activeMessages:   0,
 // 			expectedIdleTime: 10 * time.Second,
 // 		},
 // 		{
 // 			name:             "idle time when processing",
 // 			lastActivityAgo:  5 * time.Second,
-// 			state:            queue.SubscriberStateProcessing,
+// 			state:            queueManager.SubscriberStateProcessing,
 // 			activeMessages:   0,
 // 			expectedIdleTime: 0,
 // 		},
 // 		{
 // 			name:             "idle time when waiting with active messages",
 // 			lastActivityAgo:  3 * time.Second,
-// 			state:            queue.SubscriberStateWaiting,
+// 			state:            queueManager.SubscriberStateWaiting,
 // 			activeMessages:   1,
 // 			expectedIdleTime: 0,
 // 		},
@@ -117,7 +117,7 @@ package queue_test
 //
 // 	for _, tc := range testCases {
 // 		s.Run(tc.name, func() {
-// 			metrics := &queue.SubscriberMetrics{
+// 			metrics := &queueManager.SubscriberMetrics{
 // 				ActiveMessages: &atomic.Int64{},
 // 				LastActivity:   &atomic.Int64{},
 // 				ProcessingTime: &atomic.Int64{},
@@ -173,7 +173,7 @@ package queue_test
 //
 // 	for _, tc := range testCases {
 // 		s.Run(tc.name, func() {
-// 			metrics := &queue.SubscriberMetrics{
+// 			metrics := &queueManager.SubscriberMetrics{
 // 				ActiveMessages: &atomic.Int64{},
 // 				LastActivity:   &atomic.Int64{},
 // 				ProcessingTime: &atomic.Int64{},
@@ -206,7 +206,7 @@ package queue_test
 //
 // 	for _, tc := range testCases {
 // 		s.Run(tc.name, func() {
-// 			metrics := &queue.SubscriberMetrics{
+// 			metrics := &queueManager.SubscriberMetrics{
 // 				ActiveMessages: &atomic.Int64{},
 // 				LastActivity:   &atomic.Int64{},
 // 				ProcessingTime: &atomic.Int64{},
@@ -278,7 +278,7 @@ package queue_test
 // 	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependancyOption) {
 // 		for _, tc := range testCases {
 // 			t.Run(tc.name, func(t *testing.T) {
-// 				queue := dep.ByIsQueue(t.Context())
+// 				queueManager := dep.ByIsQueue(t.Context())
 //
 // 				var processedCount int64
 // 				var mu sync.Mutex
@@ -292,7 +292,7 @@ package queue_test
 // 				}
 //
 // 				// Create subscriber with handler
-// 				subscriber := queue.NewSubscriber(tc.topic, queue.GetDS(ctx).String(), handler)
+// 				subscriber := queueManager.NewSubscriber(tc.topic, queueManager.GetDS(ctx).String(), handler)
 //
 // 				// Start subscriber
 // 				err := subscriber.Start(ctx)

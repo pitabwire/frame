@@ -262,10 +262,17 @@ func (s *subscriber) listen(ctx context.Context) {
 }
 
 func (s *subscriber) SendStopError(ctx context.Context, err error) {
-	s.workManager.StopError(ctx, err)
+	if s.workManager != nil {
+		s.workManager.StopError(ctx, err)
+	}
 }
 
-func newSubscriber(reference string, queueURL string, handlers ...SubscribeWorker) Subscriber {
+func newSubscriber(
+	workPool workerpool.Manager,
+	reference string,
+	queueURL string,
+	handlers ...SubscribeWorker,
+) Subscriber {
 	return &subscriber{
 		reference: reference,
 		url:       queueURL,
@@ -277,5 +284,6 @@ func newSubscriber(reference string, queueURL string, handlers ...SubscribeWorke
 			MessageCount:   &atomic.Int64{},
 			ErrorCount:     &atomic.Int64{},
 		},
+		workManager: workPool,
 	}
 }

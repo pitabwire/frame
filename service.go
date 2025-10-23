@@ -93,8 +93,16 @@ type Service struct {
 	queueManager        queue.Manager
 	eventsManager       events.Manager
 
-	startOnce sync.Once
-	stopMutex sync.Mutex
+	startOnce            sync.Once
+	startupOnce          sync.Once
+	startupCompleted     bool
+	stopMutex            sync.Mutex
+	startupErrors        []error
+	startupMutex         sync.Mutex
+	publisherStartups    []func(ctx context.Context, s *Service)
+	subscriberStartups   []func(ctx context.Context, s *Service)
+	otherStartups        []func(ctx context.Context, s *Service)
+	startupRegistrations sync.Mutex
 }
 
 type Option func(ctx context.Context, service *Service)
@@ -136,8 +144,6 @@ func NewServiceWithContext(ctx context.Context, name string, opts ...Option) (co
 		client:       defaultClient,
 		logger:       log,
 
-		queueManager: queue.NewQueueManager(ctx),
-
 		configuration: &cfg,
 	}
 
@@ -170,10 +176,40 @@ func NewServiceWithContext(ctx context.Context, name string, opts ...Option) (co
 
 	svc.workerPoolManager = workerpool.NewManager(ctx, &cfg, svc.sendStopError)
 
-	err = svc.setupEventsQueueIfNeeded(ctx)
+	svc.queueManager = queue.NewQueueManager(ctx, svc.workerPoolManager)
+
+	// Setup events queue first (before startup methods)
+	// This registers the internal events publisher/subscriber
+	err = svc.setupEventsQueue(ctx)
 	if err != nil {
 		log.WithError(err).Panic("could not setup application events")
 	}
+
+	// Execute pre-start methods now that queue manager is initialized
+	// This ensures queue registrations from options are applied
+	// Run in order: publishers first, then subscribers, then other startups
+	svc.startupOnce.Do(func() {
+		// Run publisher startups first (to create topics for mem:// driver)
+		for _, startup := range svc.publisherStartups {
+			startup(ctx, svc)
+		}
+		// Run subscriber startups after publishers
+		for _, startup := range svc.subscriberStartups {
+			startup(ctx, svc)
+		}
+		// Run other startups last
+		for _, startup := range svc.otherStartups {
+			startup(ctx, svc)
+		}
+		// Run legacy startup function if set
+		if svc.startup != nil {
+			svc.startup(ctx, svc)
+		}
+		// Mark startup as completed
+		svc.startupRegistrations.Lock()
+		svc.startupCompleted = true
+		svc.startupRegistrations.Unlock()
+	})
 
 	err = svc.initTracer(ctx)
 	if err != nil {
@@ -255,24 +291,83 @@ func (s *Service) Security() security.Manager {
 }
 
 // Init evaluates the options provided as arguments and supplies them to the service object.
+// If called after initial startup, it will execute any new startup methods immediately.
 func (s *Service) Init(ctx context.Context, opts ...Option) {
+	s.startupRegistrations.Lock()
+	initialPublisherCount := len(s.publisherStartups)
+	initialSubscriberCount := len(s.subscriberStartups)
+	initialOtherCount := len(s.otherStartups)
+	alreadyStarted := s.startupCompleted
+	s.startupRegistrations.Unlock()
+
 	for _, opt := range opts {
 		opt(ctx, s)
+	}
+
+	// If startup has already run, execute new startup methods immediately
+	if alreadyStarted {
+		s.startupRegistrations.Lock()
+		newPublishers := s.publisherStartups[initialPublisherCount:]
+		newSubscribers := s.subscriberStartups[initialSubscriberCount:]
+		newOthers := s.otherStartups[initialOtherCount:]
+		s.startupRegistrations.Unlock()
+
+		// Run new startup methods in order
+		for _, startup := range newPublishers {
+			startup(ctx, s)
+		}
+		for _, startup := range newSubscribers {
+			startup(ctx, s)
+		}
+		for _, startup := range newOthers {
+			startup(ctx, s)
+		}
 	}
 }
 
 // AddPreStartMethod Adds user defined functions that can be run just before
 // the service starts receiving requests but is fully initialized.
 func (s *Service) AddPreStartMethod(f func(ctx context.Context, s *Service)) {
-	s.stopMutex.Lock()
-	defer s.stopMutex.Unlock()
-	if s.startup == nil {
-		s.startup = f
+	s.startupRegistrations.Lock()
+	defer s.startupRegistrations.Unlock()
+	s.otherStartups = append(s.otherStartups, f)
+}
+
+// AddPublisherStartup Adds publisher initialization functions that run before subscribers.
+func (s *Service) AddPublisherStartup(f func(ctx context.Context, s *Service)) {
+	s.startupRegistrations.Lock()
+	defer s.startupRegistrations.Unlock()
+	s.publisherStartups = append(s.publisherStartups, f)
+}
+
+// AddSubscriberStartup Adds subscriber initialization functions that run after publishers.
+func (s *Service) AddSubscriberStartup(f func(ctx context.Context, s *Service)) {
+	s.startupRegistrations.Lock()
+	defer s.startupRegistrations.Unlock()
+	s.subscriberStartups = append(s.subscriberStartups, f)
+}
+
+// AddStartupError stores errors that occur during startup initialization.
+func (s *Service) AddStartupError(err error) {
+	if err == nil {
 		return
 	}
+	s.startupMutex.Lock()
+	defer s.startupMutex.Unlock()
+	s.startupErrors = append(s.startupErrors, err)
+}
 
-	old := s.startup
-	s.startup = func(ctx context.Context, st *Service) { old(ctx, st); f(ctx, st) }
+// GetStartupErrors returns all errors that occurred during startup.
+func (s *Service) GetStartupErrors() []error {
+	s.startupMutex.Lock()
+	defer s.startupMutex.Unlock()
+	if len(s.startupErrors) == 0 {
+		return nil
+	}
+	// Return a copy to prevent external modification
+	errorsCopy := make([]error, len(s.startupErrors))
+	copy(errorsCopy, s.startupErrors)
+	return errorsCopy
 }
 
 // AddCleanupMethod Adds user defined functions to be run just before completely stopping the service.
@@ -302,6 +397,11 @@ func (s *Service) AddHealthCheck(checker Checker) {
 
 // Run keeps the service useful by handling incoming requests.
 func (s *Service) Run(ctx context.Context, address string) error {
+	// Check for any errors that occurred during startup initialization
+	if startupErrs := s.GetStartupErrors(); len(startupErrs) > 0 {
+		return startupErrs[0] // Return the first error
+	}
+
 	pubSubErr := s.queueManager.Init(ctx)
 	if pubSubErr != nil {
 		return pubSubErr
@@ -417,6 +517,53 @@ func (s *Service) initializeServerDrivers(ctx context.Context, httpPort string) 
 	}
 }
 
+// executeStartupMethods runs all startup methods in the correct order.
+func (s *Service) executeStartupMethods(ctx context.Context) {
+	s.startupOnce.Do(func() {
+		// Run publisher startups first (to create topics for mem:// driver)
+		for _, startup := range s.publisherStartups {
+			startup(ctx, s)
+		}
+		// Run subscriber startups after publishers
+		for _, startup := range s.subscriberStartups {
+			startup(ctx, s)
+		}
+		// Run other startups last
+		for _, startup := range s.otherStartups {
+			startup(ctx, s)
+		}
+		// Run legacy startup function if set
+		if s.startup != nil {
+			s.startup(ctx, s)
+		}
+		// Mark startup as completed
+		s.startupRegistrations.Lock()
+		s.startupCompleted = true
+		s.startupRegistrations.Unlock()
+	})
+}
+
+// startServerDriver starts either TLS or non-TLS server based on configuration.
+func (s *Service) startServerDriver(httpPort string) error {
+	if s.TLSEnabled() {
+		cfg, ok := s.Config().(config.ConfigurationTLS)
+		if !ok {
+			return errors.New("TLS is enabled but configuration does not implement ConfigurationTLS")
+		}
+		tlsServer, ok := s.driver.(driver.TLSServer)
+		if !ok {
+			return errors.New("driver does not implement internal.TLSServer for TLS mode")
+		}
+		return tlsServer.ListenAndServeTLS(httpPort, cfg.TLSCertPath(), cfg.TLSCertKeyPath(), s.handler)
+	}
+
+	nonTLSServer, ok := s.driver.(driver.Server)
+	if !ok {
+		return errors.New("driver does not implement internal.Server for non-TLS mode")
+	}
+	return nonTLSServer.ListenAndServe(httpPort, s.handler)
+}
+
 // initServer starts the Service. It initializes server drivers (HTTP, gRPC).
 func (s *Service) initServer(ctx context.Context, httpPort string) error {
 	if s.healthCheckPath == "" ||
@@ -440,27 +587,10 @@ func (s *Service) initServer(ctx context.Context, httpPort string) error {
 		s.initializeServerDrivers(ctx, httpPort)
 	})
 
-	if s.startup != nil {
-		s.startup(ctx, s)
-	}
+	// Execute pre-start methods
+	s.executeStartupMethods(ctx)
 
-	if s.TLSEnabled() {
-		cfg, ok := s.Config().(config.ConfigurationTLS)
-		if !ok {
-			return errors.New("TLS is enabled but configuration does not implement ConfigurationTLS")
-		}
-		tlsServer, ok := s.driver.(driver.TLSServer)
-		if !ok {
-			return errors.New("driver does not implement internal.TLSServer for TLS mode")
-		}
-		return tlsServer.ListenAndServeTLS(httpPort, cfg.TLSCertPath(), cfg.TLSCertKeyPath(), s.handler)
-	}
-
-	nonTLSServer, ok := s.driver.(driver.Server)
-	if !ok {
-		return errors.New("driver does not implement internal.Server for non-TLS mode")
-	}
-	return nonTLSServer.ListenAndServe(httpPort, s.handler)
+	return s.startServerDriver(httpPort)
 }
 
 // Stop Used to gracefully run clean up methods ensuring all requests that

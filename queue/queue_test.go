@@ -18,12 +18,12 @@ import (
 	"github.com/pitabwire/frame/tests"
 )
 
-// QueueTestSuite extends BaseTestSuite for comprehensive queue testing.
+// QueueTestSuite extends BaseTestSuite for comprehensive queueManager testing.
 type QueueTestSuite struct {
 	tests.BaseTestSuite
 }
 
-// TestQueueSuite runs the queue test suite.
+// TestQueueSuite runs the queueManager test suite.
 func TestQueueSuite(t *testing.T) {
 	suite.Run(t, &QueueTestSuite{})
 }
@@ -681,7 +681,7 @@ func (s *QueueTestSuite) TestServiceRegisterSubscriberInvalid() {
 				ctx, srv := frame.NewService(tc.serviceName, opt, frametests.WithNoopDriver())
 
 				err := srv.Run(ctx, "")
-				require.Error(t, err, "Service should fail to start with invalid queue URL")
+				require.Error(t, err, "Service should fail to start with invalid queueManager URL")
 			})
 		}
 	})

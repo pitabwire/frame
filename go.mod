@@ -15,9 +15,9 @@ require (
 	github.com/lmittmann/tint v1.1.2
 	github.com/nicksnyder/go-i18n/v2 v2.6.0
 	github.com/panjf2000/ants/v2 v2.11.3
-	github.com/pitabwire/natspubsub v0.7.2
+	github.com/pitabwire/natspubsub v0.7.3
 	github.com/pitabwire/util v0.3.5
-	github.com/redis/go-redis/v9 v9.14.1
+	github.com/redis/go-redis/v9 v9.16.0
 	github.com/rs/xid v1.6.0
 	github.com/stretchr/testify v1.11.1
 	github.com/testcontainers/testcontainers-go v0.39.0

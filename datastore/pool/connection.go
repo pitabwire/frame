@@ -13,19 +13,7 @@ import (
 	"gorm.io/gorm"
 )
 
-func (s *pool) createConnection(ctx context.Context, dsn string, opts ...Option) (*gorm.DB, error) {
-	poolOpts := &Options{
-		MaxOpen:                0,
-		MaxIdle:                0,
-		MaxLifetime:            0,
-		PreferSimpleProtocol:   true,
-		SkipDefaultTransaction: true,
-	}
-
-	for _, opt := range opts {
-		opt(poolOpts)
-	}
-
+func (s *pool) createConnection(ctx context.Context, dsn string, poolOpts *Options) (*gorm.DB, error) {
 	cleanedPostgresqlDSN, err := cleanPostgresDSN(dsn)
 	if err != nil {
 		return nil, err

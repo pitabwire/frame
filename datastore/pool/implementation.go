@@ -36,18 +36,33 @@ func NewPool(_ context.Context) Pool {
 }
 
 // AddConnection safely adds a DB connection to the pool.
-func (s *pool) AddConnection(ctx context.Context, dsn string, readOnly bool, opts ...Option) error {
-	db, err := s.createConnection(ctx, dsn, opts...)
-	if err != nil {
-		return err
+func (s *pool) AddConnection(ctx context.Context, opts ...Option) error {
+	poolOpts := &Options{
+		MaxOpen:                0,
+		MaxIdle:                0,
+		MaxLifetime:            0,
+		PreferSimpleProtocol:   true,
+		SkipDefaultTransaction: true,
 	}
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if readOnly {
-		s.allReadDBs = append(s.allReadDBs, db)
-	} else {
-		s.allWriteDBs = append(s.allWriteDBs, db)
+	for _, opt := range opts {
+		opt(poolOpts)
+	}
+
+	for _, conn := range poolOpts.Connections {
+		db, err := s.createConnection(ctx, conn.DSN, poolOpts)
+		if err != nil {
+			return err
+		}
+
+		s.mu.Lock()
+
+		if conn.ReadOnly {
+			s.allReadDBs = append(s.allReadDBs, db)
+		} else {
+			s.allWriteDBs = append(s.allWriteDBs, db)
+		}
+		s.mu.Unlock()
 	}
 	return nil
 }
@@ -76,7 +91,10 @@ func (s *pool) DB(ctx context.Context, readOnly bool) *gorm.DB {
 		idx = &s.readIdx
 		if len(s.allReadDBs) != 0 {
 			// This check ensures we are able to use the write db if no more read dbs exist
-			return s.selectOne(s.allReadDBs, idx)
+			s.mu.RUnlock()
+			return s.selectOne(s.allReadDBs, idx).Session(&gorm.Session{NewDB: true, AllowGlobalUpdate: true}).
+				WithContext(ctx).
+				Scopes(scopes.TenancyPartition(ctx))
 		}
 	}
 

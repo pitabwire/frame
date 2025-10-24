@@ -497,7 +497,7 @@ func (c *ConfigurationDefault) GetDatabasePrimaryHostURL() []string {
 }
 
 func (c *ConfigurationDefault) GetDatabaseReplicaHostURL() []string {
-	return c.DatabasePrimaryURL
+	return c.DatabaseReplicaURL
 }
 
 func (c *ConfigurationDefault) DoDatabaseMigrate() bool {

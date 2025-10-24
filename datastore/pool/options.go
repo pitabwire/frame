@@ -11,6 +11,8 @@ type Option func(*Options)
 
 // Options holds Datastore connection configuration.
 type Options struct {
+	Connections []Connection
+
 	MaxOpen     int
 	MaxIdle     int
 	MaxLifetime time.Duration
@@ -19,6 +21,25 @@ type Options struct {
 	SkipDefaultTransaction bool
 
 	TraceConfig config.ConfigurationDatabaseTracing
+}
+
+// WithConnection returns an Option to configure the database connection dsn.
+// Multiple calls with the same DSN but different readOnly flags are supported.
+func WithConnection(dsn string, readOnly bool) Option {
+	return func(o *Options) {
+		o.Connections = append(o.Connections, Connection{
+			DSN:      dsn,
+			ReadOnly: readOnly,
+		})
+	}
+}
+
+// WithConnections returns an Option to configure database connections from a slice.
+// Supports adding multiple connections including the same DSN with different readOnly flags.
+func WithConnections(connections []Connection) Option {
+	return func(o *Options) {
+		o.Connections = append(o.Connections, connections...)
+	}
 }
 
 // WithMaxOpen returns an Option to configure the database connection max open connections.

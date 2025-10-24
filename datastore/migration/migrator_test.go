@@ -13,6 +13,7 @@ import (
 	"github.com/pitabwire/frame/config"
 	"github.com/pitabwire/frame/datastore"
 	"github.com/pitabwire/frame/datastore/migration"
+	"github.com/pitabwire/frame/datastore/pool"
 	"github.com/pitabwire/frame/frametests/definition"
 	"github.com/pitabwire/frame/tests"
 )
@@ -50,7 +51,10 @@ func (s *MigratorTestSuite) TestSaveNewMigrations() {
 			t.Run(tc.name, func(t *testing.T) {
 				db := dep.ByIsDatabase(t.Context())
 
-				ctx, svc := frame.NewService(tc.serviceName, frame.WithDatastore(datastore.WithConnection(db.GetDS(t.Context()).String(), false)))
+				ctx, svc := frame.NewService(
+					tc.serviceName,
+					frame.WithDatastore(pool.WithConnection(db.GetDS(t.Context()).String(), false)),
+				)
 
 				svc.Init(ctx)
 
@@ -139,7 +143,11 @@ func (s *MigratorTestSuite) TestApplyMigrations() {
 				defConf.DatabaseTraceQueries = tc.traceQueries
 				defConf.LogLevel = tc.logLevel
 
-				ctx, svc := frame.NewService(tc.serviceName, frame.WithConfig(&defConf), frame.WithDatastore(datastore.WithConnection(db.GetDS(t.Context()).String(), false)))
+				ctx, svc := frame.NewService(
+					tc.serviceName,
+					frame.WithConfig(&defConf),
+					frame.WithDatastore(pool.WithConnection(db.GetDS(t.Context()).String(), false)),
+				)
 
 				svc.Init(ctx)
 
@@ -188,7 +196,10 @@ func (s *MigratorTestSuite) TestServiceMigrateDatastore() {
 			t.Run(tc.name, func(t *testing.T) {
 				db := dep.ByIsDatabase(t.Context())
 
-				ctx, svc := frame.NewService(tc.serviceName, frame.WithDatastore(datastore.WithConnection(db.GetDS(t.Context()).String(), false)))
+				ctx, svc := frame.NewService(
+					tc.serviceName,
+					frame.WithDatastore(pool.WithConnection(db.GetDS(t.Context()).String(), false)),
+				)
 
 				svc.Init(ctx)
 
@@ -236,7 +247,10 @@ func (s *MigratorTestSuite) TestServiceMigrateDatastoreIdempotency() {
 			t.Run(tc.name, func(t *testing.T) {
 				db := dep.ByIsDatabase(t.Context())
 
-				ctx, svc := frame.NewService(tc.serviceName, frame.WithDatastore(datastore.WithConnection(db.GetDS(t.Context()).String(), false)))
+				ctx, svc := frame.NewService(
+					tc.serviceName,
+					frame.WithDatastore(pool.WithConnection(db.GetDS(t.Context()).String(), false)),
+				)
 
 				svc.Init(ctx)
 

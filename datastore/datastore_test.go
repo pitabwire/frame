@@ -13,6 +13,7 @@ import (
 	"github.com/pitabwire/frame"
 	"github.com/pitabwire/frame/config"
 	"github.com/pitabwire/frame/datastore"
+	"github.com/pitabwire/frame/datastore/pool"
 	"github.com/pitabwire/frame/frametests"
 	"github.com/pitabwire/frame/frametests/definition"
 	"github.com/pitabwire/frame/tests"
@@ -92,7 +93,8 @@ func (s *DatastoreTestSuite) TestServiceDatastoreSet() {
 				ctx := t.Context()
 				db := dep.ByIsDatabase(ctx)
 				// Set environment variables
-				t.Setenv("DATABASE_URL", db.GetDS(ctx).String())
+				dbURL := db.GetDS(ctx).String()
+				t.Setenv("DATABASE_URL", dbURL)
 
 				defConf, err := config.FromEnv[config.ConfigurationDefault]()
 				require.NoError(t, err, "configuration loading should succeed")
@@ -147,7 +149,7 @@ func (s *DatastoreTestSuite) TestServiceDatastoreRunQuery() {
 				ctx, svc := frame.NewService(
 					"Test Srv",
 					frame.WithConfig(&defConf),
-					frame.WithDatastore(datastore.WithConnection(db.GetDS(t.Context()).String(), false)),
+					frame.WithDatastore(pool.WithConnection(db.GetDS(t.Context()).String(), false)),
 				)
 
 				svc.Init(ctx)
@@ -191,7 +193,10 @@ func (s *DatastoreTestSuite) TestServiceDatastoreRead() {
 			t.Run(tc.name, func(t *testing.T) {
 				db := dep.ByIsDatabase(t.Context())
 
-				ctx, srv := frame.NewService(tc.serviceName, frame.WithDatastore(datastore.WithConnection(db.GetDS(t.Context()).String(), false)))
+				ctx, srv := frame.NewService(
+					tc.serviceName,
+					frame.WithDatastore(pool.WithConnection(db.GetDS(t.Context()).String(), false)),
+				)
 
 				readDB := frame.WithDatastoreConnection(db.GetDS(ctx).String(), true)
 				srv.Init(ctx, readDB)
@@ -233,7 +238,11 @@ func (s *DatastoreTestSuite) TestServiceDatastoreNotSet() {
 			t.Run(tc.name, func(t *testing.T) {
 				_, srv := frame.NewService(tc.serviceName)
 
-				require.Nil(t, srv.DatastoreManager(), "no database manager should be available when none is configured")
+				require.Nil(
+					t,
+					srv.DatastoreManager(),
+					"no database manager should be available when none is configured",
+				)
 			})
 		}
 	})

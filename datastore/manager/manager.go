@@ -18,37 +18,10 @@ type manager struct {
 // NewManager creates a new database manager and optionally initializes pools with connections.
 // The manager is resilient and will succeed even if no connections are provided initially.
 // Connections can be added later using the manager's AddPool method.
-func NewManager(ctx context.Context, options ...datastore.Option) (datastore.Manager, error) {
-	poolOpts := datastore.Options{
-		Name: datastore.DefaultPoolName,
-	}
-
-	for _, opt := range options {
-		opt(&poolOpts)
-	}
-
-	man := &manager{
+func NewManager(_ context.Context) (datastore.Manager, error) {
+	return &manager{
 		dbPools: sync.Map{},
-	}
-
-	// Only create a pool if connections are provided
-	if len(poolOpts.DSNMap) > 0 {
-		p := pool.NewPool(ctx)
-
-		// Add all connections to the pool
-		for dsn, readOnly := range poolOpts.DSNMap {
-			if err := p.AddConnection(ctx, dsn, readOnly, poolOpts.PoolOptions...); err != nil {
-				// Clean up the pool on error
-				p.Close(ctx)
-				return nil, err
-			}
-		}
-
-		// Register the pool with the manager
-		man.AddPool(ctx, poolOpts.Name, p)
-	}
-
-	return man, nil
+	}, nil
 }
 
 // AddPool registers a pool with the manager using the given reference name.

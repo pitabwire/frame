@@ -1,4 +1,4 @@
-package frame_test
+package datastore_test
 
 import (
 	"reflect"
@@ -12,6 +12,7 @@ import (
 
 	"github.com/pitabwire/frame"
 	"github.com/pitabwire/frame/config"
+	"github.com/pitabwire/frame/datastore"
 	"github.com/pitabwire/frame/frametests"
 	"github.com/pitabwire/frame/frametests/definition"
 	"github.com/pitabwire/frame/tests"
@@ -51,12 +52,13 @@ func (s *DatastoreTestSuite) TestServiceDatastore() {
 				mainDB := frame.WithDatastoreConnection(db.GetDS(ctx).String(), false)
 				srv.Init(ctx, mainDB)
 
-				require.Equal(t, tc.serviceName, srv.Name(), "service name should match")
+				require.Equal(t, tc.serviceName, srv.Name(), "dbPool name should match")
 
-				w := srv.DB(ctx, false)
+				dbPool := srv.DatastoreManager().GetPool(ctx, datastore.DefaultPoolName)
+				w := dbPool.DB(ctx, false)
 				require.NotNil(t, w, "write database should be instantiated")
 
-				r := srv.DB(ctx, true)
+				r := dbPool.DB(ctx, true)
 				require.NotNil(t, r, "read database should be instantiated")
 
 				rd, _ := r.DB()
@@ -100,10 +102,11 @@ func (s *DatastoreTestSuite) TestServiceDatastoreSet() {
 				ctx, srv := frame.NewService("Test Srv", frame.WithConfig(&defConf))
 				srv.Init(ctx, frame.WithDatastore())
 
-				w := srv.DB(ctx, false)
+				dbPool := srv.DatastoreManager().GetPool(ctx, datastore.DefaultPoolName)
+				w := dbPool.DB(ctx, false)
 				require.NotNil(t, w, "write database should be available")
 
-				r := srv.DB(ctx, true)
+				r := dbPool.DB(ctx, true)
 				require.NotNil(t, r, "read database should be available")
 			})
 		}
@@ -144,10 +147,11 @@ func (s *DatastoreTestSuite) TestServiceDatastoreRunQuery() {
 				ctx, srv := frame.NewService("Test Srv", frame.WithConfig(&defConf))
 				srv.Init(ctx, frame.WithDatastore())
 
-				w := srv.DB(ctx, false)
+				dbPool := srv.DatastoreManager().GetPool(ctx, datastore.DefaultPoolName)
+				w := dbPool.DB(ctx, false)
 				require.NotNil(t, w, "write database should be available")
 
-				r := srv.DB(ctx, true)
+				r := dbPool.DB(ctx, true)
 				require.NotNil(t, r, "read database should be available")
 
 				rows, err := w.Raw(tc.query).Rows()
@@ -188,10 +192,11 @@ func (s *DatastoreTestSuite) TestServiceDatastoreRead() {
 				readDB := frame.WithDatastoreConnection(db.GetDS(ctx).String(), true)
 				srv.Init(ctx, mainDB, readDB)
 
-				w := srv.DB(ctx, false)
+				dbPool := srv.DatastoreManager().GetPool(ctx, datastore.DefaultPoolName)
+				w := dbPool.DB(ctx, false)
 				require.NotNil(t, w, "write database should be available")
 
-				r := srv.DB(ctx, true)
+				r := dbPool.DB(ctx, true)
 				require.NotNil(t, r, "read database should be available")
 
 				rd, _ := r.DB()
@@ -224,7 +229,8 @@ func (s *DatastoreTestSuite) TestServiceDatastoreNotSet() {
 			t.Run(tc.name, func(t *testing.T) {
 				ctx, srv := frame.NewService(tc.serviceName)
 
-				w := srv.DB(ctx, false)
+				dbPool := srv.DatastoreManager().GetPool(ctx, datastore.DefaultPoolName)
+				w := dbPool.DB(ctx, false)
 				require.Nil(t, w, "no database should be available when none is configured")
 			})
 		}
@@ -236,7 +242,7 @@ func (s *DatastoreTestSuite) TestDBPropertiesFromMap() {
 	testCases := []struct {
 		name     string
 		propsMap map[string]any
-		want     frame.JSONMap
+		want     datastore.JSONMap
 	}{
 		{
 			name: "happy case with various data types",
@@ -248,7 +254,7 @@ func (s *DatastoreTestSuite) TestDBPropertiesFromMap() {
 				"e": []any{23, 35, 37, 55},
 				"f": map[string]any{"x": "t", "y": "g"},
 			},
-			want: frame.JSONMap{
+			want: datastore.JSONMap{
 				"a": "a",
 				"b": "751",
 				"c": "23.5",
@@ -277,7 +283,7 @@ func (s *DatastoreTestSuite) TestDBPropertiesFromMap() {
 func (s *DatastoreTestSuite) TestDBPropertiesToMap() {
 	testCases := []struct {
 		name    string
-		dbProps frame.JSONMap
+		dbProps datastore.JSONMap
 		want    map[string]any
 	}{
 		{
@@ -290,7 +296,7 @@ func (s *DatastoreTestSuite) TestDBPropertiesToMap() {
 				"e": []any{23.0, 35.0, 37.0, 55.0},
 				"f": map[string]any{"x": "t", "y": "g"},
 			},
-			dbProps: frame.JSONMap{
+			dbProps: datastore.JSONMap{
 				"a": "a",
 				"b": 751,
 				"c": "23.5",

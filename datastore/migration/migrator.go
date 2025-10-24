@@ -1,7 +1,8 @@
-package frame
+package migration
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"os"
@@ -12,9 +13,21 @@ import (
 
 	"github.com/pitabwire/util"
 	"gorm.io/gorm"
+
+	"github.com/pitabwire/frame/data"
 )
 
-type MigrationPatch struct {
+// Migration Our simple table holding all the migration data.
+type Migration struct {
+	data.BaseModel
+
+	Name        string `gorm:"type:text;uniqueIndex:idx_migrations_name"`
+	Patch       string `gorm:"type:text"`
+	RevertPatch string `gorm:"type:text"`
+	AppliedAt   sql.NullTime
+}
+
+type Patch struct {
 	// Name is a simple description/name of this migration.
 	Name string
 	// Patch is the SQL to execute for an upgrade.
@@ -23,16 +36,23 @@ type MigrationPatch struct {
 	RevertPatch string
 }
 
-type DatastoreMigrator struct {
-	pool   *Pool
-	logger *util.LogEntry
+type datastoreMigrator struct {
+	dbGetter func(ctx context.Context) *gorm.DB
+	logger   *util.LogEntry
 }
 
-func (m *DatastoreMigrator) DB(ctx context.Context) *gorm.DB {
-	return m.pool.DB(ctx, false)
+func NewMigrator(ctx context.Context, dbGetter func(ctx context.Context) *gorm.DB) Migrator {
+	return &datastoreMigrator{
+		dbGetter: dbGetter,
+		logger:   util.Log(ctx),
+	}
 }
 
-func (m *DatastoreMigrator) scanForNewMigrations(ctx context.Context, migrationsDirPath string) error {
+func (m *datastoreMigrator) DB(ctx context.Context) *gorm.DB {
+	return m.dbGetter(ctx)
+}
+
+func (m *datastoreMigrator) ScanMigrationFiles(ctx context.Context, migrationsDirPath string) error {
 	// Get a list of migration files
 	files, err := filepath.Glob(migrationsDirPath + "/*.sql")
 	if err != nil {
@@ -53,7 +73,7 @@ func (m *DatastoreMigrator) scanForNewMigrations(ctx context.Context, migrations
 		if err0 != nil {
 			m.logger.WithError(err0).
 				WithField("file", filename).
-				Error("scanForNewMigrations -- Problem reading migration file content")
+				Error("ScanMigrationFiles -- Problem reading migration file content")
 			continue
 		}
 
@@ -75,14 +95,14 @@ func (m *DatastoreMigrator) scanForNewMigrations(ctx context.Context, migrations
 		if err0 != nil {
 			m.logger.WithError(err0).
 				WithField("file", filename).
-				Error("scanForNewMigrations -- new migration could not be saved")
+				Error("ScanMigrationFiles -- new migration could not be saved")
 			return err0
 		}
 	}
 	return nil
 }
 
-func (m *DatastoreMigrator) SaveMigrationString(
+func (m *datastoreMigrator) SaveMigrationString(
 	ctx context.Context,
 	filename string,
 	migrationPatch string,
@@ -98,7 +118,7 @@ func (m *DatastoreMigrator) SaveMigrationString(
 
 	err = m.DB(ctx).Model(&migration).First(&migration, "name = ?", filename).Error
 	if err != nil {
-		if !ErrorIsNoRows(err) {
+		if !data.ErrorIsNoRows(err) {
 			return err
 		}
 
@@ -131,7 +151,7 @@ func (m *DatastoreMigrator) SaveMigrationString(
 	return nil
 }
 
-func (m *DatastoreMigrator) ApplyNewMigrations(ctx context.Context) error {
+func (m *datastoreMigrator) ApplyNewMigrations(ctx context.Context) error {
 	var unAppliedMigrations []*Migration
 	err := m.DB(ctx).Where("applied_at IS NULL").Find(&unAppliedMigrations).Error
 	if err != nil {
@@ -156,87 +176,5 @@ func (m *DatastoreMigrator) ApplyNewMigrations(ctx context.Context) error {
 		m.logger.WithField("migration", migration.Name).Debug("ApplyNewMigrations -- Successfully applied migration")
 	}
 
-	return nil
-}
-
-func (s *Service) NewMigrator(ctx context.Context, poolOpts ...*Pool) *DatastoreMigrator {
-	var pool *Pool
-	if len(poolOpts) > 0 {
-		pool = poolOpts[0]
-	} else {
-		pool = s.DBPool()
-	}
-
-	return &DatastoreMigrator{
-		pool:   pool,
-		logger: s.Log(ctx),
-	}
-}
-
-func (s *Service) SaveMigration(ctx context.Context, migrationPatches ...*MigrationPatch) error {
-	pool := s.DBPool()
-	return s.SaveMigrationWithPool(ctx, pool, migrationPatches...)
-}
-
-func (s *Service) SaveMigrationWithPool(ctx context.Context, pool *Pool, migrationPatches ...*MigrationPatch) error {
-	migrationExecutor := s.NewMigrator(ctx, pool)
-	for _, migrationPatch := range migrationPatches {
-		err := migrationExecutor.SaveMigrationString(
-			ctx,
-			migrationPatch.Name,
-			migrationPatch.Patch,
-			migrationPatch.RevertPatch,
-		)
-		if err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// MigrateDatastore finds missing migrations and records them in the database.
-func (s *Service) MigrateDatastore(ctx context.Context, migrationsDirPath string, migrations ...any) error {
-	pool := s.DBPool()
-	return s.MigratePool(ctx, pool, migrationsDirPath, migrations...)
-}
-
-// MigratePool finds missing migrations and records them in the database.
-func (s *Service) MigratePool(ctx context.Context, pool *Pool, migrationsDirPath string, migrations ...any) error {
-	if migrationsDirPath == "" {
-		migrationsDirPath = "./migrations/0001"
-	}
-
-	migrtor := pool.DB(ctx, false).Migrator()
-	// Ensure the migration schema exists
-	if !migrtor.HasTable(&Migration{}) {
-		err := migrtor.CreateTable(&Migration{})
-		if err != nil {
-			s.Log(ctx).WithError(err).Error("MigrateDatastore -- couldn't create migration table")
-			return err
-		}
-	}
-
-	if len(migrations) > 0 {
-		// Migrate the schema
-		err := migrtor.AutoMigrate(migrations...)
-		if err != nil {
-			s.Log(ctx).WithError(err).Error("MigrateDatastore -- couldn't auto migrate")
-			return err
-		}
-	}
-
-	migrationExecutor := s.NewMigrator(ctx, pool)
-
-	err := migrationExecutor.scanForNewMigrations(ctx, migrationsDirPath)
-	if err != nil {
-		s.Log(ctx).WithError(err).Error("MigrateDatastore -- Error scanning for new migrations")
-		return err
-	}
-
-	err = migrationExecutor.ApplyNewMigrations(ctx)
-	if err != nil {
-		s.Log(ctx).WithError(err).Error("MigrateDatastore -- Error applying migrations ")
-		return err
-	}
 	return nil
 }

@@ -1,4 +1,4 @@
-package frame
+package pool
 
 import (
 	"context"
@@ -12,6 +12,7 @@ import (
 	glogger "gorm.io/gorm/logger"
 
 	"github.com/pitabwire/frame/config"
+	"github.com/pitabwire/frame/data"
 )
 
 const (
@@ -20,14 +21,11 @@ const (
 	tintAttrCodeQuery    = 2
 )
 
-func datbaseLogger(ctx context.Context, s *Service) glogger.Interface {
+func datastoreLogger(ctx context.Context, cfg config.ConfigurationDatabaseTracing) glogger.Interface {
 	logQueries := false
 	slowQueryThreshold := config.DefaultSlowQueryThreshold
-	if s.Config() != nil {
-		cfg, ok := s.Config().(config.ConfigurationDatabase)
-		if ok {
-			slowQueryThreshold = cfg.GetDatabaseSlowQueryLogThreshold()
-		}
+	if cfg != nil {
+		slowQueryThreshold = cfg.GetDatabaseSlowQueryLogThreshold()
 		logQueries = cfg.CanDatabaseTraceQueries()
 	}
 
@@ -89,7 +87,7 @@ func (l *dbLogger) Trace(ctx context.Context, begin time.Time, fc func() (string
 		queryIsSlow = true
 	}
 
-	if err != nil && !ErrorIsNoRows(err) {
+	if err != nil && !data.ErrorIsNoRows(err) {
 		log.WithError(err).Error(" Error running query ")
 		return
 	}

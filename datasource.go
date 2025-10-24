@@ -11,6 +11,10 @@ import (
 // Constants for database drivers.
 const (
 	PostgresScheme = "postgres"
+	MysqlScheme    = "mysql://"
+	MemScheme      = "mem://"
+	RedisScheme    = "redis://"
+	NatsScheme     = "nats://"
 )
 
 // A DataSource for conveniently handling a URI connection string.
@@ -30,7 +34,7 @@ func (d DataSource) ToArray() []DataSource {
 }
 
 func (d DataSource) IsMySQL() bool {
-	return strings.HasPrefix(string(d), "mysql:")
+	return strings.HasPrefix(string(d), MysqlScheme)
 }
 
 func (d DataSource) IsPostgres() bool {
@@ -66,7 +70,7 @@ func (d DataSource) IsDB() bool {
 }
 
 func (d DataSource) IsRedis() bool {
-	return strings.HasPrefix(string(d), "redis://")
+	return strings.HasPrefix(string(d), RedisScheme)
 }
 
 func (d DataSource) IsCache() bool {
@@ -74,11 +78,11 @@ func (d DataSource) IsCache() bool {
 }
 
 func (d DataSource) IsNats() bool {
-	return strings.HasPrefix(string(d), "nats://")
+	return strings.HasPrefix(string(d), NatsScheme)
 }
 
 func (d DataSource) IsMem() bool {
-	return strings.HasPrefix(string(d), "mem://")
+	return strings.HasPrefix(string(d), MemScheme)
 }
 
 func (d DataSource) IsQueue() bool {

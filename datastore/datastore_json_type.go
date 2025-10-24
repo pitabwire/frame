@@ -1,4 +1,4 @@
-package frame
+package datastore
 
 import (
 	"bytes"

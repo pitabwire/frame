@@ -20,6 +20,7 @@ import (
 	"github.com/pitabwire/frame/cache"
 	"github.com/pitabwire/frame/client"
 	"github.com/pitabwire/frame/config"
+	"github.com/pitabwire/frame/datastore"
 	"github.com/pitabwire/frame/events"
 	"github.com/pitabwire/frame/localization"
 	"github.com/pitabwire/frame/queue"
@@ -68,8 +69,6 @@ type Service struct {
 	grpcListener               net.Listener
 	grpcPort                   string
 
-	dataStores sync.Map
-
 	healthCheckers  []Checker
 	healthCheckPath string
 	startup         func(ctx context.Context, s *Service)
@@ -84,6 +83,7 @@ type Service struct {
 	cacheManager        cache.Manager
 	queueManager        queue.Manager
 	eventsManager       events.Manager
+	datastoreManager    datastore.Manager
 
 	telemetryManager telemetry.Manager
 

@@ -1,45 +1,52 @@
-package framedata
+package datastore
 
 import (
 	"context"
 	"fmt"
 	"time"
 
-	"github.com/pitabwire/frame"
+	"github.com/pitabwire/frame/data"
+	"github.com/pitabwire/frame/datastore/pool"
 	"github.com/pitabwire/frame/workerpool"
 )
 
 // BaseRepository provides generic CRUD operations for any model type.
 // T is the model type (e.g., *models.Room).
 type BaseRepository[T any] interface {
-	Svc() *frame.Service
+	Svc() pool.Pool
 	GetByID(ctx context.Context, id string) (T, error)
 	GetLastestBy(ctx context.Context, properties map[string]any) (T, error)
 	GetAllBy(ctx context.Context, properties map[string]any, offset, limit int) ([]T, error)
-	Search(ctx context.Context, query *SearchQuery) (workerpool.JobResultPipe[[]T], error)
+	Search(ctx context.Context, query *data.SearchQuery) (workerpool.JobResultPipe[[]T], error)
 	Count(ctx context.Context) (int64, error)
 	Save(ctx context.Context, entity T) error
 	Delete(ctx context.Context, id string) error
 }
 
 // baseRepository is the concrete implementation of BaseRepository.
-type baseRepository[T frame.BaseModelI] struct {
-	service *frame.Service
+type baseRepository[T data.BaseModelI] struct {
+	dbPool  pool.Pool
+	workMan workerpool.Manager
 	// modelFactory creates a new instance of T for queries
 	modelFactory func() T
 }
 
 // NewBaseRepository creates a new base repository instance.
 // modelFactory should return a pointer to a new model instance (e.g., func() *models.Room { return &models.Room{} }).
-func NewBaseRepository[T frame.BaseModelI](service *frame.Service, modelFactory func() T) BaseRepository[T] {
+func NewBaseRepository[T data.BaseModelI](
+	dbPool pool.Pool,
+	workMan workerpool.Manager,
+	modelFactory func() T,
+) BaseRepository[T] {
 	return &baseRepository[T]{
-		service:      service,
+		dbPool:       dbPool,
+		workMan:      workMan,
 		modelFactory: modelFactory,
 	}
 }
 
-func (br *baseRepository[T]) Svc() *frame.Service {
-	return br.service
+func (br *baseRepository[T]) Svc() pool.Pool {
+	return br.dbPool
 }
 
 // GetByID retrieves an entity by its ID.
@@ -104,50 +111,58 @@ func (br *baseRepository[T]) GetAllBy(ctx context.Context, properties map[string
 	return entities, err
 }
 
-func (br *baseRepository[T]) Search(ctx context.Context, query *SearchQuery) (workerpool.JobResultPipe[[]T], error) {
-	return StableSearch[T](ctx, br.service, query, func(ctx context.Context, query *SearchQuery) ([]T, error) {
-		var entities []T
+func (br *baseRepository[T]) Search(
+	ctx context.Context,
+	query *data.SearchQuery,
+) (workerpool.JobResultPipe[[]T], error) {
+	return data.StableSearch[T](
+		ctx,
+		br.workMan,
+		query,
+		func(ctx context.Context, query *data.SearchQuery) ([]T, error) {
+			var entities []T
 
-		paginator := query.Pagination
+			paginator := query.Pagination
 
-		db := br.Svc().DB(ctx, true).
-			Limit(paginator.Limit).Offset(paginator.Offset)
+			db := br.Svc().DB(ctx, true).
+				Limit(paginator.Limit).Offset(paginator.Offset)
 
-		var startAt any
-		var stopAt any
-		for k, v := range query.Fields {
-			if k == "start_date" {
-				startAt = v
-				continue
+			var startAt any
+			var stopAt any
+			for k, v := range query.Fields {
+				if k == "start_date" {
+					startAt = v
+					continue
+				}
+				if k == "end_date" {
+					stopAt = v
+					continue
+				}
+
+				db = db.Where(fmt.Sprintf("%s = ? ", k), v)
 			}
-			if k == "end_date" {
-				stopAt = v
-				continue
+
+			if startAt != nil && stopAt != nil {
+				startDate, ok1 := startAt.(*time.Time)
+				endDate, ok2 := stopAt.(*time.Time)
+				if ok1 && ok2 {
+					db = db.Where(
+						"created_at BETWEEN ? AND ? ",
+						startDate.Format("2020-01-31T00:00:00Z"),
+						endDate.Format("2020-01-31T00:00:00Z"),
+					)
+				}
 			}
 
-			db = db.Where(fmt.Sprintf("%s = ? ", k), v)
-		}
-
-		if startAt != nil && stopAt != nil {
-			startDate, ok1 := startAt.(*time.Time)
-			endDate, ok2 := stopAt.(*time.Time)
-			if ok1 && ok2 {
-				db = db.Where(
-					"created_at BETWEEN ? AND ? ",
-					startDate.Format("2020-01-31T00:00:00Z"),
-					endDate.Format("2020-01-31T00:00:00Z"),
-				)
+			if query.Query != "" {
+				for searchField, oprt := range query.QueryFields {
+					db = db.Where(fmt.Sprintf(" %s %s ", searchField, oprt), query.Query)
+				}
 			}
-		}
 
-		if query.Query != "" {
-			for searchField, oprt := range query.QueryFields {
-				db = db.Where(fmt.Sprintf(" %s %s ", searchField, oprt), query.Query)
-			}
-		}
+			err := db.Find(&entities).Error
 
-		err := db.Find(&entities).Error
-
-		return entities, err
-	})
+			return entities, err
+		},
+	)
 }

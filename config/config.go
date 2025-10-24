@@ -483,6 +483,9 @@ type ConfigurationDatabase interface {
 	GetMaxConnectionLifeTimeInSeconds() time.Duration
 
 	GetDatabaseMigrationPath() string
+}
+
+type ConfigurationDatabaseTracing interface {
 	CanDatabaseTraceQueries() bool
 	GetDatabaseSlowQueryLogThreshold() time.Duration
 }
@@ -525,6 +528,9 @@ func (c *ConfigurationDefault) GetMaxConnectionLifeTimeInSeconds() time.Duration
 func (c *ConfigurationDefault) GetDatabaseMigrationPath() string {
 	return c.DatabaseMigrationPath
 }
+
+var _ ConfigurationDatabaseTracing = new(ConfigurationDefault)
+
 func (c *ConfigurationDefault) CanDatabaseTraceQueries() bool {
 	return c.DatabaseTraceQueries
 }

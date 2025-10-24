@@ -1,4 +1,4 @@
-package framedata_test
+package data_test
 
 import (
 	"context"
@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	"github.com/pitabwire/frame"
-	"github.com/pitabwire/frame/framedata"
+	"github.com/pitabwire/frame/data"
 	"github.com/pitabwire/frame/frametests"
 	"github.com/pitabwire/frame/frametests/definition"
 	"github.com/pitabwire/frame/frametests/deps/testnats"
@@ -48,7 +48,7 @@ func (s *SearchTestSuite) TestNewSearchQuery() {
 		resultPage    int
 		resultCount   int
 		expectError   bool
-		expectedQuery *framedata.SearchQuery
+		expectedQuery *data.SearchQuery
 	}{
 		{
 			name:        "valid query with default count",
@@ -57,10 +57,10 @@ func (s *SearchTestSuite) TestNewSearchQuery() {
 			resultPage:  0,
 			resultCount: 0,
 			expectError: false,
-			expectedQuery: &framedata.SearchQuery{
+			expectedQuery: &data.SearchQuery{
 				Query:  "test query",
 				Fields: map[string]any{"field1": "value1"},
-				Pagination: &framedata.Paginator{
+				Pagination: &data.Paginator{
 					Offset:    0,
 					Limit:     50, // defaultBatchSize
 					BatchSize: 50,
@@ -74,10 +74,10 @@ func (s *SearchTestSuite) TestNewSearchQuery() {
 			resultPage:  1,
 			resultCount: 25,
 			expectError: false,
-			expectedQuery: &framedata.SearchQuery{
+			expectedQuery: &data.SearchQuery{
 				Query:  "search term",
 				Fields: map[string]any{"name": "John", "age": 30},
-				Pagination: &framedata.Paginator{
+				Pagination: &data.Paginator{
 					Offset:    25,
 					Limit:     25,
 					BatchSize: 25,
@@ -91,10 +91,10 @@ func (s *SearchTestSuite) TestNewSearchQuery() {
 			resultPage:  0,
 			resultCount: 100,
 			expectError: false,
-			expectedQuery: &framedata.SearchQuery{
+			expectedQuery: &data.SearchQuery{
 				Query:  "large query",
 				Fields: map[string]any{},
-				Pagination: &framedata.Paginator{
+				Pagination: &data.Paginator{
 					Offset:    0,
 					Limit:     100,
 					BatchSize: 50, // defaultBatchSize
@@ -108,10 +108,10 @@ func (s *SearchTestSuite) TestNewSearchQuery() {
 			resultPage:  2,
 			resultCount: 10,
 			expectError: false,
-			expectedQuery: &framedata.SearchQuery{
+			expectedQuery: &data.SearchQuery{
 				Query:  "",
 				Fields: map[string]any{"status": "active"},
-				Pagination: &framedata.Paginator{
+				Pagination: &data.Paginator{
 					Offset:    20,
 					Limit:     10,
 					BatchSize: 10,
@@ -125,10 +125,10 @@ func (s *SearchTestSuite) TestNewSearchQuery() {
 			resultPage:  0,
 			resultCount: 15,
 			expectError: false,
-			expectedQuery: &framedata.SearchQuery{
+			expectedQuery: &data.SearchQuery{
 				Query:  "test",
 				Fields: nil,
-				Pagination: &framedata.Paginator{
+				Pagination: &data.Paginator{
 					Offset:    0,
 					Limit:     15,
 					BatchSize: 15,
@@ -139,7 +139,7 @@ func (s *SearchTestSuite) TestNewSearchQuery() {
 
 	for _, tc := range testCases {
 		s.Run(tc.name, func() {
-			result := framedata.NewSearchQuery(tc.query, tc.fields, tc.resultPage, tc.resultCount)
+			result := data.NewSearchQuery(tc.query, tc.fields, tc.resultPage, tc.resultCount)
 
 			s.NotNil(result)
 			s.Equal(tc.expectedQuery.Query, result.Query)
@@ -199,7 +199,7 @@ func (s *SearchTestSuite) TestPaginatorCanLoad() {
 
 	for _, tc := range testCases {
 		s.Run(tc.name, func() {
-			paginator := &framedata.Paginator{
+			paginator := &data.Paginator{
 				Offset: tc.offset,
 				Limit:  tc.limit,
 			}
@@ -286,7 +286,7 @@ func (s *SearchTestSuite) TestPaginatorStop() {
 
 	for _, tc := range testCases {
 		s.Run(tc.name, func() {
-			paginator := &framedata.Paginator{
+			paginator := &data.Paginator{
 				Offset:    tc.initialOffset,
 				Limit:     tc.initialLimit,
 				BatchSize: tc.initialBatchSize,
@@ -310,23 +310,23 @@ func (s *SearchTestSuite) TestStableSearchWithDependencies() {
 	frametests.WithTestDependancies(s.T(), depOptions, func(t *testing.T, depOpt *definition.DependancyOption) {
 		testCases := []struct {
 			name          string
-			query         *framedata.SearchQuery
-			searchFunc    func(ctx context.Context, query *framedata.SearchQuery) ([]*TestItem, error)
+			query         *data.SearchQuery
+			searchFunc    func(ctx context.Context, query *data.SearchQuery) ([]*TestItem, error)
 			expectedItems int
 			expectedError bool
 		}{
 			{
 				name: "successful search with single batch",
-				query: &framedata.SearchQuery{
+				query: &data.SearchQuery{
 					Query:  "test",
 					Fields: map[string]any{"category": "books"},
-					Pagination: &framedata.Paginator{
+					Pagination: &data.Paginator{
 						Offset:    0,
 						Limit:     10,
 						BatchSize: 10,
 					},
 				},
-				searchFunc: func(_ context.Context, _ *framedata.SearchQuery) ([]*TestItem, error) {
+				searchFunc: func(_ context.Context, _ *data.SearchQuery) ([]*TestItem, error) {
 					return []*TestItem{
 						{ID: "1", Name: "Item 1"},
 						{ID: "2", Name: "Item 2"},
@@ -337,10 +337,10 @@ func (s *SearchTestSuite) TestStableSearchWithDependencies() {
 			},
 			{
 				name: "successful search with multiple batches",
-				query: &framedata.SearchQuery{
+				query: &data.SearchQuery{
 					Query:  "multi",
 					Fields: map[string]any{},
-					Pagination: &framedata.Paginator{
+					Pagination: &data.Paginator{
 						Offset:    0,
 						Limit:     25,
 						BatchSize: 10,
@@ -352,16 +352,16 @@ func (s *SearchTestSuite) TestStableSearchWithDependencies() {
 			},
 			{
 				name: "search function returns error",
-				query: &framedata.SearchQuery{
+				query: &data.SearchQuery{
 					Query:  "error",
 					Fields: map[string]any{},
-					Pagination: &framedata.Paginator{
+					Pagination: &data.Paginator{
 						Offset:    0,
 						Limit:     10,
 						BatchSize: 5,
 					},
 				},
-				searchFunc: func(_ context.Context, _ *framedata.SearchQuery) ([]*TestItem, error) {
+				searchFunc: func(_ context.Context, _ *data.SearchQuery) ([]*TestItem, error) {
 					return nil, errors.New("search failed")
 				},
 				expectedItems: 0,
@@ -369,16 +369,16 @@ func (s *SearchTestSuite) TestStableSearchWithDependencies() {
 			},
 			{
 				name: "empty search results",
-				query: &framedata.SearchQuery{
+				query: &data.SearchQuery{
 					Query:  "empty",
 					Fields: map[string]any{},
-					Pagination: &framedata.Paginator{
+					Pagination: &data.Paginator{
 						Offset:    0,
 						Limit:     10,
 						BatchSize: 5,
 					},
 				},
-				searchFunc: func(_ context.Context, _ *framedata.SearchQuery) ([]*TestItem, error) {
+				searchFunc: func(_ context.Context, _ *data.SearchQuery) ([]*TestItem, error) {
 					return []*TestItem{}, nil
 				},
 				expectedItems: 0,
@@ -393,8 +393,8 @@ func (s *SearchTestSuite) TestStableSearchWithDependencies() {
 // runStableSearchTests is a helper function to reduce complexity in TestStableSearchWithDependencies.
 func (s *SearchTestSuite) runStableSearchTests(t *testing.T, depOpt *definition.DependancyOption, testCases []struct {
 	name          string
-	query         *framedata.SearchQuery
-	searchFunc    func(ctx context.Context, query *framedata.SearchQuery) ([]*TestItem, error)
+	query         *data.SearchQuery
+	searchFunc    func(ctx context.Context, query *data.SearchQuery) ([]*TestItem, error)
 	expectedItems int
 	expectedError bool
 }) {
@@ -402,7 +402,7 @@ func (s *SearchTestSuite) runStableSearchTests(t *testing.T, depOpt *definition.
 		t.Run(tc.name, func(tt *testing.T) {
 			ctx := context.Background()
 
-			// Create a service with the test dependencies
+			// Create a dbPool with the test dependencies
 			ctx, svc := frame.NewServiceWithContext(ctx, "search-test",
 				frame.WithDatastoreConnection(depOpt.ByIsDatabase(ctx).GetDS(ctx).String(), false),
 				frame.WithRegisterPublisher("test-queue", depOpt.ByIsQueue(ctx).GetDS(ctx).String()),
@@ -410,7 +410,7 @@ func (s *SearchTestSuite) runStableSearchTests(t *testing.T, depOpt *definition.
 			defer svc.Stop(ctx)
 
 			// Execute StableSearch
-			jobPipe, err := framedata.StableSearch(ctx, svc, tc.query, tc.searchFunc)
+			jobPipe, err := data.StableSearch(ctx, svc.WorkManager(), tc.query, tc.searchFunc)
 
 			if tc.expectedError {
 				s.handleErrorCase(tt, err, jobPipe)
@@ -459,9 +459,9 @@ func (s *SearchTestSuite) handleSuccessCase(
 }
 
 // createMultiBatchSearchFunc creates a search function that returns data in multiple batches.
-func createMultiBatchSearchFunc() func(ctx context.Context, query *framedata.SearchQuery) ([]*TestItem, error) {
+func createMultiBatchSearchFunc() func(ctx context.Context, query *data.SearchQuery) ([]*TestItem, error) {
 	callCount := 0
-	return func(_ context.Context, query *framedata.SearchQuery) ([]*TestItem, error) {
+	return func(_ context.Context, query *data.SearchQuery) ([]*TestItem, error) {
 		callCount++
 
 		// Simulate pagination by returning different data based on offset
@@ -522,7 +522,7 @@ func (s *SearchTestSuite) TestProfileIDHandling() {
 
 	for _, tc := range testCases {
 		s.Run(tc.name, func() {
-			result := framedata.NewSearchQuery(tc.query, tc.fields, 0, 10)
+			result := data.NewSearchQuery(tc.query, tc.fields, 0, 10)
 			s.NotNil(result)
 
 			s.Equal(tc.query, result.Query)
@@ -536,13 +536,13 @@ func (s *SearchTestSuite) TestProfileIDHandling() {
 func (s *SearchTestSuite) TestPaginatorEdgeCases() {
 	testCases := []struct {
 		name           string
-		paginator      *framedata.Paginator
+		paginator      *data.Paginator
 		operations     []paginatorOperation
 		expectedStates []paginatorState
 	}{
 		{
 			name: "multiple stop calls with varying loads",
-			paginator: &framedata.Paginator{
+			paginator: &data.Paginator{
 				Offset:    0,
 				Limit:     20,
 				BatchSize: 5,
@@ -562,7 +562,7 @@ func (s *SearchTestSuite) TestPaginatorEdgeCases() {
 		},
 		{
 			name: "boundary conditions",
-			paginator: &framedata.Paginator{
+			paginator: &data.Paginator{
 				Offset:    18,
 				Limit:     20,
 				BatchSize: 5,
@@ -611,7 +611,7 @@ func (s *SearchTestSuite) TestStableSearchConcurrency() {
 	frametests.WithTestDependancies(s.T(), depOptions, func(t *testing.T, depOpt *definition.DependancyOption) {
 		ctx := context.Background()
 
-		// Create a service with the test dependencies
+		// Create a dbPool with the test dependencies
 		ctx, svc := frame.NewServiceWithContext(ctx, "search-test",
 			frame.WithDatastoreConnection(depOpt.ByIsDatabase(ctx).GetDS(ctx).String(), false),
 			frame.WithRegisterPublisher("test-queue", depOpt.ByIsQueue(ctx).GetDS(ctx).String()),
@@ -622,7 +622,7 @@ func (s *SearchTestSuite) TestStableSearchConcurrency() {
 		results := make(chan int, numConcurrentSearches)
 		concurrentErrors := make(chan error, numConcurrentSearches)
 
-		searchFunc := func(_ context.Context, _ *framedata.SearchQuery) ([]*TestItem, error) {
+		searchFunc := func(_ context.Context, _ *data.SearchQuery) ([]*TestItem, error) {
 			// Simulate some processing time
 			return []*TestItem{
 				{ID: "1", Name: "Item 1"},
@@ -631,17 +631,17 @@ func (s *SearchTestSuite) TestStableSearchConcurrency() {
 
 		for i := range numConcurrentSearches {
 			go func(searchID int) {
-				query := &framedata.SearchQuery{
+				query := &data.SearchQuery{
 					Query:  "concurrent test",
 					Fields: map[string]any{"search_id": searchID},
-					Pagination: &framedata.Paginator{
+					Pagination: &data.Paginator{
 						Offset:    0,
 						Limit:     10,
 						BatchSize: 5,
 					},
 				}
 
-				jobPipe, err := framedata.StableSearch(ctx, svc, query, searchFunc)
+				jobPipe, err := data.StableSearch(ctx, svc.WorkManager(), query, searchFunc)
 				if err != nil {
 					concurrentErrors <- err
 					return
@@ -690,7 +690,7 @@ func (s *SearchTestSuite) TestStableSearchMemoryManagement() {
 	frametests.WithTestDependancies(s.T(), depOptions, func(t *testing.T, depOpt *definition.DependancyOption) {
 		ctx := context.Background()
 
-		// Create a service with the test dependencies
+		// Create a dbPool with the test dependencies
 		ctx, svc := frame.NewServiceWithContext(ctx, "search-test",
 			frame.WithDatastoreConnection(depOpt.ByIsDatabase(ctx).GetDS(ctx).String(), false),
 			frame.WithRegisterPublisher("test-queue", depOpt.ByIsQueue(ctx).GetDS(ctx).String()),
@@ -698,7 +698,7 @@ func (s *SearchTestSuite) TestStableSearchMemoryManagement() {
 		defer svc.Stop(ctx)
 
 		// Test with large result sets to check memory handling
-		largeSearchFunc := func(_ context.Context, query *framedata.SearchQuery) ([]*TestItem, error) {
+		largeSearchFunc := func(_ context.Context, query *data.SearchQuery) ([]*TestItem, error) {
 			items := make([]*TestItem, query.Pagination.BatchSize)
 			for i := range query.Pagination.BatchSize {
 				items[i] = &TestItem{
@@ -709,17 +709,17 @@ func (s *SearchTestSuite) TestStableSearchMemoryManagement() {
 			return items, nil
 		}
 
-		query := &framedata.SearchQuery{
+		query := &data.SearchQuery{
 			Query:  "memory test",
 			Fields: map[string]any{"type": "large"},
-			Pagination: &framedata.Paginator{
+			Pagination: &data.Paginator{
 				Offset:    0,
 				Limit:     1000, // Large limit
 				BatchSize: 50,   // Reasonable batch size
 			},
 		}
 
-		jobPipe, err := framedata.StableSearch(ctx, svc, query, largeSearchFunc)
+		jobPipe, err := data.StableSearch(ctx, svc.WorkManager(), query, largeSearchFunc)
 		require.NoError(t, err)
 		require.NotNil(t, jobPipe)
 
@@ -797,7 +797,7 @@ func (s *SearchTestSuite) TestFieldTypeValidation() {
 
 	for _, tc := range testCases {
 		s.Run(tc.name, func() {
-			result := framedata.NewSearchQuery("test query", tc.fields, 0, 10)
+			result := data.NewSearchQuery("test query", tc.fields, 0, 10)
 
 			s.NotNil(result)
 			s.Equal(tc.fields, result.Fields)
@@ -836,7 +836,7 @@ func (s *SearchTestSuite) TestPaginatorStressTesting() {
 
 	for _, tc := range testCases {
 		s.Run(tc.name, func() {
-			paginator := &framedata.Paginator{
+			paginator := &data.Paginator{
 				Offset:    0,
 				Limit:     tc.limit,
 				BatchSize: tc.batchSize,
@@ -872,12 +872,12 @@ func (s *SearchTestSuite) TestStableSearchErrorRecovery() {
 	frametests.WithTestDependancies(s.T(), depOptions, func(t *testing.T, depOpt *definition.DependancyOption) {
 		testCases := []struct {
 			name       string
-			searchFunc func(ctx context.Context, query *framedata.SearchQuery) ([]*TestItem, error)
+			searchFunc func(ctx context.Context, query *data.SearchQuery) ([]*TestItem, error)
 			expectErr  bool
 		}{
 			{
 				name: "context cancellation",
-				searchFunc: func(_ context.Context, _ *framedata.SearchQuery) ([]*TestItem, error) {
+				searchFunc: func(_ context.Context, _ *data.SearchQuery) ([]*TestItem, error) {
 					// Cancel context during search
 					return nil, context.Canceled
 				},
@@ -885,21 +885,21 @@ func (s *SearchTestSuite) TestStableSearchErrorRecovery() {
 			},
 			{
 				name: "timeout error",
-				searchFunc: func(_ context.Context, _ *framedata.SearchQuery) ([]*TestItem, error) {
+				searchFunc: func(_ context.Context, _ *data.SearchQuery) ([]*TestItem, error) {
 					return nil, context.DeadlineExceeded
 				},
 				expectErr: true,
 			},
 			{
 				name: "custom error",
-				searchFunc: func(_ context.Context, _ *framedata.SearchQuery) ([]*TestItem, error) {
+				searchFunc: func(_ context.Context, _ *data.SearchQuery) ([]*TestItem, error) {
 					return nil, errors.New("database connection failed")
 				},
 				expectErr: true,
 			},
 			{
 				name: "panic recovery simulation",
-				searchFunc: func(_ context.Context, _ *framedata.SearchQuery) ([]*TestItem, error) {
+				searchFunc: func(_ context.Context, _ *data.SearchQuery) ([]*TestItem, error) {
 					// Simulate a recoverable error condition
 					return nil, errors.New("panic: runtime error")
 				},
@@ -914,31 +914,31 @@ func (s *SearchTestSuite) TestStableSearchErrorRecovery() {
 // runErrorRecoveryTests is a helper function to reduce complexity in TestStableSearchErrorRecovery.
 func (s *SearchTestSuite) runErrorRecoveryTests(t *testing.T, depOpt *definition.DependancyOption, testCases []struct {
 	name       string
-	searchFunc func(ctx context.Context, query *framedata.SearchQuery) ([]*TestItem, error)
+	searchFunc func(ctx context.Context, query *data.SearchQuery) ([]*TestItem, error)
 	expectErr  bool
 }) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(tt *testing.T) {
 			ctx := context.Background()
 
-			// Create a service with the test dependencies
+			// Create a dbPool with the test dependencies
 			ctx, svc := frame.NewServiceWithContext(ctx, "search-test",
 				frame.WithDatastoreConnection(depOpt.ByIsDatabase(ctx).GetDS(ctx).String(), false),
 				frame.WithRegisterPublisher("test-queue", depOpt.ByIsQueue(ctx).GetDS(ctx).String()),
 			)
 			defer svc.Stop(ctx)
 
-			query := &framedata.SearchQuery{
+			query := &data.SearchQuery{
 				Query:  "error test",
 				Fields: map[string]any{"test": "error"},
-				Pagination: &framedata.Paginator{
+				Pagination: &data.Paginator{
 					Offset:    0,
 					Limit:     10,
 					BatchSize: 5,
 				},
 			}
 
-			jobPipe, err := framedata.StableSearch(ctx, svc, query, tc.searchFunc)
+			jobPipe, err := data.StableSearch(ctx, svc.WorkManager(), query, tc.searchFunc)
 
 			s.validateErrorTestResult(tt, tc.expectErr, err, jobPipe)
 		})

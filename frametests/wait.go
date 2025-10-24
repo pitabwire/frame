@@ -18,7 +18,7 @@ func WaitForConditionWithResult[T any](
 ) (*T, error) {
 	return WaitForCheckedConditionWithResult(ctx, condition, func(t *T, err error) bool {
 		if err != nil {
-			if !frame.ErrorIsNoRows(err) {
+			if !frame.ErrIsNotFound(err) {
 				return true
 			}
 		} else {

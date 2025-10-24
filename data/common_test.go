@@ -1,4 +1,4 @@
-package frame_test
+package data_test
 
 import (
 	"database/sql"

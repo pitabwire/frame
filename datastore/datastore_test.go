@@ -99,8 +99,8 @@ func (s *DatastoreTestSuite) TestServiceDatastoreSet() {
 
 				defConf.DatabaseTraceQueries = tc.traceQueries
 
-				ctx, srv := frame.NewService("Test Srv", frame.WithConfig(&defConf))
-				srv.Init(ctx, frame.WithDatastore())
+				ctx, srv := frame.NewService("Test Srv", frame.WithConfig(&defConf), frame.WithDatastore())
+				srv.Init(ctx)
 
 				dbPool := srv.DatastoreManager().GetPool(ctx, datastore.DefaultPoolName)
 				w := dbPool.DB(ctx, false)
@@ -144,10 +144,15 @@ func (s *DatastoreTestSuite) TestServiceDatastoreRunQuery() {
 
 				defConf.DatabaseTraceQueries = true
 
-				ctx, srv := frame.NewService("Test Srv", frame.WithConfig(&defConf))
-				srv.Init(ctx, frame.WithDatastore())
+				ctx, svc := frame.NewService(
+					"Test Srv",
+					frame.WithConfig(&defConf),
+					frame.WithDatastore(datastore.WithConnection(db.GetDS(t.Context()).String(), false)),
+				)
 
-				dbPool := srv.DatastoreManager().GetPool(ctx, datastore.DefaultPoolName)
+				svc.Init(ctx)
+
+				dbPool := svc.DatastoreManager().GetPool(ctx, datastore.DefaultPoolName)
 				w := dbPool.DB(ctx, false)
 				require.NotNil(t, w, "write database should be available")
 
@@ -186,11 +191,10 @@ func (s *DatastoreTestSuite) TestServiceDatastoreRead() {
 			t.Run(tc.name, func(t *testing.T) {
 				db := dep.ByIsDatabase(t.Context())
 
-				ctx, srv := frame.NewService(tc.serviceName)
+				ctx, srv := frame.NewService(tc.serviceName, frame.WithDatastore(datastore.WithConnection(db.GetDS(t.Context()).String(), false)))
 
-				mainDB := frame.WithDatastoreConnection(db.GetDS(ctx).String(), false)
 				readDB := frame.WithDatastoreConnection(db.GetDS(ctx).String(), true)
-				srv.Init(ctx, mainDB, readDB)
+				srv.Init(ctx, readDB)
 
 				dbPool := srv.DatastoreManager().GetPool(ctx, datastore.DefaultPoolName)
 				w := dbPool.DB(ctx, false)
@@ -227,11 +231,9 @@ func (s *DatastoreTestSuite) TestServiceDatastoreNotSet() {
 	s.WithTestDependancies(s.T(), func(t *testing.T, _ *definition.DependancyOption) {
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
-				ctx, srv := frame.NewService(tc.serviceName)
+				_, srv := frame.NewService(tc.serviceName)
 
-				dbPool := srv.DatastoreManager().GetPool(ctx, datastore.DefaultPoolName)
-				w := dbPool.DB(ctx, false)
-				require.Nil(t, w, "no database should be available when none is configured")
+				require.Nil(t, srv.DatastoreManager(), "no database manager should be available when none is configured")
 			})
 		}
 	})

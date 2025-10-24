@@ -19,7 +19,3 @@ type Manager interface {
 	// Migrate finds missing migrations and records them in the database.
 	Migrate(ctx context.Context, pool pool.Pool, migrationsDirPath string, migrations ...any) error
 }
-
-type MigrationManager interface {
-	SaveMigration(ctx context.Context, migrationPatches ...*migration.Patch) error
-}

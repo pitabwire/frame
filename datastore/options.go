@@ -36,7 +36,15 @@ func WithConnection(dsn string, readOnly bool) Option {
 // WithConnections returns an Option to configure database connections.
 func WithConnections(dsns map[string]bool) Option {
 	return func(o *Options) {
-		o.DSNMap = dsns
+
+		if o.DSNMap == nil {
+			o.DSNMap = dsns
+			return
+		}
+
+		for k, v := range dsns {
+			o.DSNMap[k] = v
+		}
 	}
 }
 

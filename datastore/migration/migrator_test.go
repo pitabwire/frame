@@ -39,7 +39,7 @@ func (s *MigratorTestSuite) TestSaveNewMigrations() {
 		{
 			name:          "save and update new migrations",
 			serviceName:   "Test Migrations Srv",
-			migrationDir:  "./tests_runner/migrations/default",
+			migrationDir:  "./testdata/migrations/default",
 			migrationPath: "./tests_runner/migrations/scans/scanned_select.sql",
 			updateSQL:     "SELECT 2;",
 		},
@@ -50,10 +50,9 @@ func (s *MigratorTestSuite) TestSaveNewMigrations() {
 			t.Run(tc.name, func(t *testing.T) {
 				db := dep.ByIsDatabase(t.Context())
 
-				ctx, svc := frame.NewService(tc.serviceName)
+				ctx, svc := frame.NewService(tc.serviceName, frame.WithDatastore(datastore.WithConnection(db.GetDS(t.Context()).String(), false)))
 
-				mainDB := frame.WithDatastoreConnection(db.GetDS(ctx).String(), false)
-				svc.Init(ctx, mainDB)
+				svc.Init(ctx)
 
 				dbMan := svc.DatastoreManager()
 				dbPool := dbMan.GetPool(ctx, datastore.DefaultPoolName)
@@ -63,7 +62,7 @@ func (s *MigratorTestSuite) TestSaveNewMigrations() {
 					Unscoped().
 					Delete(&migration.Migration{})
 
-				// Apply initial migrations
+				// Apply initial migrations (this creates the migrations table)
 				err := dbPool.Migrate(ctx, tc.migrationDir)
 				require.NoError(t, err, "Initial migr should succeed")
 
@@ -121,7 +120,7 @@ func (s *MigratorTestSuite) TestApplyMigrations() {
 		{
 			name:               "apply migrations with configuration",
 			serviceName:        "Test Migrations Srv",
-			migrationDir:       "./tests_runner/migrations/default",
+			migrationDir:       "./testdata/migrations/default",
 			slowQueryThreshold: "5ms",
 			traceQueries:       true,
 			logLevel:           "debug",
@@ -140,13 +139,15 @@ func (s *MigratorTestSuite) TestApplyMigrations() {
 				defConf.DatabaseTraceQueries = tc.traceQueries
 				defConf.LogLevel = tc.logLevel
 
-				ctx, svc := frame.NewService(tc.serviceName, frame.WithConfig(&defConf))
+				ctx, svc := frame.NewService(tc.serviceName, frame.WithConfig(&defConf), frame.WithDatastore(datastore.WithConnection(db.GetDS(t.Context()).String(), false)))
 
-				mainDB := frame.WithDatastoreConnection(db.GetDS(ctx).String(), false)
-				svc.Init(ctx, mainDB)
+				svc.Init(ctx)
 
 				dbMan := svc.DatastoreManager()
+				require.NotNil(t, dbMan, "DatastoreManager should not be nil")
+
 				dbPool := dbMan.GetPool(ctx, datastore.DefaultPoolName)
+				require.NotNil(t, dbPool, "Database pool should not be nil")
 
 				// Clean up existing migrations
 				dbPool.DB(ctx, false).
@@ -178,7 +179,7 @@ func (s *MigratorTestSuite) TestServiceMigrateDatastore() {
 		{
 			name:         "migrate datastore",
 			serviceName:  "Test Migrations Srv",
-			migrationDir: "./tests_runner/migrations/default",
+			migrationDir: "./testdata/migrations/default",
 		},
 	}
 
@@ -187,10 +188,9 @@ func (s *MigratorTestSuite) TestServiceMigrateDatastore() {
 			t.Run(tc.name, func(t *testing.T) {
 				db := dep.ByIsDatabase(t.Context())
 
-				ctx, svc := frame.NewService(tc.serviceName)
+				ctx, svc := frame.NewService(tc.serviceName, frame.WithDatastore(datastore.WithConnection(db.GetDS(t.Context()).String(), false)))
 
-				mainDB := frame.WithDatastoreConnection(db.GetDS(ctx).String(), false)
-				svc.Init(ctx, mainDB)
+				svc.Init(ctx)
 
 				dbMan := svc.DatastoreManager()
 				dbPool := dbMan.GetPool(ctx, datastore.DefaultPoolName)
@@ -236,10 +236,9 @@ func (s *MigratorTestSuite) TestServiceMigrateDatastoreIdempotency() {
 			t.Run(tc.name, func(t *testing.T) {
 				db := dep.ByIsDatabase(t.Context())
 
-				ctx, svc := frame.NewService(tc.serviceName)
+				ctx, svc := frame.NewService(tc.serviceName, frame.WithDatastore(datastore.WithConnection(db.GetDS(t.Context()).String(), false)))
 
-				mainDB := frame.WithDatastoreConnection(db.GetDS(ctx).String(), false)
-				svc.Init(ctx, mainDB)
+				svc.Init(ctx)
 
 				dbMan := svc.DatastoreManager()
 				dbPool := dbMan.GetPool(ctx, datastore.DefaultPoolName)

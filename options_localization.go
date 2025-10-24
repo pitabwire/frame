@@ -13,6 +13,6 @@ func WithTranslation(translationsFolder string, languages ...string) Option {
 	}
 }
 
-func (s *Service) Localization() localization.Manager {
+func (s *Service) LocalizationManager() localization.Manager {
 	return s.localizationManager
 }

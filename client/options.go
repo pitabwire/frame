@@ -7,7 +7,10 @@ import (
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
-const defaultHTTPTimeoutSeconds = 30
+const (
+	defaultHTTPTimeoutSeconds     = 30
+	defaultHTTPIdleTimeoutSeconds = 90
+)
 
 // HTTPOption configures HTTP client behavior.
 // It can be used to configure timeout, transport, and other HTTP client settings.
@@ -60,32 +63,25 @@ func WithHTTPIdleTimeout(timeout time.Duration) HTTPOption {
 // NewHTTPClient creates a new HTTP client with the provided options.
 // If no transport is specified, it defaults to otelhttp.NewTransport(http.DefaultTransport).
 func NewHTTPClient(opts ...HTTPOption) *http.Client {
-	config := &httpConfig{}
+	cfg := &httpConfig{
+		timeout:     time.Duration(defaultHTTPTimeoutSeconds) * time.Second,
+		idleTimeout: time.Duration(defaultHTTPIdleTimeoutSeconds) * time.Second,
+		transport:   otelhttp.NewTransport(http.DefaultTransport),
+	}
 	for _, opt := range opts {
-		opt(config)
+		opt(cfg)
 	}
-
-	if config.timeout == 0 {
-		config.timeout = time.Duration(defaultHTTPTimeoutSeconds) * time.Second
-	}
-
-	// Set defaults
-	if config.transport == nil {
-		config.transport = http.DefaultTransport
-	}
-
-	transport := otelhttp.NewTransport(config.transport)
 
 	client := &http.Client{
-		Transport:     transport,
-		Timeout:       config.timeout,
-		Jar:           config.jar,
-		CheckRedirect: config.checkRedirect,
+		Transport:     cfg.transport,
+		Timeout:       cfg.timeout,
+		Jar:           cfg.jar,
+		CheckRedirect: cfg.checkRedirect,
 	}
 
-	if config.idleTimeout > 0 {
+	if cfg.idleTimeout > 0 {
 		if t, ok := client.Transport.(*http.Transport); ok {
-			t.IdleConnTimeout = config.idleTimeout
+			t.IdleConnTimeout = cfg.idleTimeout
 		}
 	}
 

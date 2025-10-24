@@ -23,7 +23,7 @@ type clientRegistrar struct {
 	serviceEnvironment string
 	cfg                config.ConfigurationOAUTH2
 
-	invoker client.HTTPInvoker
+	invoker client.Manager
 }
 
 func NewClientRegistrar(serviceName, serviceEnvironment string,
@@ -78,7 +78,7 @@ func (s *clientRegistrar) RegisterForJwtWithParams(ctx context.Context,
 	oauth2AdminURI := fmt.Sprintf("%s/admin/clients", oauth2ServiceAdminHost)
 	oauth2AdminIDUri := fmt.Sprintf("%s/%s", oauth2AdminURI, clientID)
 
-	status, response, err := s.invoker.InvokeRestService(ctx, http.MethodGet, oauth2AdminIDUri, nil, nil)
+	status, response, err := s.invoker.Invoke(ctx, http.MethodGet, oauth2AdminIDUri, nil, nil)
 	if err != nil {
 		util.Log(ctx).WithError(err).Error("could not get existing clients")
 		return nil, err
@@ -118,7 +118,7 @@ func (s *clientRegistrar) RegisterForJwtWithParams(ctx context.Context,
 		payload["scope"] = scope
 	}
 
-	status, response, err = s.invoker.InvokeRestService(ctx, http.MethodPost, oauth2AdminURI, payload, nil)
+	status, response, err = s.invoker.Invoke(ctx, http.MethodPost, oauth2AdminURI, payload, nil)
 	if err != nil {
 		util.Log(ctx).WithError(err).Error("could not create a new client")
 		return nil, err
@@ -148,7 +148,7 @@ func (s *clientRegistrar) UnRegisterForJwt(ctx context.Context,
 	oauth2ServiceAdminHost string, clientID string) error {
 	oauth2AdminURI := fmt.Sprintf("%s%s/%s", oauth2ServiceAdminHost, "/admin/clients", clientID)
 
-	status, result, err := s.invoker.InvokeRestService(
+	status, result, err := s.invoker.Invoke(
 		ctx,
 		http.MethodDelete,
 		oauth2AdminURI,

@@ -12,7 +12,7 @@ type Options struct {
 	SecurityCfg config.ConfigurationSecurity
 	Oath2Cfg    config.ConfigurationOAUTH2
 	ServiceCfg  config.ConfigurationService
-	Invoker     client.HTTPInvoker
+	Invoker     client.Manager
 }
 
 type Option func(ctx context.Context, opts *Options)
@@ -39,7 +39,7 @@ func WithServiceConfig(cfg config.ConfigurationService) Option {
 }
 
 // WithInvoker adds an oauth2 configuration to Options.
-func WithInvoker(cfg client.HTTPInvoker) Option {
+func WithInvoker(cfg client.Manager) Option {
 	return func(_ context.Context, opts *Options) {
 		opts.Invoker = cfg
 	}

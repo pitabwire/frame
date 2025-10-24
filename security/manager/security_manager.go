@@ -24,7 +24,7 @@ type managerImpl struct {
 // NewManager creates and returns a new security Manager.
 func NewManager(_ context.Context,
 	cfg *config.ConfigurationDefault,
-	invoker client.HTTPInvoker) security.Manager {
+	invoker client.Manager) security.Manager {
 	return &managerImpl{
 		serviceName:        cfg.Name(),
 		serviceEnvironment: cfg.Environment(),

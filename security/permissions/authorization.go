@@ -14,10 +14,10 @@ import (
 
 type ketoAuthorizer struct {
 	cfg    config2.ConfigurationAuthorization
-	client client.HTTPInvoker
+	client client.Manager
 }
 
-func NewKetoAuthorizer(cfg config2.ConfigurationAuthorization, client client.HTTPInvoker) security.Authorizer {
+func NewKetoAuthorizer(cfg config2.ConfigurationAuthorization, client client.Manager) security.Authorizer {
 	return &ketoAuthorizer{
 		cfg:    cfg,
 		client: client,
@@ -43,7 +43,7 @@ func (a *ketoAuthorizer) HasAccess(ctx context.Context, objectID, action string)
 		"subject_id": authClaims.GetProfileID(),
 	}
 
-	status, result, err := a.client.InvokeRestService(ctx, http.MethodPost,
+	status, result, err := a.client.Invoke(ctx, http.MethodPost,
 		a.cfg.GetAuthorizationServiceReadURI(), payload, nil)
 	if err != nil {
 		return false, err

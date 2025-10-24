@@ -84,7 +84,7 @@ func (s *JwtTestSuite) TestServiceRegisterForJwtWithParams() {
 					Oauth2ServiceAdminURI: hydra.GetDS(ctx).String(),
 				}))
 
-				sm := srv.Security()
+				sm := srv.SecurityManager()
 				clientRegistrar := sm.GetOauth2ClientRegistrar(ctx)
 
 				response, err := clientRegistrar.RegisterForJwtWithParams(

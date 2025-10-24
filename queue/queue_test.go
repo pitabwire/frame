@@ -49,7 +49,7 @@ func (s *QueueTestSuite) TestServiceRegisterPublisherNotSet() {
 			t.Run(tc.name, func(t *testing.T) {
 				ctx, srv := frame.NewService(tc.serviceName)
 
-				qm := srv.Queue(ctx)
+				qm := srv.QueueManager(ctx)
 
 				err := qm.Publish(ctx, tc.topic, tc.message)
 				require.Error(t, err, "Publishing to unregistered topic should fail")
@@ -117,7 +117,7 @@ func (s *QueueTestSuite) TestServiceRegisterPublisherNotInitialized() {
 				opt := frame.WithRegisterPublisher("test", queueURL)
 				ctx, srv := frame.NewService(tc.serviceName, opt)
 
-				qm := srv.Queue(ctx)
+				qm := srv.QueueManager(ctx)
 
 				err = qm.Publish(ctx, tc.topic, tc.message)
 				require.Error(t, err, "Publishing to uninitialized publisher should fail")
@@ -188,7 +188,7 @@ func (s *QueueTestSuite) TestServiceRegisterPublisher() {
 				err = srv.Run(ctx, "")
 				require.NoError(t, err, "Service should start successfully")
 
-				qm := srv.Queue(ctx)
+				qm := srv.QueueManager(ctx)
 				err = qm.Publish(ctx, tc.topic, tc.message)
 				require.NoError(t, err, "Publishing to registered topic should succeed")
 
@@ -270,7 +270,7 @@ func (s *QueueTestSuite) TestServiceRegisterPublisherMultiple() {
 				err = srv.Run(ctx, "")
 				require.NoError(t, err, "Service should start successfully")
 
-				qm := srv.Queue(ctx)
+				qm := srv.QueueManager(ctx)
 				// Test publishing to valid topics
 				for topic, message := range tc.testMessages {
 					err = qm.Publish(ctx, topic, message)
@@ -366,7 +366,7 @@ func (s *QueueTestSuite) TestServiceRegisterSubscriber() {
 				err = srv.Run(ctx, "")
 				require.NoError(t, err, "Service should start successfully")
 
-				qm := srv.Queue(ctx)
+				qm := srv.QueueManager(ctx)
 				subscriber, err := qm.GetSubscriber(tc.topic)
 				require.NoError(t, err, "Subscriber should exist")
 				require.NotNil(t, subscriber, "Subscriber should be registered")
@@ -455,7 +455,7 @@ func (s *QueueTestSuite) TestServiceRegisterSubscriberValidateMessages() {
 				err = srv.Run(ctx, "")
 				require.NoError(t, err, "Service should start successfully")
 
-				qm := srv.Queue(ctx)
+				qm := srv.QueueManager(ctx)
 				// Publish messages
 				for _, msg := range tc.messages {
 					err = qm.Publish(ctx, tc.topic, []byte(msg))
@@ -560,7 +560,7 @@ func (s *QueueTestSuite) TestServiceSubscriberValidateJetstreamMessages() {
 				err = srv.Run(ctx, "")
 				require.NoError(t, err, "Service should start successfully")
 
-				qm := srv.Queue(ctx)
+				qm := srv.QueueManager(ctx)
 				// Publish messages
 				for _, msg := range tc.messages {
 					data, _ := json.Marshal(msg)
@@ -643,7 +643,7 @@ func (s *QueueTestSuite) TestServiceRegisterSubscriberWithError() {
 				err = srv.Run(ctx, "")
 				require.NoError(t, err, "Service should start successfully")
 
-				qm := srv.Queue(ctx)
+				qm := srv.QueueManager(ctx)
 				subscriber, err := qm.GetSubscriber(tc.topic)
 				require.NoError(t, err, "Could not get subscriber")
 				require.NotNil(t, subscriber, "Subscriber should be registered")
@@ -750,7 +750,7 @@ func (s *QueueTestSuite) TestServiceRegisterSubscriberContextCancelWorks() {
 				err = srv.Run(ctx, "")
 				require.NoError(t, err, "Service should start successfully")
 
-				qm := srv.Queue(ctx)
+				qm := srv.QueueManager(ctx)
 				subscriber, err := qm.GetSubscriber(tc.topic)
 				require.NoError(t, err, "Subscriber not found")
 				require.NotNil(t, subscriber, "Subscriber should be registered")
@@ -823,7 +823,7 @@ func (s *QueueTestSuite) TestServiceAddPublisher() {
 				err = srv.Run(ctx, "")
 				require.NoError(t, err, "Service should start successfully")
 
-				qm := srv.Queue(ctx)
+				qm := srv.QueueManager(ctx)
 				err = qm.AddPublisher(ctx, tc.topic, queueURL)
 				require.NoError(t, err, "Adding publisher should succeed")
 
@@ -860,7 +860,7 @@ func (s *QueueTestSuite) TestServiceAddPublisherInvalidURL() {
 				err := srv.Run(ctx, "")
 				require.NoError(t, err, "Service should start successfully")
 
-				qm := srv.Queue(ctx)
+				qm := srv.QueueManager(ctx)
 				err = qm.AddPublisher(ctx, tc.topic, tc.queueURL)
 				require.Error(t, err, "Adding publisher with invalid URL should fail")
 			})
@@ -931,7 +931,7 @@ func (s *QueueTestSuite) TestServiceAddSubscriber() {
 				err = srv.Run(ctx, "")
 				require.NoError(t, err, "Service should start successfully")
 
-				qm := srv.Queue(ctx)
+				qm := srv.QueueManager(ctx)
 				err = qm.AddSubscriber(ctx, tc.topic, queueURL, handler)
 				require.NoError(t, err, "Adding subscriber should succeed")
 
@@ -1005,7 +1005,7 @@ func (s *QueueTestSuite) TestServiceAddSubscriberWithoutHandler() {
 				err = srv.Run(ctx, "")
 				require.NoError(t, err, "Service should start successfully")
 
-				qm := srv.Queue(ctx)
+				qm := srv.QueueManager(ctx)
 				err = qm.AddSubscriber(ctx, tc.topic, queueURL)
 				require.NoError(
 					t,
@@ -1045,7 +1045,7 @@ func (s *QueueTestSuite) TestServiceAddSubscriberInvalidURL() {
 				err := srv.Run(ctx, "")
 				require.NoError(t, err, "Service should start successfully")
 
-				qm := srv.Queue(ctx)
+				qm := srv.QueueManager(ctx)
 				err = qm.AddSubscriber(ctx, tc.topic, tc.queueURL, handler)
 				require.Error(t, err, "Adding subscriber with invalid URL should fail")
 			})

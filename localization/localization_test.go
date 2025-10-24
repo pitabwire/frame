@@ -43,7 +43,7 @@ func (s *LocalizationTestSuite) TestTranslations() {
 	}{
 		{
 			name:           "basic translation with template data",
-			serviceName:    "Test Localization Srv",
+			serviceName:    "Test LocalizationManager Srv",
 			translationDir: "test_data",
 			languages:      []string{"en", "sw"},
 			messageID:      "Example",
@@ -102,7 +102,7 @@ func (s *LocalizationTestSuite) TestTranslationsHelpers() {
 	}{
 		{
 			name:           "translate without template data",
-			serviceName:    "Test Localization Srv",
+			serviceName:    "Test LocalizationManager Srv",
 			translationDir: "test_data",
 			languages:      []string{"en", "sw"},
 			messageID:      "Example",
@@ -113,7 +113,7 @@ func (s *LocalizationTestSuite) TestTranslationsHelpers() {
 		},
 		{
 			name:           "translate with template data",
-			serviceName:    "Test Localization Srv",
+			serviceName:    "Test LocalizationManager Srv",
 			translationDir: "test_data",
 			languages:      []string{"en", "sw"},
 			messageID:      "Example",
@@ -126,7 +126,7 @@ func (s *LocalizationTestSuite) TestTranslationsHelpers() {
 		},
 		{
 			name:           "translate with template data and plural",
-			serviceName:    "Test Localization Srv",
+			serviceName:    "Test LocalizationManager Srv",
 			translationDir: "test_data",
 			languages:      []string{"en", "sw"},
 			messageID:      "Example",
@@ -170,7 +170,7 @@ func (s *LocalizationTestSuite) TestLanguageContextManagement() {
 	}{
 		{
 			name:        "language context management",
-			serviceName: "Test Localization Srv",
+			serviceName: "Test LocalizationManager Srv",
 			language:    "en",
 			messageID:   "Example",
 			expected:    "<no value> has nothing",
@@ -202,7 +202,7 @@ func (s *LocalizationTestSuite) TestLanguageMapManagement() {
 	}{
 		{
 			name:        "language map management",
-			serviceName: "Test Localization Srv",
+			serviceName: "Test LocalizationManager Srv",
 			anyMap: map[string]string{
 				"world": "data",
 			},
@@ -234,14 +234,14 @@ func (s *LocalizationTestSuite) TestLanguageHTTPMiddleware() {
 	}{
 		{
 			name:         "HTTP middleware with accept-language header",
-			serviceName:  "Test Localization Srv",
+			serviceName:  "Test LocalizationManager Srv",
 			requestPath:  "/test",
 			acceptLang:   "en-US,en;q=0.9",
 			expectedLang: "en",
 		},
 		{
 			name:         "HTTP middleware with swahili accept-language",
-			serviceName:  "Test Localization Srv",
+			serviceName:  "Test LocalizationManager Srv",
 			requestPath:  "/test",
 			acceptLang:   "sw",
 			expectedLang: "sw",
@@ -280,13 +280,13 @@ func (s *LocalizationTestSuite) TestLanguageGrpcInterceptors() {
 	}{
 		{
 			name:         "gRPC unary interceptor with language metadata",
-			serviceName:  "Test Localization Srv",
+			serviceName:  "Test LocalizationManager Srv",
 			metadataLang: "en",
 			expectedLang: []string{"en"},
 		},
 		{
 			name:         "gRPC unary interceptor with swahili metadata",
-			serviceName:  "Test Localization Srv",
+			serviceName:  "Test LocalizationManager Srv",
 			metadataLang: "sw",
 			expectedLang: []string{"sw"},
 		},
@@ -322,7 +322,7 @@ func (s *LocalizationTestSuite) TestLanguageFromGrpcRequest() {
 	}{
 		{
 			name:         "extract language from gRPC request metadata",
-			serviceName:  "Test Localization Srv",
+			serviceName:  "Test LocalizationManager Srv",
 			metadataLang: "en",
 			expectedLang: []string{"en"},
 		},

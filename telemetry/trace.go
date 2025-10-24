@@ -11,8 +11,6 @@ import (
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
-
-	"github.com/pitabwire/frame"
 )
 
 // Common attribute keys used across the frame.
@@ -41,7 +39,7 @@ type tracer struct {
 }
 
 // NewTracer creates a new tracer for a package.
-func NewTracer(name string, options ...trace.TracerOption) frame.Tracer {
+func NewTracer(name string, options ...trace.TracerOption) Tracer {
 	otelTracer := otel.Tracer(name, options...)
 
 	return &tracer{

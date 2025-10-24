@@ -15,31 +15,44 @@ import (
 	"github.com/pitabwire/frame/config"
 )
 
-type HTTPInvoker interface {
-	InvokeRestService(ctx context.Context,
+type Manager interface {
+	Client(ctx context.Context) *http.Client
+	SetClient(ctx context.Context, cl *http.Client)
+
+	Invoke(ctx context.Context,
 		method string, endpointURL string, payload map[string]any,
 		headers map[string][]string, opts ...HTTPOption) (int, []byte, error)
-	InvokeRestServiceURLEncoded(ctx context.Context,
+	InvokeWithURLEncoded(ctx context.Context,
 		method string, endpointURL string, payload url.Values,
 		headers map[string]string, opts ...HTTPOption) (int, []byte, error)
 }
 
 type invoker struct {
-	cfg    config.ConfigurationLogLevel
+	cfg    config.ConfigurationTraceRequests
 	client *http.Client
 }
 
-// NewInvoker creates a new invoker with the provided options.
-func NewInvoker(cfg config.ConfigurationLogLevel, client *http.Client) HTTPInvoker {
+// NewManager creates a new invoker with the provided options.
+func NewManager(cfg config.ConfigurationTraceRequests, opts ...HTTPOption) Manager {
 	return &invoker{
 		cfg:    cfg,
-		client: client,
+		client: NewHTTPClient(opts...),
 	}
 }
 
-// InvokeRestService convenience method to call a http endpoint and utilize the raw results.
+// Client returns the HTTP client used by the invoker.
+func (s *invoker) Client(_ context.Context) *http.Client {
+	return s.client
+}
+
+// SetClient sets the HTTP client used by the invoker.
+func (s *invoker) SetClient(_ context.Context, cl *http.Client) {
+	s.client = cl
+}
+
+// Invoke convenience method to call a http endpoint and utilize the raw results.
 // Options can be used to configure timeout and other HTTP client behavior.
-func (s *invoker) InvokeRestService(ctx context.Context,
+func (s *invoker) Invoke(ctx context.Context,
 	method string, endpointURL string, payload map[string]any,
 	headers map[string][]string, opts ...HTTPOption) (int, []byte, error) {
 	if headers == nil {
@@ -79,7 +92,7 @@ func (s *invoker) InvokeRestService(ctx context.Context,
 
 	req.Header = headers
 
-	if s.cfg.LoggingLevelIsDebug() {
+	if s.cfg.TraceReq() {
 		reqDump, _ := httputil.DumpRequestOut(req, true)
 		util.Log(ctx).WithField("request", string(reqDump)).Debug("request out")
 	}
@@ -91,7 +104,7 @@ func (s *invoker) InvokeRestService(ctx context.Context,
 	}
 	defer util.CloseAndLogOnError(ctx, resp.Body)
 
-	if s.cfg.LoggingLevelIsDebug() {
+	if s.cfg.TraceReq() {
 		respDump, _ := httputil.DumpResponse(resp, true)
 		util.Log(ctx).WithField("response", string(respDump)).Debug("response in")
 	}
@@ -101,9 +114,9 @@ func (s *invoker) InvokeRestService(ctx context.Context,
 	return resp.StatusCode, response, err
 }
 
-// InvokeRestServiceURLEncoded sends an HTTP request to the specified endpoint with a URL-encoded payload.
+// InvokeWithURLEncoded sends an HTTP request to the specified endpoint with a URL-encoded payload.
 // Options can be used to configure timeout and other HTTP client behavior.
-func (s *invoker) InvokeRestServiceURLEncoded(ctx context.Context,
+func (s *invoker) InvokeWithURLEncoded(ctx context.Context,
 	method string, endpointURL string, payload url.Values,
 	headers map[string]string, opts ...HTTPOption) (int, []byte, error) {
 	if headers == nil {
@@ -136,7 +149,7 @@ func (s *invoker) InvokeRestServiceURLEncoded(ctx context.Context,
 		req.Header.Set(key, val)
 	}
 
-	if s.cfg.LoggingLevelIsDebug() {
+	if s.cfg.TraceReq() {
 		reqDump, _ := httputil.DumpRequestOut(req, true)
 		logger.WithField("request", string(reqDump)).Debug("request out")
 	}
@@ -148,7 +161,7 @@ func (s *invoker) InvokeRestServiceURLEncoded(ctx context.Context,
 	}
 	defer util.CloseAndLogOnError(ctx, resp.Body)
 
-	if s.cfg.LoggingLevelIsDebug() {
+	if s.cfg.TraceReq() {
 		respDump, _ := httputil.DumpResponse(resp, true)
 		util.Log(ctx).WithField("response", string(respDump)).Debug("response in")
 	}

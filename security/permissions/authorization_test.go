@@ -73,9 +73,9 @@ func (s *AuthorizationTestSuite) authorizationControlListWrite(
 ) error {
 	authClaims := security.ClaimsFromContext(ctx)
 
-	cfg := config.FromContext[config.ConfigurationLogLevel](ctx)
+	cfg := config.FromContext[config.ConfigurationTraceRequests](ctx)
 
-	invoker := client.NewInvoker(cfg, client.NewHTTPClient())
+	invoker := client.NewManager(cfg)
 
 	if authClaims == nil {
 		return errors.New("only authenticated requests should be used to check authorization")
@@ -88,7 +88,7 @@ func (s *AuthorizationTestSuite) authorizationControlListWrite(
 		"subject_id": subject,
 	}
 
-	status, result, err := invoker.InvokeRestService(ctx,
+	status, result, err := invoker.Invoke(ctx,
 		http.MethodPut, writeServerURL, payload, nil)
 
 	if err != nil {
@@ -266,7 +266,7 @@ func (s *AuthorizationTestSuite) TestAuthHasAccess() {
 
 				ctx = tc.setupClaims(ctx, tc.checkSubject)
 
-				sm := srv.Security()
+				sm := srv.SecurityManager()
 				// First write the permission
 				err = s.authorizationControlListWrite(ctx, ketoAdminURI.String(), tc.objectID, tc.action, tc.subject)
 				if tc.subject == tc.checkSubject { // Only expect success if we're checking the subject we wrote

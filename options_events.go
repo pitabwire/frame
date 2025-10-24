@@ -30,7 +30,8 @@ func (s *Service) Emit(ctx context.Context, name string, payload any) error {
 	}
 
 	// ByIsQueue event message for further processing
-	err := s.Queue(ctx).Publish(ctx, cfg.GetEventsQueueName(), payload, map[string]string{events.EventHeaderName: name})
+	err := s.QueueManager(ctx).
+		Publish(ctx, cfg.GetEventsQueueName(), payload, map[string]string{events.EventHeaderName: name})
 	if err != nil {
 		s.Log(ctx).WithError(err).WithField("name", name).Error("Could not emit event")
 		return err

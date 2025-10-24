@@ -12,10 +12,6 @@ import (
 
 	"github.com/pitabwire/util"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
-	"go.opentelemetry.io/otel/propagation"
-	sdklogs "go.opentelemetry.io/otel/sdk/log"
-	sdkmetrics "go.opentelemetry.io/otel/sdk/metric"
-	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"gocloud.dev/server/driver"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health/grpc_health_v1"
@@ -29,6 +25,7 @@ import (
 	"github.com/pitabwire/frame/queue"
 	"github.com/pitabwire/frame/security"
 	securityManager "github.com/pitabwire/frame/security/manager"
+	"github.com/pitabwire/frame/telemetry"
 	"github.com/pitabwire/frame/workerpool"
 )
 
@@ -53,18 +50,12 @@ const (
 type Service struct {
 	name string
 
-	version        string
-	environment    string
-	logger         *util.LogEntry
-	disableTracing bool
+	version     string
+	environment string
+	logger      *util.LogEntry
 
-	traceTextMap      propagation.TextMapPropagator
-	traceExporter     sdktrace.SpanExporter
-	traceSampler      sdktrace.Sampler
-	metricsReader     sdkmetrics.Reader
-	traceLogsExporter sdklogs.Exporter
-	handler           http.Handler
-	cancelFunc        context.CancelFunc
+	handler    http.Handler
+	cancelFunc context.CancelFunc
 
 	errorChannelMutex sync.Mutex
 	errorChannel      chan error
@@ -76,8 +67,8 @@ type Service struct {
 	grpcServerEnableReflection bool
 	grpcListener               net.Listener
 	grpcPort                   string
-	client                     *http.Client
-	dataStores                 sync.Map
+
+	dataStores sync.Map
 
 	healthCheckers  []Checker
 	healthCheckPath string
@@ -86,12 +77,15 @@ type Service struct {
 
 	configuration any
 
+	clientManager       client.Manager
 	workerPoolManager   workerpool.Manager
 	localizationManager localization.Manager
 	securityManager     security.Manager
 	cacheManager        cache.Manager
 	queueManager        queue.Manager
 	eventsManager       events.Manager
+
+	telemetryManager telemetry.Manager
 
 	startOnce            sync.Once
 	startupOnce          sync.Once
@@ -130,21 +124,15 @@ func NewServiceWithContext(ctx context.Context, name string, opts ...Option) (co
 
 	cfg, _ := config.FromEnv[config.ConfigurationDefault]()
 
-	defaultClient := client.NewHTTPClient(
-		client.WithHTTPTimeout(time.Duration(defaultHTTPTimeoutSeconds)*time.Second),
-		client.WithHTTPIdleTimeout(time.Duration(defaultHTTPIdleTimeoutSeconds)*time.Second),
-	)
-
-	invoker := client.NewInvoker(&cfg, defaultClient)
-
 	svc := &Service{
 		name:         name,
 		cancelFunc:   signalCancelFunc, // Store its cancel function
 		errorChannel: make(chan error, 1),
-		client:       defaultClient,
-		logger:       log,
+
+		logger: log,
 
 		configuration: &cfg,
+		clientManager: client.NewManager(&cfg),
 	}
 
 	if cfg.ServiceName != "" {
@@ -159,11 +147,14 @@ func NewServiceWithContext(ctx context.Context, name string, opts ...Option) (co
 		opts = append(opts, WithVersion(cfg.ServiceVersion))
 	}
 
+	var telemetryOpts []telemetry.Option
 	if cfg.OpenTelemetryDisable {
-		opts = append(opts, WithDisableTracing())
+		telemetryOpts = append(telemetryOpts, telemetry.WithDisableTracing())
 	}
 
 	opts = append(opts, WithLogger()) // Ensure logger is initialized early
+
+	opts = append(opts, WithTelemetry(telemetryOpts...))
 
 	svc.Init(ctx, opts...) // Apply all options, using the signal-aware context
 
@@ -172,7 +163,7 @@ func NewServiceWithContext(ctx context.Context, name string, opts ...Option) (co
 	if !ok {
 		finalCfg = &cfg
 	}
-	svc.securityManager = securityManager.NewManager(ctx, finalCfg, invoker)
+	svc.securityManager = securityManager.NewManager(ctx, finalCfg, svc.clientManager)
 
 	svc.workerPoolManager = workerpool.NewManager(ctx, &cfg, svc.sendStopError)
 
@@ -210,11 +201,6 @@ func NewServiceWithContext(ctx context.Context, name string, opts ...Option) (co
 		svc.startupCompleted = true
 		svc.startupRegistrations.Unlock()
 	})
-
-	err = svc.initTracer(ctx)
-	if err != nil {
-		log.WithError(err).Panic("could not setup application telemetry")
-	}
 
 	// Prepare context to be returned, embedding svc and config
 	ctx = ToContext(ctx, svc)
@@ -274,20 +260,8 @@ func WithEnvironment(environment string) Option {
 	}
 }
 
-// WithHTTPClient configures the HTTP client used by the service.
-// This allows customizing the HTTP client's behavior such as timeout, transport, etc.
-func WithHTTPClient(opts ...client.HTTPOption) Option {
-	return func(_ context.Context, s *Service) {
-		s.client = client.NewHTTPClient(opts...)
-	}
-}
-
 func (s *Service) H() http.Handler {
 	return s.handler
-}
-
-func (s *Service) Security() security.Manager {
-	return s.securityManager
 }
 
 // Init evaluates the options provided as arguments and supplies them to the service object.
@@ -579,7 +553,7 @@ func (s *Service) initServer(ctx context.Context, httpPort string) error {
 
 	s.startOnce.Do(func() {
 		rootHandler := s.createAndConfigureMux(ctx)
-		if s.disableTracing {
+		if s.telemetryManager.Disabled() {
 			s.handler = rootHandler
 		} else {
 			s.handler = otelhttp.NewHandler(rootHandler, s.Name())

@@ -78,11 +78,14 @@ func FillEnv(v any) error {
 }
 
 type ConfigurationDefault struct {
-	LogLevel          string `envDefault:"info"                      env:"LOG_LEVEL"            yaml:"log_level"`
-	LogFormat         string `envDefault:"info"                      env:"LOG_FORMAT"           yaml:"log_format"`
-	LogTimeFormat     string `envDefault:"2006-01-02T15:04:05Z07:00" env:"LOG_TIME_FORMAT"      yaml:"log_time_format"`
-	LogColored        bool   `envDefault:"true"                      env:"LOG_COLORED"          yaml:"log_colored"`
-	LogShowStackTrace bool   `envDefault:"false"                     env:"LOG_SHOW_STACK_TRACE" yaml:"log_show_stack_trace"`
+	LogLevel      string `envDefault:"info"                      env:"LOG_LEVEL"       yaml:"log_level"`
+	LogFormat     string `envDefault:"info"                      env:"LOG_FORMAT"      yaml:"log_format"`
+	LogTimeFormat string `envDefault:"2006-01-02T15:04:05Z07:00" env:"LOG_TIME_FORMAT" yaml:"log_time_format"`
+	LogColored    bool   `envDefault:"true"                      env:"LOG_COLORED"     yaml:"log_colored"`
+
+	LogShowStackTrace bool `envDefault:"false" env:"LOG_SHOW_STACK_TRACE" yaml:"log_show_stack_trace"`
+
+	TraceRequests bool `envDefault:"false" env:"TRACE_REQUESTS" yaml:"trace_requests"`
 
 	OpenTelemetryDisable    bool    `envDefault:"false" env:"OPENTELEMETRY_DISABLE"        yaml:"opentelemetry_disable"`
 	OpenTelemetryTraceRatio float64 `envDefault:"1"     env:"OPENTELEMETRY_TRACE_ID_RATIO" yaml:"opentelemetry_trace_id_ratio"`
@@ -199,6 +202,16 @@ func (c *ConfigurationDefault) LoggingShowStackTrace() bool {
 
 func (c *ConfigurationDefault) LoggingLevelIsDebug() bool {
 	return c.LoggingLevel() == "debug" || c.LoggingLevel() == "trace"
+}
+
+type ConfigurationTraceRequests interface {
+	TraceReq() bool
+}
+
+var _ ConfigurationTraceRequests = new(ConfigurationDefault)
+
+func (c *ConfigurationDefault) TraceReq() bool {
+	return c.TraceRequests
 }
 
 type ConfigurationPorts interface {

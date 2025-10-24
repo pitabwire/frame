@@ -144,7 +144,7 @@ func (s *AuthenticationTestSuite) TestSimpleAuthenticate() {
 				ctx, srv := frame.NewService("Test Srv", frame.WithConfig(
 					&config.ConfigurationDefault{Oauth2WellKnownJwkData: sampleWellKnownJwk}))
 
-				sm := srv.Security()
+				sm := srv.SecurityManager()
 				ctx2, err := sm.GetAuthenticator(ctx).
 					Authenticate(ctx, tc.accessKey, security.WithAudience(tc.audience), security.WithIssuer(tc.issuer))
 
@@ -234,7 +234,7 @@ func (s *AuthenticationTestSuite) TestAuthenticateWithTenantClaims() {
 				ctx, srv := frame.NewService("Tenant Srv", frame.WithConfig(
 					&config.ConfigurationDefault{Oauth2WellKnownJwkData: tenantWellKnownJwk}))
 
-				sm := srv.Security()
+				sm := srv.SecurityManager()
 				ctx2, err := sm.GetAuthenticator(ctx).
 					Authenticate(ctx, tc.accessKey, security.WithAudience(tc.audience), security.WithIssuer(tc.issuer))
 

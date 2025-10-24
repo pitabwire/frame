@@ -112,7 +112,7 @@ func (s *EventsTestSuite) TestServiceRegisterEventsWorks() {
 					frametests.WithNoopDriver(),
 				)
 
-				qm := srv.Queue(ctx)
+				qm := srv.QueueManager(ctx)
 
 				subs, _ := qm.GetSubscriber(cfg.EventsQueueName)
 				if subs != nil && subs.Initiated() {

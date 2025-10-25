@@ -5,7 +5,7 @@ import (
 
 	"github.com/testcontainers/testcontainers-go"
 
-	"github.com/pitabwire/frame"
+	"github.com/pitabwire/frame/data"
 )
 
 const ContainerFileMode = 0o755
@@ -20,9 +20,9 @@ type DependancyRes interface {
 type DependancyConn interface {
 	Name() string
 	PortMapping(ctx context.Context, port string) (string, error)
-	GetDS(ctx context.Context) frame.DataSource
-	GetInternalDS(ctx context.Context) frame.DataSource
-	GetRandomisedDS(ctx context.Context, randomisedPrefix string) (frame.DataSource, func(context.Context), error)
+	GetDS(ctx context.Context) data.DSN
+	GetInternalDS(ctx context.Context) data.DSN
+	GetRandomisedDS(ctx context.Context, randomisedPrefix string) (data.DSN, func(context.Context), error)
 }
 
 type TestResource interface {

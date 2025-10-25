@@ -10,7 +10,7 @@ import (
 	"github.com/pitabwire/util"
 	"github.com/testcontainers/testcontainers-go"
 
-	"github.com/pitabwire/frame"
+	"github.com/pitabwire/frame/data"
 )
 
 type DefaultImpl struct {
@@ -73,7 +73,7 @@ func (d *DefaultImpl) PortMapping(ctx context.Context, port string) (string, err
 	return mappedPort.Port(), nil
 }
 
-func (d *DefaultImpl) Endpoint(ctx context.Context, scheme string, port string) (frame.DataSource, error) {
+func (d *DefaultImpl) Endpoint(ctx context.Context, scheme string, port string) (data.DSN, error) {
 	conn, err := d.container.PortEndpoint(ctx, nat.Port(port), scheme)
 	if err != nil {
 		return "", err
@@ -81,10 +81,10 @@ func (d *DefaultImpl) Endpoint(ctx context.Context, scheme string, port string) 
 
 	conn = strings.Replace(conn, "localhost", "127.0.0.1", 1)
 
-	return frame.DataSource(conn), nil
+	return data.DSN(conn), nil
 }
 
-func (d *DefaultImpl) InternalEndpoint(ctx context.Context, scheme string, port string) (frame.DataSource, error) {
+func (d *DefaultImpl) InternalEndpoint(ctx context.Context, scheme string, port string) (data.DSN, error) {
 	internalIP, err := d.container.ContainerIP(ctx)
 	if err != nil {
 		return "", err
@@ -103,12 +103,12 @@ func (d *DefaultImpl) InternalEndpoint(ctx context.Context, scheme string, port 
 
 	hostPort := net.JoinHostPort(internalIP, port)
 	if scheme == "" {
-		return frame.DataSource(hostPort), nil
+		return data.DSN(hostPort), nil
 	}
-	return frame.DataSource(fmt.Sprintf("%s://%s", scheme, hostPort)), nil
+	return data.DSN(fmt.Sprintf("%s://%s", scheme, hostPort)), nil
 }
 
-func (d *DefaultImpl) GetDS(ctx context.Context) frame.DataSource {
+func (d *DefaultImpl) GetDS(ctx context.Context) data.DSN {
 	ds, err := d.Endpoint(ctx, d.DefaultScheme, d.DefaultPort.Port())
 	if err != nil {
 		logger := util.Log(ctx).WithField("image", d.opts.ImageName)
@@ -118,7 +118,7 @@ func (d *DefaultImpl) GetDS(ctx context.Context) frame.DataSource {
 	return ds
 }
 
-func (d *DefaultImpl) GetInternalDS(ctx context.Context) frame.DataSource {
+func (d *DefaultImpl) GetInternalDS(ctx context.Context) data.DSN {
 	ds, err := d.InternalEndpoint(ctx, d.DefaultScheme, d.DefaultPort.Port())
 	if err != nil {
 		logger := util.Log(ctx).WithField("image", d.opts.ImageName)
@@ -131,7 +131,7 @@ func (d *DefaultImpl) GetInternalDS(ctx context.Context) frame.DataSource {
 func (d *DefaultImpl) GetRandomisedDS(
 	ctx context.Context,
 	_ string,
-) (frame.DataSource, func(context.Context), error) {
+) (data.DSN, func(context.Context), error) {
 	return d.GetDS(ctx), func(_ context.Context) {
 	}, nil
 }

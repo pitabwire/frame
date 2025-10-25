@@ -2,7 +2,6 @@ package valkey
 
 import (
 	"context"
-	"net/url"
 	"time"
 
 	"github.com/valkey-io/valkey-go"
@@ -10,45 +9,31 @@ import (
 	"github.com/pitabwire/frame/cache"
 )
 
-// Options contains configuration for Valkey cache.
-type Options struct {
-	Addr     string
-	Password string
-	DB       int
-}
-
 // Cache is a Valkey-backed cache implementation using the official Valkey client.
 type Cache struct {
 	client valkey.Client
+	maxAge time.Duration
 }
 
 const connectionTimeout = 5 * time.Second
 
 // New creates a new Valkey cache.
-func New(opts Options) (cache.RawCache, error) {
-	// Parse address to handle redis:// scheme
-	addr := opts.Addr
-	if parsedURL, err := url.Parse(opts.Addr); err == nil && parsedURL.Scheme == "redis" {
-		addr = parsedURL.Host
+func New(opts ...cache.Option) (cache.RawCache, error) {
+	cacheOpts := &cache.Options{
+		MaxAge: time.Hour,
 	}
 
-	// Create Valkey client options
-	clientOpts := valkey.ClientOption{
-		InitAddress: []string{addr},
+	for _, opt := range opts {
+		opt(cacheOpts)
 	}
 
-	// Add password if provided
-	if opts.Password != "" {
-		clientOpts.Password = opts.Password
-	}
-
-	// Add DB selection if provided (SelectDB option)
-	if opts.DB != 0 {
-		clientOpts.SelectDB = opts.DB
+	valkeyOpts, err := valkey.ParseURL(cacheOpts.DSN.String())
+	if err != nil {
+		return nil, err
 	}
 
 	// Create the client
-	client, err := valkey.NewClient(clientOpts)
+	client, err := valkey.NewClient(valkeyOpts)
 	if err != nil {
 		return nil, err
 	}
@@ -64,6 +49,7 @@ func New(opts Options) (cache.RawCache, error) {
 
 	return &Cache{
 		client: client,
+		maxAge: cacheOpts.MaxAge,
 	}, nil
 }
 
@@ -90,6 +76,10 @@ func (vc *Cache) Get(ctx context.Context, key string) ([]byte, bool, error) {
 // Set sets an item in the cache with the specified TTL.
 func (vc *Cache) Set(ctx context.Context, key string, value []byte, ttl time.Duration) error {
 	var cmd valkey.Completed
+
+	if ttl <= 0 {
+		ttl = vc.maxAge
+	}
 
 	if ttl > 0 {
 		// Valkey Ex() expects seconds, not duration

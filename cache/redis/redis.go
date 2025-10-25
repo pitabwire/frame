@@ -3,7 +3,6 @@ package redis
 import (
 	"context"
 	"errors"
-	"net/url"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -11,44 +10,43 @@ import (
 	"github.com/pitabwire/frame/cache"
 )
 
-// Options contains configuration for Redis cache.
-type Options struct {
-	Addr     string
-	Password string
-	DB       int
-}
-
 // Cache is a Redis-backed cache implementation.
 type Cache struct {
 	client *redis.Client
+	maxAge time.Duration
 }
 
 const connectionTimeout = 5 * time.Second
 
 // New creates a new Redis cache.
-func New(opts Options) (cache.RawCache, error) {
-	// Parse address to handle redis:// scheme
-	addr := opts.Addr
-	if parsedURL, err := url.Parse(opts.Addr); err == nil && parsedURL.Scheme == "redis" {
-		addr = parsedURL.Host
+func New(opts ...cache.Option) (cache.RawCache, error) {
+	cacheOpts := &cache.Options{
+		MaxAge: time.Hour,
 	}
 
-	client := redis.NewClient(&redis.Options{
-		Addr:     addr,
-		Password: opts.Password,
-		DB:       opts.DB,
-	})
+	for _, opt := range opts {
+		opt(cacheOpts)
+	}
+
+	redisOpts, err := redis.ParseURL(cacheOpts.DSN.String())
+	if err != nil {
+		return nil, err
+	}
+
+	client := redis.NewClient(redisOpts)
 
 	// Test the connection
 	ctx, cancel := context.WithTimeout(context.Background(), connectionTimeout)
 	defer cancel()
 
-	if err := client.Ping(ctx).Err(); err != nil {
+	err = client.Ping(ctx).Err()
+	if err != nil {
 		return nil, err
 	}
 
 	return &Cache{
 		client: client,
+		maxAge: cacheOpts.MaxAge,
 	}, nil
 }
 
@@ -66,6 +64,10 @@ func (rc *Cache) Get(ctx context.Context, key string) ([]byte, bool, error) {
 
 // Set sets an item in the cache with the specified TTL.
 func (rc *Cache) Set(ctx context.Context, key string, value []byte, ttl time.Duration) error {
+	if ttl <= 0 {
+		ttl = rc.maxAge
+	}
+
 	return rc.client.Set(ctx, key, value, ttl).Err()
 }
 

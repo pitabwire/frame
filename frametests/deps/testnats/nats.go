@@ -8,7 +8,7 @@ import (
 	tcNats "github.com/testcontainers/testcontainers-go/modules/nats"
 	"github.com/testcontainers/testcontainers-go/wait"
 
-	"github.com/pitabwire/frame"
+	"github.com/pitabwire/frame/data"
 	"github.com/pitabwire/frame/frametests/definition"
 )
 
@@ -65,7 +65,7 @@ func (d *dependancy) Setup(ctx context.Context, ntwk *testcontainers.DockerNetwo
 	return nil
 }
 
-func (d *dependancy) GetDS(ctx context.Context) frame.DataSource {
+func (d *dependancy) GetDS(ctx context.Context) data.DSN {
 	ds := d.DefaultImpl.GetDS(ctx)
 
 	ds, _ = ds.WithUser(d.Opts().UserName)
@@ -73,7 +73,7 @@ func (d *dependancy) GetDS(ctx context.Context) frame.DataSource {
 	return ds
 }
 
-func (d *dependancy) GetInternalDS(ctx context.Context) frame.DataSource {
+func (d *dependancy) GetInternalDS(ctx context.Context) data.DSN {
 	ds := d.DefaultImpl.GetInternalDS(ctx)
 
 	ds, _ = ds.WithUser(d.Opts().UserName)

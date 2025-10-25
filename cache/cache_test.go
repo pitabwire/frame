@@ -12,6 +12,7 @@ import (
 	"github.com/pitabwire/frame/cache"
 	cacheredis "github.com/pitabwire/frame/cache/redis"
 	cachevalkey "github.com/pitabwire/frame/cache/valkey"
+	"github.com/pitabwire/frame/data"
 	"github.com/pitabwire/frame/frametests"
 	"github.com/pitabwire/frame/frametests/definition"
 	testvalkey "github.com/pitabwire/frame/frametests/deps/testvalkey"
@@ -58,10 +59,7 @@ func (s *CacheTestSuite) getCacheImplementations() map[string]cache.RawCache {
 
 	// Add Valkey if available
 	if s.valkeyAddr != "" {
-		valkeyCache, err := cachevalkey.New(cachevalkey.Options{
-			Addr: s.valkeyAddr,
-			DB:   0,
-		})
+		valkeyCache, err := cachevalkey.New(cache.WithDSN(data.DSN(s.valkeyAddr)))
 		if err == nil {
 			implementations["Valkey"] = valkeyCache
 		} else {
@@ -70,10 +68,7 @@ func (s *CacheTestSuite) getCacheImplementations() map[string]cache.RawCache {
 
 		// Add Redis (using same Valkey server as it's compatible)
 		// Redis client needs the address without the redis:// scheme
-		redisCache, err := cacheredis.New(cacheredis.Options{
-			Addr: s.valkeyAddr, // cacheredis.New handles URL parsing
-			DB:   1,
-		})
+		redisCache, err := cacheredis.New(cache.WithDSN(data.DSN(s.valkeyAddr)))
 		if err == nil {
 			implementations["Redis"] = redisCache
 		} else {

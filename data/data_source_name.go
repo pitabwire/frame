@@ -1,4 +1,4 @@
-package frame
+package data
 
 import (
 	"fmt"
@@ -17,14 +17,14 @@ const (
 	NatsScheme     = "nats://"
 )
 
-// A DataSource for conveniently handling a URI connection string.
-type DataSource string
+// A DSN for conveniently handling a URI connection string.
+type DSN string
 
-func (d DataSource) ToArray() []DataSource {
-	var connectionDSList []DataSource
+func (d DSN) ToArray() []DSN {
+	var connectionDSList []DSN
 	connectionURIs := strings.Split(string(d), ",")
 	for _, connectionURI := range connectionURIs {
-		dataSourceURI := DataSource(connectionURI)
+		dataSourceURI := DSN(connectionURI)
 		if len(dataSourceURI) > 0 {
 			connectionDSList = append(connectionDSList, dataSourceURI)
 		}
@@ -33,11 +33,11 @@ func (d DataSource) ToArray() []DataSource {
 	return connectionDSList
 }
 
-func (d DataSource) IsMySQL() bool {
+func (d DSN) IsMySQL() bool {
 	return strings.HasPrefix(string(d), MysqlScheme)
 }
 
-func (d DataSource) IsPostgres() bool {
+func (d DSN) IsPostgres() bool {
 	u, err := url.Parse(string(d))
 
 	// Check URI format
@@ -65,35 +65,35 @@ func (d DataSource) IsPostgres() bool {
 	return keyValueRegex.MatchString(string(d))
 }
 
-func (d DataSource) IsDB() bool {
+func (d DSN) IsDB() bool {
 	return d.IsPostgres() || d.IsMySQL()
 }
 
-func (d DataSource) IsRedis() bool {
+func (d DSN) IsRedis() bool {
 	return strings.HasPrefix(string(d), RedisScheme)
 }
 
-func (d DataSource) IsCache() bool {
+func (d DSN) IsCache() bool {
 	return d.IsRedis()
 }
 
-func (d DataSource) IsNats() bool {
+func (d DSN) IsNats() bool {
 	return strings.HasPrefix(string(d), NatsScheme)
 }
 
-func (d DataSource) IsMem() bool {
+func (d DSN) IsMem() bool {
 	return strings.HasPrefix(string(d), MemScheme)
 }
 
-func (d DataSource) IsQueue() bool {
+func (d DSN) IsQueue() bool {
 	return d.IsMem() || d.IsNats()
 }
 
-func (d DataSource) ToURI() (*url.URL, error) {
+func (d DSN) ToURI() (*url.URL, error) {
 	return url.Parse(string(d))
 }
 
-func (d DataSource) ExtendPath(epath ...string) DataSource {
+func (d DSN) ExtendPath(epath ...string) DSN {
 	nuURI, err := d.ToURI()
 	if err != nil {
 		return d
@@ -104,10 +104,10 @@ func (d DataSource) ExtendPath(epath ...string) DataSource {
 
 	nuURI.Path = path.Join(nuPathPieces...)
 
-	return DataSource(nuURI.String())
+	return DSN(nuURI.String())
 }
 
-func (d DataSource) SuffixPath(suffix string) DataSource {
+func (d DSN) SuffixPath(suffix string) DSN {
 	nuURI, err := d.ToURI()
 	if err != nil {
 		return d
@@ -116,10 +116,10 @@ func (d DataSource) SuffixPath(suffix string) DataSource {
 	if nuURI.Path != "" {
 		nuURI.Path = strings.Join([]string{nuURI.Path, suffix}, "")
 	}
-	return DataSource(nuURI.String())
+	return DSN(nuURI.String())
 }
 
-func (d DataSource) PrefixPath(prefix string) DataSource {
+func (d DSN) PrefixPath(prefix string) DSN {
 	nuURI, err := d.ToURI()
 	if err != nil {
 		return d
@@ -129,10 +129,10 @@ func (d DataSource) PrefixPath(prefix string) DataSource {
 		nuURI.Path = strings.Join([]string{prefix, nuURI.Path}, "")
 	}
 
-	return DataSource(nuURI.String())
+	return DSN(nuURI.String())
 }
 
-func (d DataSource) DelPath() DataSource {
+func (d DSN) DelPath() DSN {
 	nuURI, err := d.ToURI()
 	if err != nil {
 		return d
@@ -140,10 +140,10 @@ func (d DataSource) DelPath() DataSource {
 
 	nuURI.Path = ""
 
-	return DataSource(nuURI.String())
+	return DSN(nuURI.String())
 }
 
-func (d DataSource) ExtendQuery(key, value string) DataSource {
+func (d DSN) ExtendQuery(key, value string) DSN {
 	nuURI, err := d.ToURI()
 	if err != nil {
 		return d
@@ -154,10 +154,10 @@ func (d DataSource) ExtendQuery(key, value string) DataSource {
 
 	nuURI.RawQuery = q.Encode()
 
-	return DataSource(nuURI.String())
+	return DSN(nuURI.String())
 }
 
-func (d DataSource) RemoveQuery(key ...string) DataSource {
+func (d DSN) RemoveQuery(key ...string) DSN {
 	nuURI, err := d.ToURI()
 	if err != nil {
 		return d
@@ -171,10 +171,10 @@ func (d DataSource) RemoveQuery(key ...string) DataSource {
 
 	nuURI.RawQuery = q.Encode()
 
-	return DataSource(nuURI.String())
+	return DSN(nuURI.String())
 }
 
-func (d DataSource) GetQuery(key string) string {
+func (d DSN) GetQuery(key string) string {
 	nuURI, err := d.ToURI()
 	if err != nil {
 		return ""
@@ -183,17 +183,17 @@ func (d DataSource) GetQuery(key string) string {
 	return nuURI.Query().Get(key)
 }
 
-func (d DataSource) WithPath(path string) (DataSource, error) {
+func (d DSN) WithPath(path string) (DSN, error) {
 	nuURI, err := d.ToURI()
 	if err != nil {
 		return "", err
 	}
 
 	nuURI.Path = path
-	return DataSource(nuURI.String()), nil
+	return DSN(nuURI.String()), nil
 }
 
-func (d DataSource) WithPathSuffix(suffix string) (DataSource, error) {
+func (d DSN) WithPathSuffix(suffix string) (DSN, error) {
 	nuURI, err := d.ToURI()
 	if err != nil {
 		return "", err
@@ -202,20 +202,20 @@ func (d DataSource) WithPathSuffix(suffix string) (DataSource, error) {
 	if nuURI.Path != "" {
 		nuURI.Path = strings.Join([]string{nuURI.Path, suffix}, "")
 	}
-	return DataSource(nuURI.String()), nil
+	return DSN(nuURI.String()), nil
 }
 
-func (d DataSource) WithQuery(query string) (DataSource, error) {
+func (d DSN) WithQuery(query string) (DSN, error) {
 	nuURI, err := d.ToURI()
 	if err != nil {
 		return "", err
 	}
 
 	nuURI.RawQuery = query
-	return DataSource(nuURI.String()), nil
+	return DSN(nuURI.String()), nil
 }
 
-func (d DataSource) WithUser(user string) (DataSource, error) {
+func (d DSN) WithUser(user string) (DSN, error) {
 	nuURI, err := d.ToURI()
 	if err != nil {
 		return "", err
@@ -227,10 +227,10 @@ func (d DataSource) WithUser(user string) (DataSource, error) {
 	} else {
 		nuURI.User = url.User(user)
 	}
-	return DataSource(nuURI.String()), nil
+	return DSN(nuURI.String()), nil
 }
 
-func (d DataSource) WithPassword(password string) (DataSource, error) {
+func (d DSN) WithPassword(password string) (DSN, error) {
 	nuURI, err := d.ToURI()
 	if err != nil {
 		return "", err
@@ -242,24 +242,24 @@ func (d DataSource) WithPassword(password string) (DataSource, error) {
 	}
 
 	nuURI.User = url.UserPassword(userName, password)
-	return DataSource(nuURI.String()), nil
+	return DSN(nuURI.String()), nil
 }
 
-func (d DataSource) WithUserAndPassword(userName, password string) (DataSource, error) {
+func (d DSN) WithUserAndPassword(userName, password string) (DSN, error) {
 	nuURI, err := d.ToURI()
 	if err != nil {
 		return "", err
 	}
 
 	nuURI.User = url.UserPassword(userName, password)
-	return DataSource(nuURI.String()), nil
+	return DSN(nuURI.String()), nil
 }
 
-func (d DataSource) String() string {
+func (d DSN) String() string {
 	return string(d)
 }
 
-func (d DataSource) ChangePort(newPort string) (DataSource, error) {
+func (d DSN) ChangePort(newPort string) (DSN, error) {
 	nuURI, err := d.ToURI()
 	if err != nil {
 		return "", err
@@ -267,5 +267,5 @@ func (d DataSource) ChangePort(newPort string) (DataSource, error) {
 
 	hostname := nuURI.Hostname()
 	nuURI.Host = fmt.Sprintf("%s:%s", hostname, newPort)
-	return DataSource(nuURI.String()), nil
+	return DSN(nuURI.String()), nil
 }

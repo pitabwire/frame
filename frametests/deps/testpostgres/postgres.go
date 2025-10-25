@@ -15,7 +15,7 @@ import (
 	tcPostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/wait"
 
-	"github.com/pitabwire/frame"
+	"github.com/pitabwire/frame/data"
 	"github.com/pitabwire/frame/frametests/definition"
 )
 
@@ -87,18 +87,18 @@ func (d *postgreSQLDependancy) Setup(ctx context.Context, ntwk *testcontainers.D
 	return nil
 }
 
-func (d *postgreSQLDependancy) GetDS(ctx context.Context) frame.DataSource {
+func (d *postgreSQLDependancy) GetDS(ctx context.Context) data.DSN {
 	ds := d.DefaultImpl.GetDS(ctx)
 
-	return frame.DataSource(
+	return data.DSN(
 		fmt.Sprintf("postgres://%s:%s@%s/%s", d.Opts().UserName, d.Opts().Password, ds.String(), d.dbname),
 	)
 }
 
-func (d *postgreSQLDependancy) GetInternalDS(ctx context.Context) frame.DataSource {
+func (d *postgreSQLDependancy) GetInternalDS(ctx context.Context) data.DSN {
 	ds := d.DefaultImpl.GetInternalDS(ctx)
 
-	return frame.DataSource(
+	return data.DSN(
 		fmt.Sprintf("postgres://%s:%s@%s/%s", d.Opts().UserName, d.Opts().Password, ds.String(), d.dbname),
 	)
 }
@@ -110,16 +110,16 @@ func (d *postgreSQLDependancy) GetInternalDS(ctx context.Context) frame.DataSour
 func (d *postgreSQLDependancy) GetRandomisedDS(
 	ctx context.Context,
 	randomisedPrefix string,
-) (frame.DataSource, func(context.Context), error) {
+) (data.DSN, func(context.Context), error) {
 	return CreateDatabase(ctx, d.GetDS(ctx), randomisedPrefix)
 }
 
 // CreateDatabase Creates another database with a suffix dbname on the connection supplied.
 func CreateDatabase(
 	ctx context.Context,
-	connection frame.DataSource,
+	connection data.DSN,
 	dbName string,
-) (frame.DataSource, func(context.Context), error) {
+) (data.DSN, func(context.Context), error) {
 	connectionURI, err := connection.ToURI()
 	if err != nil {
 		return "", func(_ context.Context) {}, err
@@ -133,7 +133,7 @@ func CreateDatabase(
 	}
 
 	suffixedPgURIStr := connectionURI.String()
-	return frame.DataSource(suffixedPgURIStr), func(_ context.Context) {
+	return data.DSN(suffixedPgURIStr), func(_ context.Context) {
 		_ = clearDatabase(ctx, suffixedPgURIStr)
 	}, nil
 }

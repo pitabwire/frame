@@ -4,7 +4,6 @@ import (
 	"context"
 	"sync"
 	"sync/atomic"
-	"time"
 
 	"github.com/pitabwire/util"
 	"gorm.io/gorm"
@@ -119,24 +118,6 @@ func (s *pool) selectOne(pool []*gorm.DB, idx *uint64) *gorm.DB {
 	}
 	pos := atomic.AddUint64(idx, 1)
 	return pool[int(pos-1)%len(pool)] //nolint:gosec // G115: index is result of (val % len), always < len and fits in int.
-}
-
-// Configure updates pool sizes and connection lifetimes at runtime for all DBs.
-func (s *pool) Configure(maxOpen, maxIdle int, maxLifetime time.Duration) {
-	for _, db := range s.allReadDBs {
-		if sqlDB, err := db.DB(); err == nil {
-			sqlDB.SetMaxOpenConns(maxOpen)
-			sqlDB.SetMaxIdleConns(maxIdle)
-			sqlDB.SetConnMaxLifetime(maxLifetime)
-		}
-	}
-	for _, db := range s.allWriteDBs {
-		if sqlDB, err := db.DB(); err == nil {
-			sqlDB.SetMaxOpenConns(maxOpen)
-			sqlDB.SetMaxIdleConns(maxIdle)
-			sqlDB.SetConnMaxLifetime(maxLifetime)
-		}
-	}
 }
 
 func (s *pool) CanMigrate() bool {

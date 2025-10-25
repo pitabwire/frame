@@ -6,10 +6,10 @@ require (
 	buf.build/go/protovalidate v1.0.0
 	connectrpc.com/connect v1.19.1
 	github.com/BurntSushi/toml v1.5.0
-	github.com/XSAM/otelsql v0.40.0
 	github.com/caarlos0/env/v11 v11.3.1
 	github.com/docker/docker v28.5.1+incompatible
 	github.com/docker/go-connections v0.6.0
+	github.com/exaring/otelpgx v0.9.3
 	github.com/golang-jwt/jwt/v5 v5.3.0
 	github.com/jackc/pgx/v5 v5.7.6
 	github.com/lmittmann/tint v1.1.2
@@ -67,7 +67,6 @@ require (
 	github.com/distribution/reference v0.6.0 // indirect
 	github.com/docker/go-units v0.5.0 // indirect
 	github.com/ebitengine/purego v0.9.0 // indirect
-	github.com/exaring/otelpgx v0.9.3 // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect

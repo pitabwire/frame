@@ -42,6 +42,7 @@ func (s *pool) AddConnection(ctx context.Context, opts ...Option) error {
 		MaxLifetime:            0,
 		PreferSimpleProtocol:   true,
 		SkipDefaultTransaction: true,
+		InsertBatchSize:        1000,
 	}
 
 	for _, opt := range opts {

@@ -87,6 +87,7 @@ func (s *pool) createConnection(ctx context.Context, dsn string, poolOpts *Optio
 			Logger:                 datastoreLogger(ctx, poolOpts.TraceConfig),
 			SkipDefaultTransaction: poolOpts.SkipDefaultTransaction,
 			PrepareStmt:            true, // Enable prepared statement cache for better performance
+			CreateBatchSize:        poolOpts.InsertBatchSize,
 		},
 	)
 

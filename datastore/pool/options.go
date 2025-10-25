@@ -20,7 +20,8 @@ type Options struct {
 	PreferSimpleProtocol   bool
 	SkipDefaultTransaction bool
 
-	TraceConfig config.ConfigurationDatabaseTracing
+	TraceConfig     config.ConfigurationDatabaseTracing
+	InsertBatchSize int
 }
 
 // WithConnection returns an Option to configure the database connection dsn.
@@ -81,5 +82,12 @@ func WithSkipDefaultTransaction(skipDefaultTransaction bool) Option {
 func WithTraceConfig(traceConfig config.ConfigurationDatabaseTracing) Option {
 	return func(o *Options) {
 		o.TraceConfig = traceConfig
+	}
+}
+
+// WithInsertBatchSize returns an Option to configure the database connection insert batch size.
+func WithInsertBatchSize(insertBatchSize int) Option {
+	return func(o *Options) {
+		o.InsertBatchSize = insertBatchSize
 	}
 }

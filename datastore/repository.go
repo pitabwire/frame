@@ -3,11 +3,13 @@ package datastore
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/pitabwire/frame/data"
 	"github.com/pitabwire/frame/datastore/pool"
 	"github.com/pitabwire/frame/workerpool"
+	"gorm.io/gorm"
 )
 
 // BaseRepository provides generic CRUD operations for any model type.
@@ -19,8 +21,11 @@ type BaseRepository[T any] interface {
 	GetAllBy(ctx context.Context, properties map[string]any, offset, limit int) ([]T, error)
 	Search(ctx context.Context, query *data.SearchQuery) (workerpool.JobResultPipe[[]T], error)
 	Count(ctx context.Context) (int64, error)
+	CountBy(ctx context.Context, properties map[string]any) (int64, error)
 	Save(ctx context.Context, entity T) error
+	BatchInsert(ctx context.Context, entities []T) error
 	Delete(ctx context.Context, id string) error
+	DeleteBatch(ctx context.Context, ids []string) error
 }
 
 // baseRepository is the concrete implementation of BaseRepository.
@@ -29,6 +34,10 @@ type baseRepository[T data.BaseModelI] struct {
 	workMan workerpool.Manager
 	// modelFactory creates a new instance of T for queries
 	modelFactory func() T
+	// tableName caches the table name to avoid repeated reflection
+	tableName string
+	// allowedColumns whitelist for safe column access (set during initialization)
+	allowedColumns map[string]bool
 }
 
 // NewBaseRepository creates a new base repository instance.
@@ -38,62 +47,156 @@ func NewBaseRepository[T data.BaseModelI](
 	workMan workerpool.Manager,
 	modelFactory func() T,
 ) BaseRepository[T] {
-	return &baseRepository[T]{
-		dbPool:       dbPool,
-		workMan:      workMan,
-		modelFactory: modelFactory,
+	repo := &baseRepository[T]{
+		dbPool:         dbPool,
+		workMan:        workMan,
+		modelFactory:   modelFactory,
+		allowedColumns: make(map[string]bool),
 	}
+
+	// Initialize table name and allowed columns from model
+	model := modelFactory()
+	stmt := &gorm.Statement{DB: dbPool.DB(context.Background(), true)}
+	_ = stmt.Parse(model)
+	repo.tableName = stmt.Schema.Table
+
+	// Build allowed columns whitelist from schema
+	for _, field := range stmt.Schema.Fields {
+		repo.allowedColumns[field.DBName] = true
+	}
+
+	return repo
 }
 
 func (br *baseRepository[T]) Svc() pool.Pool {
 	return br.dbPool
 }
 
+// validateColumn checks if a column name is safe to use in queries.
+func (br *baseRepository[T]) validateColumn(column string) error {
+	if !br.allowedColumns[column] {
+		return fmt.Errorf("invalid column name: %s", column)
+	}
+	return nil
+}
+
 // GetByID retrieves an entity by its ID.
 func (br *baseRepository[T]) GetByID(ctx context.Context, id string) (T, error) {
 	entity := br.modelFactory()
-	err := br.Svc().DB(ctx, true).First(entity, "id = ?", id).Error
+	// Use indexed lookup with prepared statement
+	err := br.Svc().DB(ctx, true).Where("id = ?", id).First(entity).Error
 	return entity, err
 }
 
-// Save creates or updates an entity.
+// Save creates or updates an entity with optimistic locking.
+// For new entities (version <= 0), it performs a CREATE operation.
+// For existing entities, it performs an UPDATE with version check to prevent lost updates.
 func (br *baseRepository[T]) Save(ctx context.Context, entity T) error {
+	// Validate entity has an ID for updates
+	if entity.GetVersion() > 0 && entity.GetID() == "" {
+		return fmt.Errorf("entity ID is required for updates")
+	}
+
 	if entity.GetVersion() <= 0 {
+		// Use Create for new entities (more efficient than Save)
 		return br.Svc().DB(ctx, false).Create(entity).Error
 	}
 
-	return br.Svc().DB(ctx, false).Save(entity).Error
+	// Update with optimistic locking to prevent lost updates
+	// The version check ensures the entity hasn't been modified by another transaction
+	currentVersion := entity.GetVersion()
+
+	// GORM will increment version in BeforeUpdate hook
+	// We check that exactly 1 row was updated with the expected version
+	result := br.Svc().DB(ctx, false).
+		Model(entity).
+		Where("id = ? AND version = ?", entity.GetID(), currentVersion).
+		Updates(entity)
+
+	if result.Error != nil {
+		return result.Error
+	}
+
+	if result.RowsAffected == 0 {
+		return fmt.Errorf("optimistic lock failed: entity (id=%s) was modified by another transaction (expected version: %d)", 
+			entity.GetID(), currentVersion)
+	}
+
+	return nil
 }
 
-// Delete soft deletes an entity by its ID.
-func (br *baseRepository[T]) Delete(ctx context.Context, id string) error {
-	entity, err := br.GetByID(ctx, id)
-	if err != nil {
-		return err
+// BatchInsert inserts multiple entities efficiently in a single transaction.
+func (br *baseRepository[T]) BatchInsert(ctx context.Context, entities []T) error {
+	if len(entities) == 0 {
+		return nil
 	}
-	return br.Svc().DB(ctx, false).Delete(entity).Error
+
+	// CreateInBatches uses GORM's batch insert which is more efficient
+	// The batch size is configured in pool options (InsertBatchSize)
+	return br.Svc().DB(ctx, false).CreateInBatches(entities, 0).Error
+}
+
+// Delete soft deletes an entity by its ID without fetching it first.
+func (br *baseRepository[T]) Delete(ctx context.Context, id string) error {
+	// Direct delete without SELECT - much more efficient
+	entity := br.modelFactory()
+	return br.Svc().DB(ctx, false).Where("id = ?", id).Delete(entity).Error
+}
+
+// DeleteBatch soft deletes multiple entities by their IDs in a single query.
+func (br *baseRepository[T]) DeleteBatch(ctx context.Context, ids []string) error {
+	if len(ids) == 0 {
+		return nil
+	}
+
+	entity := br.modelFactory()
+	return br.Svc().DB(ctx, false).Where("id IN ?", ids).Delete(entity).Error
 }
 
 // Count returns the total number of entities.
 func (br *baseRepository[T]) Count(ctx context.Context) (int64, error) {
 	var count int64
-	entity := br.modelFactory()
-	err := br.Svc().DB(ctx, true).Model(entity).Count(&count).Error
+	// Use table name directly instead of creating model instance
+	err := br.Svc().DB(ctx, true).Table(br.tableName).Count(&count).Error
 	return count, err
 }
 
+// CountBy returns the count of entities matching the given properties.
+func (br *baseRepository[T]) CountBy(ctx context.Context, properties map[string]any) (int64, error) {
+	var count int64
+	query := br.Svc().DB(ctx, true).Table(br.tableName)
+
+	// Apply filters with validation
+	for key, value := range properties {
+		if err := br.validateColumn(key); err != nil {
+			return 0, err
+		}
+		query = query.Where(key+" = ?", value)
+	}
+
+	err := query.Count(&count).Error
+	return count, err
+}
+
+// GetLastestBy retrieves the most recent entity matching the given properties.
 func (br *baseRepository[T]) GetLastestBy(ctx context.Context, properties map[string]any) (T, error) {
 	entity := br.modelFactory()
 	query := br.Svc().DB(ctx, true)
 
+	// Apply filters with validation
 	for key, value := range properties {
-		query.Where(fmt.Sprintf("%s = ?", key), value)
+		if err := br.validateColumn(key); err != nil {
+			return entity, err
+		}
+		query = query.Where(key+" = ?", value)
 	}
 
-	err := query.Last(entity).Error
+	// Order by created_at DESC for "latest"
+	err := query.Order("created_at DESC").First(entity).Error
 	return entity, err
 }
 
+// GetAllBy retrieves entities matching the given properties with pagination.
 func (br *baseRepository[T]) GetAllBy(ctx context.Context, properties map[string]any, offset, limit int) ([]T, error) {
 	var entities []T
 
@@ -103,14 +206,20 @@ func (br *baseRepository[T]) GetAllBy(ctx context.Context, properties map[string
 		query = query.Limit(limit)
 	}
 
+	// Apply filters with validation
 	for key, value := range properties {
-		query.Where(fmt.Sprintf("%s = ?", key), value)
+		if err := br.validateColumn(key); err != nil {
+			return nil, err
+		}
+		query = query.Where(key+" = ?", value)
 	}
 
-	err := query.Find(entities).Error
+	// Fixed: Pass pointer to slice
+	err := query.Find(&entities).Error
 	return entities, err
 }
 
+// Search performs a complex search with pagination and filtering.
 func (br *baseRepository[T]) Search(
 	ctx context.Context,
 	query *data.SearchQuery,
@@ -125,41 +234,82 @@ func (br *baseRepository[T]) Search(
 			paginator := query.Pagination
 
 			db := br.Svc().DB(ctx, true).
-				Limit(paginator.Limit).Offset(paginator.Offset)
+				Limit(paginator.Limit).
+				Offset(paginator.Offset)
 
-			var startAt any
-			var stopAt any
+			// Process date range filters
+			var startAt *time.Time
+			var stopAt *time.Time
+
+			// Apply field filters with validation
 			for k, v := range query.Fields {
 				if k == "start_date" {
-					startAt = v
+					if t, ok := v.(*time.Time); ok {
+						startAt = t
+					}
 					continue
 				}
 				if k == "end_date" {
-					stopAt = v
+					if t, ok := v.(*time.Time); ok {
+						stopAt = t
+					}
 					continue
 				}
 
-				db = db.Where(fmt.Sprintf("%s = ? ", k), v)
+				// Validate column name before using
+				if err := br.validateColumn(k); err != nil {
+					return nil, err
+				}
+				db = db.Where(k+" = ?", v)
 			}
 
+			// Apply date range filter if both dates provided
 			if startAt != nil && stopAt != nil {
-				startDate, ok1 := startAt.(*time.Time)
-				endDate, ok2 := stopAt.(*time.Time)
-				if ok1 && ok2 {
-					db = db.Where(
-						"created_at BETWEEN ? AND ? ",
-						startDate.Format("2020-01-31T00:00:00Z"),
-						endDate.Format("2020-01-31T00:00:00Z"),
-					)
+				// Fixed: Use actual dates, not hardcoded 2020
+				// Use RFC3339 format for proper timezone handling
+				db = db.Where(
+					"created_at BETWEEN ? AND ?",
+					startAt.Format(time.RFC3339),
+					stopAt.Format(time.RFC3339),
+				)
+			}
+
+			// Apply text search across multiple fields
+			if query.Query != "" && len(query.QueryFields) > 0 {
+				// Build OR conditions for search fields
+				var conditions []string
+				var args []interface{}
+
+				for searchField, operator := range query.QueryFields {
+					// Validate column name
+					if err := br.validateColumn(searchField); err != nil {
+						return nil, err
+					}
+
+					// Sanitize operator (whitelist allowed operators)
+					operator = strings.TrimSpace(strings.ToUpper(operator))
+					switch operator {
+					case "LIKE", "ILIKE", "=", "!=", ">", "<", ">=", "<=":
+						conditions = append(conditions, fmt.Sprintf("%s %s ?", searchField, operator))
+						
+						// Add wildcards for LIKE/ILIKE operators
+						if operator == "LIKE" || operator == "ILIKE" {
+							args = append(args, "%"+query.Query+"%")
+						} else {
+							args = append(args, query.Query)
+						}
+					default:
+						return nil, fmt.Errorf("invalid operator: %s", operator)
+					}
+				}
+
+				if len(conditions) > 0 {
+					// Combine with OR
+					db = db.Where(strings.Join(conditions, " OR "), args...)
 				}
 			}
 
-			if query.Query != "" {
-				for searchField, oprt := range query.QueryFields {
-					db = db.Where(fmt.Sprintf(" %s %s ", searchField, oprt), query.Query)
-				}
-			}
-
+			// Execute query with pointer to slice
 			err := db.Find(&entities).Error
 
 			return entities, err

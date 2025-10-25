@@ -12,6 +12,7 @@ import (
 
 	"github.com/pitabwire/frame"
 	"github.com/pitabwire/frame/config"
+	"github.com/pitabwire/frame/data"
 	"github.com/pitabwire/frame/datastore"
 	"github.com/pitabwire/frame/datastore/pool"
 	"github.com/pitabwire/frame/frametests"
@@ -253,7 +254,7 @@ func (s *DatastoreTestSuite) TestDBPropertiesFromMap() {
 	testCases := []struct {
 		name     string
 		propsMap map[string]any
-		want     datastore.JSONMap
+		want     data.JSONMap
 	}{
 		{
 			name: "happy case with various data types",
@@ -265,7 +266,7 @@ func (s *DatastoreTestSuite) TestDBPropertiesFromMap() {
 				"e": []any{23, 35, 37, 55},
 				"f": map[string]any{"x": "t", "y": "g"},
 			},
-			want: datastore.JSONMap{
+			want: data.JSONMap{
 				"a": "a",
 				"b": "751",
 				"c": "23.5",
@@ -294,7 +295,7 @@ func (s *DatastoreTestSuite) TestDBPropertiesFromMap() {
 func (s *DatastoreTestSuite) TestDBPropertiesToMap() {
 	testCases := []struct {
 		name    string
-		dbProps datastore.JSONMap
+		dbProps data.JSONMap
 		want    map[string]any
 	}{
 		{
@@ -307,7 +308,7 @@ func (s *DatastoreTestSuite) TestDBPropertiesToMap() {
 				"e": []any{23.0, 35.0, 37.0, 55.0},
 				"f": map[string]any{"x": "t", "y": "g"},
 			},
-			dbProps: datastore.JSONMap{
+			dbProps: data.JSONMap{
 				"a": "a",
 				"b": 751,
 				"c": "23.5",

@@ -71,7 +71,7 @@ func (s *JwtTestSuite) TestServiceRegisterForJwtWithParams() {
 		},
 	}
 
-	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependancyOption) {
+	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependencyOption) {
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
 				// Skip this test as it requires external OAuth2 service

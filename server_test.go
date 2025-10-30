@@ -76,7 +76,7 @@ func (s *ServerTestSuite) TestRawGrpcServer() {
 		},
 	}
 
-	s.WithTestDependancies(s.T(), func(t *testing.T, _ *definition.DependancyOption) {
+	s.WithTestDependancies(s.T(), func(t *testing.T, _ *definition.DependencyOption) {
 		for _, tc := range testCases {
 			t.Run(tc.name, func(_ *testing.T) {
 				srv, listener := s.startGRPCServer(t)
@@ -114,7 +114,7 @@ func (s *ServerTestSuite) TestServiceGrpcHealthServer() {
 		},
 	}
 
-	s.WithTestDependancies(s.T(), func(t *testing.T, _ *definition.DependancyOption) {
+	s.WithTestDependancies(s.T(), func(t *testing.T, _ *definition.DependencyOption) {
 		for _, tc := range testCases {
 			t.Run(tc.name, func(_ *testing.T) {
 				bufferSize := 1024 * 1024
@@ -176,7 +176,7 @@ func (s *ServerTestSuite) TestServiceGrpcServer() {
 		},
 	}
 
-	s.WithTestDependancies(s.T(), func(t *testing.T, _ *definition.DependancyOption) {
+	s.WithTestDependancies(s.T(), func(t *testing.T, _ *definition.DependencyOption) {
 		for _, tc := range testCases {
 			t.Run(tc.name, func(_ *testing.T) {
 				bufferSize := 1024 * 1024
@@ -236,7 +236,7 @@ func (s *ServerTestSuite) TestServiceGrpcTLSServer() {
 		},
 	}
 
-	s.WithTestDependancies(s.T(), func(t *testing.T, _ *definition.DependancyOption) {
+	s.WithTestDependancies(s.T(), func(t *testing.T, _ *definition.DependencyOption) {
 		for _, tc := range testCases {
 			t.Run(tc.name, func(_ *testing.T) {
 				gsrv := grpc.NewServer()
@@ -299,7 +299,7 @@ func (s *ServerTestSuite) TestServiceRun() {
 		},
 	}
 
-	s.WithTestDependancies(s.T(), func(t *testing.T, _ *definition.DependancyOption) {
+	s.WithTestDependancies(s.T(), func(t *testing.T, _ *definition.DependencyOption) {
 		for _, tc := range testCases {
 			t.Run(tc.name, func(_ *testing.T) {
 				httpTestOpt, _ := frametests.WithHTTPTestDriver()

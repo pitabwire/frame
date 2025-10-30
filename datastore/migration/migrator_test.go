@@ -46,7 +46,7 @@ func (s *MigratorTestSuite) TestSaveNewMigrations() {
 		},
 	}
 
-	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependancyOption) {
+	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependencyOption) {
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
 				db := dep.ByIsDatabase(t.Context())
@@ -131,7 +131,7 @@ func (s *MigratorTestSuite) TestApplyMigrations() {
 		},
 	}
 
-	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependancyOption) {
+	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependencyOption) {
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
 				db := dep.ByIsDatabase(t.Context())
@@ -191,7 +191,7 @@ func (s *MigratorTestSuite) TestServiceMigrateDatastore() {
 		},
 	}
 
-	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependancyOption) {
+	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependencyOption) {
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
 				db := dep.ByIsDatabase(t.Context())
@@ -242,7 +242,7 @@ func (s *MigratorTestSuite) TestServiceMigrateDatastoreIdempotency() {
 		},
 	}
 
-	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependancyOption) {
+	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependencyOption) {
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
 				db := dep.ByIsDatabase(t.Context())

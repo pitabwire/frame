@@ -30,31 +30,31 @@ type TestResource interface {
 	DependancyConn
 }
 
-type DependancyOption struct {
+type DependencyOption struct {
 	name   string
 	prefix string
 	deps   []DependancyConn
 }
 
-func NewDependancyOption(name string, prefix string, deps []DependancyConn) *DependancyOption {
-	return &DependancyOption{
+func NewDependancyOption(name string, prefix string, deps []DependancyConn) *DependencyOption {
+	return &DependencyOption{
 		name:   name,
 		prefix: prefix,
 		deps:   deps,
 	}
 }
 
-func (opt *DependancyOption) Name() string {
+func (opt *DependencyOption) Name() string {
 	return opt.name
 }
-func (opt *DependancyOption) Prefix() string {
+func (opt *DependencyOption) Prefix() string {
 	return opt.prefix
 }
-func (opt *DependancyOption) All() []DependancyConn {
+func (opt *DependencyOption) All() []DependancyConn {
 	return opt.deps
 }
 
-func (opt *DependancyOption) ByImageName(imageName string) DependancyConn {
+func (opt *DependencyOption) ByImageName(imageName string) DependancyConn {
 	for _, dep := range opt.deps {
 		if dep.Name() == imageName {
 			return dep
@@ -63,7 +63,7 @@ func (opt *DependancyOption) ByImageName(imageName string) DependancyConn {
 	return nil
 }
 
-func (opt *DependancyOption) ByIsDatabase(ctx context.Context) DependancyConn {
+func (opt *DependencyOption) ByIsDatabase(ctx context.Context) DependancyConn {
 	for _, dep := range opt.deps {
 		if dep.GetDS(ctx).IsDB() {
 			return dep
@@ -72,7 +72,7 @@ func (opt *DependancyOption) ByIsDatabase(ctx context.Context) DependancyConn {
 	return nil
 }
 
-func (opt *DependancyOption) ByIsCache(ctx context.Context) DependancyConn {
+func (opt *DependencyOption) ByIsCache(ctx context.Context) DependancyConn {
 	for _, dep := range opt.deps {
 		if dep.GetDS(ctx).IsCache() {
 			return dep
@@ -81,7 +81,7 @@ func (opt *DependancyOption) ByIsCache(ctx context.Context) DependancyConn {
 	return nil
 }
 
-func (opt *DependancyOption) ByIsQueue(ctx context.Context) DependancyConn {
+func (opt *DependencyOption) ByIsQueue(ctx context.Context) DependancyConn {
 	for _, dep := range opt.deps {
 		if dep.GetDS(ctx).IsQueue() {
 			return dep

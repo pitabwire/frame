@@ -86,7 +86,7 @@ func (s *AuthenticationTestSuite) TestAuthenticationFromContext() {
 		},
 	}
 
-	s.WithTestDependancies(s.T(), func(t *testing.T, _ *definition.DependancyOption) {
+	s.WithTestDependancies(s.T(), func(t *testing.T, _ *definition.DependencyOption) {
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
 				ctx := tc.setupContext(t.Context())
@@ -138,7 +138,7 @@ func (s *AuthenticationTestSuite) TestSimpleAuthenticate() {
 		},
 	}
 
-	s.WithTestDependancies(s.T(), func(t *testing.T, _ *definition.DependancyOption) {
+	s.WithTestDependancies(s.T(), func(t *testing.T, _ *definition.DependencyOption) {
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
 				ctx, srv := frame.NewService("Test Srv", frame.WithConfig(
@@ -178,7 +178,7 @@ func (s *AuthenticationTestSuite) TestSimpleAuthenticateWithOIDC() {
 		},
 	}
 
-	s.WithTestDependancies(s.T(), func(t *testing.T, _ *definition.DependancyOption) {
+	s.WithTestDependancies(s.T(), func(t *testing.T, _ *definition.DependencyOption) {
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
 				t.Setenv("OAUTH2_SERVICE_URI", tc.serviceURI)
@@ -228,7 +228,7 @@ func (s *AuthenticationTestSuite) TestAuthenticateWithTenantClaims() {
 		},
 	}
 
-	s.WithTestDependancies(s.T(), func(t *testing.T, _ *definition.DependancyOption) {
+	s.WithTestDependancies(s.T(), func(t *testing.T, _ *definition.DependencyOption) {
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
 				ctx, srv := frame.NewService("Tenant Srv", frame.WithConfig(

@@ -68,7 +68,7 @@ func (s *EventsTestSuite) TestServiceRegisterEventsWorks() {
 		},
 	}
 
-	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependancyOption) {
+	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependencyOption) {
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
 				ctx := t.Context()
@@ -156,7 +156,7 @@ func (s *EventsTestSuite) TestServiceEventsPublishingWorks() {
 		},
 	}
 
-	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependancyOption) {
+	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependencyOption) {
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
 				ctx := t.Context()

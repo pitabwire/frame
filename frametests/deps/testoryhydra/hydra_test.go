@@ -47,7 +47,7 @@ func TestHydraImageSetup(t *testing.T) {
 
 // TestHydraImageSetup tests the hydra image setup.
 func (h *HydraImageSetupTestSuite) TestHydraImageSetup() {
-	depOptions := []*definition.DependancyOption{
+	depOptions := []*definition.DependencyOption{
 		definition.NewDependancyOption("hydra setup", "hydra_t", h.Resources()),
 	}
 
@@ -101,7 +101,7 @@ func (h *HydraImageSetupTestSuite) TestHydraImageSetup() {
 		},
 	}
 
-	frametests.WithTestDependancies(h.T(), depOptions, func(t *testing.T, depOpt *definition.DependancyOption) {
+	frametests.WithTestDependencies(h.T(), depOptions, func(t *testing.T, depOpt *definition.DependencyOption) {
 		depCon := depOpt.ByImageName(testoryhydra.OryHydraImage)
 
 		for _, tc := range testCases {

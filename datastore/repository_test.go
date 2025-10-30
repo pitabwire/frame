@@ -49,7 +49,7 @@ func (s *RepositoryTestSuite) TestServiceDatastore() {
 		},
 	}
 
-	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependancyOption) {
+	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependencyOption) {
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
 				db := dep.ByIsDatabase(t.Context())
@@ -93,7 +93,7 @@ func (s *RepositoryTestSuite) TestServiceDatastoreSet() {
 		},
 	}
 
-	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependancyOption) {
+	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependencyOption) {
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
 				ctx := t.Context()
@@ -140,7 +140,7 @@ func (s *RepositoryTestSuite) TestServiceDatastoreRunQuery() {
 		},
 	}
 
-	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependancyOption) {
+	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependencyOption) {
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
 				db := dep.ByIsDatabase(t.Context())
@@ -194,7 +194,7 @@ func (s *RepositoryTestSuite) TestServiceDatastoreRead() {
 		},
 	}
 
-	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependancyOption) {
+	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependencyOption) {
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
 				db := dep.ByIsDatabase(t.Context())
@@ -239,7 +239,7 @@ func (s *RepositoryTestSuite) TestServiceDatastoreNotSet() {
 		},
 	}
 
-	s.WithTestDependancies(s.T(), func(t *testing.T, _ *definition.DependancyOption) {
+	s.WithTestDependancies(s.T(), func(t *testing.T, _ *definition.DependencyOption) {
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
 				_, srv := frame.NewService(tc.serviceName)
@@ -282,7 +282,7 @@ func (s *RepositoryTestSuite) TestDBPropertiesFromMap() {
 		},
 	}
 
-	s.WithTestDependancies(s.T(), func(t *testing.T, _ *definition.DependancyOption) {
+	s.WithTestDependancies(s.T(), func(t *testing.T, _ *definition.DependencyOption) {
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
 				got, _ := structpb.NewStruct(tc.propsMap)
@@ -324,7 +324,7 @@ func (s *RepositoryTestSuite) TestDBPropertiesToMap() {
 		},
 	}
 
-	s.WithTestDependancies(s.T(), func(t *testing.T, _ *definition.DependancyOption) {
+	s.WithTestDependancies(s.T(), func(t *testing.T, _ *definition.DependencyOption) {
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
 				got, _ := structpb.NewStruct(tc.dbProps)
@@ -388,7 +388,7 @@ func (s *RepositoryTestSuite) TestCreate() {
 		},
 	}
 
-	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependancyOption) {
+	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependencyOption) {
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
 				ctx := t.Context()
@@ -440,7 +440,7 @@ func (s *RepositoryTestSuite) TestCreate() {
 
 // TestImmutableFields tests that immutable fields cannot be modified.
 func (s *RepositoryTestSuite) TestImmutableFields() {
-	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependancyOption) {
+	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependencyOption) {
 		ctx := t.Context()
 		db := dep.ByIsDatabase(ctx)
 
@@ -540,7 +540,7 @@ func (s *RepositoryTestSuite) TestBulkCreate() {
 		},
 	}
 
-	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependancyOption) {
+	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependencyOption) {
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
 				ctx := t.Context()
@@ -616,7 +616,7 @@ func (s *RepositoryTestSuite) TestBulkCreate() {
 
 // TestBulkCreateBatchSize tests that bulk create respects batch size.
 func (s *RepositoryTestSuite) TestBulkCreateBatchSize() {
-	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependancyOption) {
+	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependencyOption) {
 		ctx := t.Context()
 		db := dep.ByIsDatabase(ctx)
 
@@ -740,7 +740,7 @@ func (s *RepositoryTestSuite) TestBulkUpdate() {
 		},
 	}
 
-	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependancyOption) {
+	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependencyOption) {
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
 				ctx := t.Context()
@@ -834,7 +834,7 @@ func (s *RepositoryTestSuite) TestBulkUpdate() {
 
 // TestBulkUpdateInvalidColumn tests that bulk update validates column names.
 func (s *RepositoryTestSuite) TestBulkUpdateInvalidColumn() {
-	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependancyOption) {
+	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependencyOption) {
 		ctx := t.Context()
 		db := dep.ByIsDatabase(ctx)
 
@@ -875,7 +875,7 @@ func (s *RepositoryTestSuite) TestBulkUpdateInvalidColumn() {
 
 // TestBulkUpdateConcurrent tests concurrent bulk updates.
 func (s *RepositoryTestSuite) TestBulkUpdateConcurrent() {
-	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependancyOption) {
+	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependencyOption) {
 		ctx := t.Context()
 		db := dep.ByIsDatabase(ctx)
 
@@ -959,7 +959,7 @@ func (s *RepositoryTestSuite) TestBulkUpdateConcurrent() {
 
 // TestBulkUpdatePerformance tests performance characteristics of bulk updates.
 func (s *RepositoryTestSuite) TestBulkUpdatePerformance() {
-	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependancyOption) {
+	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependencyOption) {
 		ctx := t.Context()
 		db := dep.ByIsDatabase(ctx)
 

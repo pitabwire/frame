@@ -65,7 +65,7 @@ func (s *CommonTestSuite) TestConfigProcess() {
 		},
 	}
 
-	s.WithTestDependancies(s.T(), func(t *testing.T, _ *definition.DependancyOption) {
+	s.WithTestDependancies(s.T(), func(t *testing.T, _ *definition.DependencyOption) {
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
 				// Set environment variables
@@ -116,7 +116,7 @@ func (s *CommonTestSuite) TestConfigCastingIssues() {
 		},
 	}
 
-	s.WithTestDependancies(s.T(), func(t *testing.T, _ *definition.DependancyOption) {
+	s.WithTestDependancies(s.T(), func(t *testing.T, _ *definition.DependencyOption) {
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
 				// Set environment variables
@@ -232,7 +232,7 @@ func (s *CommonTestSuite) TestErrIsNotFound() {
 		},
 	}
 
-	s.WithTestDependancies(s.T(), func(t *testing.T, _ *definition.DependancyOption) {
+	s.WithTestDependancies(s.T(), func(t *testing.T, _ *definition.DependencyOption) {
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
 				result := frame.ErrIsNotFound(tc.err)

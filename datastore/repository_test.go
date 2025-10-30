@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"reflect"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -696,6 +697,40 @@ func (s *RepositoryTestSuite) TestBulkUpdate() {
 			expectError:  true,
 		},
 		{
+			name:        "bulk update with immutable field 'id' should fail",
+			entityCount: 10,
+			updateParams: map[string]any{
+				"id": "new-id",
+			},
+			expectError: true,
+		},
+		{
+			name:        "bulk update with immutable field 'created_at' should fail",
+			entityCount: 10,
+			updateParams: map[string]any{
+				"created_at": time.Now(),
+			},
+			expectError: true,
+		},
+		{
+			name:        "bulk update with immutable field 'tenant_id' should fail",
+			entityCount: 10,
+			updateParams: map[string]any{
+				"tenant_id": "new-tenant",
+			},
+			expectError: true,
+		},
+		{
+			name:        "bulk update with mixed fields including immutable should fail",
+			entityCount: 10,
+			updateParams: map[string]any{
+				"status":  "active",
+				"id":      "new-id", // immutable field
+				"counter": 100,
+			},
+			expectError: true,
+		},
+		{
 			name:        "bulk update with empty entity list",
 			entityCount: 0,
 			updateParams: map[string]any{
@@ -758,6 +793,10 @@ func (s *RepositoryTestSuite) TestBulkUpdate() {
 
 				if tc.expectError {
 					require.Error(t, err)
+					// Verify immutable field errors contain appropriate message
+					if strings.Contains(tc.name, "immutable") {
+						require.Contains(t, err.Error(), "immutable", "error should mention immutable field")
+					}
 				} else {
 					require.NoError(t, err, "bulk update should succeed")
 					require.Equal(t, int64(tc.entityCount), rowsAffected, "should update all entities")

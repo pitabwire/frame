@@ -111,16 +111,15 @@ func (br *baseRepository[T]) GetByID(ctx context.Context, id string) (T, error) 
 	return entity, err
 }
 
-// Create creates an entity with optimistic locking.
-// For new entities (version <= 0), it performs a CREATE operation.
-// For existing entities, it performs an UPDATE with version check to prevent lost updates.
+// Create creates a new entity in the database.
+// It is intended for new entities and will return an error if the entity's version is greater than 0.
 func (br *baseRepository[T]) Create(ctx context.Context, entity T) error {
-	// Validate entity has an ID for updates
+	// Prevent updating existing entities with Create.
 	if entity.GetVersion() > 0 {
-		return errors.New("entity version is more than 0, consider updating instead of creating")
+		return errors.New("entity version is more than 0, consider using Update instead of Create")
 	}
 
-	// Use Create for new entities (more efficient than Create)
+	// Use GORM's Create for new entities, which is more direct than Save.
 	return br.Pool().DB(ctx, false).Create(entity).Error
 }
 
@@ -177,7 +176,7 @@ func (br *baseRepository[T]) Update(ctx context.Context, entity T, affectedField
 		query = query.Select(affectedFields)
 	} else {
 		// Only omit immutable fields when updating all fields
-		query = query.Omit("id", "created_at", "tenant_id", "partition_id")
+		query = query.Omit(br.ImmutableFields()...)
 	}
 
 	// Execute update - single database round trip
@@ -202,6 +201,11 @@ func (br *baseRepository[T]) BulkUpdate(ctx context.Context, entityIDs []string,
 	for col := range params {
 		if err := br.validateColumn(col); err != nil {
 			return 0, err
+		}
+		for _, immutableField := range br.ImmutableFields() {
+			if col == immutableField {
+				return 0, fmt.Errorf("cannot bulk update immutable field: %s", col)
+			}
 		}
 	}
 

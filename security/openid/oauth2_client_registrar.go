@@ -8,11 +8,10 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/pitabwire/util"
-
 	"github.com/pitabwire/frame/client"
 	"github.com/pitabwire/frame/config"
 	"github.com/pitabwire/frame/security"
+	"github.com/pitabwire/util"
 )
 
 const ConstSystemScopeInternal = "system_int"

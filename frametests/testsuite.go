@@ -4,14 +4,13 @@ import (
 	"context"
 	"testing"
 
+	"github.com/pitabwire/frame/frametests/definition"
 	"github.com/pitabwire/util"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/network"
 	"go.uber.org/mock/gomock"
-
-	"github.com/pitabwire/frame/frametests/definition"
 )
 
 // FrameBaseTestSuite provides a base test suite with all necessary test components.
@@ -80,13 +79,16 @@ func (s *FrameBaseTestSuite) TearDownSuite() {
 	}
 }
 
-// WithTestDependancies Creates subtests with each known DependancyOption.
-func WithTestDependancies(t *testing.T,
-	options []*definition.DependancyOption,
-	testFn func(t *testing.T, db *definition.DependancyOption)) {
+// WithTestDependencies runs subtests for each provided DependencyOption.
+// It ensures each subtest is properly isolated and runs in parallel if desired.
+func WithTestDependencies(t *testing.T,
+	options []*definition.DependencyOption,
+	testFn func(t *testing.T, opt *definition.DependencyOption)) {
+	t.Helper() // Marks this as a helper so test failures point to caller
 	for _, opt := range options {
-		t.Run(opt.Name(), func(tt *testing.T) {
-			testFn(tt, opt)
+		nueOpt := opt
+		t.Run(nueOpt.Name(), func(tt *testing.T) {
+			testFn(tt, nueOpt)
 		})
 	}
 }

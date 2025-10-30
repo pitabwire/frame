@@ -6,14 +6,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/require"
-	"github.com/stretchr/testify/suite"
-
 	"github.com/pitabwire/frame"
 	"github.com/pitabwire/frame/config"
 	"github.com/pitabwire/frame/frametests"
 	"github.com/pitabwire/frame/frametests/definition"
 	"github.com/pitabwire/frame/tests"
+	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 // EventsTestSuite extends BaseTestSuite for comprehensive events testing.
@@ -68,7 +67,7 @@ func (s *EventsTestSuite) TestServiceRegisterEventsWorks() {
 		},
 	}
 
-	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependancyOption) {
+	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependencyOption) {
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
 				ctx := t.Context()
@@ -156,7 +155,7 @@ func (s *EventsTestSuite) TestServiceEventsPublishingWorks() {
 		},
 	}
 
-	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependancyOption) {
+	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependencyOption) {
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
 				ctx := t.Context()

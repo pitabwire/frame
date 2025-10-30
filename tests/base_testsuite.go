@@ -4,14 +4,13 @@ import (
 	"context"
 	"testing"
 
-	"github.com/pitabwire/util"
-
 	"github.com/pitabwire/frame/frametests"
 	"github.com/pitabwire/frame/frametests/definition"
 	"github.com/pitabwire/frame/frametests/deps/testnats"
 	"github.com/pitabwire/frame/frametests/deps/testoryhydra"
 	"github.com/pitabwire/frame/frametests/deps/testoryketo"
 	"github.com/pitabwire/frame/frametests/deps/testpostgres"
+	"github.com/pitabwire/util"
 )
 
 const (
@@ -43,10 +42,10 @@ func (bs *BaseTestSuite) SetupSuite() {
 	bs.FrameBaseTestSuite.SetupSuite()
 }
 
-// WithTestDependancies Creates subtests with each known DependancyOption.
+// WithTestDependancies Creates subtests with each known DependencyOption.
 func (bs *BaseTestSuite) WithTestDependancies(
 	t *testing.T,
-	testFn func(t *testing.T, dep *definition.DependancyOption),
+	testFn func(t *testing.T, dep *definition.DependencyOption),
 ) {
 	var allDeps []definition.DependancyConn
 	var queueDR definition.DependancyConn
@@ -70,10 +69,10 @@ func (bs *BaseTestSuite) WithTestDependancies(
 	allDepsWQ := allDeps
 	allDepsWQ = append(allDepsWQ, queueDR)
 
-	options := []*definition.DependancyOption{
+	options := []*definition.DependencyOption{
 		definition.NewDependancyOption("default", util.RandomString(DefaultRandomStringLength), allDeps),
 		definition.NewDependancyOption("natsQ", util.RandomString(DefaultRandomStringLength), allDepsWQ),
 	}
 
-	frametests.WithTestDependancies(t, options, testFn)
+	frametests.WithTestDependencies(t, options, testFn)
 }

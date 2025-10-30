@@ -9,13 +9,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/require"
-	"github.com/stretchr/testify/suite"
-
 	"github.com/pitabwire/frame"
 	"github.com/pitabwire/frame/frametests"
 	"github.com/pitabwire/frame/frametests/definition"
 	"github.com/pitabwire/frame/tests"
+	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 // QueueTestSuite extends BaseTestSuite for comprehensive queueManager testing.
@@ -44,7 +43,7 @@ func (s *QueueTestSuite) TestServiceRegisterPublisherNotSet() {
 		},
 	}
 
-	s.WithTestDependancies(s.T(), func(t *testing.T, _ *definition.DependancyOption) {
+	s.WithTestDependancies(s.T(), func(t *testing.T, _ *definition.DependencyOption) {
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
 				ctx, srv := frame.NewService(tc.serviceName)
@@ -76,7 +75,7 @@ func (s *QueueTestSuite) TestServiceRegisterPublisherNotInitialized() {
 		},
 	}
 
-	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependancyOption) {
+	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependencyOption) {
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
 				var err error
@@ -144,7 +143,7 @@ func (s *QueueTestSuite) TestServiceRegisterPublisher() {
 		},
 	}
 
-	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependancyOption) {
+	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependencyOption) {
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
 				var err error
@@ -223,7 +222,7 @@ func (s *QueueTestSuite) TestServiceRegisterPublisherMultiple() {
 		},
 	}
 
-	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependancyOption) {
+	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependencyOption) {
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
 				var err error
@@ -321,7 +320,7 @@ func (s *QueueTestSuite) TestServiceRegisterSubscriber() {
 		},
 	}
 
-	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependancyOption) {
+	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependencyOption) {
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
 				var err error
@@ -398,7 +397,7 @@ func (s *QueueTestSuite) TestServiceRegisterSubscriberValidateMessages() {
 		},
 	}
 
-	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependancyOption) {
+	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependencyOption) {
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
 				var err error
@@ -499,7 +498,7 @@ func (s *QueueTestSuite) TestServiceSubscriberValidateJetstreamMessages() {
 		},
 	}
 
-	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependancyOption) {
+	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependencyOption) {
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
 				var err error
@@ -598,7 +597,7 @@ func (s *QueueTestSuite) TestServiceRegisterSubscriberWithError() {
 		},
 	}
 
-	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependancyOption) {
+	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependencyOption) {
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
 				var err error
@@ -671,7 +670,7 @@ func (s *QueueTestSuite) TestServiceRegisterSubscriberInvalid() {
 		},
 	}
 
-	s.WithTestDependancies(s.T(), func(t *testing.T, _ *definition.DependancyOption) {
+	s.WithTestDependancies(s.T(), func(t *testing.T, _ *definition.DependencyOption) {
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
 				handler := &msgHandler{f: func(_ context.Context, _ map[string]string, _ []byte) error {
@@ -703,7 +702,7 @@ func (s *QueueTestSuite) TestServiceRegisterSubscriberContextCancelWorks() {
 		},
 	}
 
-	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependancyOption) {
+	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependencyOption) {
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
 				var err error
@@ -780,7 +779,7 @@ func (s *QueueTestSuite) TestServiceAddPublisher() {
 		},
 	}
 
-	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependancyOption) {
+	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependencyOption) {
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
 				var err error
@@ -852,7 +851,7 @@ func (s *QueueTestSuite) TestServiceAddPublisherInvalidURL() {
 		},
 	}
 
-	s.WithTestDependancies(s.T(), func(t *testing.T, _ *definition.DependancyOption) {
+	s.WithTestDependancies(s.T(), func(t *testing.T, _ *definition.DependencyOption) {
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
 				ctx, srv := frame.NewService(tc.serviceName, frametests.WithNoopDriver())
@@ -884,7 +883,7 @@ func (s *QueueTestSuite) TestServiceAddSubscriber() {
 		},
 	}
 
-	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependancyOption) {
+	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependencyOption) {
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
 				var err error
@@ -962,7 +961,7 @@ func (s *QueueTestSuite) TestServiceAddSubscriberWithoutHandler() {
 		},
 	}
 
-	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependancyOption) {
+	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependencyOption) {
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
 				var err error
@@ -1033,7 +1032,7 @@ func (s *QueueTestSuite) TestServiceAddSubscriberInvalidURL() {
 		},
 	}
 
-	s.WithTestDependancies(s.T(), func(t *testing.T, _ *definition.DependancyOption) {
+	s.WithTestDependancies(s.T(), func(t *testing.T, _ *definition.DependencyOption) {
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
 				handler := &msgHandler{f: func(_ context.Context, _ map[string]string, _ []byte) error {

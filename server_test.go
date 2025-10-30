@@ -12,19 +12,18 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/suite"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials"
-	"google.golang.org/grpc/credentials/insecure"
-	"google.golang.org/grpc/health/grpc_health_v1"
-	"google.golang.org/grpc/test/bufconn"
-
 	"github.com/pitabwire/frame"
 	"github.com/pitabwire/frame/config"
 	"github.com/pitabwire/frame/frametests"
 	"github.com/pitabwire/frame/frametests/definition"
 	grpcping2 "github.com/pitabwire/frame/frametests/grpcping"
 	"github.com/pitabwire/frame/tests"
+	"github.com/stretchr/testify/suite"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/health/grpc_health_v1"
+	"google.golang.org/grpc/test/bufconn"
 )
 
 // ServerTestSuite extends FrameBaseTestSuite for comprehensive server testing.
@@ -76,7 +75,7 @@ func (s *ServerTestSuite) TestRawGrpcServer() {
 		},
 	}
 
-	s.WithTestDependancies(s.T(), func(t *testing.T, _ *definition.DependancyOption) {
+	s.WithTestDependancies(s.T(), func(t *testing.T, _ *definition.DependencyOption) {
 		for _, tc := range testCases {
 			t.Run(tc.name, func(_ *testing.T) {
 				srv, listener := s.startGRPCServer(t)
@@ -114,7 +113,7 @@ func (s *ServerTestSuite) TestServiceGrpcHealthServer() {
 		},
 	}
 
-	s.WithTestDependancies(s.T(), func(t *testing.T, _ *definition.DependancyOption) {
+	s.WithTestDependancies(s.T(), func(t *testing.T, _ *definition.DependencyOption) {
 		for _, tc := range testCases {
 			t.Run(tc.name, func(_ *testing.T) {
 				bufferSize := 1024 * 1024
@@ -176,7 +175,7 @@ func (s *ServerTestSuite) TestServiceGrpcServer() {
 		},
 	}
 
-	s.WithTestDependancies(s.T(), func(t *testing.T, _ *definition.DependancyOption) {
+	s.WithTestDependancies(s.T(), func(t *testing.T, _ *definition.DependencyOption) {
 		for _, tc := range testCases {
 			t.Run(tc.name, func(_ *testing.T) {
 				bufferSize := 1024 * 1024
@@ -236,7 +235,7 @@ func (s *ServerTestSuite) TestServiceGrpcTLSServer() {
 		},
 	}
 
-	s.WithTestDependancies(s.T(), func(t *testing.T, _ *definition.DependancyOption) {
+	s.WithTestDependancies(s.T(), func(t *testing.T, _ *definition.DependencyOption) {
 		for _, tc := range testCases {
 			t.Run(tc.name, func(_ *testing.T) {
 				gsrv := grpc.NewServer()
@@ -299,7 +298,7 @@ func (s *ServerTestSuite) TestServiceRun() {
 		},
 	}
 
-	s.WithTestDependancies(s.T(), func(t *testing.T, _ *definition.DependancyOption) {
+	s.WithTestDependancies(s.T(), func(t *testing.T, _ *definition.DependencyOption) {
 		for _, tc := range testCases {
 			t.Run(tc.name, func(_ *testing.T) {
 				httpTestOpt, _ := frametests.WithHTTPTestDriver()

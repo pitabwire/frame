@@ -7,11 +7,10 @@ import (
 	"strings"
 	"time"
 
-	"gorm.io/gorm"
-
 	"github.com/pitabwire/frame/data"
 	"github.com/pitabwire/frame/datastore/pool"
 	"github.com/pitabwire/frame/workerpool"
+	"gorm.io/gorm"
 )
 
 // BaseRepository provides generic CRUD operations for any model type.

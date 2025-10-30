@@ -3,9 +3,8 @@ package pool
 import (
 	"context"
 
-	"gorm.io/gorm"
-
 	"github.com/pitabwire/frame/datastore/migration"
+	"gorm.io/gorm"
 )
 
 // Connection represents a single database connection configuration.

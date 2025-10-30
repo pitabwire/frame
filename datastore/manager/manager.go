@@ -4,11 +4,10 @@ import (
 	"context"
 	"sync"
 
-	"gorm.io/gorm"
-
 	"github.com/pitabwire/frame/datastore"
 	"github.com/pitabwire/frame/datastore/migration"
 	"github.com/pitabwire/frame/datastore/pool"
+	"gorm.io/gorm"
 )
 
 type manager struct {

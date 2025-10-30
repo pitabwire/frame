@@ -7,10 +7,9 @@ import (
 	"strings"
 
 	"github.com/docker/go-connections/nat"
+	"github.com/pitabwire/frame/data"
 	"github.com/pitabwire/util"
 	"github.com/testcontainers/testcontainers-go"
-
-	"github.com/pitabwire/frame/data"
 )
 
 type DefaultImpl struct {

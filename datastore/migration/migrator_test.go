@@ -5,10 +5,6 @@ import (
 	"os"
 	"testing"
 
-	"github.com/stretchr/testify/require"
-	"github.com/stretchr/testify/suite"
-	"gorm.io/gorm"
-
 	"github.com/pitabwire/frame"
 	"github.com/pitabwire/frame/config"
 	"github.com/pitabwire/frame/datastore"
@@ -16,6 +12,9 @@ import (
 	"github.com/pitabwire/frame/datastore/pool"
 	"github.com/pitabwire/frame/frametests/definition"
 	"github.com/pitabwire/frame/tests"
+	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
+	"gorm.io/gorm"
 )
 
 // MigratorTestSuite extends BaseTestSuite for comprehensive migrator testing.
@@ -46,7 +45,7 @@ func (s *MigratorTestSuite) TestSaveNewMigrations() {
 		},
 	}
 
-	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependancyOption) {
+	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependencyOption) {
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
 				db := dep.ByIsDatabase(t.Context())
@@ -131,7 +130,7 @@ func (s *MigratorTestSuite) TestApplyMigrations() {
 		},
 	}
 
-	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependancyOption) {
+	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependencyOption) {
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
 				db := dep.ByIsDatabase(t.Context())
@@ -191,7 +190,7 @@ func (s *MigratorTestSuite) TestServiceMigrateDatastore() {
 		},
 	}
 
-	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependancyOption) {
+	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependencyOption) {
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
 				db := dep.ByIsDatabase(t.Context())
@@ -242,7 +241,7 @@ func (s *MigratorTestSuite) TestServiceMigrateDatastoreIdempotency() {
 		},
 	}
 
-	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependancyOption) {
+	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependencyOption) {
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
 				db := dep.ByIsDatabase(t.Context())

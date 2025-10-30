@@ -2,28 +2,34 @@ package datastore
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
 
+	"gorm.io/gorm"
+
 	"github.com/pitabwire/frame/data"
 	"github.com/pitabwire/frame/datastore/pool"
 	"github.com/pitabwire/frame/workerpool"
-	"gorm.io/gorm"
 )
 
 // BaseRepository provides generic CRUD operations for any model type.
 // T is the model type (e.g., *models.Room).
 type BaseRepository[T any] interface {
-	Svc() pool.Pool
+	Pool() pool.Pool
 	GetByID(ctx context.Context, id string) (T, error)
 	GetLastestBy(ctx context.Context, properties map[string]any) (T, error)
 	GetAllBy(ctx context.Context, properties map[string]any, offset, limit int) ([]T, error)
 	Search(ctx context.Context, query *data.SearchQuery) (workerpool.JobResultPipe[[]T], error)
 	Count(ctx context.Context) (int64, error)
 	CountBy(ctx context.Context, properties map[string]any) (int64, error)
-	Save(ctx context.Context, entity T) error
-	BatchInsert(ctx context.Context, entities []T) error
+	Create(ctx context.Context, entity T) error
+	BatchSize() int
+	BulkCreate(ctx context.Context, entities []T) error
+	ImmutableFields() []string
+	Update(ctx context.Context, entity T, affectedFields ...string) (int64, error)
+	BulkUpdate(ctx context.Context, entityIDs []string, params map[string]any) (int64, error)
 	Delete(ctx context.Context, id string) error
 	DeleteBatch(ctx context.Context, ids []string) error
 }
@@ -36,6 +42,10 @@ type baseRepository[T data.BaseModelI] struct {
 	modelFactory func() T
 	// tableName caches the table name to avoid repeated reflection
 	tableName string
+
+	batchSize       int
+	immutableFields []string
+
 	// allowedColumns whitelist for safe column access (set during initialization)
 	allowedColumns map[string]bool
 }
@@ -43,20 +53,29 @@ type baseRepository[T data.BaseModelI] struct {
 // NewBaseRepository creates a new base repository instance.
 // modelFactory should return a pointer to a new model instance (e.g., func() *models.Room { return &models.Room{} }).
 func NewBaseRepository[T data.BaseModelI](
+	ctx context.Context,
 	dbPool pool.Pool,
 	workMan workerpool.Manager,
 	modelFactory func() T,
 ) BaseRepository[T] {
 	repo := &baseRepository[T]{
-		dbPool:         dbPool,
-		workMan:        workMan,
-		modelFactory:   modelFactory,
-		allowedColumns: make(map[string]bool),
+		dbPool:          dbPool,
+		workMan:         workMan,
+		modelFactory:    modelFactory,
+		batchSize:       751, //nolint:mnd // default batch size
+		immutableFields: []string{"id", "created_at", "tenant_id", "partition_id"},
+		allowedColumns:  make(map[string]bool),
+	}
+
+	db := dbPool.DB(ctx, true)
+
+	if db.CreateBatchSize > 0 {
+		repo.batchSize = db.CreateBatchSize
 	}
 
 	// Initialize table name and allowed columns from model
 	model := modelFactory()
-	stmt := &gorm.Statement{DB: dbPool.DB(context.Background(), true)}
+	stmt := &gorm.Statement{DB: db}
 	_ = stmt.Parse(model)
 	repo.tableName = stmt.Schema.Table
 
@@ -68,8 +87,12 @@ func NewBaseRepository[T data.BaseModelI](
 	return repo
 }
 
-func (br *baseRepository[T]) Svc() pool.Pool {
+func (br *baseRepository[T]) Pool() pool.Pool {
 	return br.dbPool
+}
+
+func (br *baseRepository[T]) ImmutableFields() []string {
+	return br.immutableFields
 }
 
 // validateColumn checks if a column name is safe to use in queries.
@@ -84,63 +107,123 @@ func (br *baseRepository[T]) validateColumn(column string) error {
 func (br *baseRepository[T]) GetByID(ctx context.Context, id string) (T, error) {
 	entity := br.modelFactory()
 	// Use indexed lookup with prepared statement
-	err := br.Svc().DB(ctx, true).Where("id = ?", id).First(entity).Error
+	err := br.Pool().DB(ctx, true).Where("id = ?", id).First(entity).Error
 	return entity, err
 }
 
-// Save creates or updates an entity with optimistic locking.
-// For new entities (version <= 0), it performs a CREATE operation.
-// For existing entities, it performs an UPDATE with version check to prevent lost updates.
-func (br *baseRepository[T]) Save(ctx context.Context, entity T) error {
-	// Validate entity has an ID for updates
-	if entity.GetVersion() > 0 && entity.GetID() == "" {
-		return fmt.Errorf("entity ID is required for updates")
+// Create creates a new entity in the database.
+// It is intended for new entities and will return an error if the entity's version is greater than 0.
+func (br *baseRepository[T]) Create(ctx context.Context, entity T) error {
+	// Prevent updating existing entities with Create.
+	if entity.GetVersion() > 0 {
+		return errors.New("entity version is more than 0, consider using Update instead of Create")
 	}
 
-	if entity.GetVersion() <= 0 {
-		// Use Create for new entities (more efficient than Save)
-		return br.Svc().DB(ctx, false).Create(entity).Error
-	}
-
-	// Update with optimistic locking to prevent lost updates
-	// The version check ensures the entity hasn't been modified by another transaction
-	currentVersion := entity.GetVersion()
-
-	// GORM will increment version in BeforeUpdate hook
-	// We check that exactly 1 row was updated with the expected version
-	result := br.Svc().DB(ctx, false).
-		Model(entity).
-		Where("id = ? AND version = ?", entity.GetID(), currentVersion).
-		Updates(entity)
-
-	if result.Error != nil {
-		return result.Error
-	}
-
-	if result.RowsAffected == 0 {
-		return fmt.Errorf("optimistic lock failed: entity (id=%s) was modified by another transaction (expected version: %d)", 
-			entity.GetID(), currentVersion)
-	}
-
-	return nil
+	// Use GORM's Create for new entities, which is more direct than Save.
+	return br.Pool().DB(ctx, false).Create(entity).Error
 }
 
-// BatchInsert inserts multiple entities efficiently in a single transaction.
-func (br *baseRepository[T]) BatchInsert(ctx context.Context, entities []T) error {
+func (br *baseRepository[T]) BatchSize() int {
+	return br.batchSize
+}
+
+// BulkCreate inserts multiple entities efficiently in a single transaction.
+func (br *baseRepository[T]) BulkCreate(ctx context.Context, entities []T) error {
 	if len(entities) == 0 {
 		return nil
 	}
 
 	// CreateInBatches uses GORM's batch insert which is more efficient
 	// The batch size is configured in pool options (InsertBatchSize)
-	return br.Svc().DB(ctx, false).CreateInBatches(entities, 0).Error
+	return br.Pool().DB(ctx, false).CreateInBatches(entities, br.BatchSize()).Error
+}
+
+// validateAffectedColumns checks if all columns are valid and allowed.
+func (br *baseRepository[T]) validateAffectedColumns(affectedColumns []string) error {
+	for _, col := range affectedColumns {
+		if err := br.validateColumn(col); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// Update updates an entity with optimistic locking.
+// affectedFields specifies which columns to update. If empty, all non-zero fields are updated.
+// Returns the number of rows affected.
+func (br *baseRepository[T]) Update(ctx context.Context, entity T, affectedFields ...string) (int64, error) {
+	// Validate entity has an ID
+	if entity.GetID() == "" {
+		return 0, errors.New("entity ID is required")
+	}
+
+	// Validate affected columns if provided
+	if len(affectedFields) > 0 {
+		if err := br.validateAffectedColumns(affectedFields); err != nil {
+			return 0, err
+		}
+	}
+
+	currentVersion := entity.GetVersion()
+
+	// Build update query with optimistic locking (efficient single query)
+	query := br.Pool().DB(ctx, false).
+		Model(entity).
+		Where("id = ? AND version = ?", entity.GetID(), currentVersion)
+
+	// Apply column selection if specified
+	if len(affectedFields) > 0 {
+		query = query.Select(affectedFields)
+	} else {
+		// Only omit immutable fields when updating all fields
+		query = query.Omit(br.ImmutableFields()...)
+	}
+
+	// Execute update - single database round trip
+	result := query.Updates(entity)
+
+	return result.RowsAffected, result.Error
+}
+
+// BulkUpdate efficiently updates multiple entities by their IDs with the same values.
+// This performs a single UPDATE query with WHERE id IN (...) for maximum efficiency.
+// Returns the number of rows affected.
+func (br *baseRepository[T]) BulkUpdate(ctx context.Context, entityIDs []string, params map[string]any) (int64, error) {
+	if len(entityIDs) == 0 {
+		return 0, nil
+	}
+
+	if len(params) == 0 {
+		return 0, errors.New("no parameters provided for update")
+	}
+
+	// Validate all column names in params
+	for col := range params {
+		if err := br.validateColumn(col); err != nil {
+			return 0, err
+		}
+		for _, immutableField := range br.ImmutableFields() {
+			if col == immutableField {
+				return 0, fmt.Errorf("cannot bulk update immutable field: %s", col)
+			}
+		}
+	}
+
+	// Execute efficient bulk update - single query for all IDs
+	// Use Table() instead of Model() to avoid GORM issues with empty entities
+	result := br.Pool().DB(ctx, false).
+		Table(br.tableName).
+		Where("id IN ?", entityIDs).
+		Updates(params)
+
+	return result.RowsAffected, result.Error
 }
 
 // Delete soft deletes an entity by its ID without fetching it first.
 func (br *baseRepository[T]) Delete(ctx context.Context, id string) error {
 	// Direct delete without SELECT - much more efficient
 	entity := br.modelFactory()
-	return br.Svc().DB(ctx, false).Where("id = ?", id).Delete(entity).Error
+	return br.Pool().DB(ctx, false).Where("id = ?", id).Delete(entity).Error
 }
 
 // DeleteBatch soft deletes multiple entities by their IDs in a single query.
@@ -150,21 +233,21 @@ func (br *baseRepository[T]) DeleteBatch(ctx context.Context, ids []string) erro
 	}
 
 	entity := br.modelFactory()
-	return br.Svc().DB(ctx, false).Where("id IN ?", ids).Delete(entity).Error
+	return br.Pool().DB(ctx, false).Where("id IN ?", ids).Delete(entity).Error
 }
 
 // Count returns the total number of entities.
 func (br *baseRepository[T]) Count(ctx context.Context) (int64, error) {
 	var count int64
 	// Use table name directly instead of creating model instance
-	err := br.Svc().DB(ctx, true).Table(br.tableName).Count(&count).Error
+	err := br.Pool().DB(ctx, true).Table(br.tableName).Count(&count).Error
 	return count, err
 }
 
 // CountBy returns the count of entities matching the given properties.
 func (br *baseRepository[T]) CountBy(ctx context.Context, properties map[string]any) (int64, error) {
 	var count int64
-	query := br.Svc().DB(ctx, true).Table(br.tableName)
+	query := br.Pool().DB(ctx, true).Table(br.tableName)
 
 	// Apply filters with validation
 	for key, value := range properties {
@@ -181,7 +264,7 @@ func (br *baseRepository[T]) CountBy(ctx context.Context, properties map[string]
 // GetLastestBy retrieves the most recent entity matching the given properties.
 func (br *baseRepository[T]) GetLastestBy(ctx context.Context, properties map[string]any) (T, error) {
 	entity := br.modelFactory()
-	query := br.Svc().DB(ctx, true)
+	query := br.Pool().DB(ctx, true)
 
 	// Apply filters with validation
 	for key, value := range properties {
@@ -200,7 +283,7 @@ func (br *baseRepository[T]) GetLastestBy(ctx context.Context, properties map[st
 func (br *baseRepository[T]) GetAllBy(ctx context.Context, properties map[string]any, offset, limit int) ([]T, error) {
 	var entities []T
 
-	query := br.Svc().DB(ctx, true).Offset(offset)
+	query := br.Pool().DB(ctx, true).Offset(offset)
 
 	if limit > 0 {
 		query = query.Limit(limit)
@@ -220,6 +303,8 @@ func (br *baseRepository[T]) GetAllBy(ctx context.Context, properties map[string
 }
 
 // Search performs a complex search with pagination and filtering.
+//
+//nolint:gocognit // complexity is inherent to comprehensive search logic
 func (br *baseRepository[T]) Search(
 	ctx context.Context,
 	query *data.SearchQuery,
@@ -233,7 +318,7 @@ func (br *baseRepository[T]) Search(
 
 			paginator := query.Pagination
 
-			db := br.Svc().DB(ctx, true).
+			db := br.Pool().DB(ctx, true).
 				Limit(paginator.Limit).
 				Offset(paginator.Offset)
 
@@ -291,7 +376,7 @@ func (br *baseRepository[T]) Search(
 					switch operator {
 					case "LIKE", "ILIKE", "=", "!=", ">", "<", ">=", "<=":
 						conditions = append(conditions, fmt.Sprintf("%s %s ?", searchField, operator))
-						
+
 						// Add wildcards for LIKE/ILIKE operators
 						if operator == "LIKE" || operator == "ILIKE" {
 							args = append(args, "%"+query.Query+"%")

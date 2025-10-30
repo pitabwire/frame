@@ -3,9 +3,10 @@ package frame
 import (
 	"context"
 
-	"github.com/pitabwire/frame/queue"
 	_ "github.com/pitabwire/natspubsub" // required for NATS pubsub driver registration
 	_ "gocloud.dev/pubsub/mempubsub"    // required for in-memory pubsub driver registration
+
+	"github.com/pitabwire/frame/queue"
 )
 
 // WithRegisterPublisher Option to register publishing path referenced within the system.

@@ -4,11 +4,12 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/pitabwire/frame/data"
-	"github.com/pitabwire/frame/frametests/definition"
 	"github.com/testcontainers/testcontainers-go"
 	tcNats "github.com/testcontainers/testcontainers-go/modules/nats"
 	"github.com/testcontainers/testcontainers-go/wait"
+
+	"github.com/pitabwire/frame/data"
+	"github.com/pitabwire/frame/frametests/definition"
 )
 
 const (

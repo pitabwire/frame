@@ -10,8 +10,9 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/pitabwire/frame/config"
 	"github.com/pitabwire/util"
+
+	"github.com/pitabwire/frame/config"
 )
 
 type Manager interface {

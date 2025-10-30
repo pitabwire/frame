@@ -11,9 +11,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/pitabwire/frame/data"
 	"github.com/pitabwire/util"
 	"gorm.io/gorm"
+
+	"github.com/pitabwire/frame/data"
 )
 
 // Migration Our simple table holding all the migration data.

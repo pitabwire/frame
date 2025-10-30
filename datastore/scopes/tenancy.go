@@ -3,8 +3,9 @@ package scopes
 import (
 	"context"
 
-	"github.com/pitabwire/frame/security"
 	"gorm.io/gorm"
+
+	"github.com/pitabwire/frame/security"
 )
 
 func TenancyPartition(ctx context.Context) func(db *gorm.DB) *gorm.DB {

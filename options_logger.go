@@ -4,8 +4,9 @@ import (
 	"context"
 	"log/slog"
 
-	config2 "github.com/pitabwire/frame/config"
 	"github.com/pitabwire/util"
+
+	config2 "github.com/pitabwire/frame/config"
 )
 
 // WithLogger Option that helps with initialization of our internal dbLogger.

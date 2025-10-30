@@ -6,12 +6,13 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/pitabwire/frame/internal"
-	"github.com/pitabwire/frame/localization"
-	"github.com/pitabwire/frame/security"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/propagation"
 	"gocloud.dev/pubsub"
+
+	"github.com/pitabwire/frame/internal"
+	"github.com/pitabwire/frame/localization"
+	"github.com/pitabwire/frame/security"
 )
 
 type publisher struct {

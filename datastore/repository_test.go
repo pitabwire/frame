@@ -352,7 +352,7 @@ func (s *RepositoryTestSuite) TestCreate() {
 	}{
 		{
 			name: "create valid entity",
-			setupEntity: func(ctx context.Context) *TestEntity {
+			setupEntity: func(_ context.Context) *TestEntity {
 				return &TestEntity{
 					Name:        "Test Entity",
 					Description: "Test Description",
@@ -363,7 +363,7 @@ func (s *RepositoryTestSuite) TestCreate() {
 		},
 		{
 			name: "create entity with pre-set ID",
-			setupEntity: func(ctx context.Context) *TestEntity {
+			setupEntity: func(_ context.Context) *TestEntity {
 				entity := &TestEntity{
 					Name: "Entity with ID",
 				}
@@ -375,7 +375,7 @@ func (s *RepositoryTestSuite) TestCreate() {
 		},
 		{
 			name: "create entity with version > 0 should fail",
-			setupEntity: func(ctx context.Context) *TestEntity {
+			setupEntity: func(_ context.Context) *TestEntity {
 				entity := &TestEntity{
 					Name: "Invalid Version",
 				}
@@ -427,8 +427,8 @@ func (s *RepositoryTestSuite) TestCreate() {
 					require.NotZero(t, entity.ModifiedAt, "modified_at should be set")
 
 					// Verify entity was saved to database
-					fetched, err := repo.GetByID(ctx, entity.GetID())
-					require.NoError(t, err)
+					fetched, fetchErr := repo.GetByID(ctx, entity.GetID())
+					require.NoError(t, fetchErr)
 					require.Equal(t, entity.Name, fetched.Name)
 					require.Equal(t, entity.Description, fetched.Description)
 				}
@@ -498,7 +498,13 @@ func (s *RepositoryTestSuite) TestImmutableFields() {
 		require.NoError(t, err)
 		require.Equal(t, originalID, updated.GetID(), "ID should not change")
 		// PostgreSQL truncates to microseconds, so use WithinDuration for timestamp comparison
-		require.WithinDuration(t, originalCreatedAt, updated.CreatedAt, time.Microsecond, "created_at should not change")
+		require.WithinDuration(
+			t,
+			originalCreatedAt,
+			updated.CreatedAt,
+			time.Microsecond,
+			"created_at should not change",
+		)
 		require.Equal(t, originalTenantID, updated.TenantID, "tenant_id should not change")
 		require.Equal(t, "Updated Name", updated.Name, "name should be updated")
 	})
@@ -559,7 +565,7 @@ func (s *RepositoryTestSuite) TestBulkCreate() {
 
 				// Create entities
 				entities := make([]*TestEntity, tc.entityCount)
-				for i := 0; i < tc.entityCount; i++ {
+				for i := range tc.entityCount {
 					entities[i] = &TestEntity{
 						Name:        fmt.Sprintf("Entity-%d", i),
 						Description: fmt.Sprintf("Description for entity %d", i),
@@ -588,17 +594,17 @@ func (s *RepositoryTestSuite) TestBulkCreate() {
 						}
 
 						// Spot check: verify first and last entities in database
-						first, err := repo.GetByID(ctx, entities[0].GetID())
-						require.NoError(t, err)
+						first, fetchErr := repo.GetByID(ctx, entities[0].GetID())
+						require.NoError(t, fetchErr)
 						require.Equal(t, "Entity-0", first.Name)
 
-						last, err := repo.GetByID(ctx, entities[tc.entityCount-1].GetID())
-						require.NoError(t, err)
+						last, lastErr := repo.GetByID(ctx, entities[tc.entityCount-1].GetID())
+						require.NoError(t, lastErr)
 						require.Equal(t, fmt.Sprintf("Entity-%d", tc.entityCount-1), last.Name)
 
 						// Verify count
-						count, err := repo.Count(ctx)
-						require.NoError(t, err)
+						count, countErr := repo.Count(ctx)
+						require.NoError(t, countErr)
 						require.GreaterOrEqual(t, count, int64(tc.entityCount), "count should include created entities")
 					}
 				}
@@ -632,13 +638,13 @@ func (s *RepositoryTestSuite) TestBulkCreateBatchSize() {
 		)
 
 		batchSize := repo.BatchSize()
-		require.Greater(t, batchSize, 0, "batch size should be positive")
+		require.Positive(t, batchSize, "batch size should be positive")
 		t.Logf("Repository batch size: %d", batchSize)
 
 		// Create more entities than batch size to test batching
 		entityCount := batchSize * 2
 		entities := make([]*TestEntity, entityCount)
-		for i := 0; i < entityCount; i++ {
+		for i := range entityCount {
 			entities[i] = &TestEntity{
 				Name:    fmt.Sprintf("Batch-Entity-%d", i),
 				Counter: i,
@@ -656,6 +662,8 @@ func (s *RepositoryTestSuite) TestBulkCreateBatchSize() {
 }
 
 // TestBulkUpdate tests bulk update functionality.
+//
+//nolint:gocognit // complexity is needed for comprehensive testing
 func (s *RepositoryTestSuite) TestBulkUpdate() {
 	testCases := []struct {
 		name         string
@@ -725,7 +733,7 @@ func (s *RepositoryTestSuite) TestBulkUpdate() {
 				entities := make([]*TestEntity, tc.entityCount)
 				entityIDs := make([]string, tc.entityCount)
 
-				for i := 0; i < tc.entityCount; i++ {
+				for i := range tc.entityCount {
 					entities[i] = &TestEntity{
 						Name:        fmt.Sprintf("Entity-%d", i),
 						Description: "Original description",
@@ -760,8 +768,8 @@ func (s *RepositoryTestSuite) TestBulkUpdate() {
 
 						// Verify updates
 						for i, entityID := range entityIDs {
-							updated, err := repo.GetByID(ctx, entityID)
-							require.NoError(t, err, "entity %d should be retrievable", i)
+							updated, fetchErr := repo.GetByID(ctx, entityID)
+							require.NoError(t, fetchErr, "entity %d should be retrievable", i)
 
 							// Verify each updated field
 							for key, expectedValue := range tc.updateParams {
@@ -853,7 +861,7 @@ func (s *RepositoryTestSuite) TestBulkUpdateConcurrent() {
 		// Create entities
 		entityCount := 100
 		entities := make([]*TestEntity, entityCount)
-		for i := 0; i < entityCount; i++ {
+		for i := range entityCount {
 			entities[i] = &TestEntity{
 				Name:    fmt.Sprintf("Concurrent-Entity-%d", i),
 				Counter: 0,
@@ -870,7 +878,7 @@ func (s *RepositoryTestSuite) TestBulkUpdateConcurrent() {
 		var wg sync.WaitGroup
 		errors := make([]error, numGroups)
 
-		for g := 0; g < numGroups; g++ {
+		for g := range numGroups {
 			wg.Add(1)
 			go func(groupIdx int) {
 				defer wg.Done()
@@ -878,7 +886,7 @@ func (s *RepositoryTestSuite) TestBulkUpdateConcurrent() {
 				start := groupIdx * entitiesPerGroup
 				groupIDs := make([]string, entitiesPerGroup)
 
-				for i := 0; i < entitiesPerGroup; i++ {
+				for i := range entitiesPerGroup {
 					groupIDs[i] = entities[start+i].GetID()
 				}
 
@@ -887,8 +895,8 @@ func (s *RepositoryTestSuite) TestBulkUpdateConcurrent() {
 					"counter": groupIdx * 100,
 				}
 
-				_, err := repo.BulkUpdate(ctx, groupIDs, params)
-				errors[groupIdx] = err
+				_, updateErr := repo.BulkUpdate(ctx, groupIDs, params)
+				errors[groupIdx] = updateErr
 			}(g)
 		}
 
@@ -900,10 +908,10 @@ func (s *RepositoryTestSuite) TestBulkUpdateConcurrent() {
 		}
 
 		// Verify updates were applied
-		for g := 0; g < numGroups; g++ {
+		for g := range numGroups {
 			start := g * entitiesPerGroup
-			firstEntityInGroup, err := repo.GetByID(ctx, entities[start].GetID())
-			require.NoError(t, err)
+			firstEntityInGroup, fetchErr := repo.GetByID(ctx, entities[start].GetID())
+			require.NoError(t, fetchErr)
 			require.Equal(t, fmt.Sprintf("group-%d", g), firstEntityInGroup.Status)
 			require.Equal(t, g*100, firstEntityInGroup.Counter)
 		}
@@ -939,7 +947,7 @@ func (s *RepositoryTestSuite) TestBulkUpdatePerformance() {
 		entities := make([]*TestEntity, entityCount)
 		entityIDs := make([]string, entityCount)
 
-		for i := 0; i < entityCount; i++ {
+		for i := range entityCount {
 			entities[i] = &TestEntity{
 				Name:    fmt.Sprintf("Perf-Entity-%d", i),
 				Status:  "initial",

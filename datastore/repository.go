@@ -2,14 +2,16 @@ package datastore
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
 
+	"gorm.io/gorm"
+
 	"github.com/pitabwire/frame/data"
 	"github.com/pitabwire/frame/datastore/pool"
 	"github.com/pitabwire/frame/workerpool"
-	"gorm.io/gorm"
 )
 
 // BaseRepository provides generic CRUD operations for any model type.
@@ -60,7 +62,7 @@ func NewBaseRepository[T data.BaseModelI](
 		dbPool:          dbPool,
 		workMan:         workMan,
 		modelFactory:    modelFactory,
-		batchSize:       751,
+		batchSize:       751, //nolint:mnd // default batch size
 		immutableFields: []string{"id", "created_at", "tenant_id", "partition_id"},
 		allowedColumns:  make(map[string]bool),
 	}
@@ -113,10 +115,9 @@ func (br *baseRepository[T]) GetByID(ctx context.Context, id string) (T, error) 
 // For new entities (version <= 0), it performs a CREATE operation.
 // For existing entities, it performs an UPDATE with version check to prevent lost updates.
 func (br *baseRepository[T]) Create(ctx context.Context, entity T) error {
-
 	// Validate entity has an ID for updates
 	if entity.GetVersion() > 0 {
-		return fmt.Errorf("entity version is more than 0, consider updating instead of creating")
+		return errors.New("entity version is more than 0, consider updating instead of creating")
 	}
 
 	// Use Create for new entities (more efficient than Create)
@@ -154,7 +155,7 @@ func (br *baseRepository[T]) validateAffectedColumns(affectedColumns []string) e
 func (br *baseRepository[T]) Update(ctx context.Context, entity T, affectedFields ...string) (int64, error) {
 	// Validate entity has an ID
 	if entity.GetID() == "" {
-		return 0, fmt.Errorf("entity ID is required")
+		return 0, errors.New("entity ID is required")
 	}
 
 	// Validate affected columns if provided
@@ -194,7 +195,7 @@ func (br *baseRepository[T]) BulkUpdate(ctx context.Context, entityIDs []string,
 	}
 
 	if len(params) == 0 {
-		return 0, fmt.Errorf("no parameters provided for update")
+		return 0, errors.New("no parameters provided for update")
 	}
 
 	// Validate all column names in params
@@ -298,6 +299,8 @@ func (br *baseRepository[T]) GetAllBy(ctx context.Context, properties map[string
 }
 
 // Search performs a complex search with pagination and filtering.
+//
+//nolint:gocognit // complexity is inherent to comprehensive search logic
 func (br *baseRepository[T]) Search(
 	ctx context.Context,
 	query *data.SearchQuery,

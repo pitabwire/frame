@@ -94,9 +94,9 @@ func WithInsertBatchSize(insertBatchSize int) Option {
 	}
 }
 
-// WithDisablePreparedStatements returns an Option to configure the database connection disable prepared statements.
-func WithDisablePreparedStatements() Option {
+// WithPreparedStatements returns an Option to enable or disable the prepared statement cache.
+func WithPreparedStatements(enabled bool) Option {
 	return func(o *Options) {
-		o.PreparedStatements = false
+		o.PreparedStatements = enabled
 	}
 }

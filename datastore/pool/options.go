@@ -22,6 +22,8 @@ type Options struct {
 
 	TraceConfig     config.ConfigurationDatabaseTracing
 	InsertBatchSize int
+
+	PreparedStatements bool
 }
 
 // WithConnection returns an Option to configure the database connection dsn.
@@ -89,5 +91,12 @@ func WithTraceConfig(traceConfig config.ConfigurationDatabaseTracing) Option {
 func WithInsertBatchSize(insertBatchSize int) Option {
 	return func(o *Options) {
 		o.InsertBatchSize = insertBatchSize
+	}
+}
+
+// WithPreparedStatements returns an Option to enable or disable the prepared statement cache.
+func WithPreparedStatements(enabled bool) Option {
+	return func(o *Options) {
+		o.PreparedStatements = enabled
 	}
 }

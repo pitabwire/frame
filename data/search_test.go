@@ -58,8 +58,8 @@ func (s *SearchTestSuite) TestNewSearchQuery() {
 			resultCount: 0,
 			expectError: false,
 			expectedQuery: &data.SearchQuery{
-				Query:  "test query",
-				Fields: map[string]any{"field1": "value1"},
+				Query:             "test query",
+				FiltersAndByValue: map[string]any{"field1": "value1"},
 				Pagination: &data.Paginator{
 					Offset:    0,
 					Limit:     50, // defaultBatchSize
@@ -75,8 +75,8 @@ func (s *SearchTestSuite) TestNewSearchQuery() {
 			resultCount: 25,
 			expectError: false,
 			expectedQuery: &data.SearchQuery{
-				Query:  "search term",
-				Fields: map[string]any{"name": "John", "age": 30},
+				Query:             "search term",
+				FiltersAndByValue: map[string]any{"name": "John", "age": 30},
 				Pagination: &data.Paginator{
 					Offset:    25,
 					Limit:     25,
@@ -92,8 +92,8 @@ func (s *SearchTestSuite) TestNewSearchQuery() {
 			resultCount: 100,
 			expectError: false,
 			expectedQuery: &data.SearchQuery{
-				Query:  "large query",
-				Fields: map[string]any{},
+				Query:             "large query",
+				FiltersAndByValue: map[string]any{},
 				Pagination: &data.Paginator{
 					Offset:    0,
 					Limit:     100,
@@ -109,8 +109,8 @@ func (s *SearchTestSuite) TestNewSearchQuery() {
 			resultCount: 10,
 			expectError: false,
 			expectedQuery: &data.SearchQuery{
-				Query:  "",
-				Fields: map[string]any{"status": "active"},
+				Query:             "",
+				FiltersAndByValue: map[string]any{"status": "active"},
 				Pagination: &data.Paginator{
 					Offset:    20,
 					Limit:     10,
@@ -126,8 +126,8 @@ func (s *SearchTestSuite) TestNewSearchQuery() {
 			resultCount: 15,
 			expectError: false,
 			expectedQuery: &data.SearchQuery{
-				Query:  "test",
-				Fields: nil,
+				Query:             "test",
+				FiltersAndByValue: nil,
 				Pagination: &data.Paginator{
 					Offset:    0,
 					Limit:     15,
@@ -138,15 +138,21 @@ func (s *SearchTestSuite) TestNewSearchQuery() {
 	}
 
 	for _, tc := range testCases {
-		s.Run(tc.name, func() {
-			result := data.NewSearchQuery(tc.query, tc.fields, tc.resultPage, tc.resultCount)
+		itc := tc
+		s.Run(itc.name, func() {
+			result := data.NewSearchQuery(
+				itc.query,
+				data.WithSearchFiltersAndByValue(itc.fields),
+				data.WithSearchOffset(itc.resultPage),
+				data.WithSearchLimit(itc.resultCount),
+			)
 
 			s.NotNil(result)
-			s.Equal(tc.expectedQuery.Query, result.Query)
-			s.Equal(tc.expectedQuery.Fields, result.Fields)
-			s.Equal(tc.expectedQuery.Pagination.Offset, result.Pagination.Offset)
-			s.Equal(tc.expectedQuery.Pagination.Limit, result.Pagination.Limit)
-			s.Equal(tc.expectedQuery.Pagination.BatchSize, result.Pagination.BatchSize)
+			s.Equal(itc.expectedQuery.Query, result.Query)
+			s.Equal(itc.expectedQuery.FiltersAndByValue, result.FiltersAndByValue)
+			s.Equal(itc.expectedQuery.Pagination.Offset, result.Pagination.Offset)
+			s.Equal(itc.expectedQuery.Pagination.Limit, result.Pagination.Limit)
+			s.Equal(itc.expectedQuery.Pagination.BatchSize, result.Pagination.BatchSize)
 		})
 	}
 }
@@ -318,8 +324,8 @@ func (s *SearchTestSuite) TestStableSearchWithDependencies() {
 			{
 				name: "successful search with single batch",
 				query: &data.SearchQuery{
-					Query:  "test",
-					Fields: map[string]any{"category": "books"},
+					Query:             "test",
+					FiltersAndByValue: map[string]any{"category": "books"},
 					Pagination: &data.Paginator{
 						Offset:    0,
 						Limit:     10,
@@ -338,8 +344,8 @@ func (s *SearchTestSuite) TestStableSearchWithDependencies() {
 			{
 				name: "successful search with multiple batches",
 				query: &data.SearchQuery{
-					Query:  "multi",
-					Fields: map[string]any{},
+					Query:             "multi",
+					FiltersAndByValue: map[string]any{},
 					Pagination: &data.Paginator{
 						Offset:    0,
 						Limit:     25,
@@ -353,8 +359,8 @@ func (s *SearchTestSuite) TestStableSearchWithDependencies() {
 			{
 				name: "search function returns error",
 				query: &data.SearchQuery{
-					Query:  "error",
-					Fields: map[string]any{},
+					Query:             "error",
+					FiltersAndByValue: map[string]any{},
 					Pagination: &data.Paginator{
 						Offset:    0,
 						Limit:     10,
@@ -370,8 +376,8 @@ func (s *SearchTestSuite) TestStableSearchWithDependencies() {
 			{
 				name: "empty search results",
 				query: &data.SearchQuery{
-					Query:  "empty",
-					Fields: map[string]any{},
+					Query:             "empty",
+					FiltersAndByValue: map[string]any{},
 					Pagination: &data.Paginator{
 						Offset:    0,
 						Limit:     10,
@@ -522,11 +528,16 @@ func (s *SearchTestSuite) TestProfileIDHandling() {
 
 	for _, tc := range testCases {
 		s.Run(tc.name, func() {
-			result := data.NewSearchQuery(tc.query, tc.fields, 0, 10)
+			result := data.NewSearchQuery(
+				tc.query,
+				data.WithSearchFiltersAndByValue(tc.fields),
+				data.WithSearchOffset(0),
+				data.WithSearchLimit(10),
+			)
 			s.NotNil(result)
 
 			s.Equal(tc.query, result.Query)
-			s.Equal(tc.fields, result.Fields)
+			s.Equal(tc.fields, result.FiltersAndByValue)
 			// Note: ProfileID is not set by NewSearchQuery, so we just verify the basic query structure
 		})
 	}
@@ -632,8 +643,8 @@ func (s *SearchTestSuite) TestStableSearchConcurrency() {
 		for i := range numConcurrentSearches {
 			go func(searchID int) {
 				query := &data.SearchQuery{
-					Query:  "concurrent test",
-					Fields: map[string]any{"search_id": searchID},
+					Query:             "concurrent test",
+					FiltersAndByValue: map[string]any{"search_id": searchID},
 					Pagination: &data.Paginator{
 						Offset:    0,
 						Limit:     10,
@@ -710,8 +721,8 @@ func (s *SearchTestSuite) TestStableSearchMemoryManagement() {
 		}
 
 		query := &data.SearchQuery{
-			Query:  "memory test",
-			Fields: map[string]any{"type": "large"},
+			Query:             "memory test",
+			FiltersAndByValue: map[string]any{"type": "large"},
 			Pagination: &data.Paginator{
 				Offset:    0,
 				Limit:     1000, // Large limit
@@ -797,10 +808,15 @@ func (s *SearchTestSuite) TestFieldTypeValidation() {
 
 	for _, tc := range testCases {
 		s.Run(tc.name, func() {
-			result := data.NewSearchQuery("test query", tc.fields, 0, 10)
+			result := data.NewSearchQuery(
+				"test query",
+				data.WithSearchFiltersAndByValue(tc.fields),
+				data.WithSearchOffset(0),
+				data.WithSearchLimit(10),
+			)
 
 			s.NotNil(result)
-			s.Equal(tc.fields, result.Fields)
+			s.Equal(tc.fields, result.FiltersAndByValue)
 			s.Equal("test query", result.Query)
 		})
 	}
@@ -929,8 +945,8 @@ func (s *SearchTestSuite) runErrorRecoveryTests(t *testing.T, depOpt *definition
 			defer svc.Stop(ctx)
 
 			query := &data.SearchQuery{
-				Query:  "error test",
-				Fields: map[string]any{"test": "error"},
+				Query:             "error test",
+				FiltersAndByValue: map[string]any{"test": "error"},
 				Pagination: &data.Paginator{
 					Offset:    0,
 					Limit:     10,

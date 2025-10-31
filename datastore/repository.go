@@ -310,9 +310,7 @@ func (br *baseRepository[T]) Search(
 	query *data.SearchQuery,
 ) (workerpool.JobResultPipe[[]T], error) {
 	return data.StableSearch[T](
-		ctx,
-		br.workMan,
-		query,
+		ctx, br.workMan, query,
 		func(ctx context.Context, query *data.SearchQuery) ([]T, error) {
 			var entities []T
 
@@ -322,50 +320,36 @@ func (br *baseRepository[T]) Search(
 				Limit(paginator.Limit).
 				Offset(paginator.Offset)
 
-			// Process date range filters
-			var startAt *time.Time
-			var stopAt *time.Time
-
-			// Apply field filters with validation
-			for k, v := range query.Fields {
-				if k == "start_date" {
-					if t, ok := v.(*time.Time); ok {
-						startAt = t
-					}
-					continue
-				}
-				if k == "end_date" {
-					if t, ok := v.(*time.Time); ok {
-						stopAt = t
-					}
-					continue
-				}
-
-				// Validate column name before using
-				if err := br.validateColumn(k); err != nil {
+			if query.TimePeriod != nil {
+				// Apply date range filter if range was provided
+				if err := br.validateColumn(query.TimePeriod.Field); err != nil {
 					return nil, err
 				}
-				db = db.Where(k+" = ?", v)
-			}
 
-			// Apply date range filter if both dates provided
-			if startAt != nil && stopAt != nil {
-				// Fixed: Use actual dates, not hardcoded 2020
 				// Use RFC3339 format for proper timezone handling
 				db = db.Where(
-					"created_at BETWEEN ? AND ?",
-					startAt.Format(time.RFC3339),
-					stopAt.Format(time.RFC3339),
-				)
+					fmt.Sprintf("%s BETWEEN ? AND ?", query.TimePeriod.Field),
+					query.TimePeriod.StartDate.Format(time.RFC3339),
+					query.TimePeriod.StopDate.Format(time.RFC3339))
+			}
+
+			if len(query.FiltersAndByValue) > 0 {
+				// Apply field filters with validation
+				for k, v := range query.FiltersAndByValue {
+					// Validate column name before using
+					if err := br.validateColumn(k); err != nil {
+						return nil, err
+					}
+					db = db.Where(k+" = ?", v)
+				}
 			}
 
 			// Apply text search across multiple fields
-			if query.Query != "" && len(query.QueryFields) > 0 {
+			if query.Query != "" && len(query.FiltersOrByQuery) > 0 {
 				// Build OR conditions for search fields
-				var conditions []string
-				var args []interface{}
+				queryCondition := map[string]any{}
 
-				for searchField, operator := range query.QueryFields {
+				for searchField, operator := range query.FiltersOrByQuery {
 					// Validate column name
 					if err := br.validateColumn(searchField); err != nil {
 						return nil, err
@@ -373,24 +357,25 @@ func (br *baseRepository[T]) Search(
 
 					// Sanitize operator (whitelist allowed operators)
 					operator = strings.TrimSpace(strings.ToUpper(operator))
-					switch operator {
-					case "LIKE", "ILIKE", "=", "!=", ">", "<", ">=", "<=":
-						conditions = append(conditions, fmt.Sprintf("%s %s ?", searchField, operator))
 
-						// Add wildcards for LIKE/ILIKE operators
-						if operator == "LIKE" || operator == "ILIKE" {
-							args = append(args, "%"+query.Query+"%")
-						} else {
-							args = append(args, query.Query)
-						}
-					default:
-						return nil, fmt.Errorf("invalid operator: %s", operator)
+					if !strings.Contains(operator, "?") {
+						return nil, errors.New("operator should contain ? for sanitizing query value")
 					}
+
+					queryValue := query.Query
+
+					// Add wildcards for LIKE/ILIKE operators
+					if strings.Contains(operator, "LIKE") {
+						queryValue = "%" + query.Query + "%"
+					}
+
+					queryField := fmt.Sprintf("%s %s ?", searchField, operator)
+					queryCondition[queryField] = queryValue
 				}
 
-				if len(conditions) > 0 {
+				if len(queryCondition) > 0 {
 					// Combine with OR
-					db = db.Where(strings.Join(conditions, " OR "), args...)
+					db = db.Or(queryCondition)
 				}
 			}
 
@@ -398,6 +383,5 @@ func (br *baseRepository[T]) Search(
 			err := db.Find(&entities).Error
 
 			return entities, err
-		},
-	)
+		})
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
 	"strings"
 	"time"
 
@@ -340,7 +341,13 @@ func (br *baseRepository[T]) Search(
 					if err := br.validateColumn(k); err != nil {
 						return nil, err
 					}
-					db = db.Where(k+" = ?", v)
+
+					kind := reflect.TypeOf(v).Kind()
+					if kind == reflect.Slice || kind == reflect.Array {
+						db = db.Where(k+" IN ?", v)
+					} else {
+						db = db.Where(k+" = ?", v)
+					}
 				}
 			}
 

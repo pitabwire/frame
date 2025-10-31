@@ -352,37 +352,31 @@ func (br *baseRepository[T]) Search(
 			}
 
 			// Apply text search across multiple fields
+			// ---- OR Text Search ----
 			if query.Query != "" && len(query.FiltersOrByQuery) > 0 {
-				// Build OR conditions for search fields
-				queryCondition := map[string]any{}
+				var orClauses []string
+				var orValues []any
 
-				for searchField, operator := range query.FiltersOrByQuery {
-					// Validate column name
-					if err := br.validateColumn(searchField); err != nil {
+				for field, operator := range query.FiltersOrByQuery {
+					if err := br.validateColumn(field); err != nil {
 						return nil, err
 					}
 
-					// Sanitize operator (whitelist allowed operators)
-					operator = strings.TrimSpace(strings.ToUpper(operator))
-
-					if !strings.Contains(operator, "?") {
-						return nil, errors.New("operator should contain ? for sanitizing query value")
-					}
+					op := strings.TrimSpace(strings.ToUpper(operator))
 
 					queryValue := query.Query
-
-					// Add wildcards for LIKE/ILIKE operators
-					if strings.Contains(operator, "LIKE") {
+					if strings.Contains(op, "LIKE") {
 						queryValue = "%" + query.Query + "%"
 					}
 
-					queryField := fmt.Sprintf("%s %s ?", searchField, operator)
-					queryCondition[queryField] = queryValue
+					orClauses = append(orClauses, fmt.Sprintf("%s %s", field, op))
+					orValues = append(orValues, queryValue)
 				}
 
-				if len(queryCondition) > 0 {
-					// Combine with OR
-					db = db.Or(queryCondition)
+				if len(orClauses) > 0 {
+					// Example: (name ILIKE ? OR topic ILIKE ?)
+					combined := "(" + strings.Join(orClauses, " OR ") + ")"
+					db = db.Where(combined, orValues...)
 				}
 			}
 

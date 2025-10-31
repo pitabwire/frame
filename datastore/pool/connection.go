@@ -86,7 +86,7 @@ func (s *pool) createConnection(ctx context.Context, dsn string, poolOpts *Optio
 		&gorm.Config{
 			Logger:                 datastoreLogger(ctx, poolOpts.TraceConfig),
 			SkipDefaultTransaction: poolOpts.SkipDefaultTransaction,
-			PrepareStmt:            true, // Enable prepared statement cache for better performance
+			PrepareStmt:            poolOpts.PreparedStatements, // Enable prepared statement cache for better performance
 			CreateBatchSize:        poolOpts.InsertBatchSize,
 		},
 	)

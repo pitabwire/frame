@@ -21,6 +21,7 @@ import (
 // T is the model type (e.g., *models.Room).
 type BaseRepository[T any] interface {
 	Pool() pool.Pool
+	WorkManager() workerpool.Manager
 	GetByID(ctx context.Context, id string) (T, error)
 	GetLastestBy(ctx context.Context, properties map[string]any) (T, error)
 	GetAllBy(ctx context.Context, properties map[string]any, offset, limit int) ([]T, error)
@@ -35,6 +36,12 @@ type BaseRepository[T any] interface {
 	BulkUpdate(ctx context.Context, entityIDs []string, params map[string]any) (int64, error)
 	Delete(ctx context.Context, id string) error
 	DeleteBatch(ctx context.Context, ids []string) error
+
+	SearchFunc(
+		ctx context.Context,
+		dbConnection *gorm.DB,
+		query *data.SearchQuery,
+	) ([]T, error)
 }
 
 // baseRepository is the concrete implementation of BaseRepository.
@@ -317,15 +324,15 @@ func (br *baseRepository[T]) Search(
 ) (workerpool.JobResultPipe[[]T], error) {
 	return data.StableSearch[T](
 		ctx, br.workMan, query, func(ctx context.Context, query *data.SearchQuery) ([]T, error) {
-			return br.DefaultSearchFunc(ctx, br.Pool().DB(ctx, true), query)
+			return br.SearchFunc(ctx, br.Pool().DB(ctx, true), query)
 		},
 	)
 }
 
-// DefaultSearchFunc performs a complex search with pagination and filtering.
+// SearchFunc performs a complex search with pagination and filtering.
 //
 //nolint:gocognit // complexity is inherent to comprehensive search logic
-func (br *baseRepository[T]) DefaultSearchFunc(
+func (br *baseRepository[T]) SearchFunc(
 	ctx context.Context,
 	dbConnection *gorm.DB,
 	query *data.SearchQuery,

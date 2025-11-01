@@ -202,7 +202,8 @@ func (s *EventsTestSuite) TestServiceEventsPublishingWorks() {
 				err = srv.Run(ctx, "")
 				require.NoError(t, err, "service should run without error")
 
-				err = srv.Emit(ctx, testEvent.Name(), tc.payload)
+				evtMan := srv.EventsManager(ctx)
+				err = evtMan.Emit(ctx, testEvent.Name(), tc.payload)
 				require.NoError(t, err, "event emission should succeed")
 
 				if len(tc.payload) > 0 {

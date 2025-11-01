@@ -8,7 +8,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pitabwire/util"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 
 	"github.com/pitabwire/frame/data"
 	"github.com/pitabwire/frame/datastore/pool"
@@ -84,6 +86,8 @@ func NewBaseRepository[T data.BaseModelI](
 	for _, field := range stmt.Schema.Fields {
 		repo.allowedColumns[field.DBName] = true
 	}
+	// This column will be added via migration for search so we will always allow it
+	repo.allowedColumns["searchable"] = true
 
 	return repo
 }
@@ -111,7 +115,7 @@ func (br *baseRepository[T]) validateColumn(column string) error {
 func (br *baseRepository[T]) GetByID(ctx context.Context, id string) (T, error) {
 	entity := br.modelFactory()
 	// Use indexed lookup with prepared statement
-	err := br.Pool().DB(ctx, true).Where("id = ?", id).First(entity).Error
+	err := br.Pool().DB(ctx, true).Preload(clause.Associations).Where("id = ?", id).First(entity).Error
 	return entity, err
 }
 
@@ -307,85 +311,96 @@ func (br *baseRepository[T]) GetAllBy(ctx context.Context, properties map[string
 }
 
 // Search performs a complex search with pagination and filtering.
-//
-//nolint:gocognit // complexity is inherent to comprehensive search logic
 func (br *baseRepository[T]) Search(
 	ctx context.Context,
 	query *data.SearchQuery,
 ) (workerpool.JobResultPipe[[]T], error) {
 	return data.StableSearch[T](
-		ctx, br.workMan, query,
-		func(ctx context.Context, query *data.SearchQuery) ([]T, error) {
-			var entities []T
+		ctx, br.workMan, query, func(ctx context.Context, query *data.SearchQuery) ([]T, error) {
+			return br.DefaultSearchFunc(ctx, br.Pool().DB(ctx, true), query)
+		},
+	)
+}
 
-			paginator := query.Pagination
+// DefaultSearchFunc performs a complex search with pagination and filtering.
+//
+//nolint:gocognit // complexity is inherent to comprehensive search logic
+func (br *baseRepository[T]) DefaultSearchFunc(
+	ctx context.Context,
+	dbConnection *gorm.DB,
+	query *data.SearchQuery,
+) ([]T, error) {
+	var entities []T
 
-			db := br.Pool().DB(ctx, true).
-				Limit(paginator.Limit).
-				Offset(paginator.Offset)
+	util.Log(ctx).Debug(" initiating a search query")
 
-			if query.TimePeriod != nil {
-				// Apply date range filter if range was provided
-				if err := br.validateColumn(query.TimePeriod.Field); err != nil {
-					return nil, err
-				}
+	paginator := query.Pagination
 
-				// Use RFC3339 format for proper timezone handling
-				db = db.Where(
-					fmt.Sprintf("%s BETWEEN ? AND ?", query.TimePeriod.Field),
-					query.TimePeriod.StartDate.Format(time.RFC3339),
-					query.TimePeriod.StopDate.Format(time.RFC3339))
+	db := dbConnection.
+		Limit(paginator.Limit).
+		Offset(paginator.Offset)
+
+	if query.TimePeriod != nil {
+		// Apply date range filter if range was provided
+		if err := br.validateColumn(query.TimePeriod.Field); err != nil {
+			return nil, err
+		}
+
+		// Use RFC3339 format for proper timezone handling
+		db = db.Where(
+			fmt.Sprintf("%s BETWEEN ? AND ?", query.TimePeriod.Field),
+			query.TimePeriod.StartDate.Format(time.RFC3339),
+			query.TimePeriod.StopDate.Format(time.RFC3339))
+	}
+
+	if len(query.FiltersAndByValue) > 0 {
+		// Apply field filters with validation
+		for k, v := range query.FiltersAndByValue {
+			// Validate column name before using
+			if err := br.validateColumn(k); err != nil {
+				return nil, err
 			}
 
-			if len(query.FiltersAndByValue) > 0 {
-				// Apply field filters with validation
-				for k, v := range query.FiltersAndByValue {
-					// Validate column name before using
-					if err := br.validateColumn(k); err != nil {
-						return nil, err
-					}
+			kind := reflect.TypeOf(v).Kind()
+			if kind == reflect.Slice || kind == reflect.Array {
+				db = db.Where(k+" IN ?", v)
+			} else {
+				db = db.Where(k+" = ?", v)
+			}
+		}
+	}
 
-					kind := reflect.TypeOf(v).Kind()
-					if kind == reflect.Slice || kind == reflect.Array {
-						db = db.Where(k+" IN ?", v)
-					} else {
-						db = db.Where(k+" = ?", v)
-					}
-				}
+	// Apply text search across multiple fields
+	// ---- OR Text Search ----
+	if query.Query != "" && len(query.FiltersOrByQuery) > 0 {
+		var orClauses []string
+		var orValues []any
+
+		for field, operator := range query.FiltersOrByQuery {
+			if err := br.validateColumn(field); err != nil {
+				return nil, err
 			}
 
-			// Apply text search across multiple fields
-			// ---- OR Text Search ----
-			if query.Query != "" && len(query.FiltersOrByQuery) > 0 {
-				var orClauses []string
-				var orValues []any
+			op := strings.TrimSpace(strings.ToUpper(operator))
 
-				for field, operator := range query.FiltersOrByQuery {
-					if err := br.validateColumn(field); err != nil {
-						return nil, err
-					}
-
-					op := strings.TrimSpace(strings.ToUpper(operator))
-
-					queryValue := query.Query
-					if strings.Contains(op, "LIKE") {
-						queryValue = "%" + query.Query + "%"
-					}
-
-					orClauses = append(orClauses, fmt.Sprintf("%s %s", field, op))
-					orValues = append(orValues, queryValue)
-				}
-
-				if len(orClauses) > 0 {
-					// Example: (name ILIKE ? OR topic ILIKE ?)
-					combined := "(" + strings.Join(orClauses, " OR ") + ")"
-					db = db.Where(combined, orValues...)
-				}
+			queryValue := query.Query
+			if strings.Contains(op, "LIKE") {
+				queryValue = "%" + query.Query + "%"
 			}
 
-			// Execute query with pointer to slice
-			err := db.Find(&entities).Error
+			orClauses = append(orClauses, fmt.Sprintf("%s %s", field, op))
+			orValues = append(orValues, queryValue)
+		}
 
-			return entities, err
-		})
+		if len(orClauses) > 0 {
+			// Example: (name ILIKE ? OR topic ILIKE ?)
+			combined := "(" + strings.Join(orClauses, " OR ") + ")"
+			db = db.Where(combined, orValues...)
+		}
+	}
+
+	// Execute query with pointer to slice
+	err := db.Find(&entities).Error
+
+	return entities, err
 }

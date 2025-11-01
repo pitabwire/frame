@@ -26,6 +26,6 @@ type EventI interface {
 type Manager interface {
 	Add(eventI EventI)
 	Get(name string) (EventI, error)
-
+	Emit(ctx context.Context, name string, payload any) error
 	Handler() queue.SubscribeWorker
 }

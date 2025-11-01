@@ -21,36 +21,21 @@ func WithRegisterEvents(evt ...events.EventI) Option {
 	}
 }
 
-// Emit a simple method used to deploy.
-func (s *Service) Emit(ctx context.Context, name string, payload any) error {
-	cfg, ok := s.Config().(config.ConfigurationEvents)
-	if !ok {
-		s.Log(ctx).Warn("configuration object not of type : ConfigurationDefault")
-		return errors.New("could not cast cfg to ConfigurationEvents")
-	}
-
-	// ByIsQueue event message for further processing
-	err := s.QueueManager(ctx).
-		Publish(ctx, cfg.GetEventsQueueName(), payload, map[string]string{events.EventHeaderName: name})
-	if err != nil {
-		s.Log(ctx).WithError(err).WithField("name", name).Error("Could not emit event")
-		return err
-	}
-
-	return nil
+func (s *Service) EventsManager(_ context.Context) events.Manager {
+	return s.eventsManager
 }
 
 // setupEventsQueue sets up the default events queue publisher and subscriber
 // if an event registry is configured for the service.
 func (s *Service) setupEventsQueue(ctx context.Context) error {
-	s.eventsManager = events.NewManager(ctx)
-
 	cfg, ok := s.Config().(config.ConfigurationEvents)
 	if !ok {
 		errMsg := "configuration object does not implement ConfigurationEvents, cannot setup events queue"
 		s.Log(ctx).Error(errMsg)
 		return errors.New(errMsg)
 	}
+
+	s.eventsManager = events.NewManager(ctx, s.QueueManager(ctx), cfg)
 
 	eventsQueueSubscriberOpt := WithRegisterSubscriber(
 		cfg.GetEventsQueueName(),

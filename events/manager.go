@@ -30,7 +30,7 @@ func (m *manager) Get(eventName string) (EventI, error) {
 	return evt, nil
 }
 
-// Emit a simple method used to deploy.
+// Emit publishes an event with the given name and payload to the event queue.
 func (m *manager) Emit(ctx context.Context, name string, payload any) error {
 	// ByIsQueue event message for further processing
 	err := m.qm.

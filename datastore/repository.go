@@ -91,6 +91,9 @@ func NewBaseRepository[T data.BaseModelI](
 func (br *baseRepository[T]) Pool() pool.Pool {
 	return br.dbPool
 }
+func (br *baseRepository[T]) WorkManager() workerpool.Manager {
+	return br.workMan
+}
 
 func (br *baseRepository[T]) ImmutableFields() []string {
 	return br.immutableFields

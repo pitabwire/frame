@@ -8,6 +8,7 @@ import (
 )
 
 const DefaultPoolName = "__default__pool_name__"
+const DefaultMigrationPoolName = "__default__migration_pool_name__"
 
 type Manager interface {
 	AddPool(ctx context.Context, reference string, store pool.Pool)

@@ -16,7 +16,7 @@ func WithRegisterPublisher(reference string, queueURL string) Option {
 		// so defer registration to pre-start phase
 		// Publishers must be registered before subscribers (for mem:// driver)
 		s.AddPublisherStartup(func(ctx context.Context, svc *Service) {
-			err := svc.QueueManager(ctx).AddPublisher(ctx, reference, queueURL)
+			err := svc.QueueManager().AddPublisher(ctx, reference, queueURL)
 			if err != nil {
 				svc.Log(ctx).WithError(err).
 					WithField("publisher_ref", reference).
@@ -36,7 +36,7 @@ func WithRegisterSubscriber(reference string, queueURL string,
 		// so defer registration to pre-start phase
 		// Subscribers must be registered after publishers (for mem:// driver)
 		s.AddSubscriberStartup(func(ctx context.Context, svc *Service) {
-			err := svc.QueueManager(ctx).AddSubscriber(ctx, reference, queueURL, handlers...)
+			err := svc.QueueManager().AddSubscriber(ctx, reference, queueURL, handlers...)
 			if err != nil {
 				svc.Log(ctx).WithError(err).
 					WithField("subscriber_ref", reference).
@@ -48,6 +48,6 @@ func WithRegisterSubscriber(reference string, queueURL string,
 	}
 }
 
-func (s *Service) QueueManager(_ context.Context) queue.Manager {
+func (s *Service) QueueManager() queue.Manager {
 	return s.queueManager
 }

@@ -21,7 +21,7 @@ func WithRegisterEvents(evt ...events.EventI) Option {
 	}
 }
 
-func (s *Service) EventsManager(_ context.Context) events.Manager {
+func (s *Service) EventsManager() events.Manager {
 	return s.eventsManager
 }
 
@@ -35,7 +35,7 @@ func (s *Service) setupEventsQueue(ctx context.Context) error {
 		return errors.New(errMsg)
 	}
 
-	s.eventsManager = events.NewManager(ctx, s.QueueManager(ctx), cfg)
+	s.eventsManager = events.NewManager(ctx, s.QueueManager(), cfg)
 
 	eventsQueueSubscriberOpt := WithRegisterSubscriber(
 		cfg.GetEventsQueueName(),

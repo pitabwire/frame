@@ -112,7 +112,7 @@ func (s *EventsTestSuite) TestServiceRegisterEventsWorks() {
 					frametests.WithNoopDriver(),
 				)
 
-				qm := srv.QueueManager(ctx)
+				qm := srv.QueueManager()
 
 				subs, _ := qm.GetSubscriber(cfg.EventsQueueName)
 				if subs != nil && subs.Initiated() {
@@ -202,7 +202,7 @@ func (s *EventsTestSuite) TestServiceEventsPublishingWorks() {
 				err = srv.Run(ctx, "")
 				require.NoError(t, err, "service should run without error")
 
-				evtMan := srv.EventsManager(ctx)
+				evtMan := srv.EventsManager()
 				err = evtMan.Emit(ctx, testEvent.Name(), tc.payload)
 				require.NoError(t, err, "event emission should succeed")
 

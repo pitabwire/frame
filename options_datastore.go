@@ -92,6 +92,13 @@ func WithDatastore(opts ...pool.Option) Option {
 
 		dbConnectionOpts := WithDatastoreConnectionWithOptions(datastore.DefaultPoolName, opts...)
 		dbConnectionOpts(ctx, s)
+
+		if cfg.DoDatabaseMigrate() {
+			// minor feature to automatically make a pool that can be used for db migrations
+			opts = append(opts, pool.WithPreparedStatements(false))
+			migrationOpts := WithDatastoreConnectionWithOptions(datastore.DefaultMigrationPoolName, opts...)
+			migrationOpts(ctx, s)
+		}
 	}
 }
 

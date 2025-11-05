@@ -47,10 +47,8 @@ func New(opts ...cache.Option) (cache.RawCache, error) {
 
 	client, err := js.CreateKeyValue(kvCfg)
 	if err != nil {
-
 		var apiErr *nats.APIError
 		if errors.As(err, &apiErr) && apiErr.ErrorCode == nats.JSErrCodeStreamNameInUse {
-
 			// If the bucket already exists, just get a handle to it.
 			client, err = js.KeyValue(cacheOpts.Name)
 			if err != nil {

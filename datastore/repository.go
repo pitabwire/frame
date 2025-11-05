@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"slices"
 	"strings"
 	"time"
 
@@ -31,7 +32,8 @@ type BaseRepository[T any] interface {
 	Create(ctx context.Context, entity T) error
 	BatchSize() int
 	BulkCreate(ctx context.Context, entities []T) error
-	ImmutableFields() []string
+	FieldsImmutable() []string
+	FieldsAllowed() map[string]bool
 	Update(ctx context.Context, entity T, affectedFields ...string) (int64, error)
 	BulkUpdate(ctx context.Context, entityIDs []string, params map[string]any) (int64, error)
 	Delete(ctx context.Context, id string) error
@@ -106,11 +108,11 @@ func (br *baseRepository[T]) WorkManager() workerpool.Manager {
 	return br.workMan
 }
 
-func (br *baseRepository[T]) ImmutableFields() []string {
+func (br *baseRepository[T]) FieldsImmutable() []string {
 	return br.immutableFields
 }
 
-func (br *baseRepository[T]) AllowedFields() map[string]bool {
+func (br *baseRepository[T]) FieldsAllowed() map[string]bool {
 	return br.allowedFields
 }
 
@@ -195,7 +197,7 @@ func (br *baseRepository[T]) Update(ctx context.Context, entity T, affectedField
 		query = query.Select(affectedFields)
 	} else {
 		// Only omit immutable fields when updating all fields
-		query = query.Omit(br.ImmutableFields()...)
+		query = query.Omit(br.FieldsImmutable()...)
 	}
 
 	// Execute update - single database round trip
@@ -221,10 +223,8 @@ func (br *baseRepository[T]) BulkUpdate(ctx context.Context, entityIDs []string,
 		if err := br.validateColumn(col); err != nil {
 			return 0, err
 		}
-		for _, immutableField := range br.ImmutableFields() {
-			if col == immutableField {
-				return 0, fmt.Errorf("cannot bulk update immutable field: %s", col)
-			}
+		if slices.Contains(br.FieldsImmutable(), col) {
+			return 0, fmt.Errorf("cannot bulk update immutable field: %s", col)
 		}
 	}
 

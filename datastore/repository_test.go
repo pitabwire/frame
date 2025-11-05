@@ -463,7 +463,7 @@ func (s *RepositoryTestSuite) TestImmutableFields() {
 		)
 
 		// Verify immutable fields are set
-		immutableFields := repo.ImmutableFields()
+		immutableFields := repo.FieldsImmutable()
 		require.NotEmpty(t, immutableFields, "immutable fields should be defined")
 		require.Contains(t, immutableFields, "id", "id should be immutable")
 		require.Contains(t, immutableFields, "created_at", "created_at should be immutable")

@@ -11,7 +11,7 @@ import (
 	"github.com/pitabwire/frame/cache"
 )
 
-// Cache is a Valkey-backed cache implementation using the official Valkey client.
+// Cache is a JetStream-backed cache implementation using the NATS KeyValue store.
 type Cache struct {
 	conn   *nats.Conn
 	client nats.KeyValue
@@ -45,13 +45,19 @@ func New(opts ...cache.Option) (cache.RawCache, error) {
 		// History, MaxBytes, etc. may also be set
 	}
 
-	client, err := js.KeyValue(cacheOpts.Name)
+	client, err := js.CreateKeyValue(kvCfg)
 	if err != nil {
-		client, err = js.CreateKeyValue(kvCfg)
-		if err != nil {
-			// If bucket already exists, CreateKeyValue returns an error.
-			// Try to open existing bucket instead:
 
+		var apiErr *nats.APIError
+		if errors.As(err, &apiErr) && apiErr.ErrorCode == nats.JSErrCodeStreamNameInUse {
+
+			// If the bucket already exists, just get a handle to it.
+			client, err = js.KeyValue(cacheOpts.Name)
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			// Another error occurred during creation.
 			return nil, err
 		}
 	}
@@ -98,6 +104,9 @@ func (vc *Cache) Delete(_ context.Context, key string) error {
 func (vc *Cache) Exists(_ context.Context, key string) (bool, error) {
 	_, err := vc.client.Get(key)
 	if err != nil {
+		if errors.Is(err, nats.ErrKeyNotFound) {
+			return false, nil
+		}
 		return false, err
 	}
 
@@ -106,6 +115,18 @@ func (vc *Cache) Exists(_ context.Context, key string) (bool, error) {
 
 // Flush clears all items from the cache.
 func (vc *Cache) Flush(_ context.Context) error {
+	keys, err := vc.client.Keys()
+	if err != nil {
+		return err
+	}
+
+	for _, key := range keys {
+		err = vc.client.Delete(key)
+		if err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
@@ -145,7 +166,10 @@ func (vc *Cache) Increment(_ context.Context, key string, delta int64) (int64, e
 			return 0, err
 		}
 
-		currentVal, _ := strconv.ParseInt(string(entry.Value()), 10, 64)
+		currentVal, err := strconv.ParseInt(string(entry.Value()), 10, 64)
+		if err != nil {
+			return 0, err
+		}
 		newVal := currentVal + delta
 
 		newRev, err := vc.client.Update(key, []byte(strconv.FormatInt(newVal, 10)), entry.Revision())

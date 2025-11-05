@@ -34,16 +34,11 @@ type BaseRepository[T any] interface {
 	BulkCreate(ctx context.Context, entities []T) error
 	FieldsImmutable() []string
 	FieldsAllowed() map[string]bool
+	IsFieldAllowed(column string) error
 	Update(ctx context.Context, entity T, affectedFields ...string) (int64, error)
 	BulkUpdate(ctx context.Context, entityIDs []string, params map[string]any) (int64, error)
 	Delete(ctx context.Context, id string) error
 	DeleteBatch(ctx context.Context, ids []string) error
-
-	SearchFunc(
-		ctx context.Context,
-		dbConnection *gorm.DB,
-		query *data.SearchQuery,
-	) ([]T, error)
 }
 
 // baseRepository is the concrete implementation of BaseRepository.
@@ -116,8 +111,8 @@ func (br *baseRepository[T]) FieldsAllowed() map[string]bool {
 	return br.allowedFields
 }
 
-// validateColumn checks if a column name is safe to use in queries.
-func (br *baseRepository[T]) validateColumn(column string) error {
+// IsFieldAllowed checks if a column name is safe to use in queries.
+func (br *baseRepository[T]) IsFieldAllowed(column string) error {
 	if !br.allowedFields[column] {
 		return fmt.Errorf("invalid column name: %s", column)
 	}
@@ -162,7 +157,7 @@ func (br *baseRepository[T]) BulkCreate(ctx context.Context, entities []T) error
 // validateAffectedColumns checks if all columns are valid and allowed.
 func (br *baseRepository[T]) validateAffectedColumns(affectedColumns []string) error {
 	for _, col := range affectedColumns {
-		if err := br.validateColumn(col); err != nil {
+		if err := br.IsFieldAllowed(col); err != nil {
 			return err
 		}
 	}
@@ -220,7 +215,7 @@ func (br *baseRepository[T]) BulkUpdate(ctx context.Context, entityIDs []string,
 
 	// Validate all column names in params
 	for col := range params {
-		if err := br.validateColumn(col); err != nil {
+		if err := br.IsFieldAllowed(col); err != nil {
 			return 0, err
 		}
 		if slices.Contains(br.FieldsImmutable(), col) {
@@ -270,7 +265,7 @@ func (br *baseRepository[T]) CountBy(ctx context.Context, properties map[string]
 
 	// Apply filters with validation
 	for key, value := range properties {
-		if err := br.validateColumn(key); err != nil {
+		if err := br.IsFieldAllowed(key); err != nil {
 			return 0, err
 		}
 		query = query.Where(key+" = ?", value)
@@ -287,7 +282,7 @@ func (br *baseRepository[T]) GetLastestBy(ctx context.Context, properties map[st
 
 	// Apply filters with validation
 	for key, value := range properties {
-		if err := br.validateColumn(key); err != nil {
+		if err := br.IsFieldAllowed(key); err != nil {
 			return entity, err
 		}
 		query = query.Where(key+" = ?", value)
@@ -310,7 +305,7 @@ func (br *baseRepository[T]) GetAllBy(ctx context.Context, properties map[string
 
 	// Apply filters with validation
 	for key, value := range properties {
-		if err := br.validateColumn(key); err != nil {
+		if err := br.IsFieldAllowed(key); err != nil {
 			return nil, err
 		}
 		query = query.Where(key+" = ?", value)
@@ -328,18 +323,20 @@ func (br *baseRepository[T]) Search(
 ) (workerpool.JobResultPipe[[]T], error) {
 	return data.StableSearch[T](
 		ctx, br.workMan, query, func(ctx context.Context, query *data.SearchQuery) ([]T, error) {
-			return br.SearchFunc(ctx, br.Pool().DB(ctx, true), query)
+			return SearchFunc[T](ctx, br.Pool().DB(ctx, true), query, br.IsFieldAllowed)
 		},
 	)
 }
 
 // SearchFunc performs a complex search with pagination and filtering.
+// It accepts a validation function to check column names, allowing flexible validation strategies.
 //
 //nolint:gocognit // complexity is inherent to comprehensive search logic
-func (br *baseRepository[T]) SearchFunc(
+func SearchFunc[T any](
 	ctx context.Context,
 	dbConnection *gorm.DB,
 	query *data.SearchQuery,
+	validateColumn func(string) error,
 ) ([]T, error) {
 	var entities []T
 
@@ -357,7 +354,7 @@ func (br *baseRepository[T]) SearchFunc(
 
 	if query.TimePeriod != nil {
 		// Apply date range filter if range was provided
-		if err := br.validateColumn(query.TimePeriod.Field); err != nil {
+		if err := validateColumn(query.TimePeriod.Field); err != nil {
 			return nil, err
 		}
 
@@ -372,7 +369,7 @@ func (br *baseRepository[T]) SearchFunc(
 		// Apply field filters with validation
 		for k, v := range query.FiltersAndByValue {
 			// Validate column name before using
-			if err := br.validateColumn(k); err != nil {
+			if err := validateColumn(k); err != nil {
 				return nil, err
 			}
 
@@ -392,7 +389,7 @@ func (br *baseRepository[T]) SearchFunc(
 		var orValues []any
 
 		for field, operator := range query.FiltersOrByQuery {
-			if err := br.validateColumn(field); err != nil {
+			if err := validateColumn(field); err != nil {
 				return nil, err
 			}
 

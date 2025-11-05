@@ -1,4 +1,4 @@
-package valkey
+package jetstream
 
 import (
 	"context"

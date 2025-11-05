@@ -35,6 +35,8 @@ type SearchQuery struct {
 
 	TimePeriod *TimePeriod
 	Pagination *Paginator
+
+	OrderBy string
 }
 
 // SearchOption mutates a `SearchQuery` during construction. Options are

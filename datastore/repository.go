@@ -351,6 +351,10 @@ func (br *baseRepository[T]) SearchFunc(
 		Limit(paginator.Limit).
 		Offset(paginator.Offset)
 
+	if query.OrderBy != "" {
+		db = db.Order(query.OrderBy)
+	}
+
 	if query.TimePeriod != nil {
 		// Apply date range filter if range was provided
 		if err := br.validateColumn(query.TimePeriod.Field); err != nil {

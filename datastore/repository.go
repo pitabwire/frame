@@ -56,8 +56,8 @@ type baseRepository[T data.BaseModelI] struct {
 	batchSize       int
 	immutableFields []string
 
-	// allowedColumns whitelist for safe column access (set during initialization)
-	allowedColumns map[string]bool
+	// allowedFields whitelist for safe column access (set during initialization)
+	allowedFields map[string]bool
 }
 
 // NewBaseRepository creates a new base repository instance.
@@ -74,7 +74,7 @@ func NewBaseRepository[T data.BaseModelI](
 		modelFactory:    modelFactory,
 		batchSize:       751, //nolint:mnd // default batch size
 		immutableFields: []string{"id", "created_at", "tenant_id", "partition_id"},
-		allowedColumns:  make(map[string]bool),
+		allowedFields:   make(map[string]bool),
 	}
 
 	db := dbPool.DB(ctx, true)
@@ -91,10 +91,10 @@ func NewBaseRepository[T data.BaseModelI](
 
 	// Build allowed columns whitelist from schema
 	for _, field := range stmt.Schema.Fields {
-		repo.allowedColumns[field.DBName] = true
+		repo.allowedFields[field.DBName] = true
 	}
 	// This column will be added via migration for search so we will always allow it
-	repo.allowedColumns["searchable"] = true
+	repo.allowedFields["searchable"] = true
 
 	return repo
 }
@@ -110,9 +110,13 @@ func (br *baseRepository[T]) ImmutableFields() []string {
 	return br.immutableFields
 }
 
+func (br *baseRepository[T]) AllowedFields() map[string]bool {
+	return br.allowedFields
+}
+
 // validateColumn checks if a column name is safe to use in queries.
 func (br *baseRepository[T]) validateColumn(column string) error {
-	if !br.allowedColumns[column] {
+	if !br.allowedFields[column] {
 		return fmt.Errorf("invalid column name: %s", column)
 	}
 	return nil

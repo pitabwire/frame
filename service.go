@@ -132,7 +132,6 @@ func NewServiceWithContext(ctx context.Context, name string, opts ...Option) (co
 		logger: log,
 
 		configuration: &cfg,
-		clientManager: client.NewManager(&cfg),
 	}
 
 	if cfg.ServiceName != "" {
@@ -153,7 +152,7 @@ func NewServiceWithContext(ctx context.Context, name string, opts ...Option) (co
 	}
 
 	opts = append(opts, WithLogger()) // Ensure logger is initialized early
-
+	opts = append(opts, WithHTTPClient())
 	opts = append(opts, WithTelemetry(telemetryOpts...))
 
 	svc.Init(ctx, opts...) // Apply all options, using the signal-aware context

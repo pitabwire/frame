@@ -28,9 +28,9 @@ const defaultBatchSize = 50
 //     column.
 //   - `Pagination` tracks the intended result window and streaming batch size.
 type SearchQuery struct {
-	Query string
 
-	FiltersOrByQuery  map[string]string // We query with the value of query but use value as operator: {'id': ' = ?', 'name': ' LIKE ?', 'props': ' @@ plainto_tsquery(?)'}
+	// We query with the value key is in the form key = ? and value whatever should be substituted
+	FiltersOrByValue  map[string]any
 	FiltersAndByValue map[string]any
 
 	TimePeriod *TimePeriod
@@ -48,9 +48,8 @@ type SearchOption func(*SearchQuery)
 // applies the provided options. The paginator stores offsets in terms of page
 // numbers; once options are applied we convert the supplied offset into the
 // absolute row offset expected by downstream code.
-func NewSearchQuery(query string, opts ...SearchOption) *SearchQuery {
+func NewSearchQuery(opts ...SearchOption) *SearchQuery {
 	sq := SearchQuery{
-		Query: query,
 		Pagination: &Paginator{
 			Offset:    0,
 			Limit:     defaultBatchSize,
@@ -180,16 +179,16 @@ func WithSearchBatchSize(batchSize int) SearchOption {
 	}
 }
 
-// WithSearchFiltersOrByQuery supplies OR filters whose values are map entries
-// describing the operator to use for the textual query, e.g. `LIKE ?`.
-func WithSearchFiltersOrByQuery(filters map[string]string) SearchOption {
+// WithSearchFiltersOrByValue supplies OR filters whose values are map entries
+// the keys should have query selection, e.g. `LIKE ?`.
+func WithSearchFiltersOrByValue(filters map[string]any) SearchOption {
 	return func(query *SearchQuery) {
-		query.FiltersOrByQuery = filters
+		query.FiltersOrByValue = filters
 	}
 }
 
 // WithSearchFiltersAndByValue supplies AND filters whose values are compared
-// for equality in repository implementations.
+// for equality in repository implementations. The keys should have query selection e.g. `id LIKE ?`
 func WithSearchFiltersAndByValue(filters map[string]any) SearchOption {
 	return func(query *SearchQuery) {
 		query.FiltersAndByValue = filters

@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"reflect"
 	"slices"
 	"strings"
 	"time"
@@ -113,8 +112,11 @@ func (br *baseRepository[T]) FieldsAllowed() map[string]bool {
 
 // IsFieldAllowed checks if a column name is safe to use in queries.
 func (br *baseRepository[T]) IsFieldAllowed(column string) error {
-	if !br.allowedFields[column] {
-		return fmt.Errorf("invalid column name: %s", column)
+
+	columns := strings.Split(strings.TrimSpace(column), " ")
+
+	if !br.allowedFields[columns[0]] {
+		return fmt.Errorf("invalid column name: %s ", columns[0])
 	}
 	return nil
 }
@@ -372,36 +374,29 @@ func SearchFunc[T any](
 			if err := validateColumn(k); err != nil {
 				return nil, err
 			}
-
-			kind := reflect.TypeOf(v).Kind()
-			if kind == reflect.Slice || kind == reflect.Array {
-				db = db.Where(k+" IN ?", v)
+			if v == "" {
+				db = db.Where(k)
 			} else {
-				db = db.Where(k+" = ?", v)
+				db = db.Where(k, v)
 			}
 		}
 	}
 
 	// Apply text search across multiple fields
 	// ---- OR Text Search ----
-	if query.Query != "" && len(query.FiltersOrByQuery) > 0 {
+	if len(query.FiltersOrByValue) > 0 {
 		var orClauses []string
 		var orValues []any
 
-		for field, operator := range query.FiltersOrByQuery {
-			if err := validateColumn(field); err != nil {
+		for k, v := range query.FiltersOrByValue {
+			if err := validateColumn(k); err != nil {
 				return nil, err
 			}
 
-			op := strings.TrimSpace(strings.ToUpper(operator))
-
-			queryValue := query.Query
-			if strings.Contains(op, "LIKE") {
-				queryValue = "%" + query.Query + "%"
+			orClauses = append(orClauses, k)
+			if strings.Contains(k, "?") {
+				orValues = append(orValues, v)
 			}
-
-			orClauses = append(orClauses, fmt.Sprintf("%s %s", field, op))
-			orValues = append(orValues, queryValue)
 		}
 
 		if len(orClauses) > 0 {

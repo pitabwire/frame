@@ -165,7 +165,7 @@ func (s *AuthorizationTestSuite) TestAuthorizationControlListWrite() {
 				require.NoError(t, err)
 
 				// Setup service and context
-				ctx, srv := frame.NewService("Test Srv", frame.WithConfig(&config.ConfigurationDefault{
+				ctx, srv := frame.NewService(frame.WithName("Test Srv"), frame.WithConfig(&config.ConfigurationDefault{
 					AuthorizationServiceWriteURI: ketoAdminURI.String(),
 					AuthorizationServiceReadURI:  ketoReadURI.String(),
 				}))
@@ -258,7 +258,7 @@ func (s *AuthorizationTestSuite) TestAuthHasAccess() {
 				require.NoError(t, err)
 
 				// Setup service and context
-				ctx, srv := frame.NewService("Test Srv", frame.WithConfig(
+				ctx, srv := frame.NewService(frame.WithName("Test Srv"), frame.WithConfig(
 					&config.ConfigurationDefault{
 						AuthorizationServiceReadURI:  ketoReadURI.String(),
 						AuthorizationServiceWriteURI: ketoAdminURI.String(),

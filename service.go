@@ -103,14 +103,14 @@ type Option func(ctx context.Context, service *Service)
 
 // NewService creates a new instance of Service with the name and supplied options.
 // Internally it calls NewServiceWithContext and creates a background context for use.
-func NewService(name string, opts ...Option) (context.Context, *Service) {
+func NewService(opts ...Option) (context.Context, *Service) {
 	ctx := context.Background()
-	return NewServiceWithContext(ctx, name, opts...)
+	return NewServiceWithContext(ctx, opts...)
 }
 
 // NewServiceWithContext creates a new instance of Service with context, name and supplied options
 // It is used together with the Init option to setup components of a service that is not yet running.
-func NewServiceWithContext(ctx context.Context, name string, opts ...Option) (context.Context, *Service) {
+func NewServiceWithContext(ctx context.Context, opts ...Option) (context.Context, *Service) {
 	// Create a new context that listens for OS signals for graceful shutdown.
 	ctx, signalCancelFunc := signal.NotifyContext(ctx,
 		syscall.SIGHUP,
@@ -125,7 +125,7 @@ func NewServiceWithContext(ctx context.Context, name string, opts ...Option) (co
 	cfg, _ := config.FromEnv[config.ConfigurationDefault]()
 
 	svc := &Service{
-		name:         name,
+		name:         cfg.Name(),
 		cancelFunc:   signalCancelFunc, // Store its cancel function
 		errorChannel: make(chan error, 1),
 

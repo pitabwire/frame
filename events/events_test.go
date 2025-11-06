@@ -106,7 +106,7 @@ func (s *EventsTestSuite) TestServiceRegisterEventsWorks() {
 				cfg.EventsQueueName = tc.queueName
 				events := frame.WithRegisterEvents(&MessageToTest{})
 				ctx, srv := frame.NewService(
-					tc.serviceName,
+					frame.WithName(tc.serviceName),
 					events,
 					frame.WithConfig(&cfg),
 					frametests.WithNoopDriver(),
@@ -193,7 +193,11 @@ func (s *EventsTestSuite) TestServiceEventsPublishingWorks() {
 					}
 				}
 
-				ctx, srv := frame.NewService(tc.serviceName, frame.WithConfig(&cfg), frametests.WithNoopDriver())
+				ctx, srv := frame.NewService(
+					frame.WithName(tc.serviceName),
+					frame.WithConfig(&cfg),
+					frametests.WithNoopDriver(),
+				)
 
 				testEvent := MessageToTest{Service: srv, Count: tc.initialCount}
 				events := frame.WithRegisterEvents(&testEvent)

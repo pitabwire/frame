@@ -30,7 +30,7 @@ The Frame datastore component provides a robust database integration layer built
 ```go
 mainDbOption := frame.Datastore(ctx, "postgres://user:secret@primary_server/service_db", false)
 readDbOption := frame.Datastore(ctx, "postgres://user:secret@secondary_server/service_db", true)
-service := frame.NewService("Data service", mainDbOption, readDbOption)
+service := frame.NewService(frame.WithName("Data service", mainDbOption, readDbOption))
 ```
 
 ### Connection URL Format

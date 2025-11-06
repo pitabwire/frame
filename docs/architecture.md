@@ -72,7 +72,7 @@ Frame is a Go-based framework built on top of [go-cloud](https://github.com/goog
 
 ### Component Interaction Flow
 
-1. Service initialization starts with `NewService()`
+1. Service initialization starts with `NewService(frame.WithName())`
 2. Components are registered through options
 3. Service manages component lifecycle:
    - Initialization order

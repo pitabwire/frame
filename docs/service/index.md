@@ -17,7 +17,7 @@ A new service object is created by supplying the service name and or a list of [
      
           ... add code to create components
      
-     service := frame.NewService(serviceName, serviceOptions ...)
+     service := frame.NewService(frame.WithName(serviceName, serviceOptions ...))
 
 ````
 
@@ -25,7 +25,7 @@ A new service object is created by supplying the service name and or a list of [
    
 ````go
 serviceName = "Notification Service"
-service := frame.NewService(serviceName)
+service := frame.NewService(frame.WithName(serviceName))
 
 var serviceOptions []frame.Option
 
@@ -42,7 +42,7 @@ Once instantiated we recommend passing it around via the context object of which
 ````go
 
 ctx := context.Background()
-service := frame.NewService(serviceName)
+service := frame.NewService(frame.WithName(serviceName))
 
 ctx := frame.ToContext(ctx, service)
 
@@ -58,7 +58,7 @@ like the queues, databases and bind to the appropriate ports for the http server
 
 ````go
         
-        service := frame.NewService(serviceName)
+        service := frame.NewService(frame.WithName(serviceName))
         err := service.Run(ctx, ":7654")
 	    if err != nil {
             ...

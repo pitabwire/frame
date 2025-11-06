@@ -141,7 +141,7 @@ func (s *AuthenticationTestSuite) TestSimpleAuthenticate() {
 	s.WithTestDependancies(s.T(), func(t *testing.T, _ *definition.DependencyOption) {
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
-				ctx, srv := frame.NewService("Test Srv", frame.WithConfig(
+				ctx, srv := frame.NewService(frame.WithName("Test Srv"), frame.WithConfig(
 					&config.ConfigurationDefault{Oauth2WellKnownJwkData: sampleWellKnownJwk}))
 
 				sm := srv.SecurityManager()
@@ -231,7 +231,7 @@ func (s *AuthenticationTestSuite) TestAuthenticateWithTenantClaims() {
 	s.WithTestDependancies(s.T(), func(t *testing.T, _ *definition.DependencyOption) {
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
-				ctx, srv := frame.NewService("Tenant Srv", frame.WithConfig(
+				ctx, srv := frame.NewService(frame.WithName("Tenant Srv"), frame.WithConfig(
 					&config.ConfigurationDefault{Oauth2WellKnownJwkData: tenantWellKnownJwk}))
 
 				sm := srv.SecurityManager()

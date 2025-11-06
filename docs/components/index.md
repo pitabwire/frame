@@ -45,7 +45,7 @@ func main() {
 
 	serverOption := frame.HttpHandler(r)
 
-	service := frame.NewService("Testing service", serverOption)
+	service := frame.NewService(frame.WithName("Testing service", serverOption))
 	...
 
 }
@@ -100,7 +100,7 @@ func main() {
 grpcSrv := grpc.NewServer()
 grpchello.RegisterGreeterServer(grpcSrv, &grpcServer{})
 grpcServerOption := frame.GrpcServer(grpcSrv)
-service := NewService("Testing Service Grpc", grpcServerOption)
+service := NewService(frame.WithName("Testing Service Grpc", grpcServerOption))
 ...
 }
 ````
@@ -133,7 +133,7 @@ func main() {
 	mainDbOption := frame.Datastore(ctx, "postgres://user:secret@primary_server/service_db", false)
 	readDbOption := frame.Datastore(ctx, "postgres://user:secret@secondary_server/service_db", true)
 
-	service := frame.NewService("Data service", mainDbOption, readDbOption)
+	service := frame.NewService(frame.WithName("Data service", mainDbOption, readDbOption))
 
 	...
 }
@@ -173,7 +173,7 @@ func main() {
 	ctx := context.Background()
 	opt := RegisterPublisher("test", "mem://topicA")
 	opt := RegisterSubscriber("test", "mem://topicA", 5, &messageHandler{} )
-	service := frame.NewService("Data service", mainDbOption, readDbOption)
+	service := frame.NewService(frame.WithName("Data service", mainDbOption, readDbOption))
 
 	...
 }

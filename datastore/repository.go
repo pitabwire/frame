@@ -112,7 +112,6 @@ func (br *baseRepository[T]) FieldsAllowed() map[string]bool {
 
 // IsFieldAllowed checks if a column name is safe to use in queries.
 func (br *baseRepository[T]) IsFieldAllowed(column string) error {
-
 	columns := strings.Split(strings.TrimSpace(column), " ")
 
 	if !br.allowedFields[columns[0]] {

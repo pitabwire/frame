@@ -212,7 +212,7 @@ func (s *LocalizationTestSuite) TestLanguageMapManagement() {
 
 	for _, tc := range testCases {
 		s.Run(tc.name, func() {
-			_, _ = frame.NewService(tc.serviceName)
+			_, _ = frame.NewService(frame.WithName(tc.serviceName))
 
 			// Test language map functions
 			testMap := localization.ToMap(tc.anyMap, tc.testLanguages)
@@ -330,7 +330,7 @@ func (s *LocalizationTestSuite) TestLanguageFromGrpcRequest() {
 
 	for _, tc := range testCases {
 		s.Run(tc.name, func() {
-			ctx, _ := frame.NewService(tc.serviceName)
+			ctx, _ := frame.NewService(frame.WithName(tc.serviceName))
 
 			md := metadata.New(map[string]string{"accept-language": tc.metadataLang})
 			grpcCtx := metadata.NewIncomingContext(ctx, md)

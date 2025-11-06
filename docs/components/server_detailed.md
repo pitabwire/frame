@@ -41,7 +41,7 @@ func main() {
     server := frame.HttpHandler(router)
     
     // Create service with server
-    service := frame.NewService("api-service", server)
+    service := frame.NewService(frame.WithName("api-service", server))
     
     // Run service
     if err := service.Run(ctx, ":8080"); err != nil {
@@ -113,7 +113,7 @@ func main() {
     server := frame.GrpcServer(grpcServer)
     
     // Create service
-    service := frame.NewService("grpc-service", server)
+    service := frame.NewService(frame.WithName("grpc-service", server))
     
     // Run service
     if err := service.Run(ctx, ":50051"); err != nil {

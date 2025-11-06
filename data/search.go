@@ -188,7 +188,7 @@ func WithSearchFiltersOrByValue(filters map[string]any) SearchOption {
 }
 
 // WithSearchFiltersAndByValue supplies AND filters whose values are compared
-// for equality in repository implementations. The keys should have query selection e.g. `id LIKE ?`
+// for equality in repository implementations. The keys should have query selection e.g. `id LIKE ?`.
 func WithSearchFiltersAndByValue(filters map[string]any) SearchOption {
 	return func(query *SearchQuery) {
 		query.FiltersAndByValue = filters

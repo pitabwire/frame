@@ -48,7 +48,7 @@ func main() {
 	router.HandleFunc("/", handler)
 
 	server := frame.HttpHandler(router)
-	service := frame.NewService(serviceName,server)
+	service := frame.NewService(frame.WithName(serviceName,server))
 	err := service.Run(ctx, ":7654")
 	if err != nil {
 		log.Fatal("main -- Could not run Server : %v", err)

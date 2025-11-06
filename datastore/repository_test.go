@@ -54,7 +54,7 @@ func (s *RepositoryTestSuite) TestServiceDatastore() {
 			t.Run(tc.name, func(t *testing.T) {
 				db := dep.ByIsDatabase(t.Context())
 
-				ctx, srv := frame.NewService(tc.serviceName, frametests.WithNoopDriver())
+				ctx, srv := frame.NewService(frame.WithName(tc.serviceName), frametests.WithNoopDriver())
 
 				mainDB := frame.WithDatastoreConnection(db.GetDS(ctx).String(), false)
 				srv.Init(ctx, mainDB)
@@ -107,7 +107,11 @@ func (s *RepositoryTestSuite) TestServiceDatastoreSet() {
 
 				defConf.DatabaseTraceQueries = tc.traceQueries
 
-				ctx, srv := frame.NewService("Test Srv", frame.WithConfig(&defConf), frame.WithDatastore())
+				ctx, srv := frame.NewService(
+					frame.WithName("Test Srv"),
+					frame.WithConfig(&defConf),
+					frame.WithDatastore(),
+				)
 				srv.Init(ctx)
 
 				dbPool := srv.DatastoreManager().GetPool(ctx, datastore.DefaultPoolName)
@@ -153,7 +157,7 @@ func (s *RepositoryTestSuite) TestServiceDatastoreRunQuery() {
 				defConf.DatabaseTraceQueries = true
 
 				ctx, svc := frame.NewService(
-					"Test Srv",
+					frame.WithName("Test Srv"),
 					frame.WithConfig(&defConf),
 					frame.WithDatastore(pool.WithConnection(db.GetDS(t.Context()).String(), false)),
 				)
@@ -200,7 +204,7 @@ func (s *RepositoryTestSuite) TestServiceDatastoreRead() {
 				db := dep.ByIsDatabase(t.Context())
 
 				ctx, srv := frame.NewService(
-					tc.serviceName,
+					frame.WithName(tc.serviceName),
 					frame.WithDatastore(pool.WithConnection(db.GetDS(t.Context()).String(), false)),
 				)
 
@@ -242,7 +246,7 @@ func (s *RepositoryTestSuite) TestServiceDatastoreNotSet() {
 	s.WithTestDependancies(s.T(), func(t *testing.T, _ *definition.DependencyOption) {
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
-				_, srv := frame.NewService(tc.serviceName)
+				_, srv := frame.NewService(frame.WithName(tc.serviceName))
 
 				require.Nil(
 					t,
@@ -395,7 +399,7 @@ func (s *RepositoryTestSuite) TestCreate() {
 				db := dep.ByIsDatabase(ctx)
 
 				ctx, srv := frame.NewService(
-					"Test Create Service",
+					frame.WithName("Test Create Service"),
 					frame.WithDatastore(pool.WithConnection(db.GetDS(t.Context()).String(), false)),
 				)
 				srv.Init(ctx)
@@ -445,7 +449,7 @@ func (s *RepositoryTestSuite) TestImmutableFields() {
 		db := dep.ByIsDatabase(ctx)
 
 		ctx, srv := frame.NewService(
-			"Test Immutable Service",
+			frame.WithName("Test Immutable Service"),
 			frame.WithDatastore(pool.WithConnection(db.GetDS(t.Context()).String(), false)),
 		)
 		srv.Init(ctx)
@@ -547,7 +551,7 @@ func (s *RepositoryTestSuite) TestBulkCreate() {
 				db := dep.ByIsDatabase(ctx)
 
 				ctx, srv := frame.NewService(
-					"Test Bulk Create Service",
+					frame.WithName("Test Bulk Create Service"),
 					frame.WithDatastore(pool.WithConnection(db.GetDS(t.Context()).String(), false)),
 				)
 				srv.Init(ctx)
@@ -621,7 +625,7 @@ func (s *RepositoryTestSuite) TestBulkCreateBatchSize() {
 		db := dep.ByIsDatabase(ctx)
 
 		ctx, srv := frame.NewService(
-			"Test Batch Size Service",
+			frame.WithName("Test Batch Size Service"),
 			frame.WithDatastore(pool.WithConnection(db.GetDS(t.Context()).String(), false)),
 		)
 		srv.Init(ctx)
@@ -747,7 +751,7 @@ func (s *RepositoryTestSuite) TestBulkUpdate() {
 				db := dep.ByIsDatabase(ctx)
 
 				ctx, srv := frame.NewService(
-					"Test Bulk Update Service",
+					frame.WithName("Test Bulk Update Service"),
 					frame.WithDatastore(pool.WithConnection(db.GetDS(t.Context()).String(), false)),
 				)
 				srv.Init(ctx)
@@ -839,7 +843,7 @@ func (s *RepositoryTestSuite) TestBulkUpdateInvalidColumn() {
 		db := dep.ByIsDatabase(ctx)
 
 		ctx, srv := frame.NewService(
-			"Test Invalid Column Service",
+			frame.WithName("Test Invalid Column Service"),
 			frame.WithDatastore(pool.WithConnection(db.GetDS(t.Context()).String(), false)),
 		)
 		srv.Init(ctx)
@@ -880,7 +884,7 @@ func (s *RepositoryTestSuite) TestBulkUpdateConcurrent() {
 		db := dep.ByIsDatabase(ctx)
 
 		ctx, srv := frame.NewService(
-			"Test Concurrent Bulk Service",
+			frame.WithName("Test Concurrent Bulk Service"),
 			frame.WithDatastore(pool.WithConnection(db.GetDS(t.Context()).String(), false)),
 		)
 		srv.Init(ctx)
@@ -964,7 +968,7 @@ func (s *RepositoryTestSuite) TestBulkUpdatePerformance() {
 		db := dep.ByIsDatabase(ctx)
 
 		ctx, srv := frame.NewService(
-			"Test Performance Service",
+			frame.WithName("Test Performance Service"),
 			frame.WithDatastore(pool.WithConnection(db.GetDS(t.Context()).String(), false)),
 		)
 		srv.Init(ctx)

@@ -52,7 +52,7 @@ func (s *MigratorTestSuite) TestSaveNewMigrations() {
 				db := dep.ByIsDatabase(t.Context())
 
 				ctx, svc := frame.NewService(
-					tc.serviceName,
+					frame.WithName(tc.serviceName),
 					frame.WithDatastore(pool.WithConnection(db.GetDS(t.Context()).String(), false)),
 				)
 
@@ -144,7 +144,7 @@ func (s *MigratorTestSuite) TestApplyMigrations() {
 				defConf.LogLevel = tc.logLevel
 
 				ctx, svc := frame.NewService(
-					tc.serviceName,
+					frame.WithName(tc.serviceName),
 					frame.WithConfig(&defConf),
 					frame.WithDatastore(pool.WithConnection(db.GetDS(t.Context()).String(), false)),
 				)
@@ -197,7 +197,7 @@ func (s *MigratorTestSuite) TestServiceMigrateDatastore() {
 				db := dep.ByIsDatabase(t.Context())
 
 				ctx, svc := frame.NewService(
-					tc.serviceName,
+					frame.WithName(tc.serviceName),
 					frame.WithDatastore(pool.WithConnection(db.GetDS(t.Context()).String(), false)),
 				)
 
@@ -248,7 +248,7 @@ func (s *MigratorTestSuite) TestServiceMigrateDatastoreIdempotency() {
 				db := dep.ByIsDatabase(t.Context())
 
 				ctx, svc := frame.NewService(
-					tc.serviceName,
+					frame.WithName(tc.serviceName),
 					frame.WithDatastore(pool.WithConnection(db.GetDS(t.Context()).String(), false)),
 				)
 

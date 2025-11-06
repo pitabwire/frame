@@ -132,7 +132,7 @@ func (s *ServerTestSuite) TestServiceGrpcHealthServer() {
 				httpTestOpt, _ := frametests.WithHTTPTestDriver()
 
 				ctx, srv := frame.NewService(
-					tc.serviceName,
+					frame.WithName(tc.serviceName),
 					httpTestOpt,
 					frame.WithGRPCServer(gsrv),
 					frame.WithGRPCServerListener(listener),
@@ -187,7 +187,7 @@ func (s *ServerTestSuite) TestServiceGrpcServer() {
 				httpTestOpt, _ := frametests.WithHTTPTestDriver()
 
 				ctx, srv := frame.NewService(
-					tc.serviceName,
+					frame.WithName(tc.serviceName),
 					httpTestOpt,
 					frame.WithGRPCServer(gsrv),
 					frame.WithGRPCServerListener(listener),
@@ -242,7 +242,7 @@ func (s *ServerTestSuite) TestServiceGrpcTLSServer() {
 				gsrv := grpc.NewServer()
 				grpcping2.RegisterFramePingServer(gsrv, &grpcServer{})
 
-				ctx, srv := frame.NewService(tc.serviceName)
+				ctx, srv := frame.NewService(frame.WithName(tc.serviceName))
 
 				httpTestOpt, _ := frametests.WithHTTPTestDriver()
 
@@ -304,7 +304,7 @@ func (s *ServerTestSuite) TestServiceRun() {
 			t.Run(tc.name, func(_ *testing.T) {
 				httpTestOpt, _ := frametests.WithHTTPTestDriver()
 
-				ctx2, srv2 := frame.NewService(tc.serviceName, httpTestOpt)
+				ctx2, srv2 := frame.NewService(frame.WithName(tc.serviceName), httpTestOpt)
 
 				if err := srv2.Run(ctx2, tc.port); err != nil {
 					if !errors.Is(err, context.Canceled) {

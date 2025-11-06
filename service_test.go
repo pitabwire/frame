@@ -50,7 +50,7 @@ func (s *ServiceTestSuite) TestDefaultService() {
 	s.WithTestDependancies(s.T(), func(t *testing.T, _ *definition.DependencyOption) {
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
-				_, srv := frame.NewService(tc.serviceName)
+				_, srv := frame.NewService(frame.WithName(tc.serviceName))
 				require.NotNil(t, srv, "default service should be instantiated")
 				require.Equal(t, tc.serviceName, srv.Name(), "service name should match")
 			})
@@ -73,7 +73,7 @@ func (s *ServiceTestSuite) TestService() {
 	s.WithTestDependancies(s.T(), func(t *testing.T, _ *definition.DependencyOption) {
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
-				_, srv := frame.NewService(tc.serviceName)
+				_, srv := frame.NewService(frame.WithName(tc.serviceName))
 				require.NotNil(t, srv, "service should be instantiated")
 			})
 		}
@@ -106,7 +106,7 @@ func (s *ServiceTestSuite) TestFromContext() {
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
 				ctx := s.T().Context()
-				_, srv := frame.NewService(tc.serviceName)
+				_, srv := frame.NewService(frame.WithName(tc.serviceName))
 
 				if tc.setService {
 					ctx = frame.ToContext(ctx, srv)
@@ -141,7 +141,7 @@ func (s *ServiceTestSuite) TestServiceAddCleanupMethod() {
 	s.WithTestDependancies(s.T(), func(t *testing.T, _ *definition.DependencyOption) {
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
-				ctx, srv := frame.NewService(tc.serviceName)
+				ctx, srv := frame.NewService(frame.WithName(tc.serviceName))
 
 				a := 30
 
@@ -192,7 +192,7 @@ func (s *ServiceTestSuite) TestServiceAddHealthCheck() {
 	s.WithTestDependancies(s.T(), func(t *testing.T, _ *definition.DependencyOption) {
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
-				_, srv := frame.NewService(tc.serviceName)
+				_, srv := frame.NewService(frame.WithName(tc.serviceName))
 
 				if tc.addHealthCheck {
 					healthChecker := new(testHC)
@@ -238,7 +238,10 @@ func (s *ServiceTestSuite) TestBackGroundConsumer() {
 	s.WithTestDependancies(s.T(), func(t *testing.T, _ *definition.DependencyOption) {
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
-				ctx, srv := frame.NewService(tc.serviceName, frame.WithBackgroundConsumer(tc.consumerFunc))
+				ctx, srv := frame.NewService(
+					frame.WithName(tc.serviceName),
+					frame.WithBackgroundConsumer(tc.consumerFunc),
+				)
 
 				err := srv.Run(ctx, ":")
 
@@ -269,7 +272,7 @@ func (s *ServiceTestSuite) TestServiceExitByOSSignal() {
 	s.WithTestDependancies(s.T(), func(t *testing.T, _ *definition.DependencyOption) {
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
-				ctx, srv := frame.NewService(tc.serviceName)
+				ctx, srv := frame.NewService(frame.WithName(tc.serviceName))
 
 				go func(srv *frame.Service) {
 					err := srv.Run(ctx, ":")
@@ -362,13 +365,17 @@ func (s *ServiceTestSuite) TestHealthCheckEndpoints() {
 	s.WithTestDependancies(s.T(), func(t *testing.T, _ *definition.DependencyOption) {
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
-				opts := []frame.Option{frametests.WithNoopDriver(), frame.WithHealthCheckPath(tc.healthPath)}
+				opts := []frame.Option{
+					frame.WithName("Test Srv"),
+					frametests.WithNoopDriver(),
+					frame.WithHealthCheckPath(tc.healthPath),
+				}
 
 				if tc.handler != nil {
 					opts = append(opts, frame.WithHTTPHandler(tc.handler))
 				}
 
-				ctx, srv := frame.NewService("Test Srv", opts...)
+				ctx, srv := frame.NewService(opts...)
 				defer srv.Stop(ctx)
 
 				err := srv.Run(ctx, ":41576")

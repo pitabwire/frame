@@ -54,7 +54,7 @@ package main
 import ("github.com/pitabwire/frame"; "net/http"; "context")
 func main() {
     http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("Hello!")) })
-    frame.NewService("hello-service", frame.HttpHandler(http.DefaultServeMux)).Run(context.Background(), ":8080")
+    frame.NewService(frame.WithName("hello-service", frame.HttpHandler(http.DefaultServeMux))).Run(context.Background(), ":8080")
 }
 ```
 

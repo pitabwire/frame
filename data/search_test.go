@@ -173,14 +173,14 @@ func (s *SearchTestSuite) TestSearchFiltersOrByValue() {
 		{
 			name: "OR filters with equality pattern",
 			filters: map[string]any{
-				"status = ?":  "active",
-				"role = ?":    "admin",
-				"type = ?":    "premium",
+				"status = ?": "active",
+				"role = ?":   "admin",
+				"type = ?":   "premium",
 			},
 			expected: map[string]any{
-				"status = ?":  "active",
-				"role = ?":    "admin",
-				"type = ?":    "premium",
+				"status = ?": "active",
+				"role = ?":   "admin",
+				"type = ?":   "premium",
 			},
 		},
 		{
@@ -473,7 +473,7 @@ func (s *SearchTestSuite) runStableSearchTests(t *testing.T, depOpt *definition.
 			ctx := context.Background()
 
 			// Create a dbPool with the test dependencies
-			ctx, svc := frame.NewServiceWithContext(ctx, "search-test",
+			ctx, svc := frame.NewServiceWithContext(ctx, frame.WithName("search-test"),
 				frame.WithDatastoreConnection(depOpt.ByIsDatabase(ctx).GetDS(ctx).String(), false),
 				frame.WithRegisterPublisher("test-queue", depOpt.ByIsQueue(ctx).GetDS(ctx).String()),
 			)
@@ -685,7 +685,7 @@ func (s *SearchTestSuite) TestStableSearchConcurrency() {
 		ctx := context.Background()
 
 		// Create a dbPool with the test dependencies
-		ctx, svc := frame.NewServiceWithContext(ctx, "search-test",
+		ctx, svc := frame.NewServiceWithContext(ctx, frame.WithName("search-test"),
 			frame.WithDatastoreConnection(depOpt.ByIsDatabase(ctx).GetDS(ctx).String(), false),
 			frame.WithRegisterPublisher("test-queue", depOpt.ByIsQueue(ctx).GetDS(ctx).String()),
 		)
@@ -763,7 +763,7 @@ func (s *SearchTestSuite) TestStableSearchMemoryManagement() {
 		ctx := context.Background()
 
 		// Create a dbPool with the test dependencies
-		ctx, svc := frame.NewServiceWithContext(ctx, "search-test",
+		ctx, svc := frame.NewServiceWithContext(ctx, frame.WithName("search-test"),
 			frame.WithDatastoreConnection(depOpt.ByIsDatabase(ctx).GetDS(ctx).String(), false),
 			frame.WithRegisterPublisher("test-queue", depOpt.ByIsQueue(ctx).GetDS(ctx).String()),
 		)
@@ -1006,7 +1006,7 @@ func (s *SearchTestSuite) runErrorRecoveryTests(t *testing.T, depOpt *definition
 			ctx := context.Background()
 
 			// Create a dbPool with the test dependencies
-			ctx, svc := frame.NewServiceWithContext(ctx, "search-test",
+			ctx, svc := frame.NewServiceWithContext(ctx, frame.WithName("search-test"),
 				frame.WithDatastoreConnection(depOpt.ByIsDatabase(ctx).GetDS(ctx).String(), false),
 				frame.WithRegisterPublisher("test-queue", depOpt.ByIsQueue(ctx).GetDS(ctx).String()),
 			)

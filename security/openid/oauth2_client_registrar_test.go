@@ -80,9 +80,12 @@ func (s *JwtTestSuite) TestServiceRegisterForJwtWithParams() {
 				ctx := t.Context()
 				hydra := dep.ByImageName(testoryhydra.OryHydraImage)
 
-				ctx, srv := frame.NewService(tc.serviceName, frame.WithConfig(&config.ConfigurationDefault{
-					Oauth2ServiceAdminURI: hydra.GetDS(ctx).String(),
-				}))
+				ctx, srv := frame.NewService(
+					frame.WithName(tc.serviceName),
+					frame.WithConfig(&config.ConfigurationDefault{
+						Oauth2ServiceAdminURI: hydra.GetDS(ctx).String(),
+					}),
+				)
 
 				sm := srv.SecurityManager()
 				clientRegistrar := sm.GetOauth2ClientRegistrar(ctx)

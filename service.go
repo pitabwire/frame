@@ -76,6 +76,8 @@ type Service struct {
 
 	configuration any
 
+	registerOauth2Cli bool
+
 	clientManager       client.Manager
 	workerPoolManager   workerpool.Manager
 	localizationManager localization.Manager
@@ -163,6 +165,17 @@ func NewServiceWithContext(ctx context.Context, opts ...Option) (context.Context
 		finalCfg = &cfg
 	}
 	svc.securityManager = securityManager.NewManager(ctx, finalCfg, svc.clientManager)
+
+	if svc.registerOauth2Cli {
+		sm := svc.SecurityManager()
+		clr := sm.GetOauth2ClientRegistrar(ctx)
+
+		// Register for JWT
+		err = clr.RegisterForJwt(ctx, sm)
+		if err != nil {
+			svc.Log(ctx).WithError(err).Fatal("could not register server client for jwt")
+		}
+	}
 
 	svc.workerPoolManager = workerpool.NewManager(ctx, &cfg, svc.sendStopError)
 

@@ -16,7 +16,7 @@ require (
 	github.com/nats-io/nats.go v1.47.0
 	github.com/nicksnyder/go-i18n/v2 v2.6.0
 	github.com/panjf2000/ants/v2 v2.11.3
-	github.com/pitabwire/natspubsub v0.7.3
+	github.com/pitabwire/natspubsub v0.7.4
 	github.com/pitabwire/util v0.3.5
 	github.com/redis/go-redis/v9 v9.16.0
 	github.com/rs/xid v1.6.0

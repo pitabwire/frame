@@ -15,7 +15,7 @@ import (
 
 const (
 	// OryHydraImage is the Ory Hydra Image.
-	OryHydraImage = "oryd/hydra:latest"
+	OryHydraImage = "oryd/hydra:v2.3.0"
 
 	HydraConfiguration = `
 ## ORY Hydra Configuration

@@ -27,11 +27,12 @@ type clientRegistrar struct {
 }
 
 func NewClientRegistrar(serviceName, serviceEnvironment string,
-	cfg config.ConfigurationOAUTH2) security.Oauth2ClientRegistrar {
+	cfg config.ConfigurationOAUTH2, cli client.Manager) security.Oauth2ClientRegistrar {
 	return &clientRegistrar{
 		serviceName:        serviceName,
 		serviceEnvironment: serviceEnvironment,
 		cfg:                cfg,
+		invoker:            cli,
 	}
 }
 

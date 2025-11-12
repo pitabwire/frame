@@ -29,7 +29,7 @@ func NewManager(_ context.Context,
 		serviceName:        cfg.Name(),
 		serviceEnvironment: cfg.Environment(),
 		cfg:                cfg,
-		clientRegistrar:    openid.NewClientRegistrar(cfg.Name(), cfg.Environment(), cfg),
+		clientRegistrar:    openid.NewClientRegistrar(cfg.Name(), cfg.Environment(), cfg, invoker),
 		authenticator:      openid.NewJwtTokenAuthenticator(cfg),
 		authorizer:         permissions.NewKetoAuthorizer(cfg, invoker),
 	}

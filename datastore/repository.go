@@ -236,9 +236,19 @@ func (br *baseRepository[T]) BulkUpdate(ctx context.Context, entityIDs []string,
 
 // Delete soft deletes an entity by its ID without fetching it first.
 func (br *baseRepository[T]) Delete(ctx context.Context, id string) error {
-	// Direct delete without SELECT - much more efficient
 	entity := br.modelFactory()
-	return br.Pool().DB(ctx, false).Where("id = ?", id).Delete(entity).Error
+	result := br.Pool().DB(ctx, false).Where("id = ?", id).Delete(entity)
+	
+	if result.Error != nil {
+		return result.Error
+	}
+	
+	// Check if any rows were affected (object existed and was deleted)
+	if result.RowsAffected == 0 {
+		return gorm.ErrRecordNotFound
+	}
+	
+	return nil
 }
 
 // DeleteBatch soft deletes multiple entities by their IDs in a single query.

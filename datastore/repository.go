@@ -125,6 +125,10 @@ func (br *baseRepository[T]) GetByID(ctx context.Context, id string) (T, error) 
 	entity := br.modelFactory()
 	// Use indexed lookup with prepared statement
 	err := br.Pool().DB(ctx, true).Preload(clause.Associations).Where("id = ?", id).First(entity).Error
+	if err != nil {
+		var zero T
+		return zero, err
+	}
 	return entity, err
 }
 
@@ -238,16 +242,16 @@ func (br *baseRepository[T]) BulkUpdate(ctx context.Context, entityIDs []string,
 func (br *baseRepository[T]) Delete(ctx context.Context, id string) error {
 	entity := br.modelFactory()
 	result := br.Pool().DB(ctx, false).Where("id = ?", id).Delete(entity)
-	
+
 	if result.Error != nil {
 		return result.Error
 	}
-	
+
 	// Check if any rows were affected (object existed and was deleted)
 	if result.RowsAffected == 0 {
 		return gorm.ErrRecordNotFound
 	}
-	
+
 	return nil
 }
 

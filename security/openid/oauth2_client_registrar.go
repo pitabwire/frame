@@ -50,6 +50,9 @@ func (s *clientRegistrar) RegisterForJwt(ctx context.Context, iClientHolder secu
 		if s.serviceEnvironment != "" {
 			clientID = fmt.Sprintf("%s_%s", s.serviceName, s.serviceEnvironment)
 		}
+		if clientID == "" {
+			clientID = util.IDString()
+		}
 	}
 
 	clientSecret := oauth2Config.GetOauth2ServiceClientSecret()
@@ -77,9 +80,9 @@ func (s *clientRegistrar) RegisterForJwtWithParams(ctx context.Context,
 	oauth2ServiceAdminHost string, clientName string, clientID string, clientSecret string,
 	scope string, audienceList []string, metadata map[string]string) (map[string]any, error) {
 	oauth2AdminURI := fmt.Sprintf("%s/admin/clients", oauth2ServiceAdminHost)
-	oauth2AdminIDUri := fmt.Sprintf("%s/%s", oauth2AdminURI, clientID)
+	oauth2AdminIDURI := fmt.Sprintf("%s/%s", oauth2AdminURI, clientID)
 
-	status, response, err := s.invoker.Invoke(ctx, http.MethodGet, oauth2AdminIDUri, nil, nil)
+	status, response, err := s.invoker.Invoke(ctx, http.MethodGet, oauth2AdminIDURI, nil, nil)
 	if err != nil {
 		util.Log(ctx).WithError(err).Error("could not get existing clients")
 		return nil, err
@@ -147,7 +150,7 @@ func (s *clientRegistrar) RegisterForJwtWithParams(ctx context.Context,
 // UnRegisterForJwt utilizing client id we de register external applications for access token generation.
 func (s *clientRegistrar) UnRegisterForJwt(ctx context.Context,
 	oauth2ServiceAdminHost string, clientID string) error {
-	oauth2AdminURI := fmt.Sprintf("%s%s/%s", oauth2ServiceAdminHost, "/admin/clients", clientID)
+	oauth2AdminURI := fmt.Sprintf("%s/admin/clients/%s", oauth2ServiceAdminHost, clientID)
 
 	status, result, err := s.invoker.Invoke(
 		ctx,

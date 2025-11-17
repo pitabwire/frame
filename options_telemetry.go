@@ -21,6 +21,10 @@ func WithTelemetry(opts ...telemetry.Option) Option {
 			telemetry.WithServiceVersion(s.Version()),
 			telemetry.WithServiceEnvironment(s.Environment())}
 
+		if cfg.DisableOpenTelemetry() {
+			extOpts = append(extOpts, telemetry.WithDisableTracing())
+		}
+
 		extOpts = append(extOpts, opts...)
 
 		s.telemetryManager = telemetry.NewManager(ctx, cfg, extOpts...)

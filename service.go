@@ -137,35 +137,18 @@ func NewServiceWithContext(ctx context.Context, opts ...Option) (context.Context
 		configuration: &cfg,
 	}
 
-	if cfg.ServiceName != "" {
-		opts = append(opts, WithName(cfg.ServiceName))
-	}
-
-	if cfg.ServiceEnvironment != "" {
-		opts = append(opts, WithEnvironment(cfg.ServiceEnvironment))
-	}
-
-	if cfg.ServiceVersion != "" {
-		opts = append(opts, WithVersion(cfg.ServiceVersion))
-	}
-
-	var telemetryOpts []telemetry.Option
-	if cfg.OpenTelemetryDisable {
-		telemetryOpts = append(telemetryOpts, telemetry.WithDisableTracing())
-	}
-
-	opts = append(opts, WithLogger()) // Ensure logger is initialized early
-	opts = append(opts, WithHTTPClient())
-	opts = append(opts, WithTelemetry(telemetryOpts...))
+	opts = append(
+		[]Option{WithLogger(), WithTelemetry(), WithHTTPClient()},
+		opts...) // Ensure prerequisites are initialized early
 
 	svc.Init(ctx, opts...) // Apply all options, using the signal-aware context
 
 	// Create security manager AFTER options are applied so it gets the correct config
-	finalCfg, ok := svc.Config().(*config.ConfigurationDefault)
+	smCfg, ok := svc.Config().(securityManager.SecurityConfiguration)
 	if !ok {
-		finalCfg = &cfg
+		smCfg = &cfg
 	}
-	svc.securityManager = securityManager.NewManager(ctx, finalCfg, svc.clientManager)
+	svc.securityManager = securityManager.NewManager(ctx, smCfg, svc.clientManager)
 
 	if svc.registerOauth2Cli {
 		sm := svc.SecurityManager()
@@ -178,7 +161,11 @@ func NewServiceWithContext(ctx context.Context, opts ...Option) (context.Context
 		}
 	}
 
-	svc.workerPoolManager = workerpool.NewManager(ctx, &cfg, svc.sendStopError)
+	wkpCfg, ok := svc.Config().(config.ConfigurationWorkerPool)
+	if !ok {
+		wkpCfg = &cfg
+	}
+	svc.workerPoolManager = workerpool.NewManager(ctx, wkpCfg, svc.sendStopError)
 
 	svc.queueManager = queue.NewQueueManager(ctx, svc.workerPoolManager)
 

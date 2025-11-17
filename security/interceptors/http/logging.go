@@ -32,8 +32,14 @@ func (w *responseWriterWrapper) WriteHeader(code int) {
 
 // Write captures the response body.
 func (w *responseWriterWrapper) Write(b []byte) (int, error) {
-	if w.body != nil {
-		w.body.Write(b)
+	if w.body != nil && w.body.Len() < maxBodyLogSize {
+		// Only buffer up to the max log size.
+		remainingSpace := maxBodyLogSize - w.body.Len()
+		if len(b) > remainingSpace {
+			w.body.Write(b[:remainingSpace])
+		} else {
+			w.body.Write(b)
+		}
 	}
 	return w.ResponseWriter.Write(b)
 }
@@ -67,8 +73,11 @@ func LoggingMiddleware(next http.Handler) http.Handler {
 func readRequestBody(r *http.Request) []byte {
 	var requestBody []byte
 	if r.Body != nil {
-		requestBody, _ = io.ReadAll(r.Body)
-		r.Body = io.NopCloser(bytes.NewBuffer(requestBody))
+		// Read only up to the max log size to avoid loading large bodies into memory.
+		lr := io.LimitReader(r.Body, maxBodyLogSize)
+		requestBody, _ = io.ReadAll(lr)
+		// Re-construct the body with what was read plus the rest of the original stream.
+		r.Body = io.NopCloser(io.MultiReader(bytes.NewReader(requestBody), r.Body))
 	}
 	return requestBody
 }
@@ -158,20 +167,16 @@ func logByStatusCode(logEntry *util.LogEntry, statusCode int) {
 
 // isSensitiveHeader checks if a header contains sensitive information.
 func isSensitiveHeader(name string) bool {
-	sensitiveHeaders := []string{
-		"authorization",
-		"cookie",
-		"set-cookie",
-		"x-api-key",
-		"x-auth-token",
-		"x-csrf-token",
-		"x-session-id",
+	// Use a map for efficient, case-insensitive lookups after canonicalization.
+	sensitiveHeaders := map[string]struct{}{
+		"Authorization": {},
+		"Cookie":        {},
+		"Set-Cookie":    {},
+		"X-Api-Key":     {},
+		"X-Auth-Token":  {},
+		"X-Csrf-Token":  {},
+		"X-Session-Id":  {},
 	}
-
-	for _, sensitive := range sensitiveHeaders {
-		if name == sensitive {
-			return true
-		}
-	}
-	return false
+	_, ok := sensitiveHeaders[http.CanonicalHeaderKey(name)]
+	return ok
 }

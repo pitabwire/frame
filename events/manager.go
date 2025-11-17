@@ -4,10 +4,9 @@ import (
 	"context"
 	"errors"
 
-	"github.com/pitabwire/util"
-
 	"github.com/pitabwire/frame/config"
 	"github.com/pitabwire/frame/queue"
+	"github.com/pitabwire/util"
 )
 
 type manager struct {

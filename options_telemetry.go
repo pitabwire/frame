@@ -36,3 +36,7 @@ func WithTelemetry(opts ...telemetry.Option) Option {
 		s.logger = s.telemetryManager.Log()
 	}
 }
+
+func (s *Service) TelemetryManager() telemetry.Manager {
+	return s.telemetryManager
+}

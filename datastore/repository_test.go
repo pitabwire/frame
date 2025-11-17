@@ -10,11 +10,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pitabwire/util"
-	"github.com/stretchr/testify/require"
-	"github.com/stretchr/testify/suite"
-	"google.golang.org/protobuf/types/known/structpb"
-
 	"github.com/pitabwire/frame"
 	"github.com/pitabwire/frame/config"
 	"github.com/pitabwire/frame/data"
@@ -23,6 +18,10 @@ import (
 	"github.com/pitabwire/frame/frametests"
 	"github.com/pitabwire/frame/frametests/definition"
 	"github.com/pitabwire/frame/tests"
+	"github.com/pitabwire/util"
+	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
+	"google.golang.org/protobuf/types/known/structpb"
 )
 
 // RepositoryTestSuite extends FrameBaseTestSuite for comprehensive datastore testing.

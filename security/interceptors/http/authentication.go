@@ -4,9 +4,8 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/pitabwire/util"
-
 	"github.com/pitabwire/frame/security"
+	"github.com/pitabwire/util"
 )
 
 const (

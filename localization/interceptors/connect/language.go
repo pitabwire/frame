@@ -4,7 +4,6 @@ import (
 	"context"
 
 	"connectrpc.com/connect"
-
 	"github.com/pitabwire/frame/localization"
 )
 

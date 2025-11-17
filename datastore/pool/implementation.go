@@ -5,11 +5,10 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/pitabwire/util"
-	"gorm.io/gorm"
-
 	"github.com/pitabwire/frame/datastore/migration"
 	"github.com/pitabwire/frame/datastore/scopes"
+	"github.com/pitabwire/util"
+	"gorm.io/gorm"
 )
 
 type pool struct {

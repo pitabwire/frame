@@ -6,9 +6,8 @@ import (
 	"strings"
 
 	"connectrpc.com/connect"
-	"github.com/pitabwire/util"
-
 	"github.com/pitabwire/frame/security"
+	"github.com/pitabwire/util"
 )
 
 const (

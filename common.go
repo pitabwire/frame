@@ -3,10 +3,9 @@ package frame
 import (
 	"strings"
 
+	"github.com/pitabwire/frame/data"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-
-	"github.com/pitabwire/frame/data"
 )
 
 // ErrIsNotFound checks if an error represents a "not found" condition.

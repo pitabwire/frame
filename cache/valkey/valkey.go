@@ -4,9 +4,8 @@ import (
 	"context"
 	"time"
 
-	"github.com/valkey-io/valkey-go"
-
 	"github.com/pitabwire/frame/cache"
+	"github.com/valkey-io/valkey-go"
 )
 
 // Cache is a Valkey-backed cache implementation using the official Valkey client.

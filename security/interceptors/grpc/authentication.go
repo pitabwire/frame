@@ -4,13 +4,12 @@ import (
 	"context"
 	"strings"
 
+	"github.com/pitabwire/frame/security"
 	"github.com/pitabwire/util"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
-
-	"github.com/pitabwire/frame/security"
 )
 
 const (

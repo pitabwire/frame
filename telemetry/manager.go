@@ -5,6 +5,7 @@ import (
 	"os"
 	"runtime"
 
+	"github.com/pitabwire/frame/config"
 	"github.com/pitabwire/util"
 	"go.opentelemetry.io/contrib/bridges/otelslog"
 	"go.opentelemetry.io/contrib/exporters/autoexport"
@@ -18,8 +19,6 @@ import (
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.37.0"
-
-	"github.com/pitabwire/frame/config"
 )
 
 type Manager interface {

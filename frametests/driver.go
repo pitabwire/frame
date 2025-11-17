@@ -6,9 +6,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 
-	"github.com/pitabwire/util"
-
 	"github.com/pitabwire/frame"
+	"github.com/pitabwire/util"
 )
 
 func GetFreePort(ctx context.Context) (int, error) {

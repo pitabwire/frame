@@ -4,11 +4,10 @@ import (
 	"context"
 	"time"
 
+	"github.com/pitabwire/frame/security"
 	"github.com/pitabwire/util"
 	"github.com/rs/xid"
 	"gorm.io/gorm"
-
-	"github.com/pitabwire/frame/security"
 )
 
 type BaseModelI interface {

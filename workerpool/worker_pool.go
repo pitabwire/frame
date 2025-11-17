@@ -9,10 +9,9 @@ import (
 	"time"
 
 	"github.com/panjf2000/ants/v2"
+	"github.com/pitabwire/frame/config"
 	"github.com/pitabwire/util"
 	"github.com/rs/xid"
-
-	"github.com/pitabwire/frame/config"
 )
 
 var ErrWorkerPoolResultChannelIsClosed = errors.New("worker job is already closed")

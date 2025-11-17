@@ -11,7 +11,6 @@ import (
 	"strings"
 
 	"github.com/golang-jwt/jwt/v5"
-
 	"github.com/pitabwire/frame/config"
 	"github.com/pitabwire/frame/security"
 )

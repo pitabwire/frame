@@ -5,9 +5,8 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/pitabwire/util"
-
 	"github.com/pitabwire/frame/workerpool"
+	"github.com/pitabwire/util"
 )
 
 type queueManager struct {

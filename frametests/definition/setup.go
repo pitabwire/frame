@@ -3,9 +3,8 @@ package definition
 import (
 	"context"
 
-	"github.com/testcontainers/testcontainers-go"
-
 	"github.com/pitabwire/frame/data"
+	"github.com/testcontainers/testcontainers-go"
 )
 
 const ContainerFileMode = 0o755

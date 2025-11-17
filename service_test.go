@@ -574,7 +574,7 @@ func TestService_HTTPClientTracing(t *testing.T) {
 			defer testServer.Close()
 
 			// Create a request with our context that has the custom logger
-			req, err := http.NewRequestWithContext(ctx, "GET", testServer.URL, nil)
+			req, err := http.NewRequestWithContext(ctx, http.MethodGet, testServer.URL, nil)
 			require.NoError(t, err)
 
 			// Make a request with the traced client using our context

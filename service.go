@@ -10,6 +10,13 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/pitabwire/util"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"gocloud.dev/server/driver"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/health/grpc_health_v1"
+	"google.golang.org/grpc/reflection"
+
 	"github.com/pitabwire/frame/cache"
 	"github.com/pitabwire/frame/client"
 	"github.com/pitabwire/frame/config"
@@ -22,12 +29,6 @@ import (
 	securityManager "github.com/pitabwire/frame/security/manager"
 	"github.com/pitabwire/frame/telemetry"
 	"github.com/pitabwire/frame/workerpool"
-	"github.com/pitabwire/util"
-	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
-	"gocloud.dev/server/driver"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/health/grpc_health_v1"
-	"google.golang.org/grpc/reflection"
 )
 
 type contextKey string

@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/suite"
+
 	"github.com/pitabwire/frame/cache"
 	cacheredis "github.com/pitabwire/frame/cache/redis"
 	cachevalkey "github.com/pitabwire/frame/cache/valkey"
@@ -14,7 +16,6 @@ import (
 	"github.com/pitabwire/frame/frametests"
 	"github.com/pitabwire/frame/frametests/definition"
 	testvalkey "github.com/pitabwire/frame/frametests/deps/testvalkey"
-	"github.com/stretchr/testify/suite"
 )
 
 // CacheTestSuite runs all cache tests against different implementations.

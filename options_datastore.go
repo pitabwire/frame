@@ -3,11 +3,12 @@ package frame
 import (
 	"context"
 
+	"github.com/pitabwire/util"
+
 	"github.com/pitabwire/frame/config"
 	"github.com/pitabwire/frame/datastore"
 	"github.com/pitabwire/frame/datastore/manager"
 	"github.com/pitabwire/frame/datastore/pool"
-	"github.com/pitabwire/util"
 )
 
 // WithDatastoreManager creates and initializes a datastore manager with the given options.

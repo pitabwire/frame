@@ -4,13 +4,14 @@ import (
 	"context"
 	"testing"
 
+	"github.com/pitabwire/util"
+
 	"github.com/pitabwire/frame/frametests"
 	"github.com/pitabwire/frame/frametests/definition"
 	"github.com/pitabwire/frame/frametests/deps/testnats"
 	"github.com/pitabwire/frame/frametests/deps/testoryhydra"
 	"github.com/pitabwire/frame/frametests/deps/testoryketo"
 	"github.com/pitabwire/frame/frametests/deps/testpostgres"
-	"github.com/pitabwire/util"
 )
 
 const (

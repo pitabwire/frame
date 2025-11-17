@@ -7,9 +7,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/suite"
+
 	"github.com/pitabwire/frame/tests"
 	"github.com/pitabwire/frame/workerpool"
-	"github.com/stretchr/testify/suite"
 )
 
 // WorkerPoolTestSuite extends BaseTestSuite for comprehensive worker pool testing.

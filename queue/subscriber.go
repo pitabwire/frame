@@ -8,13 +8,14 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/pitabwire/frame/localization"
-	"github.com/pitabwire/frame/security"
-	"github.com/pitabwire/frame/workerpool"
 	"github.com/pitabwire/util"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/propagation"
 	"gocloud.dev/pubsub"
+
+	"github.com/pitabwire/frame/localization"
+	"github.com/pitabwire/frame/security"
+	"github.com/pitabwire/frame/workerpool"
 )
 
 type subscriber struct {

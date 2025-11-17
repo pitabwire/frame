@@ -15,44 +15,19 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pitabwire/util"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
+
 	"github.com/pitabwire/frame"
 	"github.com/pitabwire/frame/config"
 	"github.com/pitabwire/frame/frametests"
 	"github.com/pitabwire/frame/frametests/definition"
 	"github.com/pitabwire/frame/tests"
-	"github.com/pitabwire/util"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-	"github.com/stretchr/testify/suite"
 )
 
-// logCapture captures log output for testing
-type logCapture struct {
-	buffer *bytes.Buffer
-	logger *util.LogEntry
-}
-
-// newLogCapture creates a new log capture
-func newLogCapture() *logCapture {
-	buffer := &bytes.Buffer{}
-	logger := util.NewLogger(context.Background(), util.WithLogOutput(buffer))
-	return &logCapture{
-		buffer: buffer,
-		logger: logger,
-	}
-}
-
-// getLogs returns all captured logs as a string
-func (lc *logCapture) getLogs() string {
-	return lc.buffer.String()
-}
-
-// containsLog checks if a specific log message is present
-func (lc *logCapture) containsLog(message string) bool {
-	return strings.Contains(lc.buffer.String(), message)
-}
-
-// stripANSICodes removes ANSI escape codes from strings for clean testing
+// stripANSICodes removes ANSI escape codes from strings for clean testing.
 func stripANSICodes(s string) string {
 	// Simple regex to remove ANSI escape sequences
 	result := s
@@ -494,9 +469,8 @@ func TestService_ConfigurationSetup(t *testing.T) {
 
 	for _, tt := range testCases {
 		t.Run(tt.name, func(t *testing.T) {
-			ctx := context.Background()
 			allOpts := append([]frame.Option{frame.WithConfig(tt.config)}, tt.options...)
-			ctx, svc := frame.NewServiceWithContext(ctx, allOpts...)
+			_, svc := frame.NewServiceWithContext(context.Background(), allOpts...)
 
 			assert.Equal(t, tt.expectedName, svc.Name())
 			assert.Equal(t, tt.expectedEnvironment, svc.Environment())
@@ -546,8 +520,7 @@ func TestService_TelemetryConfiguration(t *testing.T) {
 
 	for _, tt := range testCases {
 		t.Run(tt.name, func(t *testing.T) {
-			ctx := context.Background()
-			ctx, svc := frame.NewServiceWithContext(ctx, frame.WithConfig(tt.config))
+			_, svc := frame.NewServiceWithContext(context.Background(), frame.WithConfig(tt.config))
 
 			telemetryManager := svc.TelemetryManager()
 			// Verify telemetry manager is created
@@ -596,13 +569,14 @@ func TestService_HTTPClientTracing(t *testing.T) {
 
 	for _, tt := range testCases {
 		t.Run(tt.name, func(t *testing.T) {
-			// Capture stdout to verify log generation
-			oldStdout := os.Stdout
-			r, pipeWriter, _ := os.Pipe()
-			os.Stdout = pipeWriter
-
 			ctx := context.Background()
-			ctx, svc := frame.NewServiceWithContext(ctx, frame.WithConfig(tt.config))
+			capturedOutput := &bytes.Buffer{}
+
+			ctx, svc := frame.NewServiceWithContext(
+				ctx,
+				frame.WithConfig(tt.config),
+				frame.WithLogger(util.WithLogOutput(capturedOutput)),
+			)
 
 			clientManager := svc.HTTPClientManager()
 			require.NotNil(t, clientManager)
@@ -611,7 +585,7 @@ func TestService_HTTPClientTracing(t *testing.T) {
 			require.NotNil(t, client)
 
 			// Create a test server to capture requests
-			testServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			testServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 				w.WriteHeader(http.StatusOK)
 				_, _ = w.Write([]byte("test response"))
 			}))
@@ -623,10 +597,6 @@ func TestService_HTTPClientTracing(t *testing.T) {
 			defer resp.Body.Close()
 
 			// Close the pipe and read the captured output
-			_ = pipeWriter.Close()
-			var capturedOutput bytes.Buffer
-			_, _ = io.Copy(&capturedOutput, r)
-			os.Stdout = oldStdout
 
 			logOutput := capturedOutput.String()
 			cleanLogOutput := stripANSICodes(logOutput)
@@ -698,17 +668,21 @@ func TestService_HTTPServerTracing(t *testing.T) {
 	for _, tt := range testCases {
 		t.Run(tt.name, func(t *testing.T) {
 			// Create a test handler
-			testHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			testHandler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 				w.WriteHeader(http.StatusOK)
 				_, err := w.Write([]byte("test response"))
 				assert.NoError(t, err)
 			})
 
 			ctx := context.Background()
-			ctx, svc := frame.NewServiceWithContext(ctx, frame.WithConfig(tt.config), frame.WithHTTPHandler(testHandler))
+			ctx, svc := frame.NewServiceWithContext(
+				ctx,
+				frame.WithConfig(tt.config),
+				frame.WithHTTPHandler(testHandler),
+			)
 
 			// Create a test request
-			req := httptest.NewRequest("GET", "/test", nil)
+			req := httptest.NewRequest(http.MethodGet, "/test", nil)
 			req = req.WithContext(ctx) // Ensure the request has the logger context
 			responseRecorder := httptest.NewRecorder()
 
@@ -744,10 +718,8 @@ func TestService_HTTPServerTracing(t *testing.T) {
 }
 
 func TestService_WithIndividualOptions(t *testing.T) {
-	ctx := context.Background()
-
 	// Test individual options
-	ctx, svc := frame.NewServiceWithContext(ctx,
+	_, svc := frame.NewServiceWithContext(context.Background(),
 		frame.WithName("override-name"),
 		frame.WithEnvironment("override-env"),
 		frame.WithVersion("override-version"),
@@ -772,8 +744,7 @@ func TestService_ConfigurationPrecedence(t *testing.T) {
 		WorkerPoolCapacity:   100,
 	}
 
-	ctx := context.Background()
-	ctx, svc := frame.NewServiceWithContext(ctx, frame.WithConfig(cfg))
+	_, svc := frame.NewServiceWithContext(context.Background(), frame.WithConfig(cfg))
 
 	// Verify all configuration options are respected
 	assert.Equal(t, "precedence-service", svc.Name())
@@ -835,22 +806,20 @@ func TestService_SecurityManagerConfiguration(t *testing.T) {
 		WorkerPoolCapacity:           100,
 	}
 
-	ctx := context.Background()
-	ctx, svc := frame.NewServiceWithContext(ctx, frame.WithConfig(cfg))
+	ctx, svc := frame.NewServiceWithContext(context.Background(), frame.WithConfig(cfg))
 
 	sm := svc.SecurityManager()
 	// Verify security manager is created
 	require.NotNil(t, sm)
 
 	// Verify we can get security components
-	securityCtx := context.Background()
-	registrar := sm.GetOauth2ClientRegistrar(securityCtx)
+	registrar := sm.GetOauth2ClientRegistrar(ctx)
 	require.NotNil(t, registrar)
 
-	authenticator := sm.GetAuthenticator(securityCtx)
+	authenticator := sm.GetAuthenticator(ctx)
 	require.NotNil(t, authenticator)
 
-	authorizer := sm.GetAuthorizer(securityCtx)
+	authorizer := sm.GetAuthorizer(ctx)
 	require.NotNil(t, authorizer)
 
 	// Verify service properties are set correctly

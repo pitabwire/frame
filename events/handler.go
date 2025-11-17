@@ -4,8 +4,9 @@ import (
 	"context"
 	"errors"
 
-	"github.com/pitabwire/frame/internal"
 	"github.com/pitabwire/util"
+
+	"github.com/pitabwire/frame/internal"
 )
 
 const EventHeaderName = "frame._internal.event.header"

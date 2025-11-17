@@ -11,6 +11,48 @@ import (
 	"github.com/pitabwire/util"
 )
 
+// teeReadCloser is a reader that duplicates its reads to both a limited buffer and the original reader
+type teeReadCloser struct {
+	reader  io.Reader
+	closer  io.Closer
+	teeBuf  *bytes.Buffer
+	maxSize int64
+	written int64
+}
+
+func newTeeReadCloser(rc io.ReadCloser, maxSize int64) *teeReadCloser {
+	return &teeReadCloser{
+		reader:  rc,
+		closer:  rc,
+		teeBuf:  &bytes.Buffer{},
+		maxSize: maxSize,
+	}
+}
+
+func (tr *teeReadCloser) Read(p []byte) (n int, err error) {
+	n, err = tr.reader.Read(p)
+	if n > 0 {
+		// Only write to tee buffer if we haven't exceeded max size
+		if tr.written < tr.maxSize {
+			toWrite := int64(n)
+			if tr.written+toWrite > tr.maxSize {
+				toWrite = tr.maxSize - tr.written
+			}
+			tr.teeBuf.Write(p[:toWrite])
+			tr.written += int64(toWrite)
+		}
+	}
+	return n, err
+}
+
+func (tr *teeReadCloser) Close() error {
+	return tr.closer.Close()
+}
+
+func (tr *teeReadCloser) LoggedBody() []byte {
+	return tr.teeBuf.Bytes()
+}
+
 // Copyright 2023-2024 Ant Investor Ltd
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -107,13 +149,34 @@ func (t *loggingTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 	start := time.Now()
 	ctx := req.Context()
 
-	// Log the request
+	// Wrap the body for logging if needed (before the request)
+	var teeReader *teeReadCloser
+	if t.logBody && req.Body != nil {
+		teeReader = newTeeReadCloser(req.Body, t.maxBodySize)
+		req.Body = teeReader
+	}
+
+	// Log the request (without body initially)
 	if t.logRequests {
 		t.logRequest(ctx, req)
 	}
 
 	// Execute the request
 	resp, err := t.transport.RoundTrip(req)
+
+	// Log the body after the request has been read
+	if t.logRequests && teeReader != nil {
+		bodyLogged := teeReader.LoggedBody()
+		if len(bodyLogged) > 0 {
+			logger := util.Log(ctx).WithFields(map[string]any{
+				"method": req.Method,
+				"url":    req.URL.String(),
+				"host":   req.Host,
+				"body":   string(bodyLogged),
+			})
+			logger.Info("HTTP request body logged")
+		}
+	}
 
 	// Log the response
 	if t.logResponses {
@@ -143,16 +206,6 @@ func (t *loggingTransport) logRequest(ctx context.Context, req *http.Request) {
 			}
 		}
 		logger = logger.WithField("headers", headers)
-	}
-
-	if t.logBody && req.Body != nil {
-		// Read the body to log it
-		bodyBytes, err := io.ReadAll(io.LimitReader(req.Body, t.maxBodySize))
-		if err == nil && len(bodyBytes) > 0 {
-			logger = logger.WithField("body", string(bodyBytes))
-			// Restore the body for the actual request
-			req.Body = io.NopCloser(bytes.NewReader(bodyBytes))
-		}
 	}
 
 	logger.Info("HTTP request sent")
@@ -206,12 +259,15 @@ func (t *loggingTransport) logResponseHeaders(logger *util.LogEntry, headers htt
 }
 
 func (t *loggingTransport) logResponseBody(logger *util.LogEntry, body *io.ReadCloser) *util.LogEntry {
-	var bodyBytes []byte
-	bodyBytes, readErr := io.ReadAll(io.LimitReader(*body, t.maxBodySize))
-	if readErr == nil && len(bodyBytes) > 0 {
-		logger = logger.WithField("body", string(bodyBytes))
-		// Restore the body for the caller
-		*body = io.NopCloser(bytes.NewReader(bodyBytes))
+	if *body != nil {
+		// Wrap the response body with our tee reader to capture up to maxBodySize without loading everything into memory
+		teeReader := newTeeReadCloser(*body, t.maxBodySize)
+		*body = teeReader
+		bodyLogged := teeReader.LoggedBody()
+		
+		if len(bodyLogged) > 0 {
+			logger = logger.WithField("body", string(bodyLogged))
+		}
 	}
 	return logger
 }

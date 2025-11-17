@@ -5,6 +5,7 @@ import (
 	"context"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/pitabwire/util"
@@ -138,7 +139,7 @@ func (t *loggingTransport) logRequest(ctx context.Context, req *http.Request) {
 		headers := make(map[string]string)
 		for name, values := range req.Header {
 			if len(values) > 0 {
-				headers[name] = values[0]
+				headers[name] = strings.Join(values, " , ")
 			}
 		}
 		logger = logger.WithField("headers", headers)

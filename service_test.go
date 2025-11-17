@@ -1,6 +1,7 @@
 package frame_test
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -13,11 +14,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pitabwire/util"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
 	"github.com/pitabwire/frame"
+	"github.com/pitabwire/frame/config"
 	"github.com/pitabwire/frame/frametests"
 	"github.com/pitabwire/frame/frametests/definition"
 	"github.com/pitabwire/frame/tests"
@@ -396,4 +399,414 @@ func (s *ServiceTestSuite) TestHealthCheckEndpoints() {
 			})
 		}
 	})
+}
+
+func TestService_ConfigurationSetup(t *testing.T) {
+	testCases := []struct {
+		name                string
+		config              *config.ConfigurationDefault
+		options             []frame.Option
+		expectedName        string
+		expectedEnvironment string
+		expectedVersion     string
+	}{
+		{
+			name: "Default configuration with options",
+			config: &config.ConfigurationDefault{
+				ServiceName:        "default-service",
+				ServiceEnvironment: "default-env",
+				ServiceVersion:     "default-version",
+				WorkerPoolCount:    10,
+				WorkerPoolCapacity: 100,
+			},
+			options: []frame.Option{
+				frame.WithName("test-service"),
+				frame.WithEnvironment("test"),
+				frame.WithVersion("1.0.0"),
+			},
+			expectedName:        "test-service",
+			expectedEnvironment: "test",
+			expectedVersion:     "1.0.0",
+		},
+		{
+			name: "Production configuration",
+			config: &config.ConfigurationDefault{
+				ServiceName:        "default-service",
+				ServiceEnvironment: "default-env",
+				ServiceVersion:     "default-version",
+				WorkerPoolCount:    10,
+				WorkerPoolCapacity: 100,
+			},
+			options: []frame.Option{
+				frame.WithName("prod-service"),
+				frame.WithEnvironment("production"),
+				frame.WithVersion("2.1.0"),
+			},
+			expectedName:        "prod-service",
+			expectedEnvironment: "production",
+			expectedVersion:     "2.1.0",
+		},
+	}
+
+	for _, tt := range testCases {
+		t.Run(tt.name, func(t *testing.T) {
+			allOpts := append([]frame.Option{frame.WithConfig(tt.config)}, tt.options...)
+			_, svc := frame.NewServiceWithContext(context.Background(), allOpts...)
+
+			assert.Equal(t, tt.expectedName, svc.Name())
+			assert.Equal(t, tt.expectedEnvironment, svc.Environment())
+			assert.Equal(t, tt.expectedVersion, svc.Version())
+
+			// Verify config is of type ConfigurationDefault
+			_, ok := svc.Config().(*config.ConfigurationDefault)
+			require.True(t, ok)
+			assert.Equal(t, tt.expectedName, svc.Name())
+			assert.Equal(t, tt.expectedEnvironment, svc.Environment())
+			assert.Equal(t, tt.expectedVersion, svc.Version())
+		})
+	}
+}
+
+func TestService_TelemetryConfiguration(t *testing.T) {
+	testCases := []struct {
+		name                   string
+		config                 *config.ConfigurationDefault
+		expectTelemetryWorking bool
+	}{
+		{
+			name: "Telemetry enabled with tracing",
+			config: &config.ConfigurationDefault{
+				ServiceName:          "telemetry-test",
+				ServiceEnvironment:   "test",
+				ServiceVersion:       "1.0.0",
+				OpenTelemetryDisable: false,
+				WorkerPoolCount:      10,
+				WorkerPoolCapacity:   100,
+			},
+			expectTelemetryWorking: true,
+		},
+		{
+			name: "Telemetry disabled",
+			config: &config.ConfigurationDefault{
+				ServiceName:          "telemetry-disabled",
+				ServiceEnvironment:   "test",
+				ServiceVersion:       "1.0.0",
+				OpenTelemetryDisable: true,
+				WorkerPoolCount:      10,
+				WorkerPoolCapacity:   100,
+			},
+			expectTelemetryWorking: false,
+		},
+	}
+
+	for _, tt := range testCases {
+		t.Run(tt.name, func(t *testing.T) {
+			_, svc := frame.NewServiceWithContext(context.Background(), frame.WithConfig(tt.config))
+
+			telemetryManager := svc.TelemetryManager()
+			// Verify telemetry manager is created
+			require.NotNil(t, telemetryManager)
+			assert.Equal(t, tt.expectTelemetryWorking, !telemetryManager.Disabled())
+
+			// Verify service properties are set from config
+			assert.Equal(t, tt.config.ServiceName, svc.Name())
+			assert.Equal(t, tt.config.ServiceEnvironment, svc.Environment())
+			assert.Equal(t, tt.config.ServiceVersion, svc.Version())
+		})
+	}
+}
+
+func TestService_HTTPClientTracing(t *testing.T) {
+	testCases := []struct {
+		name          string
+		config        *config.ConfigurationDefault
+		expectTracing bool
+	}{
+		{
+			name: "HTTP client tracing enabled",
+			config: &config.ConfigurationDefault{
+				ServiceName:        "client-test",
+				ServiceEnvironment: "test",
+				ServiceVersion:     "1.0.0",
+				TraceRequests:      true,
+				WorkerPoolCount:    10,
+				WorkerPoolCapacity: 100,
+			},
+			expectTracing: true,
+		},
+		{
+			name: "HTTP client tracing disabled",
+			config: &config.ConfigurationDefault{
+				ServiceName:        "client-test",
+				ServiceEnvironment: "test",
+				ServiceVersion:     "1.0.0",
+				TraceRequests:      false,
+				WorkerPoolCount:    10,
+				WorkerPoolCapacity: 100,
+			},
+			expectTracing: false,
+		},
+	}
+
+	for _, tt := range testCases {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create a buffer to capture log output
+			capturedOutput := &bytes.Buffer{}
+
+			ctx := context.Background()
+			ctx, svc := frame.NewServiceWithContext(
+				ctx,
+				frame.WithConfig(tt.config),
+				frame.WithLogger(util.WithLogOutput(capturedOutput), util.WithLogNoColor(true)),
+			)
+
+			clientManager := svc.HTTPClientManager()
+			require.NotNil(t, clientManager)
+
+			client := clientManager.Client(ctx)
+			require.NotNil(t, client)
+
+			// Create a test server to capture requests
+			testServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(http.StatusOK)
+				_, _ = w.Write([]byte("test response"))
+			}))
+			defer testServer.Close()
+
+			// Create a request with our context that has the custom logger
+			req, err := http.NewRequestWithContext(ctx, http.MethodGet, testServer.URL, nil)
+			require.NoError(t, err)
+
+			// Make a request with the traced client using our context
+			resp, err := client.Do(req)
+			require.NoError(t, err)
+			defer resp.Body.Close()
+
+			logOutput := capturedOutput.String()
+			// No need to strip ANSI codes since we disabled colors
+			t.Logf("Captured logs: %s", logOutput)
+
+			// Verify tracing configuration
+			cfg := svc.Config().(*config.ConfigurationDefault)
+			assert.Equal(t, tt.expectTracing, cfg.TraceReq())
+
+			// Verify that tracing logs are generated when tracing is enabled
+			if tt.expectTracing {
+				// Should contain HTTP request and response logs
+				assert.Contains(t, logOutput, "HTTP request sent",
+					"Should log HTTP request when tracing is enabled")
+				assert.Contains(t, logOutput, "HTTP response received",
+					"Should log HTTP response when tracing is enabled")
+				assert.Contains(t, logOutput, "method=GET",
+					"Should log request method when tracing is enabled")
+				assert.Contains(t, logOutput, "status=200",
+					"Should log response status when tracing is enabled")
+
+				t.Log("✓ HTTP client tracing is enabled - logs captured and verified")
+			} else {
+				// Should NOT contain HTTP request and response logs
+				assert.NotContains(t, logOutput, "HTTP request sent",
+					"Should not log HTTP request when tracing is disabled")
+				assert.NotContains(t, logOutput, "HTTP response received",
+					"Should not log HTTP response when tracing is disabled")
+
+				t.Log("✓ HTTP client tracing is disabled - no logs generated")
+			}
+		})
+	}
+}
+
+func TestService_HTTPServerTracing(t *testing.T) {
+	testCases := []struct {
+		name          string
+		config        *config.ConfigurationDefault
+		expectTracing bool
+	}{
+		{
+			name: "Server tracing enabled",
+			config: &config.ConfigurationDefault{
+				ServiceName:        "server-test",
+				ServiceEnvironment: "test",
+				ServiceVersion:     "1.0.0",
+				TraceRequests:      true,
+				WorkerPoolCount:    10,
+				WorkerPoolCapacity: 100,
+			},
+			expectTracing: true,
+		},
+		{
+			name: "Server tracing disabled",
+			config: &config.ConfigurationDefault{
+				ServiceName:        "server-test",
+				ServiceEnvironment: "test",
+				ServiceVersion:     "1.0.0",
+				TraceRequests:      false,
+				WorkerPoolCount:    10,
+				WorkerPoolCapacity: 100,
+			},
+			expectTracing: false,
+		},
+	}
+
+	for _, tt := range testCases {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create a test handler
+			testHandler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(http.StatusOK)
+				_, err := w.Write([]byte("test response"))
+				assert.NoError(t, err)
+			})
+
+			ctx := context.Background()
+			ctx, svc := frame.NewServiceWithContext(
+				ctx,
+				frame.WithConfig(tt.config),
+				frame.WithHTTPHandler(testHandler),
+			)
+
+			// Create a test request
+			req := httptest.NewRequest(http.MethodGet, "/test", nil)
+			req = req.WithContext(ctx) // Ensure the request has the logger context
+			responseRecorder := httptest.NewRecorder()
+
+			// Get the handler from the service
+			handler := svc.H()
+			require.NotNil(t, handler)
+
+			// Serve the request
+			handler.ServeHTTP(responseRecorder, req)
+
+			// Verify response
+			assert.Equal(t, http.StatusOK, responseRecorder.Code)
+			assert.Contains(t, responseRecorder.Body.String(), "test response")
+
+			// Verify tracing configuration
+			cfg := svc.Config().(*config.ConfigurationDefault)
+			assert.Equal(t, tt.expectTracing, cfg.TraceReq())
+
+			// Verify that the tracing configuration is properly set
+			if tt.expectTracing {
+				// Verify that the service was configured with tracing
+				assert.True(t, cfg.TraceReq(), "TraceRequests should be enabled in config")
+
+				t.Log("✓ HTTP server tracing is enabled - configuration verified")
+				t.Log("  Note: Server logging middleware requires actual service running to capture logs")
+			} else {
+				// When tracing is disabled, the configuration should reflect that
+				assert.False(t, cfg.TraceReq(), "TraceRequests should be disabled in config")
+				t.Log("✓ HTTP server tracing is disabled - configuration verified")
+			}
+		})
+	}
+}
+
+func TestService_WithIndividualOptions(t *testing.T) {
+	// Test individual options
+	_, svc := frame.NewServiceWithContext(context.Background(),
+		frame.WithName("override-name"),
+		frame.WithEnvironment("override-env"),
+		frame.WithVersion("override-version"),
+	)
+
+	// Verify options are applied
+	assert.Equal(t, "override-name", svc.Name())
+	assert.Equal(t, "override-env", svc.Environment())
+	assert.Equal(t, "override-version", svc.Version())
+}
+
+func TestService_ConfigurationPrecedence(t *testing.T) {
+	// Test that ConfigurationDefault is properly used
+	cfg := &config.ConfigurationDefault{
+		ServiceName:          "precedence-service",
+		ServiceEnvironment:   "staging",
+		ServiceVersion:       "3.2.1",
+		OpenTelemetryDisable: false,
+		TraceRequests:        true,
+		ServerPort:           "9090",
+		WorkerPoolCount:      10,
+		WorkerPoolCapacity:   100,
+	}
+
+	_, svc := frame.NewServiceWithContext(context.Background(), frame.WithConfig(cfg))
+
+	// Verify all configuration options are respected
+	assert.Equal(t, "precedence-service", svc.Name())
+	assert.Equal(t, "staging", svc.Environment())
+	assert.Equal(t, "3.2.1", svc.Version())
+	assert.Equal(t, "precedence-service", cfg.Name())
+	assert.Equal(t, "staging", cfg.Environment())
+	assert.Equal(t, "3.2.1", cfg.Version())
+	assert.False(t, cfg.DisableOpenTelemetry())
+	assert.True(t, cfg.TraceReq())
+	assert.Equal(t, "9090", cfg.ServerPort)
+}
+
+func TestService_HTTPClientConfiguration(t *testing.T) {
+	// Create configuration for HTTP client testing
+	cfg := &config.ConfigurationDefault{
+		ServiceName:        "http-client-service",
+		ServiceEnvironment: "test",
+		ServiceVersion:     "1.0.0",
+		TraceRequests:      true,
+		WorkerPoolCount:    10,
+		WorkerPoolCapacity: 100,
+	}
+
+	ctx := context.Background()
+	ctx, svc := frame.NewServiceWithContext(ctx, frame.WithConfig(cfg))
+
+	clientManager := svc.HTTPClientManager()
+	// Verify client manager exists
+	require.NotNil(t, svc.HTTPClientManager())
+
+	// Test that we can get the HTTP client
+	httpClient := clientManager.Client(ctx)
+	require.NotNil(t, httpClient)
+
+	// Test that we can set a custom HTTP client
+	customClient := &http.Client{
+		Timeout: 30,
+	}
+	clientManager.SetClient(ctx, customClient)
+
+	// Verify the client was updated
+	updatedClient := clientManager.Client(ctx)
+	assert.Equal(t, customClient, updatedClient)
+}
+
+func TestService_SecurityManagerConfiguration(t *testing.T) {
+	// Test that security manager is properly configured with interface-based approach
+	cfg := &config.ConfigurationDefault{
+		ServiceName:                  "security-test",
+		ServiceEnvironment:           "test",
+		ServiceVersion:               "1.0.0",
+		Oauth2ServiceURI:             "https://test-issuer.com",
+		Oauth2ServiceClientID:        "test-client-id",
+		Oauth2ServiceClientSecret:    "test-client-secret",
+		AuthorizationServiceReadURI:  "https://test-auth.com/read",
+		AuthorizationServiceWriteURI: "https://test-auth.com/write",
+		WorkerPoolCount:              10,
+		WorkerPoolCapacity:           100,
+	}
+
+	ctx, svc := frame.NewServiceWithContext(context.Background(), frame.WithConfig(cfg))
+
+	sm := svc.SecurityManager()
+	// Verify security manager is created
+	require.NotNil(t, sm)
+
+	// Verify we can get security components
+	registrar := sm.GetOauth2ClientRegistrar(ctx)
+	require.NotNil(t, registrar)
+
+	authenticator := sm.GetAuthenticator(ctx)
+	require.NotNil(t, authenticator)
+
+	authorizer := sm.GetAuthorizer(ctx)
+	require.NotNil(t, authorizer)
+
+	// Verify service properties are set correctly
+	assert.Equal(t, "security-test", svc.Name())
+	assert.Equal(t, "test", svc.Environment())
+	assert.Equal(t, "1.0.0", svc.Version())
 }

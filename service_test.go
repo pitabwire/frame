@@ -10,7 +10,6 @@ import (
 	"net/http/httptest"
 	"os"
 	"strconv"
-	"strings"
 	"syscall"
 	"testing"
 	"time"
@@ -26,24 +25,6 @@ import (
 	"github.com/pitabwire/frame/frametests/definition"
 	"github.com/pitabwire/frame/tests"
 )
-
-// stripANSICodes removes ANSI escape codes from strings for clean testing.
-func stripANSICodes(s string) string {
-	// Simple regex to remove ANSI escape sequences
-	result := s
-	for {
-		start := strings.Index(result, "\x1b[")
-		if start == -1 {
-			break
-		}
-		end := strings.Index(result[start:], "m")
-		if end == -1 {
-			break
-		}
-		result = result[:start] + result[start+end+1:]
-	}
-	return result
-}
 
 // ServiceTestSuite extends FrameBaseTestSuite for comprehensive service testing.
 type ServiceTestSuite struct {
@@ -569,13 +550,14 @@ func TestService_HTTPClientTracing(t *testing.T) {
 
 	for _, tt := range testCases {
 		t.Run(tt.name, func(t *testing.T) {
-			ctx := context.Background()
+			// Create a buffer to capture log output
 			capturedOutput := &bytes.Buffer{}
 
+			ctx := context.Background()
 			ctx, svc := frame.NewServiceWithContext(
 				ctx,
 				frame.WithConfig(tt.config),
-				frame.WithLogger(util.WithLogOutput(capturedOutput)),
+				frame.WithLogger(util.WithLogOutput(capturedOutput), util.WithLogNoColor(true)),
 			)
 
 			clientManager := svc.HTTPClientManager()
@@ -591,17 +573,18 @@ func TestService_HTTPClientTracing(t *testing.T) {
 			}))
 			defer testServer.Close()
 
-			// Make a request with the traced client
-			resp, err := client.Get(testServer.URL)
+			// Create a request with our context that has the custom logger
+			req, err := http.NewRequestWithContext(ctx, "GET", testServer.URL, nil)
+			require.NoError(t, err)
+
+			// Make a request with the traced client using our context
+			resp, err := client.Do(req)
 			require.NoError(t, err)
 			defer resp.Body.Close()
 
-			// Close the pipe and read the captured output
-
 			logOutput := capturedOutput.String()
-			cleanLogOutput := stripANSICodes(logOutput)
-			t.Logf("Captured stdout: %s", logOutput)
-			t.Logf("Cleaned stdout: %s", cleanLogOutput)
+			// No need to strip ANSI codes since we disabled colors
+			t.Logf("Captured logs: %s", logOutput)
 
 			// Verify tracing configuration
 			cfg := svc.Config().(*config.ConfigurationDefault)
@@ -610,21 +593,21 @@ func TestService_HTTPClientTracing(t *testing.T) {
 			// Verify that tracing logs are generated when tracing is enabled
 			if tt.expectTracing {
 				// Should contain HTTP request and response logs
-				assert.Contains(t, cleanLogOutput, "HTTP request sent",
+				assert.Contains(t, logOutput, "HTTP request sent",
 					"Should log HTTP request when tracing is enabled")
-				assert.Contains(t, cleanLogOutput, "HTTP response received",
+				assert.Contains(t, logOutput, "HTTP response received",
 					"Should log HTTP response when tracing is enabled")
-				assert.Contains(t, cleanLogOutput, "method=GET",
+				assert.Contains(t, logOutput, "method=GET",
 					"Should log request method when tracing is enabled")
-				assert.Contains(t, cleanLogOutput, "status=200",
+				assert.Contains(t, logOutput, "status=200",
 					"Should log response status when tracing is enabled")
 
 				t.Log("✓ HTTP client tracing is enabled - logs captured and verified")
 			} else {
 				// Should NOT contain HTTP request and response logs
-				assert.NotContains(t, cleanLogOutput, "HTTP request sent",
+				assert.NotContains(t, logOutput, "HTTP request sent",
 					"Should not log HTTP request when tracing is disabled")
-				assert.NotContains(t, cleanLogOutput, "HTTP response received",
+				assert.NotContains(t, logOutput, "HTTP response received",
 					"Should not log HTTP response when tracing is disabled")
 
 				t.Log("✓ HTTP client tracing is disabled - no logs generated")

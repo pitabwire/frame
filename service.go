@@ -173,7 +173,7 @@ func NewServiceWithContext(ctx context.Context, opts ...Option) (context.Context
 	// This registers the internal events publisher/subscriber
 	err = svc.setupEventsQueue(ctx)
 	if err != nil {
-		log.WithError(err).Panic("could not setup application events")
+		svc.Log(ctx).WithError(err).Panic("could not setup application events")
 	}
 
 	// Execute pre-start methods now that queue manager is initialized
@@ -205,7 +205,7 @@ func NewServiceWithContext(ctx context.Context, opts ...Option) (context.Context
 	// Prepare context to be returned, embedding svc and config
 	ctx = ToContext(ctx, svc)
 	ctx = config.ToContext(ctx, svc.Config())
-	ctx = util.ContextWithLogger(ctx, log)
+	ctx = util.ContextWithLogger(ctx, svc.Log(ctx))
 	return ctx, svc
 }
 

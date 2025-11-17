@@ -71,6 +71,11 @@ func WithDatastore(opts ...pool.Option) Option {
 	return func(ctx context.Context, s *Service) {
 		var connectionSlice []pool.Connection
 
+		traceCfg, ok := s.Config().(config.ConfigurationDatabaseTracing)
+		if ok {
+			opts = append(opts, pool.WithTraceConfig(traceCfg))
+		}
+
 		cfg, ok := s.Config().(config.ConfigurationDatabase)
 		if ok {
 			// Add connections from config if available

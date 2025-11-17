@@ -17,7 +17,7 @@ func (s *Service) HTTPClientManager() client.Manager {
 func WithHTTPClient(opts ...client.HTTPOption) Option {
 	return func(ctx context.Context, s *Service) {
 		cfg, ok := s.Config().(config.ConfigurationTraceRequests)
-		if ok {
+		if ok && cfg.TraceReq() {
 			opts = append(opts, client.WithHTTPTraceRequests(), client.WithHTTPTraceRequestHeaders())
 		}
 

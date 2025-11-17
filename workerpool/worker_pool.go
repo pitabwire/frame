@@ -131,7 +131,7 @@ func setupWorkerPool(_ context.Context, wopts *Options) (WorkerPool, error) {
 	antsOpts = append(antsOpts, ants.WithDisablePurge(wopts.DisablePurge))
 	var err error
 
-	if wopts.PoolCount == 1 {
+	if wopts.PoolCount <= 1 {
 		var p *ants.Pool
 		p, err = ants.NewPool(wopts.SinglePoolCapacity, antsOpts...)
 		if err != nil {

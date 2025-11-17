@@ -23,6 +23,9 @@ type httpConfig struct {
 	jar           http.CookieJar
 	checkRedirect func(req *http.Request, via []*http.Request) error
 	idleTimeout   time.Duration
+
+	traceRequests       bool
+	traceRequestHeaders bool
 }
 
 // WithHTTPTimeout sets the request timeout.
@@ -60,6 +63,20 @@ func WithHTTPIdleTimeout(timeout time.Duration) HTTPOption {
 	}
 }
 
+// WithHTTPTraceRequests enables or disables request logging.
+func WithHTTPTraceRequests() HTTPOption {
+	return func(c *httpConfig) {
+		c.traceRequests = true
+	}
+}
+
+// WithHTTPTraceRequestHeaders enables or disables header logging.
+func WithHTTPTraceRequestHeaders() HTTPOption {
+	return func(c *httpConfig) {
+		c.traceRequestHeaders = true
+	}
+}
+
 // NewHTTPClient creates a new HTTP client with the provided options.
 // If no transport is specified, it defaults to otelhttp.NewTransport(http.DefaultTransport).
 func NewHTTPClient(opts ...HTTPOption) *http.Client {
@@ -70,6 +87,14 @@ func NewHTTPClient(opts ...HTTPOption) *http.Client {
 	}
 	for _, opt := range opts {
 		opt(cfg)
+	}
+
+	if cfg.traceRequests {
+		cfg.transport = NewLoggingTransport(cfg.transport,
+			WithTransportLogRequests(true),
+			WithTransportLogResponses(true),
+			WithTransportLogHeaders(cfg.traceRequestHeaders),
+			WithTransportLogBody(true))
 	}
 
 	client := &http.Client{

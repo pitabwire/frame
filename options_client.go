@@ -16,10 +16,14 @@ func (s *Service) HTTPClientManager() client.Manager {
 // This allows customizing the HTTP client's behavior such as timeout, transport, etc.
 func WithHTTPClient(opts ...client.HTTPOption) Option {
 	return func(ctx context.Context, s *Service) {
+		cfg, ok := s.Config().(config.ConfigurationTraceRequests)
+		if ok {
+			opts = append(opts, client.WithHTTPTraceRequests(), client.WithHTTPTraceRequestHeaders())
+		}
+
 		cl := client.NewHTTPClient(opts...)
 
 		if s.clientManager == nil {
-			cfg, ok := s.Config().(config.ConfigurationTraceRequests)
 			if !ok {
 				s.Log(ctx).Error("configuration object not of type : ConfigurationTraceRequests")
 				return
@@ -29,6 +33,6 @@ func WithHTTPClient(opts ...client.HTTPOption) Option {
 			return
 		}
 
-		s.clientManager.SetClient(context.Background(), cl)
+		s.clientManager.SetClient(ctx, cl)
 	}
 }

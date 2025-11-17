@@ -92,22 +92,12 @@ func (s *invoker) Invoke(ctx context.Context,
 
 	req.Header = headers
 
-	if s.cfg.TraceReq() {
-		reqDump, _ := httputil.DumpRequestOut(req, true)
-		util.Log(ctx).WithField("request", string(reqDump)).Debug("request out")
-	}
-
 	//nolint:bodyclose //this is done by util.CloseAndLogOnError()
 	resp, err := s.client.Do(req)
 	if err != nil {
 		return 0, nil, err
 	}
 	defer util.CloseAndLogOnError(ctx, resp.Body)
-
-	if s.cfg.TraceReq() {
-		respDump, _ := httputil.DumpResponse(resp, true)
-		util.Log(ctx).WithField("response", string(respDump)).Debug("response in")
-	}
 
 	response, err := io.ReadAll(resp.Body)
 

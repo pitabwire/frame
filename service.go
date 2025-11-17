@@ -25,6 +25,7 @@ import (
 	"github.com/pitabwire/frame/localization"
 	"github.com/pitabwire/frame/queue"
 	"github.com/pitabwire/frame/security"
+	httpInterceptor "github.com/pitabwire/frame/security/interceptors/http"
 	securityManager "github.com/pitabwire/frame/security/manager"
 	"github.com/pitabwire/frame/telemetry"
 	"github.com/pitabwire/frame/workerpool"
@@ -459,6 +460,13 @@ func (s *Service) createAndConfigureMux(_ context.Context) *http.ServeMux {
 	applicationHandler := s.handler
 	if applicationHandler == nil {
 		applicationHandler = http.DefaultServeMux
+	}
+
+	cfg, ok := s.Config().(config.ConfigurationTraceRequests)
+	if ok {
+		if cfg.TraceReq() {
+			applicationHandler = httpInterceptor.LoggingMiddleware(applicationHandler)
+		}
 	}
 
 	mux.HandleFunc(s.healthCheckPath, s.HandleHealth)

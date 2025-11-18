@@ -45,8 +45,8 @@ func (a *jwtTokenAuthenticator) Authenticate(
 
 	var parseOptions []jwt.ParserOption
 
-	if securityOpts.Audience != "" {
-		parseOptions = append(parseOptions, jwt.WithAudience(securityOpts.Audience))
+	if len(securityOpts.Audience) > 0 {
+		parseOptions = append(parseOptions, jwt.WithAudience(securityOpts.Audience...))
 	}
 
 	if securityOpts.Issuer != "" {

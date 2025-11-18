@@ -108,15 +108,15 @@ type ConfigurationDefault struct {
 	TLSCertificatePath    string `env:"TLS_CERTIFICATE_PATH"     yaml:"tls_certificate_path"`
 	TLSCertificateKeyPath string `env:"TLS_CERTIFICATE_KEY_PATH" yaml:"tls_certificate_key_path"`
 
-	Oauth2ServiceURI          string `env:"OAUTH2_SERVICE_URI"           yaml:"oauth2_service_uri"`
-	Oauth2ServiceAdminURI     string `env:"OAUTH2_SERVICE_ADMIN_URI"     yaml:"oauth2_service_admin_uri"`
-	Oauth2WellKnownOIDCPath   string `env:"OAUTH2_WELL_KNOWN_OIDC_PATH"  yaml:"oauth2_well_known_oidc_path"  envDefault:".well-known/openid-configuration"`
-	Oauth2WellKnownJwkData    string `env:"OAUTH2_WELL_KNOWN_JWK_DATA"   yaml:"oauth2_well_known_jwk_data"`
-	Oauth2ServiceAudience     string `env:"OAUTH2_SERVICE_AUDIENCE"      yaml:"oauth2_service_audience"`
-	Oauth2JwtVerifyAudience   string `env:"OAUTH2_JWT_VERIFY_AUDIENCE"   yaml:"oauth2_jwt_verify_audience"`
-	Oauth2JwtVerifyIssuer     string `env:"OAUTH2_JWT_VERIFY_ISSUER"     yaml:"oauth2_jwt_verify_issuer"`
-	Oauth2ServiceClientID     string `env:"OAUTH2_SERVICE_CLIENT_ID"     yaml:"oauth2_service_client_id"`
-	Oauth2ServiceClientSecret string `env:"OAUTH2_SERVICE_CLIENT_SECRET" yaml:"oauth2_service_client_secret"`
+	Oauth2ServiceURI          string   `env:"OAUTH2_SERVICE_URI"           yaml:"oauth2_service_uri"`
+	Oauth2ServiceAdminURI     string   `env:"OAUTH2_SERVICE_ADMIN_URI"     yaml:"oauth2_service_admin_uri"`
+	Oauth2WellKnownOIDCPath   string   `env:"OAUTH2_WELL_KNOWN_OIDC_PATH"  yaml:"oauth2_well_known_oidc_path"  envDefault:".well-known/openid-configuration"`
+	Oauth2WellKnownJwkData    string   `env:"OAUTH2_WELL_KNOWN_JWK_DATA"   yaml:"oauth2_well_known_jwk_data"`
+	Oauth2ServiceAudience     []string `env:"OAUTH2_SERVICE_AUDIENCE"      yaml:"oauth2_service_audience"`
+	Oauth2JwtVerifyAudience   string   `env:"OAUTH2_JWT_VERIFY_AUDIENCE"   yaml:"oauth2_jwt_verify_audience"`
+	Oauth2JwtVerifyIssuer     string   `env:"OAUTH2_JWT_VERIFY_ISSUER"     yaml:"oauth2_jwt_verify_issuer"`
+	Oauth2ServiceClientID     string   `env:"OAUTH2_SERVICE_CLIENT_ID"     yaml:"oauth2_service_client_id"`
+	Oauth2ServiceClientSecret string   `env:"OAUTH2_SERVICE_CLIENT_SECRET" yaml:"oauth2_service_client_secret"`
 
 	AuthorizationServiceReadURI  string `env:"AUTHORIZATION_SERVICE_READ_URI"  yaml:"authorization_service_read_uri"`
 	AuthorizationServiceWriteURI string `env:"AUTHORIZATION_SERVICE_WRITE_URI" yaml:"authorization_service_write_uri"`
@@ -320,7 +320,7 @@ type ConfigurationOAUTH2 interface {
 	GetOauth2ServiceURI() string
 	GetOauth2ServiceClientID() string
 	GetOauth2ServiceClientSecret() string
-	GetOauth2ServiceAudience() string
+	GetOauth2ServiceAudience() []string
 	GetOauth2ServiceAdminURI() string
 }
 
@@ -450,7 +450,7 @@ func (c *ConfigurationDefault) GetOauth2ServiceClientID() string {
 func (c *ConfigurationDefault) GetOauth2ServiceClientSecret() string {
 	return c.Oauth2ServiceClientSecret
 }
-func (c *ConfigurationDefault) GetOauth2ServiceAudience() string {
+func (c *ConfigurationDefault) GetOauth2ServiceAudience() []string {
 	return c.Oauth2ServiceAudience
 }
 func (c *ConfigurationDefault) GetOauth2ServiceAdminURI() string {

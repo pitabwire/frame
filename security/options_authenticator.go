@@ -9,7 +9,7 @@ import (
 // AuthOptions contains configuration for Redis cache.
 type AuthOptions struct {
 	DisableSecurityCfg config.ConfigurationSecurity
-	Audience           string
+	Audience           []string
 	Issuer             string
 	DisableSecurity    bool
 }
@@ -24,7 +24,7 @@ func WithDisableSecurityConfig(cfg config.ConfigurationSecurity) AuthOption {
 }
 
 // WithAudience sets the audience to use overriding any config option.
-func WithAudience(audience string) AuthOption {
+func WithAudience(audience ...string) AuthOption {
 	return func(_ context.Context, opts *AuthOptions) {
 		opts.Audience = audience
 	}
@@ -33,7 +33,7 @@ func WithAudience(audience string) AuthOption {
 // WithIssuer sets the issuer to use overriding any config option.
 func WithIssuer(issuer string) AuthOption {
 	return func(_ context.Context, opts *AuthOptions) {
-		opts.Audience = issuer
+		opts.Issuer = issuer
 	}
 }
 

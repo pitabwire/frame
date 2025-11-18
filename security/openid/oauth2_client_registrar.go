@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"strings"
 
 	"github.com/pitabwire/util"
 
@@ -60,11 +59,9 @@ func (s *clientRegistrar) RegisterForJwt(ctx context.Context, iClientHolder secu
 	oauth2Audience := oauth2Config.GetOauth2ServiceAudience()
 
 	if oauth2ServiceAdminHost != "" {
-		audienceList := strings.Split(oauth2Audience, ",")
-
 		jwtClient, err := s.RegisterForJwtWithParams(ctx,
 			oauth2ServiceAdminHost, s.serviceName, clientID, clientSecret,
-			ConstSystemScopeInternal, audienceList, map[string]string{})
+			ConstSystemScopeInternal, oauth2Audience, map[string]string{})
 		if err != nil {
 			return err
 		}

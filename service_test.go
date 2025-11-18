@@ -929,7 +929,7 @@ func TestService_H2CClientConfiguration(t *testing.T) {
 				w.Write([]byte(`{"protocol": "` + r.Proto + `"}`))
 			})
 
-			var server *httptest.Server = httptest.NewUnstartedServer(handler)
+			server := httptest.NewUnstartedServer(handler)
 			protocols := new(http.Protocols)
 			protocols.SetHTTP1(true)
 			protocols.SetUnencryptedHTTP2(true)

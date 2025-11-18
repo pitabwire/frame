@@ -49,7 +49,10 @@ func (s *clientRegistrar) RegisterForJwt(ctx context.Context, iClientHolder secu
 
 	clientID := oauth2Config.GetOauth2ServiceClientID()
 	if clientID == "" {
-		clientID = strings.Join([]string{s.serviceName, s.serviceEnvironment}, "_")
+		clientID = s.serviceName
+		if s.serviceEnvironment != "" {
+			clientID += "_" + s.serviceEnvironment
+		}
 	}
 
 	clientSecret := oauth2Config.GetOauth2ServiceClientSecret()

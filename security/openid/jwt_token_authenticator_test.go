@@ -1,4 +1,5 @@
 package openid_test
+
 import (
 	"context"
 	"crypto/ecdsa"
@@ -16,10 +17,12 @@ import (
 	"sync"
 	"testing"
 	"time"
+
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+
 	"github.com/pitabwire/frame/config"
 	"github.com/pitabwire/frame/frametests"
 	"github.com/pitabwire/frame/frametests/definition"
@@ -27,6 +30,7 @@ import (
 	"github.com/pitabwire/frame/security"
 	"github.com/pitabwire/frame/security/openid"
 )
+
 type JwtAuthenticatorTestSuite struct {
 	frametests.FrameBaseTestSuite
 	// Test infrastructure
@@ -43,6 +47,7 @@ type JwtAuthenticatorTestSuite struct {
 	testAudience []string
 	testIssuer   string
 }
+
 func initJwtAuthenticatorResources(_ context.Context) []definition.TestResource {
 	pg := testpostgres.New()
 	return []definition.TestResource{pg}
@@ -67,23 +72,24 @@ func (s *JwtAuthenticatorTestSuite) setupTestKeys() {
 	var err error
 	// RSA key
 	s.rsaKey, err = rsa.GenerateKey(rand.Reader, 2048)
-	require.NoError(s.T(), err, "Failed to generate RSA key")
+	s.Require().NoError(err, "Failed to generate RSA key")
 	s.rsaKid = "rsa-key-1"
 	// EC key (P-256)
 	s.ecKey, err = ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-	require.NoError(s.T(), err, "Failed to generate EC key")
+	s.Require().NoError(err, "Failed to generate EC key")
 	s.ecKid = "ec-key-1"
 	// Ed25519 key
 	var ed25519Pub ed25519.PublicKey
 	ed25519Pub, s.ed25519Key, err = ed25519.GenerateKey(rand.Reader)
-	require.NoError(s.T(), err, "Failed to generate Ed25519 key")
+	s.Require().NoError(err, "Failed to generate Ed25519 key")
 	_ = ed25519Pub // We only need the private key for signing
 	s.ed25519Kid = "ed25519-key-1"
 	// Test configuration
 	s.testAudience = []string{"test-audience", "another-audience"}
 	s.testIssuer = "https://test-issuer.example.com"
 }
-// JWK represents a JSON Web Key for testing
+
+// JWK represents a JSON Web Key for testing.
 type JWK struct {
 	Kty string `json:"kty"`
 	Alg string `json:"alg,omitempty"`
@@ -98,13 +104,15 @@ type JWK struct {
 	X   string `json:"x,omitempty"`
 	Y   string `json:"y,omitempty"`
 	// OKP (EdDSA)
-	OKPCrv string `json:"crv,omitempty"`
-	OKPX   string `json:"x,omitempty"`
+	OKPCrv string `json:"crv,omitempty"` //nolint:govet // JWK format allows overlapping field names for different key types
+	OKPX   string `json:"x,omitempty"`   //nolint:govet // JWK format allows overlapping field names for different key types
 }
-// JWKSet represents a set of JSON Web Keys for testing
+
+// JWKSet represents a set of JSON Web Keys for testing.
 type JWKSet struct {
 	Keys []JWK `json:"keys"`
 }
+
 func (s *JwtAuthenticatorTestSuite) setupMockJWKSServer() {
 	jwks := JWKSet{
 		Keys: []JWK{
@@ -114,8 +122,8 @@ func (s *JwtAuthenticatorTestSuite) setupMockJWKSServer() {
 		},
 	}
 	jwksData, err := json.Marshal(jwks)
-	require.NoError(s.T(), err, "Failed to marshal JWKS")
-	s.mockServer = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	s.Require().NoError(err, "Failed to marshal JWKS")
+	s.mockServer = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		w.Write(jwksData)
@@ -167,14 +175,14 @@ func (s *JwtAuthenticatorTestSuite) createAuthenticator() security.Authenticator
 		audience: s.testAudience,
 		issuer:   s.testIssuer,
 	})
-	
+
 	// Give time for JWKS refresh to complete
 	time.Sleep(200 * time.Millisecond)
-	
+
 	return auth
 }
 
-// mockJWTConfig is a test-specific config that returns our mock JWKS URL
+// mockJWTConfig is a test-specific config that returns our mock JWKS URL.
 type mockJWTConfig struct {
 	jwksURL  string
 	audience []string
@@ -224,12 +232,13 @@ func (s *JwtAuthenticatorTestSuite) createValidToken(keyType string, kid string)
 	}
 	return tokenString, nil
 }
+
 // TestValidAuthenticationRSA tests JWT authentication with valid RSA tokens.
 func (s *JwtAuthenticatorTestSuite) TestValidAuthenticationRSA() {
 	depOptions := []*definition.DependencyOption{
 		definition.NewDependancyOption("jwt_auth_test", "test", s.Resources()),
 	}
-	frametests.WithTestDependencies(s.T(), depOptions, func(t *testing.T, dep *definition.DependencyOption) {
+	frametests.WithTestDependencies(s.T(), depOptions, func(t *testing.T, _ *definition.DependencyOption) {
 		ctx := t.Context()
 		auth := s.createAuthenticator()
 		token, err := s.createValidToken("RSA", s.rsaKid)
@@ -247,12 +256,13 @@ func (s *JwtAuthenticatorTestSuite) TestValidAuthenticationRSA() {
 		assert.Equal(t, s.testIssuer, claims.Issuer, "Issuer should match")
 	})
 }
+
 // TestValidAuthenticationEC tests JWT authentication with valid EC tokens.
 func (s *JwtAuthenticatorTestSuite) TestValidAuthenticationEC() {
 	depOptions := []*definition.DependencyOption{
 		definition.NewDependancyOption("jwt_auth_test", "test", s.Resources()),
 	}
-	frametests.WithTestDependencies(s.T(), depOptions, func(t *testing.T, dep *definition.DependencyOption) {
+	frametests.WithTestDependencies(s.T(), depOptions, func(t *testing.T, _ *definition.DependencyOption) {
 		t.Skip("EC key parsing has issues - skipping for now")
 		ctx := t.Context()
 		auth := s.createAuthenticator()
@@ -263,12 +273,13 @@ func (s *JwtAuthenticatorTestSuite) TestValidAuthenticationEC() {
 		require.NotNil(t, resultCtx, "Context should be returned")
 	})
 }
+
 // TestValidAuthenticationEd25519 tests JWT authentication with valid Ed25519 tokens.
 func (s *JwtAuthenticatorTestSuite) TestValidAuthenticationEd25519() {
 	depOptions := []*definition.DependencyOption{
 		definition.NewDependancyOption("jwt_auth_test", "test", s.Resources()),
 	}
-	frametests.WithTestDependencies(s.T(), depOptions, func(t *testing.T, dep *definition.DependencyOption) {
+	frametests.WithTestDependencies(s.T(), depOptions, func(t *testing.T, _ *definition.DependencyOption) {
 		t.Skip("Ed25519 key parsing has issues - skipping for now")
 		ctx := t.Context()
 		auth := s.createAuthenticator()
@@ -279,6 +290,7 @@ func (s *JwtAuthenticatorTestSuite) TestValidAuthenticationEd25519() {
 		require.NotNil(t, resultCtx, "Context should be returned")
 	})
 }
+
 // TestInvalidTokens tests JWT authentication with various invalid tokens.
 func (s *JwtAuthenticatorTestSuite) TestInvalidTokens() {
 	testCases := []struct {
@@ -312,10 +324,10 @@ func (s *JwtAuthenticatorTestSuite) TestInvalidTokens() {
 			expectError: "crypto/rsa: verification error",
 		},
 	}
-		depOptions := []*definition.DependencyOption{
+	depOptions := []*definition.DependencyOption{
 		definition.NewDependancyOption("jwt_auth_test", "test", s.Resources()),
 	}
-	frametests.WithTestDependencies(s.T(), depOptions, func(t *testing.T, dep *definition.DependencyOption) {
+	frametests.WithTestDependencies(s.T(), depOptions, func(t *testing.T, _ *definition.DependencyOption) {
 		ctx := t.Context()
 		auth := s.createAuthenticator()
 		for _, tc := range testCases {
@@ -328,6 +340,7 @@ func (s *JwtAuthenticatorTestSuite) TestInvalidTokens() {
 		}
 	})
 }
+
 // TestAudienceIssuerValidation tests JWT authentication with incorrect audience and issuer.
 func (s *JwtAuthenticatorTestSuite) TestAudienceIssuerValidation() {
 	testCases := []struct {
@@ -355,10 +368,10 @@ func (s *JwtAuthenticatorTestSuite) TestAudienceIssuerValidation() {
 			expectError: "token has invalid audience",
 		},
 	}
-		depOptions := []*definition.DependencyOption{
+	depOptions := []*definition.DependencyOption{
 		definition.NewDependancyOption("jwt_auth_test", "test", s.Resources()),
 	}
-	frametests.WithTestDependencies(s.T(), depOptions, func(t *testing.T, dep *definition.DependencyOption) {
+	frametests.WithTestDependencies(s.T(), depOptions, func(t *testing.T, _ *definition.DependencyOption) {
 		ctx := t.Context()
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
@@ -378,18 +391,19 @@ func (s *JwtAuthenticatorTestSuite) TestAudienceIssuerValidation() {
 		}
 	})
 }
+
 // TestConcurrency tests concurrent JWT authentication.
 func (s *JwtAuthenticatorTestSuite) TestConcurrency() {
-		depOptions := []*definition.DependencyOption{
+	depOptions := []*definition.DependencyOption{
 		definition.NewDependancyOption("jwt_auth_test", "test", s.Resources()),
 	}
-	frametests.WithTestDependencies(s.T(), depOptions, func(t *testing.T, dep *definition.DependencyOption) {
+	frametests.WithTestDependencies(s.T(), depOptions, func(t *testing.T, _ *definition.DependencyOption) {
 		ctx := t.Context()
 		auth := s.createAuthenticator()
 		// Create multiple valid tokens
 		numGoroutines := 50
 		tokens := make([]string, numGoroutines)
-		for i := 0; i < numGoroutines; i++ {
+		for i := range numGoroutines {
 			token, err := s.createValidToken("RSA", s.rsaKid)
 			require.NoError(t, err, "Failed to create token %d", i)
 			tokens[i] = token
@@ -398,7 +412,7 @@ func (s *JwtAuthenticatorTestSuite) TestConcurrency() {
 		var wg sync.WaitGroup
 		results := make([]error, numGoroutines)
 		contexts := make([]context.Context, numGoroutines)
-		for i := 0; i < numGoroutines; i++ {
+		for i := range numGoroutines {
 			wg.Add(1)
 			go func(index int) {
 				defer wg.Done()
@@ -409,8 +423,8 @@ func (s *JwtAuthenticatorTestSuite) TestConcurrency() {
 		}
 		wg.Wait()
 		// Verify all authentications succeeded
-		for i := 0; i < numGoroutines; i++ {
-			assert.NoError(t, results[i], "Concurrent authentication %d should succeed", i)
+		for i := range numGoroutines {
+			require.NoError(t, results[i], "Concurrent authentication %d should succeed", i)
 			assert.NotNil(t, contexts[i], "Context %d should be returned", i)
 			// Verify JWT token is stored
 			storedToken := security.JwtFromContext(contexts[i])
@@ -418,12 +432,13 @@ func (s *JwtAuthenticatorTestSuite) TestConcurrency() {
 		}
 	})
 }
+
 // TestLargeTokens tests JWT authentication with large tokens.
 func (s *JwtAuthenticatorTestSuite) TestLargeTokens() {
-		depOptions := []*definition.DependencyOption{
+	depOptions := []*definition.DependencyOption{
 		definition.NewDependancyOption("jwt_auth_test", "test", s.Resources()),
 	}
-	frametests.WithTestDependencies(s.T(), depOptions, func(t *testing.T, dep *definition.DependencyOption) {
+	frametests.WithTestDependencies(s.T(), depOptions, func(t *testing.T, _ *definition.DependencyOption) {
 		ctx := t.Context()
 		auth := s.createAuthenticator()
 		// Create token with large payload
@@ -455,12 +470,13 @@ func (s *JwtAuthenticatorTestSuite) TestLargeTokens() {
 		require.NotNil(t, resultCtx, "Context should be returned")
 	})
 }
+
 // TestGoogleJWKSIntegration tests TokenAuthenticator with real Google OAuth2 JWKS.
 func (s *JwtAuthenticatorTestSuite) TestGoogleJWKSIntegration() {
 	depOptions := []*definition.DependencyOption{
 		definition.NewDependancyOption("jwt_auth_test", "test", s.Resources()),
 	}
-	frametests.WithTestDependencies(s.T(), depOptions, func(t *testing.T, dep *definition.DependencyOption) {
+	frametests.WithTestDependencies(s.T(), depOptions, func(t *testing.T, _ *definition.DependencyOption) {
 		// Test with Google's real JWKS endpoint
 		auth := openid.NewTokenAuthenticator("https://www.googleapis.com/oauth2/v3/certs", 5*time.Minute)
 		auth.Start()
@@ -475,16 +491,17 @@ func (s *JwtAuthenticatorTestSuite) TestGoogleJWKSIntegration() {
 
 		// Check that at least some keys were loaded
 		keyCount := auth.GetKeyCount()
-		assert.Greater(t, keyCount, 0, "Should have loaded keys from Google's JWKS endpoint")
+		assert.Positive(t, keyCount, "Should have loaded keys from Google's JWKS endpoint")
 		t.Logf("Successfully loaded %d keys from Google OAuth2 certificates", keyCount)
 	})
 }
+
 // TestJWKRefresh tests JWKS refresh behavior.
 func (s *JwtAuthenticatorTestSuite) TestJWKRefresh() {
 	depOptions := []*definition.DependencyOption{
 		definition.NewDependancyOption("jwt_auth_test", "test", s.Resources()),
 	}
-	frametests.WithTestDependencies(s.T(), depOptions, func(t *testing.T, dep *definition.DependencyOption) {
+	frametests.WithTestDependencies(s.T(), depOptions, func(t *testing.T, _ *definition.DependencyOption) {
 		// Test successful refresh
 		auth := openid.NewTokenAuthenticator(s.jwksURL, 100*time.Millisecond)
 		auth.Start()
@@ -506,6 +523,7 @@ func (s *JwtAuthenticatorTestSuite) TestJWKRefresh() {
 		assert.Error(t, err2, "Should fail with invalid URL")
 	})
 }
+
 // TestKeyLookupEdgeCases tests TokenAuthenticator key lookup edge cases.
 func (s *JwtAuthenticatorTestSuite) TestKeyLookupEdgeCases() {
 	testCases := []struct {
@@ -539,10 +557,10 @@ func (s *JwtAuthenticatorTestSuite) TestKeyLookupEdgeCases() {
 			expectError: "no jwk found for kid",
 		},
 	}
-		depOptions := []*definition.DependencyOption{
+	depOptions := []*definition.DependencyOption{
 		definition.NewDependancyOption("jwt_auth_test", "test", s.Resources()),
 	}
-	frametests.WithTestDependencies(s.T(), depOptions, func(t *testing.T, dep *definition.DependencyOption) {
+	frametests.WithTestDependencies(s.T(), depOptions, func(t *testing.T, _ *definition.DependencyOption) {
 		auth := openid.NewTokenAuthenticator(s.jwksURL, time.Minute)
 		auth.Start()
 		defer auth.Stop()
@@ -557,6 +575,7 @@ func (s *JwtAuthenticatorTestSuite) TestKeyLookupEdgeCases() {
 		}
 	})
 }
+
 // TestJWKSParsing tests malformed JWKS responses.
 func (s *JwtAuthenticatorTestSuite) TestJWKSParsing() {
 	testCases := []struct {
@@ -591,10 +610,9 @@ func (s *JwtAuthenticatorTestSuite) TestJWKSParsing() {
 		},
 	}
 	for _, tc := range testCases {
-		tc := tc
-		s.T().Run(tc.name, func(t *testing.T) {
+		s.Run(tc.name, func() {
 			// Create temporary server for this test
-			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 				w.WriteHeader(tc.statusCode)
 				w.Write([]byte(tc.jwksResponse))
 			}))
@@ -602,13 +620,14 @@ func (s *JwtAuthenticatorTestSuite) TestJWKSParsing() {
 			auth := openid.NewTokenAuthenticator(server.URL, time.Minute)
 			err := auth.Refresh()
 			if tc.expectError {
-				assert.Error(t, err, "Refresh should fail for: %s", tc.name)
+				s.Error(err, "Refresh should fail for: %s", tc.name)
 			} else {
-				assert.NoError(t, err, "Refresh should succeed for: %s", tc.name)
+				s.NoError(err, "Refresh should succeed for: %s", tc.name)
 			}
 		})
 	}
 }
+
 // BenchmarkAuthentication benchmarks JWT authentication performance.
 func BenchmarkAuthentication(b *testing.B) {
 	// Setup similar to test suite
@@ -627,7 +646,7 @@ func BenchmarkAuthentication(b *testing.B) {
 		},
 	}
 	jwksData, _ := json.Marshal(jwks)
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.Write(jwksData)
 	}))
@@ -660,7 +679,8 @@ func BenchmarkAuthentication(b *testing.B) {
 		}
 	})
 }
-// Helper methods
+
+// Helper methods.
 func (s *JwtAuthenticatorTestSuite) createExpiredToken() string {
 	claims := jwt.MapClaims{
 		"iss": s.testIssuer,
@@ -691,6 +711,7 @@ func (s *JwtAuthenticatorTestSuite) createTokenWithInvalidSignature() string {
 	tokenString, _ := token.SignedString(wrongKey)
 	return tokenString
 }
+
 // TestJwtAuthenticatorSuite runs the JWT authenticator test suite.
 func TestJwtAuthenticatorSuite(t *testing.T) {
 	suite.Run(t, &JwtAuthenticatorTestSuite{})

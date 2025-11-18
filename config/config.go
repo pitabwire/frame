@@ -115,9 +115,9 @@ type ConfigurationDefault struct {
 	Oauth2ServiceClientID     string   `env:"OAUTH2_SERVICE_CLIENT_ID"     yaml:"oauth2_service_client_id"`
 	Oauth2ServiceClientSecret string   `env:"OAUTH2_SERVICE_CLIENT_SECRET" yaml:"oauth2_service_client_secret"`
 
-	Oauth2WellKnownJwkData  string   `env:"OAUTH2_WELL_KNOWN_JWK_DATA"   yaml:"oauth2_well_known_jwk_data"`
-	Oauth2JwtVerifyAudience []string `env:"OAUTH2_JWT_VERIFY_AUDIENCE"   yaml:"oauth2_jwt_verify_audience"`
-	Oauth2JwtVerifyIssuer   string   `env:"OAUTH2_JWT_VERIFY_ISSUER"     yaml:"oauth2_jwt_verify_issuer"`
+	Oauth2WellKnownJwkData  string   `env:"OAUTH2_WELL_KNOWN_JWK_DATA" yaml:"oauth2_well_known_jwk_data"`
+	Oauth2JwtVerifyAudience []string `env:"OAUTH2_JWT_VERIFY_AUDIENCE" yaml:"oauth2_jwt_verify_audience"`
+	Oauth2JwtVerifyIssuer   string   `env:"OAUTH2_JWT_VERIFY_ISSUER"   yaml:"oauth2_jwt_verify_issuer"`
 
 	AuthorizationServiceReadURI  string `env:"AUTHORIZATION_SERVICE_READ_URI"  yaml:"authorization_service_read_uri"`
 	AuthorizationServiceWriteURI string `env:"AUTHORIZATION_SERVICE_WRITE_URI" yaml:"authorization_service_write_uri"`

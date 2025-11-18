@@ -21,6 +21,11 @@ import (
 	"github.com/pitabwire/frame/security"
 )
 
+const (
+	defaultJWKSRefreshInterval = 5 * time.Minute
+	defaultHTTPClientTimeout   = 5 * time.Second
+)
+
 type jwtTokenAuthenticator struct {
 	jwtVerificationAudience []string
 	jwtVerificationIssuer   string
@@ -28,7 +33,6 @@ type jwtTokenAuthenticator struct {
 }
 
 func (a *jwtTokenAuthenticator) keyFunc(token *jwt.Token) (any, error) {
-
 	if a.tokenAuthenticator == nil {
 		return nil, errors.New("token authenticator not initialized")
 	}
@@ -37,10 +41,9 @@ func (a *jwtTokenAuthenticator) keyFunc(token *jwt.Token) (any, error) {
 }
 
 func NewJwtTokenAuthenticator(cfg config.ConfigurationJWTVerification) security.Authenticator {
-
 	auth := NewTokenAuthenticator(
 		cfg.GetOauth2WellKnownJwk(),
-		5*time.Minute,
+		defaultJWKSRefreshInterval,
 	)
 	auth.Start()
 
@@ -112,8 +115,8 @@ type JWK struct {
 	Y   string `json:"y,omitempty"`
 
 	// OKP (EdDSA)
-	OKPCrv string `json:"crv,omitempty"`
-	OKPX   string `json:"x,omitempty"`
+	OKPCrv string `json:"crv,omitempty"` //nolint:govet // JWK format allows overlapping field names for different key types
+	OKPX   string `json:"x,omitempty"`   //nolint:govet // JWK format allows overlapping field names for different key types
 }
 
 type JWKSet struct {
@@ -138,7 +141,7 @@ func NewTokenAuthenticator(jwksURL string, refresh time.Duration) *TokenAuthenti
 	a := &TokenAuthenticator{
 		jwksURL:  jwksURL,
 		refresh:  refresh,
-		client:   &http.Client{Timeout: 5 * time.Second},
+		client:   &http.Client{Timeout: defaultHTTPClientTimeout},
 		keys:     make(map[string]any),
 		stopChan: make(chan struct{}),
 	}
@@ -173,7 +176,7 @@ func (a *TokenAuthenticator) Stop() {
 	close(a.stopChan)
 }
 
-// GetKeyCount returns the number of currently loaded keys (for testing purposes)
+// GetKeyCount returns the number of currently loaded keys (for testing purposes).
 func (a *TokenAuthenticator) GetKeyCount() int {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
@@ -227,7 +230,7 @@ func (a *TokenAuthenticator) GetKey(token *jwt.Token) (any, error) {
 // ------------------------------
 
 func (a *TokenAuthenticator) Refresh() error {
-	req, err := http.NewRequest("GET", a.jwksURL, nil)
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, a.jwksURL, nil)
 	if err != nil {
 		return err
 	}
@@ -246,9 +249,9 @@ func (a *TokenAuthenticator) Refresh() error {
 	}
 
 	var jwks JWKSet
-	if err := json.NewDecoder(resp.Body).Decode(&jwks); err != nil {
-		a.setErr(err)
-		return err
+	if decodeErr := json.NewDecoder(resp.Body).Decode(&jwks); decodeErr != nil {
+		a.setErr(decodeErr)
+		return decodeErr
 	}
 
 	keyMap := make(map[string]any)
@@ -258,8 +261,8 @@ func (a *TokenAuthenticator) Refresh() error {
 			continue
 		}
 
-		pub, err := a.buildKey(k)
-		if err != nil {
+		pub, buildErr := a.buildKey(k)
+		if buildErr != nil {
 			// Do not fully fail; skip bad key
 			continue
 		}
@@ -268,9 +271,9 @@ func (a *TokenAuthenticator) Refresh() error {
 	}
 
 	if len(keyMap) == 0 {
-		err := errors.New("no valid keys in JWK response")
-		a.setErr(err)
-		return err
+		noKeysErr := errors.New("no valid keys in JWK response")
+		a.setErr(noKeysErr)
+		return noKeysErr
 	}
 
 	a.mu.Lock()
@@ -281,7 +284,7 @@ func (a *TokenAuthenticator) Refresh() error {
 	return nil
 }
 
-// helper
+// helper.
 func (a *TokenAuthenticator) setErr(err error) {
 	a.mu.Lock()
 	a.lastErr = err
@@ -377,7 +380,7 @@ func buildEC(k JWK) (*ecdsa.PublicKey, error) {
 
 func buildOKP(k JWK) (any, error) {
 	if k.OKPX == "" || k.OKPCrv != "Ed25519" {
-		return nil, fmt.Errorf("unsupported OKP key or curve")
+		return nil, errors.New("unsupported OKP key or curve")
 	}
 
 	pk, err := base64.RawURLEncoding.DecodeString(k.OKPX)

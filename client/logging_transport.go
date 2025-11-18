@@ -11,7 +11,7 @@ import (
 	"github.com/pitabwire/util"
 )
 
-// teeReadCloser is a reader that duplicates its reads to both a limited buffer and the original reader
+// teeReadCloser is a reader that duplicates its reads to both a limited buffer and the original reader.
 type teeReadCloser struct {
 	reader  io.Reader
 	closer  io.Closer
@@ -29,8 +29,8 @@ func newTeeReadCloser(rc io.ReadCloser, maxSize int64) *teeReadCloser {
 	}
 }
 
-func (tr *teeReadCloser) Read(p []byte) (n int, err error) {
-	n, err = tr.reader.Read(p)
+func (tr *teeReadCloser) Read(p []byte) (int, error) {
+	n, err := tr.reader.Read(p)
 	if n > 0 {
 		// Only write to tee buffer if we haven't exceeded max size
 		if tr.written < tr.maxSize {
@@ -39,7 +39,7 @@ func (tr *teeReadCloser) Read(p []byte) (n int, err error) {
 				toWrite = tr.maxSize - tr.written
 			}
 			tr.teeBuf.Write(p[:toWrite])
-			tr.written += int64(toWrite)
+			tr.written += toWrite
 		}
 	}
 	return n, err
@@ -264,7 +264,7 @@ func (t *loggingTransport) logResponseBody(logger *util.LogEntry, body *io.ReadC
 		teeReader := newTeeReadCloser(*body, t.maxBodySize)
 		*body = teeReader
 		bodyLogged := teeReader.LoggedBody()
-		
+
 		if len(bodyLogged) > 0 {
 			logger = logger.WithField("body", string(bodyLogged))
 		}

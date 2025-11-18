@@ -3,6 +3,7 @@ package frame_test
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -830,7 +831,6 @@ func TestService_H2CSupport(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-
 			cfg := &config.ConfigurationDefault{
 				ServiceName:        "h2c-test",
 				ServiceEnvironment: "test",
@@ -854,21 +854,18 @@ func TestService_H2CSupport(t *testing.T) {
 			opts = append(opts, frame.WithHTTPHandler(handler), frame.WithConfig(cfg))
 
 			ctx, svc := frame.NewServiceWithContext(t.Context(), opts...)
-
-			// Start the service
-			err := svc.Run(ctx, ":8080")
-			require.NoError(t, err)
-
+			defer svc.Stop(ctx)
+			go func() {
+				// Start the service
+				_ = svc.Run(ctx, ":8080")
+			}()
 			// Wait a moment for server to start
 			time.Sleep(100 * time.Millisecond)
 
 			// Test client with h2c support
-			clientOpts := []client.HTTPOption{}
-			if !tc.disableH2C {
-				clientOpts = append(clientOpts, client.WithHTTPEndableH2C())
-			}
+			clientOpts := []client.HTTPOption{client.WithHTTPEnableH2C()}
 
-			httpClient := client.NewHTTPClient(clientOpts...)
+			httpClient := client.NewHTTPClient(ctx, clientOpts...)
 
 			// Make a request to the test endpoint
 			resp, err := httpClient.Get("http://localhost:8080/test")
@@ -887,14 +884,6 @@ func TestService_H2CSupport(t *testing.T) {
 			responseStr := string(body)
 			assert.Contains(t, responseStr, "h2c test successful")
 
-			if !tc.disableH2C {
-				// If h2c is enabled (default), we should see HTTP/2.0 in the protocol
-				// Note: The actual protocol negotiation depends on the client and server
-				t.Logf("Response body: %s", responseStr)
-			}
-
-			// Stop the service
-			svc.Stop(ctx)
 		})
 	}
 }
@@ -920,12 +909,18 @@ func TestService_H2CClientConfiguration(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			opts := []client.HTTPOption{}
+			var opts []client.HTTPOption
 			if tc.enableH2C {
-				opts = append(opts, client.WithHTTPEndableH2C())
+				opts = append(opts, client.WithHTTPEnableH2C())
+			} else {
+				// For standard HTTP, create a transport that only supports HTTP/1.1
+				standardTransport := &http.Transport{
+					ForceAttemptHTTP2: false,
+				}
+				opts = append(opts, client.WithHTTPTransport(standardTransport))
 			}
 
-			httpClient := client.NewHTTPClient(opts...)
+			httpClient := client.NewHTTPClient(t.Context(), opts...)
 
 			// Create a test server that supports h2c
 			handler := http.NewServeMux()
@@ -935,16 +930,15 @@ func TestService_H2CClientConfiguration(t *testing.T) {
 				w.Write([]byte(`{"protocol": "` + r.Proto + `"}`))
 			})
 
-			// Create test server with h2c support if needed
-			server := httptest.NewUnstartedServer(handler)
-			if tc.enableH2C {
-				// Configure h2c for the test server
-				protocols := new(http.Protocols)
-				protocols.SetHTTP1(true)
-				protocols.SetUnencryptedHTTP2(true)
-				server.Config.Protocols = protocols
-			}
+			var server *httptest.Server
+			// Create unstarted server and configure h2c
+			server = httptest.NewUnstartedServer(handler)
+			protocols := new(http.Protocols)
+			protocols.SetHTTP1(true)
+			protocols.SetUnencryptedHTTP2(true)
+			server.Config.Protocols = protocols
 			server.Start()
+
 			defer server.Close()
 
 			// Make request
@@ -958,6 +952,12 @@ func TestService_H2CClientConfiguration(t *testing.T) {
 			require.NoError(t, err)
 
 			t.Logf("Client response: %s", string(body))
+
+			// Verify the protocol matches expected value
+			var response map[string]string
+			err = json.Unmarshal(body, &response)
+			require.NoError(t, err)
+			assert.Equal(t, tc.expectedProto, response["protocol"])
 
 			// Verify the client was created successfully
 			assert.NotNil(t, httpClient.Transport)

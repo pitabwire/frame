@@ -69,6 +69,13 @@ func WithHTTPIdleTimeout(timeout time.Duration) HTTPOption {
 	}
 }
 
+// WithHTTPEnableH2C sets the enable h2c option to active.
+func WithHTTPEnableH2C() HTTPOption {
+	return func(c *httpConfig) {
+		c.enableH2C = true
+	}
+}
+
 // WithHTTPClientCredentials the client credentials the client can utilize.
 func WithHTTPClientCredentials(cfg *clientcredentials.Config) HTTPOption {
 	return func(c *httpConfig) {

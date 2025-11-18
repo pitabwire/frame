@@ -13,6 +13,7 @@ import (
 // SecurityConfiguration combines all configuration interfaces needed by the security manager.
 type SecurityConfiguration interface {
 	config.ConfigurationOAUTH2
+	config.ConfigurationJWTVerification
 	config.ConfigurationAuthorization
 }
 

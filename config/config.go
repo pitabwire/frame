@@ -111,12 +111,13 @@ type ConfigurationDefault struct {
 	Oauth2ServiceURI          string   `env:"OAUTH2_SERVICE_URI"           yaml:"oauth2_service_uri"`
 	Oauth2ServiceAdminURI     string   `env:"OAUTH2_SERVICE_ADMIN_URI"     yaml:"oauth2_service_admin_uri"`
 	Oauth2WellKnownOIDCPath   string   `env:"OAUTH2_WELL_KNOWN_OIDC_PATH"  yaml:"oauth2_well_known_oidc_path"  envDefault:".well-known/openid-configuration"`
-	Oauth2WellKnownJwkData    string   `env:"OAUTH2_WELL_KNOWN_JWK_DATA"   yaml:"oauth2_well_known_jwk_data"`
 	Oauth2ServiceAudience     []string `env:"OAUTH2_SERVICE_AUDIENCE"      yaml:"oauth2_service_audience"`
-	Oauth2JwtVerifyAudience   string   `env:"OAUTH2_JWT_VERIFY_AUDIENCE"   yaml:"oauth2_jwt_verify_audience"`
-	Oauth2JwtVerifyIssuer     string   `env:"OAUTH2_JWT_VERIFY_ISSUER"     yaml:"oauth2_jwt_verify_issuer"`
 	Oauth2ServiceClientID     string   `env:"OAUTH2_SERVICE_CLIENT_ID"     yaml:"oauth2_service_client_id"`
 	Oauth2ServiceClientSecret string   `env:"OAUTH2_SERVICE_CLIENT_SECRET" yaml:"oauth2_service_client_secret"`
+
+	Oauth2WellKnownJwkData  string   `env:"OAUTH2_WELL_KNOWN_JWK_DATA"   yaml:"oauth2_well_known_jwk_data"`
+	Oauth2JwtVerifyAudience []string `env:"OAUTH2_JWT_VERIFY_AUDIENCE"   yaml:"oauth2_jwt_verify_audience"`
+	Oauth2JwtVerifyIssuer   string   `env:"OAUTH2_JWT_VERIFY_ISSUER"     yaml:"oauth2_jwt_verify_issuer"`
 
 	AuthorizationServiceReadURI  string `env:"AUTHORIZATION_SERVICE_READ_URI"  yaml:"authorization_service_read_uri"`
 	AuthorizationServiceWriteURI string `env:"AUTHORIZATION_SERVICE_WRITE_URI" yaml:"authorization_service_write_uri"`
@@ -359,6 +360,7 @@ func (c *ConfigurationDefault) GetOauth2WellKnownJwk() string {
 	}
 	return sVal
 }
+
 func (c *ConfigurationDefault) GetOauth2WellKnownJwkData() string {
 	return c.Oauth2WellKnownJwkData
 }
@@ -455,6 +457,21 @@ func (c *ConfigurationDefault) GetOauth2ServiceAudience() []string {
 }
 func (c *ConfigurationDefault) GetOauth2ServiceAdminURI() string {
 	return c.Oauth2ServiceAdminURI
+}
+
+type ConfigurationJWTVerification interface {
+	GetOauth2WellKnownJwk() string
+	GetVerificationAudience() []string
+	GetVerificationIssuer() string
+}
+
+var _ ConfigurationJWTVerification = new(ConfigurationDefault)
+
+func (c *ConfigurationDefault) GetVerificationAudience() []string {
+	return c.Oauth2JwtVerifyAudience
+}
+func (c *ConfigurationDefault) GetVerificationIssuer() string {
+	return c.Oauth2JwtVerifyIssuer
 }
 
 type ConfigurationAuthorization interface {

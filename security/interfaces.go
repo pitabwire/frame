@@ -15,7 +15,7 @@ type Oauth2ClientRegistrar interface {
 
 type InternalOauth2ClientHolder interface {
 	JwtClient() map[string]any
-	SetJwtClient(jwtCli map[string]any)
+	SetJwtClient(clientID, clientSecret string, jwtCli map[string]any)
 	JwtClientID() string
 	JwtClientSecret() string
 }

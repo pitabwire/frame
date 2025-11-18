@@ -6,8 +6,11 @@ func (s *managerImpl) JwtClient() map[string]any {
 }
 
 // SetJwtClient sets the authenticated jwt client.
-func (s *managerImpl) SetJwtClient(jwtCli map[string]any) {
+func (s *managerImpl) SetJwtClient(clientID, clientSecret string, jwtCli map[string]any) {
+	s.clientID = clientID
+	s.clientSecret = clientSecret
 	s.jwtClient = jwtCli
+
 }
 
 // JwtClientID gets the authenticated JWT client ID if configured at startup.
@@ -17,7 +20,7 @@ func (s *managerImpl) JwtClientID() string {
 		return clientID
 	}
 
-	return ""
+	return s.clientID
 }
 
 // JwtClientSecret gets the authenticated jwt client if configured at startup.
@@ -26,5 +29,5 @@ func (s *managerImpl) JwtClientSecret() string {
 	if ok {
 		return clientSecret
 	}
-	return ""
+	return s.clientSecret
 }

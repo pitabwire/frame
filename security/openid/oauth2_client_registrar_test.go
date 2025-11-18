@@ -102,7 +102,7 @@ func (s *JwtTestSuite) TestServiceRegisterForJwtWithParams() {
 				require.NoError(t, err, "JWT registration should succeed")
 				require.NotEmpty(t, response, "JWT registration response should not be empty")
 
-				sm.SetJwtClient(response)
+				sm.SetJwtClient(tc.clientID, tc.clientSecret, response)
 				srv.Log(ctx).WithField("client id", response).Info("successfully registered for JWT")
 
 				err = clientRegistrar.UnRegisterForJwt(ctx, hydra.GetDS(ctx).String(), sm.JwtClientID())

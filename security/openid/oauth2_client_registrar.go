@@ -18,6 +18,11 @@ import (
 const ConstSystemScopeInternal = "system_int"
 const ConstSystemScopeExternal = "system_ext"
 
+type Configuration interface {
+	config.ConfigurationService
+	config.ConfigurationOAUTH2
+}
+
 type clientRegistrar struct {
 	serviceName        string
 	serviceEnvironment string
@@ -26,13 +31,10 @@ type clientRegistrar struct {
 	invoker client.Manager
 }
 
-func NewClientRegistrar(serviceName, serviceEnvironment string,
-	cfg config.ConfigurationOAUTH2, cli client.Manager) security.Oauth2ClientRegistrar {
+func NewClientRegistrar(cfg Configuration, cli client.Manager) security.Oauth2ClientRegistrar {
 	return &clientRegistrar{
-		serviceName:        serviceName,
-		serviceEnvironment: serviceEnvironment,
-		cfg:                cfg,
-		invoker:            cli,
+		cfg:     cfg,
+		invoker: cli,
 	}
 }
 
@@ -59,7 +61,7 @@ func (s *clientRegistrar) RegisterForJwt(ctx context.Context, iClientHolder secu
 
 	oauth2Audience := oauth2Config.GetOauth2ServiceAudience()
 
-	if oauth2ServiceAdminHost != "" && clientSecret != "" {
+	if oauth2ServiceAdminHost != "" {
 		audienceList := strings.Split(oauth2Audience, ",")
 
 		jwtClient, err := s.RegisterForJwtWithParams(ctx,
@@ -69,7 +71,7 @@ func (s *clientRegistrar) RegisterForJwt(ctx context.Context, iClientHolder secu
 			return err
 		}
 
-		iClientHolder.SetJwtClient(jwtClient)
+		iClientHolder.SetJwtClient(clientID, clientSecret, jwtClient)
 	}
 
 	return nil

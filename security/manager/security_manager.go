@@ -19,6 +19,8 @@ type SecurityConfiguration interface {
 
 // managerImpl is the concrete implementation of the Manager interface.
 type managerImpl struct {
+	clientID        string
+	clientSecret    string
 	jwtClient       map[string]any
 	clientRegistrar security.Oauth2ClientRegistrar
 	authenticator   security.Authenticator
@@ -29,7 +31,7 @@ type managerImpl struct {
 func NewManager(_ context.Context,
 	cfg SecurityConfiguration, invoker client.Manager) security.Manager {
 	return &managerImpl{
-		clientRegistrar: openid.NewClientRegistrar(cfg.Name(), cfg.Environment(), cfg, invoker),
+		clientRegistrar: openid.NewClientRegistrar(cfg, invoker),
 		authenticator:   openid.NewJwtTokenAuthenticator(cfg),
 		authorizer:      permissions.NewKetoAuthorizer(cfg, invoker),
 	}

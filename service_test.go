@@ -883,7 +883,6 @@ func TestService_H2CSupport(t *testing.T) {
 
 			responseStr := string(body)
 			assert.Contains(t, responseStr, "h2c test successful")
-
 		})
 	}
 }
@@ -930,9 +929,7 @@ func TestService_H2CClientConfiguration(t *testing.T) {
 				w.Write([]byte(`{"protocol": "` + r.Proto + `"}`))
 			})
 
-			var server *httptest.Server
-			// Create unstarted server and configure h2c
-			server = httptest.NewUnstartedServer(handler)
+			var server *httptest.Server = httptest.NewUnstartedServer(handler)
 			protocols := new(http.Protocols)
 			protocols.SetHTTP1(true)
 			protocols.SetUnencryptedHTTP2(true)

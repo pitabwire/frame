@@ -12,7 +12,6 @@ import (
 
 // SecurityConfiguration combines all configuration interfaces needed by the security manager.
 type SecurityConfiguration interface {
-	config.ConfigurationService
 	config.ConfigurationOAUTH2
 	config.ConfigurationAuthorization
 }
@@ -28,10 +27,10 @@ type managerImpl struct {
 }
 
 // NewManager creates and returns a new security Manager.
-func NewManager(_ context.Context,
+func NewManager(_ context.Context, serviceName, serviceEnv string,
 	cfg SecurityConfiguration, invoker client.Manager) security.Manager {
 	return &managerImpl{
-		clientRegistrar: openid.NewClientRegistrar(cfg, invoker),
+		clientRegistrar: openid.NewClientRegistrar(serviceName, serviceEnv, cfg, invoker),
 		authenticator:   openid.NewJwtTokenAuthenticator(cfg),
 		authorizer:      permissions.NewKetoAuthorizer(cfg, invoker),
 	}

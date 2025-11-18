@@ -148,7 +148,7 @@ func NewServiceWithContext(ctx context.Context, opts ...Option) (context.Context
 	if !ok {
 		smCfg = &cfg
 	}
-	svc.securityManager = securityManager.NewManager(ctx, smCfg, svc.clientManager)
+	svc.securityManager = securityManager.NewManager(ctx, svc.name, svc.environment, smCfg, svc.clientManager)
 
 	if svc.registerOauth2Cli {
 		sm := svc.SecurityManager()

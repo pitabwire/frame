@@ -21,18 +21,6 @@ func WithHTTPClient(opts ...client.HTTPOption) Option {
 			opts = append(opts, client.WithHTTPTraceRequests(), client.WithHTTPTraceRequestHeaders())
 		}
 
-		cl := client.NewHTTPClient(opts...)
-
-		if s.clientManager == nil {
-			if !ok {
-				s.Log(ctx).Error("configuration object not of type : ConfigurationTraceRequests")
-				return
-			}
-
-			s.clientManager = client.NewManager(cfg, opts...)
-			return
-		}
-
-		s.clientManager.SetClient(ctx, cl)
+		s.clientManager = client.NewManager(ctx, opts...)
 	}
 }

@@ -6,13 +6,10 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
-	"net/http/httputil"
 	"net/url"
 	"strings"
 
 	"github.com/pitabwire/util"
-
-	"github.com/pitabwire/frame/config"
 )
 
 type Manager interface {
@@ -28,15 +25,13 @@ type Manager interface {
 }
 
 type invoker struct {
-	cfg    config.ConfigurationTraceRequests
 	client *http.Client
 }
 
 // NewManager creates a new invoker with the provided options.
-func NewManager(cfg config.ConfigurationTraceRequests, opts ...HTTPOption) Manager {
+func NewManager(ctx context.Context, opts ...HTTPOption) Manager {
 	return &invoker{
-		cfg:    cfg,
-		client: NewHTTPClient(opts...),
+		client: NewHTTPClient(ctx, opts...),
 	}
 }
 
@@ -115,8 +110,6 @@ func (s *invoker) InvokeWithURLEncoded(ctx context.Context,
 		}
 	}
 
-	logger := util.Log(ctx).WithField("method", method).WithField("endpoint", endpointURL).WithField("header", headers)
-
 	// Apply options
 	httpCfg := &httpConfig{}
 	for _, opt := range opts {
@@ -139,22 +132,12 @@ func (s *invoker) InvokeWithURLEncoded(ctx context.Context,
 		req.Header.Set(key, val)
 	}
 
-	if s.cfg.TraceReq() {
-		reqDump, _ := httputil.DumpRequestOut(req, true)
-		logger.WithField("request", string(reqDump)).Debug("request out")
-	}
-
 	//nolint:bodyclose //this is done by util.CloseAndLogOnError()
 	resp, err := s.client.Do(req)
 	if err != nil {
 		return 0, nil, err
 	}
 	defer util.CloseAndLogOnError(ctx, resp.Body)
-
-	if s.cfg.TraceReq() {
-		respDump, _ := httputil.DumpResponse(resp, true)
-		util.Log(ctx).WithField("response", string(respDump)).Debug("response in")
-	}
 
 	response, err := io.ReadAll(resp.Body)
 

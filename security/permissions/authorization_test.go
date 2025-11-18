@@ -73,9 +73,12 @@ func (s *AuthorizationTestSuite) authorizationControlListWrite(
 ) error {
 	authClaims := security.ClaimsFromContext(ctx)
 
+	var opts []client.HTTPOption
 	cfg := config.FromContext[config.ConfigurationTraceRequests](ctx)
-
-	invoker := client.NewManager(cfg)
+	if cfg.TraceReq() {
+		opts = append(opts, client.WithHTTPTraceRequests(), client.WithHTTPTraceRequestHeaders())
+	}
+	invoker := client.NewManager(ctx, opts...)
 
 	if authClaims == nil {
 		return errors.New("only authenticated requests should be used to check authorization")
@@ -95,7 +98,7 @@ func (s *AuthorizationTestSuite) authorizationControlListWrite(
 		return err
 	}
 
-	if status > 299 || status < 200 {
+	if status < http.StatusOK || status >= http.StatusMultipleChoices {
 		return fmt.Errorf("invalid response status %d had message %s", status, string(result))
 	}
 

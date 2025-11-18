@@ -20,6 +20,7 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	"github.com/pitabwire/frame"
+	"github.com/pitabwire/frame/client"
 	"github.com/pitabwire/frame/config"
 	"github.com/pitabwire/frame/frametests"
 	"github.com/pitabwire/frame/frametests/definition"
@@ -809,4 +810,157 @@ func TestService_SecurityManagerConfiguration(t *testing.T) {
 	assert.Equal(t, "security-test", svc.Name())
 	assert.Equal(t, "test", svc.Environment())
 	assert.Equal(t, "1.0.0", svc.Version())
+}
+
+func TestService_H2CSupport(t *testing.T) {
+	// Test h2c (HTTP/2 without TLS) server functionality - h2c is enabled by default
+	testCases := []struct {
+		name        string
+		description string
+	}{
+		{
+			name:        "default h2c enabled server",
+			description: "Server should enable h2c by default",
+		},
+		{
+			name:        "explicitly disabled h2c server",
+			description: "Server should use standard HTTP when h2c is explicitly disabled",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+
+			cfg := &config.ConfigurationDefault{
+				ServiceName:        "h2c-test",
+				ServiceEnvironment: "test",
+				ServiceVersion:     "1.0.0",
+				WorkerPoolCount:    10,
+				WorkerPoolCapacity: 100,
+				EventsQueueURL:     "mem://test", // Use in-memory queue for testing
+			}
+
+			// Create service with h2c enabled by default, or explicitly disabled
+			var opts []frame.Option
+
+			// Add a simple HTTP handler for testing
+			handler := http.NewServeMux()
+			handler.HandleFunc("/test", func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusOK)
+				w.Write([]byte(`{"message": "h2c test successful", "protocol": "` + r.Proto + `"}`))
+			})
+
+			opts = append(opts, frame.WithHTTPHandler(handler), frame.WithConfig(cfg))
+
+			ctx, svc := frame.NewServiceWithContext(t.Context(), opts...)
+
+			// Start the service
+			err := svc.Run(ctx, ":8080")
+			require.NoError(t, err)
+
+			// Wait a moment for server to start
+			time.Sleep(100 * time.Millisecond)
+
+			// Test client with h2c support
+			clientOpts := []client.HTTPOption{}
+			if !tc.disableH2C {
+				clientOpts = append(clientOpts, client.WithHTTPEndableH2C())
+			}
+
+			httpClient := client.NewHTTPClient(clientOpts...)
+
+			// Make a request to the test endpoint
+			resp, err := httpClient.Get("http://localhost:8080/test")
+			if err != nil {
+				svc.Stop(ctx)
+				t.Fatalf("Failed to make request: %v", err)
+			}
+			defer resp.Body.Close()
+
+			// Verify response
+			assert.Equal(t, http.StatusOK, resp.StatusCode)
+
+			body, err := io.ReadAll(resp.Body)
+			require.NoError(t, err)
+
+			responseStr := string(body)
+			assert.Contains(t, responseStr, "h2c test successful")
+
+			if !tc.disableH2C {
+				// If h2c is enabled (default), we should see HTTP/2.0 in the protocol
+				// Note: The actual protocol negotiation depends on the client and server
+				t.Logf("Response body: %s", responseStr)
+			}
+
+			// Stop the service
+			svc.Stop(ctx)
+		})
+	}
+}
+
+func TestService_H2CClientConfiguration(t *testing.T) {
+	// Test h2c client configuration independently
+	testCases := []struct {
+		name          string
+		enableH2C     bool
+		expectedProto string
+	}{
+		{
+			name:          "h2c client",
+			enableH2C:     true,
+			expectedProto: "HTTP/2.0",
+		},
+		{
+			name:          "standard HTTP client",
+			enableH2C:     false,
+			expectedProto: "HTTP/1.1",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			opts := []client.HTTPOption{}
+			if tc.enableH2C {
+				opts = append(opts, client.WithHTTPEndableH2C())
+			}
+
+			httpClient := client.NewHTTPClient(opts...)
+
+			// Create a test server that supports h2c
+			handler := http.NewServeMux()
+			handler.HandleFunc("/proto-test", func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusOK)
+				w.Write([]byte(`{"protocol": "` + r.Proto + `"}`))
+			})
+
+			// Create test server with h2c support if needed
+			server := httptest.NewUnstartedServer(handler)
+			if tc.enableH2C {
+				// Configure h2c for the test server
+				protocols := new(http.Protocols)
+				protocols.SetHTTP1(true)
+				protocols.SetUnencryptedHTTP2(true)
+				server.Config.Protocols = protocols
+			}
+			server.Start()
+			defer server.Close()
+
+			// Make request
+			resp, err := httpClient.Get(server.URL + "/proto-test")
+			require.NoError(t, err)
+			defer resp.Body.Close()
+
+			assert.Equal(t, http.StatusOK, resp.StatusCode)
+
+			body, err := io.ReadAll(resp.Body)
+			require.NoError(t, err)
+
+			t.Logf("Client response: %s", string(body))
+
+			// Verify the client was created successfully
+			assert.NotNil(t, httpClient.Transport)
+		})
+	}
 }

@@ -411,23 +411,22 @@ func (s *JwtAuthenticatorTestSuite) TestConcurrency() {
 		// Run concurrent authentication
 		var wg sync.WaitGroup
 		results := make([]error, numGoroutines)
-		contexts := make([]context.Context, numGoroutines)
+		storedTokenList := make([]string, numGoroutines)
 		for i := range numGoroutines {
 			wg.Add(1)
 			go func(index int) {
 				defer wg.Done()
 				resultCtx, err := auth.Authenticate(ctx, tokens[index])
 				results[index] = err
-				contexts[index] = resultCtx
+				storedTokenList[index] = security.JwtFromContext(resultCtx)
 			}(i)
 		}
 		wg.Wait()
 		// Verify all authentications succeeded
 		for i := range numGoroutines {
 			require.NoError(t, results[i], "Concurrent authentication %d should succeed", i)
-			assert.NotNil(t, contexts[i], "Context %d should be returned", i)
 			// Verify JWT token is stored
-			storedToken := security.JwtFromContext(contexts[i])
+			storedToken := storedTokenList[i]
 			assert.Equal(t, tokens[i], storedToken, "Token %d should be stored in context", i)
 		}
 	})

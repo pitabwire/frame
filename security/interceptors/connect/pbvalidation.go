@@ -110,8 +110,8 @@ func (i *Interceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
 		if err != nil {
 			return response, err
 		}
-		if err := i.validateResponse(response.Any()); err != nil {
-			return response, err
+		if validationErr := i.validateResponse(response.Any()); validationErr != nil {
+			return response, validationErr
 		}
 		return response, nil
 	}
@@ -189,7 +189,9 @@ func validateAllStructs(m proto.Message) error {
 	return visitStructs(m.ProtoReflect())
 }
 
-func visitStructs(pr protoreflect.Message) error {
+func visitStructs(
+	pr protoreflect.Message,
+) error { //nolint:gocognit // Complex validation logic requires multiple cases and nesting
 	// Check if the message itself is a Struct (message-level validation)
 	if pr.Descriptor().FullName() == "google.protobuf.Struct" {
 		s, ok := pr.Interface().(*structpb.Struct)
@@ -207,7 +209,7 @@ func visitStructs(pr protoreflect.Message) error {
 		switch {
 		case fd.IsList():
 			list := v.List()
-			for i := 0; i < list.Len(); i++ {
+			for i := 0; i < list.Len(); i++ { //nolint:intrange // Traditional for loop is appropriate for iterating over list length
 				if fd.Message() != nil {
 					if msg := list.Get(i).Message(); msg.IsValid() {
 						if err := visitStructs(msg); err != nil {

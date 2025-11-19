@@ -1,7 +1,9 @@
+//nolint:testpackage // Internal package testing requires same package name
 package connect
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"testing"
@@ -57,19 +59,19 @@ func TestValidateRequest(t *testing.T) {
 
 	t.Run("nil message", func(t *testing.T) {
 		err := interceptor.validateRequest(nil)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 	})
 
 	t.Run("non-proto message", func(t *testing.T) {
 		err := interceptor.validateRequest("not a proto message")
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Contains(t, err.Error(), "expected proto.Message")
 	})
 
 	t.Run("valid message", func(t *testing.T) {
 		msg := &wrapperspb.StringValue{Value: "test"}
 		err := interceptor.validateRequest(msg)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 	})
 }
 
@@ -78,14 +80,14 @@ func TestValidateResponse(t *testing.T) {
 		interceptor := NewInterceptor()
 		msg := &wrapperspb.StringValue{Value: "test"}
 		err := interceptor.validateResponse(msg)
-		assert.NoError(t, err) // Should not validate responses by default
+		require.NoError(t, err) // Should not validate responses by default
 	})
 
 	t.Run("with validate responses option", func(t *testing.T) {
 		interceptor := NewInterceptor(WithValidateResponses())
 		msg := &wrapperspb.StringValue{Value: "test"}
 		err := interceptor.validateResponse(msg)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 	})
 }
 
@@ -98,7 +100,7 @@ func TestStructValidation(t *testing.T) {
 		require.NoError(t, err)
 
 		err = validateSingleStruct(s)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 	})
 
 	t.Run("struct too large", func(t *testing.T) {
@@ -114,7 +116,7 @@ func TestStructValidation(t *testing.T) {
 		require.NoError(t, err)
 
 		err = validateSingleStruct(s)
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Contains(t, err.Error(), "exceeds 1 MiB")
 	})
 
@@ -128,7 +130,7 @@ func TestStructValidation(t *testing.T) {
 		require.NoError(t, err)
 
 		err = validateSingleStruct(s)
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Contains(t, err.Error(), "too many top-level fields")
 	})
 
@@ -146,7 +148,7 @@ func TestStructValidation(t *testing.T) {
 
 		// CEL validation is currently disabled, so this should pass
 		err = validateSingleStruct(s)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 	})
 
 	t.Run("list too long", func(t *testing.T) {
@@ -162,7 +164,7 @@ func TestStructValidation(t *testing.T) {
 
 		// CEL validation is currently disabled, so this should pass
 		err = validateSingleStruct(s)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 	})
 }
 
@@ -174,7 +176,7 @@ func TestValidateAllStructs(t *testing.T) {
 		require.NoError(t, err)
 
 		err = validateAllStructs(s)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 	})
 
 	t.Run("message with nested struct", func(t *testing.T) {
@@ -190,7 +192,7 @@ func TestValidateAllStructs(t *testing.T) {
 		}
 
 		err = validateAllStructs(container)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 	})
 
 	t.Run("message with deeply nested invalid struct", func(t *testing.T) {
@@ -215,7 +217,7 @@ func TestValidateAllStructs(t *testing.T) {
 		}
 
 		err := validateAllStructs(container)
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Contains(t, err.Error(), "too many top-level fields")
 	})
 }
@@ -247,7 +249,7 @@ func TestUnaryInterceptor(t *testing.T) {
 
 	t.Run("valid request", func(t *testing.T) {
 		callCount := 0
-		next := func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
+		next := func(_ context.Context, _ connect.AnyRequest) (connect.AnyResponse, error) {
 			callCount++
 			return connect.NewResponse(&wrapperspb.StringValue{Value: "response"}), nil
 		}
@@ -256,16 +258,16 @@ func TestUnaryInterceptor(t *testing.T) {
 		req := connect.NewRequest(&wrapperspb.StringValue{Value: "request"})
 
 		resp, err := wrapped(context.Background(), req)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.NotNil(t, resp)
 		assert.Equal(t, 1, callCount)
 	})
 
 	t.Run("invalid request", func(t *testing.T) {
 		callCount := 0
-		next := func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
+		next := func(_ context.Context, _ connect.AnyRequest) (connect.AnyResponse, error) {
 			callCount++
-			return nil, nil
+			return nil, errors.New("mock error")
 		}
 
 		wrapped := interceptor.WrapUnary(next)
@@ -287,7 +289,7 @@ func TestUnaryInterceptor(t *testing.T) {
 		req := connect.NewRequest(container)
 
 		resp, err := wrapped(context.Background(), req)
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Nil(t, resp)
 		assert.Equal(t, 0, callCount) // Next should not be called
 		assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
@@ -299,7 +301,7 @@ func TestStreamingInterceptors(t *testing.T) {
 
 	t.Run("streaming client interceptor", func(t *testing.T) {
 		wrapped := interceptor.WrapStreamingClient(
-			func(ctx context.Context, spec connect.Spec) connect.StreamingClientConn {
+			func(_ context.Context, _ connect.Spec) connect.StreamingClientConn {
 				return &mockStreamingClientConn{}
 			},
 		)
@@ -309,18 +311,18 @@ func TestStreamingInterceptors(t *testing.T) {
 
 		// Test Send with valid message
 		err := conn.Send(&wrapperspb.StringValue{Value: "test"})
-		assert.NoError(t, err)
+		require.NoError(t, err)
 	})
 
 	t.Run("streaming handler interceptor", func(t *testing.T) {
 		callCount := 0
-		wrapped := interceptor.WrapStreamingHandler(func(ctx context.Context, conn connect.StreamingHandlerConn) error {
+		wrapped := interceptor.WrapStreamingHandler(func(_ context.Context, _ connect.StreamingHandlerConn) error {
 			callCount++
 			return nil
 		})
 
 		err := wrapped(context.Background(), &mockStreamingHandlerConn{})
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, 1, callCount)
 	})
 }
@@ -328,8 +330,8 @@ func TestStreamingInterceptors(t *testing.T) {
 // Mock implementations for testing.
 type mockStreamingClientConn struct{}
 
-func (m *mockStreamingClientConn) Send(msg any) error           { return nil }
-func (m *mockStreamingClientConn) Receive(msg any) error        { return nil }
+func (m *mockStreamingClientConn) Send(_ any) error             { return nil }
+func (m *mockStreamingClientConn) Receive(_ any) error          { return nil }
 func (m *mockStreamingClientConn) CloseRequest() error          { return nil }
 func (m *mockStreamingClientConn) CloseResponse() error         { return nil }
 func (m *mockStreamingClientConn) Spec() connect.Spec           { return connect.Spec{} }
@@ -340,8 +342,8 @@ func (m *mockStreamingClientConn) ResponseTrailer() http.Header { return http.He
 
 type mockStreamingHandlerConn struct{}
 
-func (m *mockStreamingHandlerConn) Send(msg any) error           { return nil }
-func (m *mockStreamingHandlerConn) Receive(msg any) error        { return nil }
+func (m *mockStreamingHandlerConn) Send(_ any) error             { return nil }
+func (m *mockStreamingHandlerConn) Receive(_ any) error          { return nil }
 func (m *mockStreamingHandlerConn) Spec() connect.Spec           { return connect.Spec{} }
 func (m *mockStreamingHandlerConn) Peer() connect.Peer           { return connect.Peer{} }
 func (m *mockStreamingHandlerConn) RequestHeader() http.Header   { return http.Header{} }
@@ -377,7 +379,7 @@ func BenchmarkValidateAllStructs(b *testing.B) {
 
 func BenchmarkInterceptorWrapUnary(b *testing.B) {
 	interceptor := NewInterceptor()
-	next := func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
+	next := func(_ context.Context, _ connect.AnyRequest) (connect.AnyResponse, error) {
 		return connect.NewResponse(&wrapperspb.StringValue{Value: "response"}), nil
 	}
 	wrapped := interceptor.WrapUnary(next)

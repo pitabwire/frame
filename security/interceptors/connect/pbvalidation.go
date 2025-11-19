@@ -12,6 +12,13 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
+const (
+	// maxStructSizeB is the maximum allowed size in bytes for a single StructPB message (1 MiB).
+	maxStructSizeB = 1024 * 1024
+	// maxStructFields is the maximum allowed number of top-level fields in a StructPB message.
+	maxStructFields = 200
+)
+
 // An Option configures an [Interceptor].
 type Option interface {
 	apply(*Interceptor)
@@ -245,15 +252,15 @@ func visitStructs(pr protoreflect.Message) error {
 // validateSingleStruct applies all limits to one Struct.
 func validateSingleStruct(s *structpb.Struct) error {
 	// 1. Exact wire size ≤ 1 MiB
-	if sz := proto.Size(s); sz > 1024*1024 {
+	if sz := proto.Size(s); sz > maxStructSizeB {
 		return connect.NewError(connect.CodeInvalidArgument,
 			fmt.Errorf("google.protobuf.Struct exceeds 1 MiB (size: %d bytes)", sz))
 	}
 
 	// 2. Max 200 top-level keys
-	if fields := s.GetFields(); len(fields) > 200 {
+	if fields := s.GetFields(); len(fields) > maxStructFields {
 		return connect.NewError(connect.CodeInvalidArgument,
-			fmt.Errorf("google.protobuf.Struct has too many top-level fields (%d > 200)", len(fields)))
+			fmt.Errorf("google.protobuf.Struct has too many top-level fields (%d > %d)", len(fields), maxStructFields))
 	}
 
 	return nil

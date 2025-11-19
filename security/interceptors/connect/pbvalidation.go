@@ -189,9 +189,10 @@ func validateAllStructs(m proto.Message) error {
 	return visitStructs(m.ProtoReflect())
 }
 
+//nolint:gocognit // this is a complex validation logic
 func visitStructs(
 	pr protoreflect.Message,
-) error { //nolint:gocognit // Complex validation logic requires multiple cases and nesting
+) error {
 	// Check if the message itself is a Struct (message-level validation)
 	if pr.Descriptor().FullName() == "google.protobuf.Struct" {
 		s, ok := pr.Interface().(*structpb.Struct)

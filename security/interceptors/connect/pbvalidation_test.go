@@ -120,7 +120,7 @@ func TestStructValidation(t *testing.T) {
 
 	t.Run("too many fields", func(t *testing.T) {
 		fields := make(map[string]interface{})
-		for i := 0; i < 201; i++ {
+		for i := range 201 {
 			fields[fmt.Sprintf("field%d", i)] = "value"
 		}
 
@@ -192,21 +192,28 @@ func TestValidateAllStructs(t *testing.T) {
 		assert.NoError(t, err)
 	})
 
-	t.Run("message with invalid nested struct", func(t *testing.T) {
-		// Create a struct with too many fields
-		fields := make(map[string]interface{})
-		for i := 0; i < 201; i++ {
-			fields[fmt.Sprintf("field%d", i)] = "value"
+	t.Run("message with deeply nested invalid struct", func(t *testing.T) {
+		// Create a deeply nested struct where an inner struct has too many fields
+		innerInvalidStruct := &structpb.Struct{}
+		innerInvalidStruct.Fields = make(map[string]*structpb.Value)
+		for i := 0; i < 201; i++ { // Too many fields
+			innerInvalidStruct.Fields[fmt.Sprintf("field%d", i)] = structpb.NewStringValue("value")
 		}
-		invalidStruct, err := structpb.NewStruct(fields)
-		require.NoError(t, err)
 
+		// Create a middle struct that contains the invalid inner struct
+		middleStruct := &structpb.Struct{}
+		middleStruct.Fields = map[string]*structpb.Value{
+			"invalid_nested": structpb.NewStructValue(innerInvalidStruct),
+			"valid_field":    structpb.NewStringValue("ok"),
+		}
+
+		// Create the top-level container
 		container := &structpb.Struct{}
 		container.Fields = map[string]*structpb.Value{
-			"data": structpb.NewStructValue(invalidStruct),
+			"data": structpb.NewStructValue(middleStruct),
 		}
 
-		err = validateAllStructs(container)
+		err := validateAllStructs(container)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "too many top-level fields")
 	})
@@ -264,7 +271,7 @@ func TestUnaryInterceptor(t *testing.T) {
 
 		// Create an invalid request that should fail struct validation
 		fields := make(map[string]interface{})
-		for i := 0; i < 201; i++ { // Too many fields
+		for i := range 201 { // Too many fields
 			fields[fmt.Sprintf("field%d", i)] = "value"
 		}
 		invalidStruct, err := structpb.NewStruct(fields)
@@ -290,9 +297,11 @@ func TestStreamingInterceptors(t *testing.T) {
 	interceptor := NewInterceptor()
 
 	t.Run("streaming client interceptor", func(t *testing.T) {
-		wrapped := interceptor.WrapStreamingClient(func(ctx context.Context, spec connect.Spec) connect.StreamingClientConn {
-			return &mockStreamingClientConn{}
-		})
+		wrapped := interceptor.WrapStreamingClient(
+			func(ctx context.Context, spec connect.Spec) connect.StreamingClientConn {
+				return &mockStreamingClientConn{}
+			},
+		)
 
 		conn := wrapped(context.Background(), connect.Spec{})
 		assert.NotNil(t, conn)
@@ -315,30 +324,30 @@ func TestStreamingInterceptors(t *testing.T) {
 	})
 }
 
-// Mock implementations for testing
+// Mock implementations for testing.
 type mockStreamingClientConn struct{}
 
-func (m *mockStreamingClientConn) Send(msg any) error             { return nil }
-func (m *mockStreamingClientConn) Receive(msg any) error           { return nil }
-func (m *mockStreamingClientConn) CloseRequest() error            { return nil }
-func (m *mockStreamingClientConn) CloseResponse() error           { return nil }
-func (m *mockStreamingClientConn) Spec() connect.Spec             { return connect.Spec{} }
-func (m *mockStreamingClientConn) Peer() connect.Peer             { return connect.Peer{} }
-func (m *mockStreamingClientConn) RequestHeader() http.Header     { return http.Header{} }
-func (m *mockStreamingClientConn) ResponseHeader() http.Header    { return http.Header{} }
-func (m *mockStreamingClientConn) ResponseTrailer() http.Header   { return http.Header{} }
+func (m *mockStreamingClientConn) Send(msg any) error           { return nil }
+func (m *mockStreamingClientConn) Receive(msg any) error        { return nil }
+func (m *mockStreamingClientConn) CloseRequest() error          { return nil }
+func (m *mockStreamingClientConn) CloseResponse() error         { return nil }
+func (m *mockStreamingClientConn) Spec() connect.Spec           { return connect.Spec{} }
+func (m *mockStreamingClientConn) Peer() connect.Peer           { return connect.Peer{} }
+func (m *mockStreamingClientConn) RequestHeader() http.Header   { return http.Header{} }
+func (m *mockStreamingClientConn) ResponseHeader() http.Header  { return http.Header{} }
+func (m *mockStreamingClientConn) ResponseTrailer() http.Header { return http.Header{} }
 
 type mockStreamingHandlerConn struct{}
 
-func (m *mockStreamingHandlerConn) Send(msg any) error             { return nil }
-func (m *mockStreamingHandlerConn) Receive(msg any) error           { return nil }
-func (m *mockStreamingHandlerConn) Spec() connect.Spec             { return connect.Spec{} }
-func (m *mockStreamingHandlerConn) Peer() connect.Peer             { return connect.Peer{} }
-func (m *mockStreamingHandlerConn) RequestHeader() http.Header     { return http.Header{} }
-func (m *mockStreamingHandlerConn) ResponseHeader() http.Header    { return http.Header{} }
-func (m *mockStreamingHandlerConn) ResponseTrailer() http.Header   { return http.Header{} }
+func (m *mockStreamingHandlerConn) Send(msg any) error           { return nil }
+func (m *mockStreamingHandlerConn) Receive(msg any) error        { return nil }
+func (m *mockStreamingHandlerConn) Spec() connect.Spec           { return connect.Spec{} }
+func (m *mockStreamingHandlerConn) Peer() connect.Peer           { return connect.Peer{} }
+func (m *mockStreamingHandlerConn) RequestHeader() http.Header   { return http.Header{} }
+func (m *mockStreamingHandlerConn) ResponseHeader() http.Header  { return http.Header{} }
+func (m *mockStreamingHandlerConn) ResponseTrailer() http.Header { return http.Header{} }
 
-// Benchmark tests
+// Benchmark tests.
 func BenchmarkValidateSingleStruct(b *testing.B) {
 	s, err := structpb.NewStruct(map[string]interface{}{
 		"name":  "test",
@@ -348,7 +357,7 @@ func BenchmarkValidateSingleStruct(b *testing.B) {
 	require.NoError(b, err)
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		_ = validateSingleStruct(s)
 	}
 }
@@ -360,7 +369,7 @@ func BenchmarkValidateAllStructs(b *testing.B) {
 	require.NoError(b, err)
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		_ = validateAllStructs(s)
 	}
 }
@@ -376,7 +385,7 @@ func BenchmarkInterceptorWrapUnary(b *testing.B) {
 	ctx := context.Background()
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		_, _ = wrapped(ctx, req)
 	}
 }

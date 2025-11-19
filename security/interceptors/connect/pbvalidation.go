@@ -177,7 +177,7 @@ func (i *Interceptor) wrapValidationError(originalErr error, code connect.Code) 
 	return connectErr
 }
 
-// validateAllStructs walks the message using only public reflection APIs
+// validateAllStructs walks the message using only public reflection APIs.
 func validateAllStructs(m proto.Message) error {
 	return visitStructs(m.ProtoReflect())
 }
@@ -230,23 +230,9 @@ func visitStructs(pr protoreflect.Message) error {
 
 		case fd.Message() != nil:
 			if msg := v.Message(); msg.IsValid() {
-				// Check if this field is a Struct
-				if msg.Descriptor().FullName() == "google.protobuf.Struct" {
-					s, ok := msg.Interface().(*structpb.Struct)
-					if !ok {
-						visitErr = fmt.Errorf("expected *structpb.Struct, got %T", msg.Interface())
-						return false
-					}
-					if err := validateSingleStruct(s); err != nil {
-						visitErr = err
-						return false
-					}
-				} else {
-					// Recurse into non-Struct messages
-					if err := visitStructs(msg); err != nil {
-						visitErr = err
-						return false
-					}
+				if err := visitStructs(msg); err != nil {
+					visitErr = err
+					return false
 				}
 			}
 		}
@@ -256,7 +242,7 @@ func visitStructs(pr protoreflect.Message) error {
 	return visitErr
 }
 
-// validateSingleStruct applies all limits to one Struct
+// validateSingleStruct applies all limits to one Struct.
 func validateSingleStruct(s *structpb.Struct) error {
 	// 1. Exact wire size ≤ 1 MiB
 	if sz := proto.Size(s); sz > 1024*1024 {

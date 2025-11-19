@@ -26,7 +26,7 @@ var (
 	ErrInvalidToken = errors.New("invalid authorization token")
 )
 
-// AuthInterceptor implements connect.Interceptor for JWT authentication.
+// AuthInterceptor implements connect.ValidationInterceptor for JWT authentication.
 type AuthInterceptor struct {
 	authenticator security.Authenticator
 }

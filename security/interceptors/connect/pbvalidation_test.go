@@ -18,7 +18,7 @@ import (
 
 func TestNewInterceptor(t *testing.T) {
 	t.Run("default configuration", func(t *testing.T) {
-		interceptor := NewInterceptor()
+		interceptor := NewValidationInterceptor()
 		assert.NotNil(t, interceptor.validator)
 		assert.False(t, interceptor.validateResponses)
 		assert.False(t, interceptor.noErrorDetails)
@@ -26,23 +26,23 @@ func TestNewInterceptor(t *testing.T) {
 
 	t.Run("with custom validator", func(t *testing.T) {
 		customValidator := protovalidate.GlobalValidator
-		interceptor := NewInterceptor(WithValidator(customValidator))
+		interceptor := NewValidationInterceptor(WithValidator(customValidator))
 		assert.Equal(t, customValidator, interceptor.validator)
 	})
 
 	t.Run("with validate responses", func(t *testing.T) {
-		interceptor := NewInterceptor(WithValidateResponses())
+		interceptor := NewValidationInterceptor(WithValidateResponses())
 		assert.True(t, interceptor.validateResponses)
 	})
 
 	t.Run("with no error details", func(t *testing.T) {
-		interceptor := NewInterceptor(WithoutErrorDetails())
+		interceptor := NewValidationInterceptor(WithoutErrorDetails())
 		assert.True(t, interceptor.noErrorDetails)
 	})
 
 	t.Run("multiple options", func(t *testing.T) {
 		customValidator := protovalidate.GlobalValidator
-		interceptor := NewInterceptor(
+		interceptor := NewValidationInterceptor(
 			WithValidator(customValidator),
 			WithValidateResponses(),
 			WithoutErrorDetails(),
@@ -55,7 +55,7 @@ func TestNewInterceptor(t *testing.T) {
 }
 
 func TestValidateRequest(t *testing.T) {
-	interceptor := NewInterceptor()
+	interceptor := NewValidationInterceptor()
 
 	t.Run("nil message", func(t *testing.T) {
 		err := interceptor.validateRequest(nil)
@@ -77,14 +77,14 @@ func TestValidateRequest(t *testing.T) {
 
 func TestValidateResponse(t *testing.T) {
 	t.Run("without validate responses option", func(t *testing.T) {
-		interceptor := NewInterceptor()
+		interceptor := NewValidationInterceptor()
 		msg := &wrapperspb.StringValue{Value: "test"}
 		err := interceptor.validateResponse(msg)
 		require.NoError(t, err) // Should not validate responses by default
 	})
 
 	t.Run("with validate responses option", func(t *testing.T) {
-		interceptor := NewInterceptor(WithValidateResponses())
+		interceptor := NewValidationInterceptor(WithValidateResponses())
 		msg := &wrapperspb.StringValue{Value: "test"}
 		err := interceptor.validateResponse(msg)
 		require.NoError(t, err)
@@ -224,7 +224,7 @@ func TestValidateAllStructs(t *testing.T) {
 
 func TestWrapValidationError(t *testing.T) {
 	t.Run("with error details", func(t *testing.T) {
-		interceptor := NewInterceptor()
+		interceptor := NewValidationInterceptor()
 		originalErr := &protovalidate.ValidationError{}
 		wrappedErr := interceptor.wrapValidationError(originalErr, connect.CodeInvalidArgument)
 
@@ -234,7 +234,7 @@ func TestWrapValidationError(t *testing.T) {
 	})
 
 	t.Run("without error details", func(t *testing.T) {
-		interceptor := NewInterceptor(WithoutErrorDetails())
+		interceptor := NewValidationInterceptor(WithoutErrorDetails())
 		originalErr := &protovalidate.ValidationError{}
 		wrappedErr := interceptor.wrapValidationError(originalErr, connect.CodeInvalidArgument)
 
@@ -245,7 +245,7 @@ func TestWrapValidationError(t *testing.T) {
 }
 
 func TestUnaryInterceptor(t *testing.T) {
-	interceptor := NewInterceptor()
+	interceptor := NewValidationInterceptor()
 
 	t.Run("valid request", func(t *testing.T) {
 		callCount := 0
@@ -297,7 +297,7 @@ func TestUnaryInterceptor(t *testing.T) {
 }
 
 func TestStreamingInterceptors(t *testing.T) {
-	interceptor := NewInterceptor()
+	interceptor := NewValidationInterceptor()
 
 	t.Run("streaming client interceptor", func(t *testing.T) {
 		wrapped := interceptor.WrapStreamingClient(
@@ -378,7 +378,7 @@ func BenchmarkValidateAllStructs(b *testing.B) {
 }
 
 func BenchmarkInterceptorWrapUnary(b *testing.B) {
-	interceptor := NewInterceptor()
+	interceptor := NewValidationInterceptor()
 	next := func(_ context.Context, _ connect.AnyRequest) (connect.AnyResponse, error) {
 		return connect.NewResponse(&wrapperspb.StringValue{Value: "response"}), nil
 	}

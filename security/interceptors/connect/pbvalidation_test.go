@@ -133,10 +133,11 @@ func TestStructValidation(t *testing.T) {
 	})
 
 	t.Run("string too long", func(t *testing.T) {
-		longString := string(make([]byte, 8193)) // > 8 KiB
-		for i := range longString {
-			longString = longString[:i] + "a" + longString[i+1:]
+		longBytes := make([]byte, 8193) // > 8 KiB
+		for i := range longBytes {
+			longBytes[i] = 'a'
 		}
+		longString := string(longBytes)
 
 		s, err := structpb.NewStruct(map[string]interface{}{
 			"long_string": longString,
@@ -196,7 +197,7 @@ func TestValidateAllStructs(t *testing.T) {
 		// Create a deeply nested struct where an inner struct has too many fields
 		innerInvalidStruct := &structpb.Struct{}
 		innerInvalidStruct.Fields = make(map[string]*structpb.Value)
-		for i := 0; i < 201; i++ { // Too many fields
+		for i := range 201 { // Too many fields
 			innerInvalidStruct.Fields[fmt.Sprintf("field%d", i)] = structpb.NewStringValue("value")
 		}
 

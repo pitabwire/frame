@@ -154,7 +154,7 @@ func (i *Interceptor) validate(msg any, code connect.Code) error {
 	}
 	protoMsg, ok := msg.(proto.Message)
 	if !ok {
-return i.wrapValidationError(fmt.Errorf("expected proto.Message, got %T", msg), code)
+		return i.wrapValidationError(fmt.Errorf("expected proto.Message, got %T", msg), code)
 	}
 	// 1. Standard protovalidate rules
 	if err := i.validator.Validate(protoMsg); err != nil {

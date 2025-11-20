@@ -114,7 +114,7 @@ func (br *baseRepository[T]) FieldsAllowed() map[string]struct{} {
 func (br *baseRepository[T]) IsFieldAllowed(column string) error {
 	column = strings.TrimSpace(column)
 	if column == "" {
-		return fmt.Errorf("column name cannot be empty")
+		return errors.New("column name cannot be empty")
 	}
 
 	// Fast path: most common case (single column, no spaces)
@@ -128,7 +128,7 @@ func (br *baseRepository[T]) IsFieldAllowed(column string) error {
 	// Fallback: multiple columns (e.g., sorting with direction: "name asc")
 	columns := strings.Fields(column) // better than Split(" ")
 	if len(columns) == 0 {
-		return fmt.Errorf("column name cannot be empty")
+		return errors.New("column name cannot be empty")
 	}
 
 	// Only validate the first field, the second part may be := ?  e.g. name := ? we only need to validate name

@@ -54,11 +54,11 @@ oauth2:
     - service_name
   mirror_top_level_claims: false
   hashers:
-	bcrypt:
-	  cost: 10
-  pbkdf2:
-    iterations: 1
-  algorithm: pbkdf2
+    bcrypt:
+      cost: 10
+    pbkdf2:
+      iterations: 1
+    algorithm: pbkdf2
   pkce:
     enforced_for_public_clients: true
     enforced: true
@@ -69,10 +69,11 @@ oauth2:
       iat_optional: false
       jti_optional: false
       max_ttl: 720h
+    refresh_token:
+      grace_period: 1h
   refresh_token_hook: http://127.0.0.1:3000/webhook/enrich/refresh-token
   token_hook: http://127.0.0.1:3000/webhook/enrich/token
   expose_internal_errors: true
-
 secrets:
   system:
     - NzItNDQ5ZS04MTBkLWM0ODBjNjhjZ

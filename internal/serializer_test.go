@@ -4,35 +4,22 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/pitabwire/frame/data"
-	"github.com/pitabwire/frame/internal"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/protobuf/reflect/protoreflect"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/structpb"
+
+	"github.com/pitabwire/frame/data"
+	"github.com/pitabwire/frame/internal"
 )
 
-// testProtoMessage implements proto.Message for testing
-type testProtoMessage struct {
-	Name  string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Value int32  `protobuf:"varint,2,opt,name=value,proto3" json:"value,omitempty"`
-}
-
-func (m *testProtoMessage) Reset()         { *m = testProtoMessage{} }
-func (m *testProtoMessage) String() string { return "" }
-func (m *testProtoMessage) ProtoMessage()  {}
-func (m *testProtoMessage) ProtoReflect() protoreflect.Message {
-	// For testing purposes, return nil - this will cause proto.Marshal to fall back to JSON
-	// In real usage, this would need proper implementation
-	return nil
-}
-
-// testStruct is a regular Go struct for JSON fallback testing
+// testStruct is a regular Go struct for JSON fallback testing.
 type testStruct struct {
 	ID   int    `json:"id"`
 	Name string `json:"name"`
 }
 
-// SerializerTestSuite provides comprehensive testing for the serializer functions
+// SerializerTestSuite provides comprehensive testing for the serializer functions.
 func TestMarshal(t *testing.T) {
 	testCases := []struct {
 		name        string
@@ -89,9 +76,18 @@ func TestMarshal(t *testing.T) {
 			expectError: false,
 		},
 		{
-			name:        "regular struct JSON marshal",
-			input:       testStruct{ID: 1, Name: "test"},
-			expected:    []byte(`{"id":1,"name":"test"}`),
+			name: "structpb.Struct marshal",
+			input: func() *structpb.Struct {
+				s, _ := structpb.NewStruct(map[string]interface{}{
+					"name":  "test",
+					"value": 42,
+					"nested": map[string]interface{}{
+						"key": "nested_value",
+					},
+				})
+				return s
+			}(),
+			expected:    nil, // StructPB marshal produces binary protobuf data
 			expectError: false,
 		},
 		{
@@ -142,7 +138,7 @@ func TestMarshal(t *testing.T) {
 			} else if !tc.expectError {
 				// For proto messages, just verify we get some data (would be JSON fallback)
 				assert.NotNil(t, result)
-				assert.True(t, len(result) > 0)
+				assert.NotEmpty(t, result)
 			}
 		})
 	}
@@ -236,7 +232,7 @@ func TestUnmarshal(t *testing.T) {
 			},
 			verify: func(t *testing.T, holder any) {
 				result := *holder.(*json.RawMessage)
-				assert.Equal(t, json.RawMessage(`{"key":"value"}`), result)
+				assert.JSONEq(t, `{"key":"value"}`, string(result))
 			},
 			expectError: false,
 		},
@@ -262,7 +258,7 @@ func TestUnmarshal(t *testing.T) {
 			},
 			verify: func(t *testing.T, holder any) {
 				result := *holder.(*string)
-				assert.Equal(t, "", result)
+				assert.Empty(t, result)
 			},
 			expectError: false,
 		},
@@ -281,15 +277,31 @@ func TestUnmarshal(t *testing.T) {
 			expectError: false,
 		},
 		{
-			name: "struct JSON unmarshal",
-			data: []byte(`{"id":42,"name":"test"}`),
+			name: "structpb.Struct unmarshal",
+			data: func() []byte {
+				// Create a StructPB and marshal it to get binary protobuf data
+				s, _ := structpb.NewStruct(map[string]interface{}{
+					"name":  "test",
+					"value": 42,
+					"nested": map[string]interface{}{
+						"key": "nested_value",
+					},
+				})
+				data, _ := proto.Marshal(s)
+				return data
+			}(),
 			setupHolder: func() any {
-				return &testStruct{}
+				return &structpb.Struct{}
 			},
 			verify: func(t *testing.T, holder any) {
-				result := holder.(*testStruct)
-				assert.Equal(t, 42, result.ID)
-				assert.Equal(t, "test", result.Name)
+				result := holder.(*structpb.Struct)
+				assert.NotNil(t, result)
+				// Verify the struct contains our test data
+				fields := result.GetFields()
+				assert.Equal(t, "test", fields["name"].GetStringValue())
+				assert.InDelta(t, float64(42), fields["value"].GetNumberValue(), 0.001)
+				nested := fields["nested"].GetStructValue()
+				assert.Equal(t, "nested_value", nested.GetFields()["key"].GetStringValue())
 			},
 			expectError: false,
 		},
@@ -339,7 +351,7 @@ func TestUnmarshal(t *testing.T) {
 				result := *holder.(*[]byte)
 				assert.Len(t, result, 1024*1024)
 				// Verify first few bytes
-				for i := 0; i < 10; i++ {
+				for i := range 10 {
 					assert.Equal(t, byte(i%256), result[i])
 				}
 			},
@@ -382,6 +394,13 @@ func TestMarshalUnmarshalRoundTrip(t *testing.T) {
 		{"byte slice", []byte("round trip test")},
 		{"string", "round trip string"},
 		{"json.RawMessage", json.RawMessage(`{"round":"trip"}`)},
+		{"structpb.Struct", func() *structpb.Struct {
+			s, _ := structpb.NewStruct(map[string]interface{}{
+				"name":  "roundtrip",
+				"value": 777,
+			})
+			return s
+		}()},
 		{"struct", testStruct{ID: 99, Name: "roundtrip"}},
 		{"map", map[string]interface{}{"key": "value", "num": 42}},
 		{"slice", []interface{}{"a", 1, true}},
@@ -405,6 +424,8 @@ func TestMarshalUnmarshalRoundTrip(t *testing.T) {
 			case json.RawMessage:
 				var rm json.RawMessage
 				result = &rm
+			case *structpb.Struct:
+				result = &structpb.Struct{}
 			case testStruct:
 				result = &testStruct{}
 			case map[string]interface{}:
@@ -426,6 +447,11 @@ func TestMarshalUnmarshalRoundTrip(t *testing.T) {
 				assert.Equal(t, v, *result.(*string))
 			case json.RawMessage:
 				assert.Equal(t, v, *result.(*json.RawMessage))
+			case *structpb.Struct:
+				original := v
+				unmarshaled := result.(*structpb.Struct)
+				// Compare the string representations since StructPB equality is complex
+				assert.Equal(t, original.AsMap(), unmarshaled.AsMap())
 			case testStruct:
 				assert.Equal(t, v, *result.(*testStruct))
 			case map[string]interface{}:

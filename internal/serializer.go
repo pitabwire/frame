@@ -8,7 +8,7 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// Errors
+// Errors.
 var (
 	errNilHolder       = errors.New("holder is nil")
 	errNonPointerOrNil = errors.New("holder must be a non-nil pointer")
@@ -74,7 +74,7 @@ func Unmarshal(data []byte, holder any) error {
 		}
 
 		// If it's a pointer to struct that implements proto.Message via interface satisfaction
-		if pm, ok := holder.(proto.Message); ok && !rv.IsNil() {
+		if pm, ok := holder.(proto.Message); ok {
 			proto.Reset(pm)
 			return proto.Unmarshal(data, pm)
 		}

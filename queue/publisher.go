@@ -51,6 +51,8 @@ func (p *publisher) Publish(ctx context.Context, payload any, headers ...map[str
 		metadata = localization.ToMap(metadata, language)
 	}
 
+	metadata = security.SkipTenancyChecksToMap(ctx, metadata)
+
 	message, err := internal.Marshal(payload)
 	if err != nil {
 		return err

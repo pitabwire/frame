@@ -247,6 +247,22 @@ func SkipTenancyChecksOnClaims(ctx context.Context) context.Context {
 	return context.WithValue(ctx, ctxKeySkipTenancyCheckOnClaim, true)
 }
 
+func SkipTenancyChecksFromMap(ctx context.Context, m map[string]string) context.Context {
+	check, ok := m["skip_tenancy_check"]
+	if ok && check == "true" {
+		return SkipTenancyChecksOnClaims(ctx)
+	}
+
+	return ctx
+}
+
+func SkipTenancyChecksToMap(ctx context.Context, m map[string]string) map[string]string {
+	if !IsTenancyChecksOnClaimSkipped(ctx) {
+		m["skip_tenancy_check"] = "true"
+	}
+	return m
+}
+
 func IsTenancyChecksOnClaimSkipped(ctx context.Context) bool {
 	isSkipped, ok := ctx.Value(ctxKeySkipTenancyCheckOnClaim).(bool)
 	if !ok {

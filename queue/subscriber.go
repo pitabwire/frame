@@ -175,8 +175,10 @@ func (s *subscriber) processReceivedMessage(ctx context.Context, msg *pubsub.Mes
 		if authClaim != nil {
 			processedCtx = authClaim.ClaimsToContext(jobCtx)
 		} else {
-			processedCtx = security.SkipTenancyChecksOnClaims(jobCtx)
+			processedCtx = jobCtx
 		}
+
+		processedCtx = security.SkipTenancyChecksFromMap(processedCtx, metadata)
 
 		processedCtx = otel.GetTextMapPropagator().Extract(processedCtx, metadata)
 

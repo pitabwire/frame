@@ -2,61 +2,84 @@ package internal
 
 import (
 	"encoding/json"
+	"errors"
+	"reflect"
 
 	"google.golang.org/protobuf/proto"
 )
 
+// Errors
+var (
+	errNilHolder       = errors.New("holder is nil")
+	errNonPointerOrNil = errors.New("holder must be a non-nil pointer")
+)
+
+// Marshal marshals payload into bytes with zero-allocation fast paths.
 func Marshal(payload any) ([]byte, error) {
+	if payload == nil {
+		return []byte("null"), nil
+	}
+
 	switch v := payload.(type) {
 	case []byte:
 		return v, nil
-	case json.RawMessage:
-		return v.MarshalJSON()
 	case string:
 		return []byte(v), nil
+	case json.RawMessage:
+		return v, nil
+	case proto.Message:
+		// Fast path: direct proto marshal (no reflection)
+		return proto.Marshal(v)
 	default:
-		protoMsg, ok := payload.(proto.Message)
-		if ok {
-			return proto.Marshal(protoMsg)
-		}
-
+		// Fallback to JSON (still reasonably fast)
 		return json.Marshal(payload)
 	}
 }
 
-//nolint:ineffassign,wastedassign,staticcheck //holder is accessed by reference
+// Unmarshal unmarshals data into holder with zero-copy where possible.
+// holder must be a pointer.
 func Unmarshal(data []byte, holder any) error {
-	switch v := holder.(type) {
-	case []byte:
-		// Direct byte slice - no allocation needed
-		holder = data
+	if holder == nil {
+		return errNilHolder
+	}
 
-	case json.RawMessage:
-		// Direct raw message - no allocation needed
-		holder = json.RawMessage(data)
+	// Fast path: reflect to get real value and type
+	rv := reflect.ValueOf(holder)
+	if rv.Kind() != reflect.Ptr || rv.IsNil() {
+		return errNonPointerOrNil
+	}
+	rv = rv.Elem()
 
-	case string:
-		// Convert to string and return pointer to match expected type
-		holder = string(data)
+	switch target := holder.(type) {
+	case *[]byte:
+		*target = append((*target)[:0], data...)
+		return nil
+
+	case *json.RawMessage:
+		*target = append((*target)[:0], data...)
+		return nil
+
+	case *string:
+		// Still needs allocation (strings are immutable)
+		*target = string(data)
+		return nil
 
 	default:
-		// Handle protobuf messages efficiently
-		if protoMsg, ok0 := v.(proto.Message); ok0 {
-			// Clone the prototype to avoid modifying the template
-			clonedMsg := proto.Clone(protoMsg)
-			err := proto.Unmarshal(data, clonedMsg)
-			if err != nil {
-				return err
+		if rv.Kind() == reflect.Ptr && !rv.IsNil() {
+			if pm, ok := rv.Interface().(proto.Message); ok {
+				// Reset + UnmarshalMerge is faster than Clone + Unmarshal
+				proto.Reset(pm)
+				return proto.Unmarshal(data, pm)
 			}
-			holder = clonedMsg
-		} else {
-			// Handle JSON unmarshaling with proper error context
-			err := json.Unmarshal(data, &v)
-			if err != nil {
-				return err
-			}
-			holder = v
 		}
+
+		// If it's a pointer to struct that implements proto.Message via interface satisfaction
+		if pm, ok := holder.(proto.Message); ok && !rv.IsNil() {
+			proto.Reset(pm)
+			return proto.Unmarshal(data, pm)
+		}
+
+		// Fallback to JSON
+		return json.Unmarshal(data, holder)
 	}
-	return nil
 }

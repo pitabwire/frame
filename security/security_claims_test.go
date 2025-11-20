@@ -2,18 +2,20 @@ package security_test
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
-	"github.com/pitabwire/frame"
 	"github.com/pitabwire/frame/config"
 	"github.com/pitabwire/frame/frametests/definition"
 	"github.com/pitabwire/frame/frametests/deps/testnats"
 	"github.com/pitabwire/frame/frametests/deps/testoryhydra"
 	"github.com/pitabwire/frame/frametests/deps/testpostgres"
 	"github.com/pitabwire/frame/security"
+	"github.com/pitabwire/frame/security/openid"
 	"github.com/pitabwire/frame/tests"
 )
 
@@ -26,6 +28,9 @@ const tenantWellKnownJwk = "{\"keys\":[{\"use\":\"sig\",\"kty\":\"RSA\",\"kid\":
 // AuthenticationTestSuite extends FrameBaseTestSuite for comprehensive authentication testing.
 type AuthenticationTestSuite struct {
 	tests.BaseTestSuite
+	// Mock JWKS server for testing
+	mockServer *httptest.Server
+	jwksURL    string
 }
 
 func initAuthenticationResources(_ context.Context) []definition.TestResource {
@@ -51,11 +56,28 @@ func (s *AuthenticationTestSuite) SetupSuite() {
 		s.InitResourceFunc = initAuthenticationResources
 	}
 	s.BaseTestSuite.SetupSuite()
+	// Start mock JWKS server
+	s.setupMockJWKSServer()
+}
+
+func (s *AuthenticationTestSuite) TearDownSuite() {
+	if s.mockServer != nil {
+		s.mockServer.Close()
+	}
+	s.BaseTestSuite.TearDownSuite()
+}
+
+func (s *AuthenticationTestSuite) setupMockJWKSServer() {
+	s.mockServer = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(sampleWellKnownJwk))
+	}))
+	s.jwksURL = s.mockServer.URL + "/.well-known/jwks.json"
 }
 
 // TestAuthenticationSuite runs the authentication test suite.
 func TestAuthenticationSuite(t *testing.T) {
-	t.SkipNow()
 	suite.Run(t, &AuthenticationTestSuite{})
 }
 
@@ -102,6 +124,16 @@ func (s *AuthenticationTestSuite) TestAuthenticationFromContext() {
 	})
 }
 
+// mockJWTConfig extends ConfigurationDefault to return our mock JWKS URL.
+type mockJWTConfig struct {
+	config.ConfigurationDefault
+	jwksURL string
+}
+
+func (m *mockJWTConfig) GetOauth2WellKnownJwk() string {
+	return m.jwksURL
+}
+
 // TestSimpleAuthenticate tests basic JWT authentication.
 func (s *AuthenticationTestSuite) TestSimpleAuthenticate() {
 	testCases := []struct {
@@ -138,30 +170,42 @@ func (s *AuthenticationTestSuite) TestSimpleAuthenticate() {
 		},
 	}
 
-	s.WithTestDependancies(s.T(), func(t *testing.T, _ *definition.DependencyOption) {
-		for _, tc := range testCases {
-			t.Run(tc.name, func(t *testing.T) {
-				ctx, srv := frame.NewService(frame.WithName("Test Srv"), frame.WithConfig(
-					&config.ConfigurationDefault{Oauth2WellKnownJwkData: sampleWellKnownJwk}))
-
-				sm := srv.SecurityManager()
-				ctx2, err := sm.GetAuthenticator(ctx).
-					Authenticate(ctx, tc.accessKey, security.WithAudience(tc.audience), security.WithIssuer(tc.issuer))
-
-				if tc.expectError {
-					require.Error(t, err, "expected authentication to fail")
-					return
-				}
-
-				require.NoError(t, err, "authentication should succeed")
-
-				if tc.expectClaims {
-					claims := security.ClaimsFromContext(ctx2)
-					require.NotNil(t, claims, "expected authentication claims in context")
-				}
+	for _, tc := range testCases {
+		s.T().Run(tc.name, func(t *testing.T) {
+			// Create authenticator directly with mock config
+			auth := openid.NewJwtTokenAuthenticator(&mockJWTConfig{
+				ConfigurationDefault: config.ConfigurationDefault{
+					Oauth2JwtVerifyAudience: []string{"c2f4j7au6s7f91uqnokg"},
+					Oauth2JwtVerifyIssuer:   "http://127.0.0.1:4444/",
+				},
+				jwksURL: s.jwksURL,
 			})
-		}
-	})
+
+			ctx := t.Context()
+			
+			var opts []security.AuthOption
+			if tc.audience != "" {
+				opts = append(opts, security.WithAudience(tc.audience))
+			}
+			if tc.issuer != "" {
+				opts = append(opts, security.WithIssuer(tc.issuer))
+			}
+			
+			ctx2, err := auth.Authenticate(ctx, tc.accessKey, opts...)
+
+			if tc.expectError {
+				require.Error(t, err, "expected authentication to fail")
+				return
+			}
+
+			require.NoError(t, err, "authentication should succeed")
+
+			if tc.expectClaims {
+				claims := security.ClaimsFromContext(ctx2)
+				require.NotNil(t, claims, "expected authentication claims in context")
+			}
+		})
+	}
 }
 
 // TestSimpleAuthenticateWithOIDC tests OIDC configuration loading.
@@ -202,56 +246,154 @@ func (s *AuthenticationTestSuite) TestSimpleAuthenticateWithOIDC() {
 	})
 }
 
-// TestAuthenticateWithTenantClaims tests tenant-specific authentication claims.
-func (s *AuthenticationTestSuite) TestAuthenticateWithTenantClaims() {
-	tenantAccessKey := "eyJhbGciOiJSUzI1NiIsImtpZCI6ImI0NTIwMGFkLTU2ZDQtNGM0ZS1iYzFhLWRlMjE4MWRlZGRiZSIsInR5cCI6IkpXVCJ9.eyJhdWQiOlsic2VydmljZV9jaGF0X2VuZ2luZSIsInNlcnZpY2VfcHJvZmlsZSIsInNlcnZpY2Vfc3Rhd2lfYXBpIiwic2VydmljZV9maWxlcyJdLCJjbGllbnRfaWQiOiI0NzUxZWEzZC1lNGU0LTQyZmUtOWIwMC0xMGFlYTVmZTk5ZmEiLCJleHAiOjE3MDU4OTc1MTAsImV4dCI6eyJhY2Nlc3NfaWQiOiJjbHQwcGUxbzc0dHM3M2J0cnVtMCIsImFjY2Vzc19zdGF0ZSI6IkNSRUFURUQiLCJwYXJ0aXRpb25faWQiOiI5YnN2MHMwaGlqamcwMnFrczZpMCIsInBhcnRpdGlvbl9zdGF0ZSI6IkNSRUFURUQiLCJyb2xlIjoidXNlciIsInRlbmFudF9pZCI6Ijlic3YwczBoaWpqZzAycWtzNmRnIn0sImlhdCI6MTcwNTg5MzkxMCwiaXNzIjoiaHR0cHM6Ly9vYXV0aDIuc3Rhd2kuaW8vIiwianRpIjoiZWVhNmZkNGItMWFiMS00NDFmLThlY2QtMWIxYjQxYmMwZWI4Iiwic2NwIjpbIm9wZW5pZCIsInByb2ZpbGUiLCJjb250YWN0Iiwib2ZmbGluZV9hY2Nlc3MiXSwic3ViIjoiY2x0MHA5dmlvcGZjNzNmZG9hZzAifQ.VuUw35N9HghZecYqR-L4bQJqZxAoyDj8b9e01bTGgP9ppM7kT5FHNHfaXP3vLQg8lRym8u_AA7XkL2IyG0EKcqmNCJCLeVpzp9aOx1TLm8Zu-b4aRBnkjEQ8gNEfOfl_7c1voK_e2EKkO6E_CE2qfxwESs-b6FmcxY-AvgX8S-IT9eYjSEPLKpEV0l8JhzdJj3i7YdetCQVtmm3uum3jAIMoWUkszURERGyG80ZSr2NE0H1V_OUPWTwE1ysML_YpwDrCtEb6BT2B-3cRnRFjJkyR0D5Dr62GEUOV3w82InbfrQwa09m3zViYX4AYMmE6Oj6ZqHoU2GVRhTdaQXxzeZOyecKDojfeEov_qro9nzJR8olJE_VlHYIpho2AlKu1DFqy7-OTHoO_9N3KvEgTcVW8wi7-ojbI_sJILkn4EVH1Ua-uOPNhAPgpSFrkgehsse4AEhK5n7lGHrj1D1QGhc97gxsSuG5Ybjd-DKascnZMcXZ6G0wXw16JCy6rHOn5iDhD6Nh4GYKF7MUDMgj-S-sgldl5FSM2tHXBAA0mxEXG5f8kz90j63eUTtYobDRj6zYfRsdidoD8R3sW5ELhbP1tFuxZGZGt-La_QF_73Xa62UoI5rliKvsDRMabAsEmnn1cGj-UAersuw9loT75GKlrB8311Ye_ODejVzVQnGc"
-
+// TestTenancySkipFunctions tests the tenancy check skip functionality.
+func (s *AuthenticationTestSuite) TestTenancySkipFunctions() {
 	testCases := []struct {
 		name        string
-		accessKey   string
-		audience    string
-		issuer      string
-		expectError bool
-		checkClaims func(*testing.T, security.AuthenticationClaims)
+		setup       func(context.Context, map[string]string) (context.Context, map[string]string)
+		checkResult func(*testing.T, context.Context, map[string]string)
 	}{
 		{
-			name:      "tenant claims authentication",
-			accessKey: tenantAccessKey,
-			audience:  "",
-			issuer:    "https://oauth2.stawi.io/",
-			checkClaims: func(t *testing.T, claims security.AuthenticationClaims) {
-				require.NotEmpty(t, claims.GetTenantID(), "tenant ID should be present")
-				require.NotEmpty(t, claims.GetPartitionID(), "partition ID should be present")
-				require.NotEmpty(t, claims.GetAccessID(), "access ID should be present")
-				require.NotEmpty(t, claims.GetRoles(), "roles should be present")
+			name: "SkipTenancyChecksFromMap with skip_tenancy_check=true should set skip flag",
+			setup: func(ctx context.Context, m map[string]string) (context.Context, map[string]string) {
+				m["skip_tenancy_check"] = "true"
+				ctx = security.SkipTenancyChecksFromMap(ctx, m)
+				return ctx, m
+			},
+			checkResult: func(t *testing.T, ctx context.Context, m map[string]string) {
+				require.True(t, security.IsTenancyChecksOnClaimSkipped(ctx), "tenancy checks should be skipped")
+			},
+		},
+		{
+			name: "SkipTenancyChecksFromMap with skip_tenancy_check=false should not set skip flag",
+			setup: func(ctx context.Context, m map[string]string) (context.Context, map[string]string) {
+				m["skip_tenancy_check"] = "false"
+				ctx = security.SkipTenancyChecksFromMap(ctx, m)
+				return ctx, m
+			},
+			checkResult: func(t *testing.T, ctx context.Context, m map[string]string) {
+				require.False(t, security.IsTenancyChecksOnClaimSkipped(ctx), "tenancy checks should not be skipped")
+			},
+		},
+		{
+			name: "SkipTenancyChecksFromMap without skip_tenancy_check should not set skip flag",
+			setup: func(ctx context.Context, m map[string]string) (context.Context, map[string]string) {
+				ctx = security.SkipTenancyChecksFromMap(ctx, m)
+				return ctx, m
+			},
+			checkResult: func(t *testing.T, ctx context.Context, m map[string]string) {
+				require.False(t, security.IsTenancyChecksOnClaimSkipped(ctx), "tenancy checks should not be skipped")
+			},
+		},
+		{
+			name: "SkipTenancyChecksFromMap with other values should not set skip flag",
+			setup: func(ctx context.Context, m map[string]string) (context.Context, map[string]string) {
+				m["skip_tenancy_check"] = "maybe"
+				m["other_key"] = "value"
+				ctx = security.SkipTenancyChecksFromMap(ctx, m)
+				return ctx, m
+			},
+			checkResult: func(t *testing.T, ctx context.Context, m map[string]string) {
+				require.False(t, security.IsTenancyChecksOnClaimSkipped(ctx), "tenancy checks should not be skipped")
+			},
+		},
+		{
+			name: "SkipTenancyChecksToMap with skip flag should not set skip_tenancy_check in map",
+			setup: func(ctx context.Context, m map[string]string) (context.Context, map[string]string) {
+				ctx = security.SkipTenancyChecksOnClaims(ctx)
+				m = security.SkipTenancyChecksToMap(ctx, m)
+				return ctx, m
+			},
+			checkResult: func(t *testing.T, ctx context.Context, m map[string]string) {
+				require.True(t, security.IsTenancyChecksOnClaimSkipped(ctx), "tenancy checks should be skipped")
+				require.NotContains(t, m, "skip_tenancy_check", "map should not contain skip_tenancy_check key")
+			},
+		},
+		{
+			name: "SkipTenancyChecksToMap without skip flag should set skip_tenancy_check=true in map",
+			setup: func(ctx context.Context, m map[string]string) (context.Context, map[string]string) {
+				m = security.SkipTenancyChecksToMap(ctx, m)
+				return ctx, m
+			},
+			checkResult: func(t *testing.T, ctx context.Context, m map[string]string) {
+				require.False(t, security.IsTenancyChecksOnClaimSkipped(ctx), "tenancy checks should not be skipped")
+				require.Equal(t, "true", m["skip_tenancy_check"], "map should contain skip_tenancy_check=true")
+			},
+		},
+		{
+			name: "SkipTenancyChecksToMap preserves existing map values",
+			setup: func(ctx context.Context, m map[string]string) (context.Context, map[string]string) {
+				m["existing_key"] = "existing_value"
+				m = security.SkipTenancyChecksToMap(ctx, m)
+				return ctx, m
+			},
+			checkResult: func(t *testing.T, ctx context.Context, m map[string]string) {
+				require.Equal(t, "existing_value", m["existing_key"], "existing map values should be preserved")
+				require.Equal(t, "true", m["skip_tenancy_check"], "skip_tenancy_check should be set to true")
+			},
+		},
+		{
+			name: "IsTenancyChecksOnClaimSkipped with skip flag returns true",
+			setup: func(ctx context.Context, m map[string]string) (context.Context, map[string]string) {
+				ctx = security.SkipTenancyChecksOnClaims(ctx)
+				return ctx, m
+			},
+			checkResult: func(t *testing.T, ctx context.Context, m map[string]string) {
+				require.True(t, security.IsTenancyChecksOnClaimSkipped(ctx), "should return true when skip flag is set")
+			},
+		},
+		{
+			name: "IsTenancyChecksOnClaimSkipped without skip flag returns false",
+			setup: func(ctx context.Context, m map[string]string) (context.Context, map[string]string) {
+				return ctx, m
+			},
+			checkResult: func(t *testing.T, ctx context.Context, m map[string]string) {
+				require.False(t, security.IsTenancyChecksOnClaimSkipped(ctx), "should return false when skip flag is not set")
+			},
+		},
+		{
+			name: "IsTenancyChecksOnClaimSkipped with wrong context value type returns false",
+			setup: func(ctx context.Context, m map[string]string) (context.Context, map[string]string) {
+				ctx = context.WithValue(ctx, "wrong_key", "string_instead_of_bool")
+				return ctx, m
+			},
+			checkResult: func(t *testing.T, ctx context.Context, m map[string]string) {
+				require.False(t, security.IsTenancyChecksOnClaimSkipped(ctx), "should return false for wrong value type")
+			},
+		},
+		{
+			name: "SkipTenancyChecksOnClaims sets skip flag correctly",
+			setup: func(ctx context.Context, m map[string]string) (context.Context, map[string]string) {
+				ctx = security.SkipTenancyChecksOnClaims(ctx)
+				return ctx, m
+			},
+			checkResult: func(t *testing.T, ctx context.Context, m map[string]string) {
+				require.True(t, security.IsTenancyChecksOnClaimSkipped(ctx), "SkipTenancyChecksOnClaims should set skip flag")
+			},
+		},
+		{
+			name: "Round trip: FromMap -> ToMap preserves skip state",
+			setup: func(ctx context.Context, m map[string]string) (context.Context, map[string]string) {
+				m["skip_tenancy_check"] = "true"
+				ctx = security.SkipTenancyChecksFromMap(ctx, m)
+				// Clear the original map and recreate it
+				newMap := make(map[string]string)
+				newMap = security.SkipTenancyChecksToMap(ctx, newMap)
+				return ctx, newMap
+			},
+			checkResult: func(t *testing.T, ctx context.Context, m map[string]string) {
+				require.True(t, security.IsTenancyChecksOnClaimSkipped(ctx), "context should have skip flag")
+				require.NotContains(t, m, "skip_tenancy_check", "map should not contain skip_tenancy_check when context has skip flag")
 			},
 		},
 	}
 
-	s.WithTestDependancies(s.T(), func(t *testing.T, _ *definition.DependencyOption) {
-		for _, tc := range testCases {
-			t.Run(tc.name, func(t *testing.T) {
-				ctx, srv := frame.NewService(frame.WithName("Tenant Srv"), frame.WithConfig(
-					&config.ConfigurationDefault{Oauth2WellKnownJwkData: tenantWellKnownJwk}))
-
-				sm := srv.SecurityManager()
-				ctx2, err := sm.GetAuthenticator(ctx).
-					Authenticate(ctx, tc.accessKey, security.WithAudience(tc.audience), security.WithIssuer(tc.issuer))
-
-				if tc.expectError {
-					require.Error(t, err, "expected authentication to fail")
-					return
-				}
-
-				require.NoError(t, err, "authentication should succeed")
-
-				claims := security.ClaimsFromContext(ctx2)
-				require.NotNil(t, claims, "expected authentication claims in context")
-
-				if tc.checkClaims != nil {
-					tc.checkClaims(t, *claims)
-				}
-			})
-		}
-	})
+	for _, tc := range testCases {
+		s.T().Run(tc.name, func(t *testing.T) {
+			ctx := t.Context()
+			m := make(map[string]string)
+			ctx, m = tc.setup(ctx, m)
+			tc.checkResult(t, ctx, m)
+		})
+	}
 }

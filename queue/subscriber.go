@@ -170,27 +170,25 @@ func (s *subscriber) processReceivedMessage(ctx context.Context, msg *pubsub.Mes
 		defer s.metrics.closeMessage(time.Now(), err)
 
 		var metadata propagation.MapCarrier = msg.Metadata
+
+		pCtx := security.SkipTenancyChecksFromMap(jobCtx, metadata)
+
 		authClaim := security.ClaimsFromMap(metadata)
-		var processedCtx context.Context
 		if authClaim != nil {
-			processedCtx = authClaim.ClaimsToContext(jobCtx)
-		} else {
-			processedCtx = jobCtx
+			pCtx = authClaim.ClaimsToContext(pCtx)
 		}
 
-		processedCtx = security.SkipTenancyChecksFromMap(processedCtx, metadata)
-
-		processedCtx = otel.GetTextMapPropagator().Extract(processedCtx, metadata)
+		pCtx = otel.GetTextMapPropagator().Extract(pCtx, metadata)
 
 		languages := localization.FromMap(metadata)
 		if len(languages) > 0 {
-			processedCtx = localization.ToContext(processedCtx, languages)
+			pCtx = localization.ToContext(pCtx, languages)
 		}
 
 		for _, worker := range s.handlers {
-			err = worker.Handle(processedCtx, metadata, msg.Body)
+			err = worker.Handle(pCtx, metadata, msg.Body)
 			if err != nil {
-				logger := util.Log(processedCtx).
+				logger := util.Log(pCtx).
 					WithField("name", s.reference).
 					WithField("function", "processReceivedMessage").
 					WithField("url", s.url)

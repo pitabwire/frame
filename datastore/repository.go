@@ -32,7 +32,7 @@ type BaseRepository[T any] interface {
 	BatchSize() int
 	BulkCreate(ctx context.Context, entities []T) error
 	FieldsImmutable() []string
-	FieldsAllowed() map[string]bool
+	FieldsAllowed() map[string]struct{}
 	IsFieldAllowed(column string) error
 	Update(ctx context.Context, entity T, affectedFields ...string) (int64, error)
 	BulkUpdate(ctx context.Context, entityIDs []string, params map[string]any) (int64, error)
@@ -53,7 +53,7 @@ type baseRepository[T data.BaseModelI] struct {
 	immutableFields []string
 
 	// allowedFields whitelist for safe column access (set during initialization)
-	allowedFields map[string]bool
+	allowedFields map[string]struct{}
 }
 
 // NewBaseRepository creates a new base repository instance.
@@ -70,7 +70,7 @@ func NewBaseRepository[T data.BaseModelI](
 		modelFactory:    modelFactory,
 		batchSize:       751, //nolint:mnd // default batch size
 		immutableFields: []string{"id", "created_at", "tenant_id", "partition_id"},
-		allowedFields:   make(map[string]bool),
+		allowedFields:   make(map[string]struct{}),
 	}
 
 	db := dbPool.DB(ctx, true)
@@ -87,10 +87,10 @@ func NewBaseRepository[T data.BaseModelI](
 
 	// Build allowed columns whitelist from schema
 	for _, field := range stmt.Schema.Fields {
-		repo.allowedFields[field.DBName] = true
+		repo.allowedFields[field.DBName] = struct{}{}
 	}
 	// This column will be added via migration for search so we will always allow it
-	repo.allowedFields["searchable"] = true
+	repo.allowedFields["searchable"] = struct{}{}
 
 	return repo
 }
@@ -106,17 +106,37 @@ func (br *baseRepository[T]) FieldsImmutable() []string {
 	return br.immutableFields
 }
 
-func (br *baseRepository[T]) FieldsAllowed() map[string]bool {
+func (br *baseRepository[T]) FieldsAllowed() map[string]struct{} {
 	return br.allowedFields
 }
 
 // IsFieldAllowed checks if a column name is safe to use in queries.
 func (br *baseRepository[T]) IsFieldAllowed(column string) error {
-	columns := strings.Split(strings.TrimSpace(column), " ")
-
-	if !br.allowedFields[columns[0]] {
-		return fmt.Errorf("invalid column name: %s ", columns[0])
+	column = strings.TrimSpace(column)
+	if column == "" {
+		return fmt.Errorf("column name cannot be empty")
 	}
+
+	// Fast path: most common case (single column, no spaces)
+	if !strings.ContainsRune(column, ' ') {
+		if _, ok := br.allowedFields[strings.ToLower(column)]; !ok {
+			return fmt.Errorf("invalid column name: %s", column)
+		}
+		return nil
+	}
+
+	// Fallback: multiple columns (e.g., sorting with direction: "name asc")
+	columns := strings.Fields(column) // better than Split(" ")
+	if len(columns) == 0 {
+		return fmt.Errorf("column name cannot be empty")
+	}
+
+	// Only validate the first field, the second part may be := ?  e.g. name := ? we only need to validate name
+	first := strings.ToLower(columns[0])
+	if _, ok := br.allowedFields[first]; !ok {
+		return fmt.Errorf("invalid column name: %s", columns[0])
+	}
+
 	return nil
 }
 

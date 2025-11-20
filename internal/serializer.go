@@ -74,10 +74,10 @@ func Unmarshal(data []byte, holder any) error {
 		}
 
 		// If it's a pointer to struct that implements proto.Message via interface satisfaction
-		if pm, ok := holder.(proto.Message); ok && !rv.IsNil() {
-			proto.Reset(pm)
-			return proto.Unmarshal(data, pm)
-		}
+    if pm, ok := holder.(proto.Message); ok {
+      proto.Reset(pm)
+      return proto.Unmarshal(data, pm)
+    }
 
 		// Fallback to JSON
 		return json.Unmarshal(data, holder)

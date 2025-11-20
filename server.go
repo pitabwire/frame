@@ -91,8 +91,6 @@ func (dd *defaultDriver) ListenAndServe(addr string, h http.Handler) error {
 	protocols.SetUnencryptedHTTP2(true)
 	dd.httpServer.Protocols = protocols
 
-	log.Info("h2c (HTTP/2 without TLS) enabled by default")
-
 	ln, err0 := getListener(dd.ctx, addr, "", "", dd.listener)
 	if err0 != nil {
 		return err0
@@ -113,7 +111,6 @@ func (dd *defaultDriver) ListenAndServeTLS(addr, certPath, certKeyPath string, h
 	if err != nil {
 		return err
 	}
-	log.Info("h2c disabled, using standard HTTP/2 with TLS")
 
 	ln, err0 := getListener(dd.ctx, addr, certPath, certKeyPath, dd.listener)
 	if err0 != nil {

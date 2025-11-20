@@ -31,18 +31,19 @@ func (event *MessageToTest) Name() string {
 }
 
 func (event *MessageToTest) PayloadType() any {
-	return ""
+	return new(string)
 }
 
 func (event *MessageToTest) Validate(_ context.Context, payload any) error {
-	if _, ok := payload.(string); !ok {
+	if _, ok := payload.(*string); !ok {
 		return fmt.Errorf("payload is %T not of type %T", payload, event.PayloadType())
 	}
 	return nil
 }
 
 func (event *MessageToTest) Execute(ctx context.Context, payload any) error {
-	message := payload.(string)
+	m, _ := payload.(*string)
+	message := *m
 	logger := event.Service.Log(ctx).WithField("payload", message).WithField("type", event.Name())
 	logger.Info("handling event")
 	event.Count++

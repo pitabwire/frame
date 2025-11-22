@@ -28,7 +28,7 @@ var gormErrorMap = map[error]connect.Code{
 }
 
 // ErrorConvertToAPI converts GORM errors to appropriate Connect RPC errors efficiently.
-func ErrorConvertToAPI(err error) error {
+func ErrorConvertToAPI(err error) *connect.Error {
 	if err == nil {
 		return nil
 	}

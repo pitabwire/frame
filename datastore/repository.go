@@ -33,6 +33,7 @@ type BaseRepository[T any] interface {
 	BulkCreate(ctx context.Context, entities []T) error
 	FieldsImmutable() []string
 	FieldsAllowed() map[string]struct{}
+	ExtendFieldsAllowed(fields ...string)
 	IsFieldAllowed(column string) error
 	Update(ctx context.Context, entity T, affectedFields ...string) (int64, error)
 	BulkUpdate(ctx context.Context, entityIDs []string, params map[string]any) (int64, error)
@@ -109,8 +110,10 @@ func (br *baseRepository[T]) FieldsImmutable() []string {
 func (br *baseRepository[T]) FieldsAllowed() map[string]struct{} {
 	return br.allowedFields
 }
-func (br *baseRepository[T]) ExtendFieldsAllowed(field string) {
-	br.allowedFields[strings.ToLower(field)] = struct{}{}
+func (br *baseRepository[T]) ExtendFieldsAllowed(fields ...string) {
+	for _, field := range fields {
+		br.allowedFields[strings.ToLower(field)] = struct{}{}
+	}
 }
 
 // IsFieldAllowed checks if a column name is safe to use in queries.

@@ -148,7 +148,7 @@ func (s *CommonTestSuite) TestConfigCastingIssues() {
 	})
 }
 
-// TestErrIsNotFound tests the ErrIsNotFound function with various error types.
+// TestErrIsNotFound tests the ErrorIsNotFound function with various error types.
 func (s *CommonTestSuite) TestErrIsNotFound() {
 	testCases := []struct {
 		name     string
@@ -235,9 +235,9 @@ func (s *CommonTestSuite) TestErrIsNotFound() {
 	s.WithTestDependancies(s.T(), func(t *testing.T, _ *definition.DependencyOption) {
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
-				result := frame.ErrIsNotFound(tc.err)
+				result := frame.ErrorIsNotFound(tc.err)
 				require.Equal(t, tc.expected, result,
-					"ErrIsNotFound(%v) = %v, expected %v", tc.err, result, tc.expected)
+					"ErrorIsNotFound(%v) = %v, expected %v", tc.err, result, tc.expected)
 			})
 		}
 	})

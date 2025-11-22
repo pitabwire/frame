@@ -3,18 +3,19 @@ package frame
 import (
 	"strings"
 
+	"connectrpc.com/connect"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
 	"github.com/pitabwire/frame/data"
 )
 
-// ErrIsNotFound checks if an error represents a "not found" condition.
+// ErrorIsNotFound checks if an error represents a "not found" condition.
 // It handles multiple error types:
 // - Database errors: gorm.ErrRecordNotFound, sql.ErrNoRows (via ErrorIsNoRows)
 // - gRPC errors: codes.NotFound
 // - Generic errors: error messages containing "not found" (case-insensitive).
-func ErrIsNotFound(err error) bool {
+func ErrorIsNotFound(err error) bool {
 	if err == nil {
 		return false
 	}
@@ -25,8 +26,13 @@ func ErrIsNotFound(err error) bool {
 	}
 
 	// Check gRPC status errors
-	if st, ok := status.FromError(err); ok {
-		return st.Code() == codes.NotFound
+	if gErr, ok := status.FromError(err); ok {
+		return gErr.Code() == codes.NotFound
+	}
+
+	// Check connect status errors
+	if connect.CodeOf(err) == connect.CodeNotFound {
+		return true
 	}
 
 	// Check error message for "not found" string (case-insensitive)

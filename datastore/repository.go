@@ -87,10 +87,10 @@ func NewBaseRepository[T data.BaseModelI](
 
 	// Build allowed columns whitelist from schema
 	for _, field := range stmt.Schema.Fields {
-		repo.allowedFields[field.DBName] = struct{}{}
+		repo.ExtendFieldsAllowed(field.DBName)
 	}
 	// This column will be added via migration for search so we will always allow it
-	repo.allowedFields["searchable"] = struct{}{}
+	repo.ExtendFieldsAllowed("searchable")
 
 	return repo
 }
@@ -108,6 +108,9 @@ func (br *baseRepository[T]) FieldsImmutable() []string {
 
 func (br *baseRepository[T]) FieldsAllowed() map[string]struct{} {
 	return br.allowedFields
+}
+func (br *baseRepository[T]) ExtendFieldsAllowed(field string) {
+	br.allowedFields[strings.ToLower(field)] = struct{}{}
 }
 
 // IsFieldAllowed checks if a column name is safe to use in queries.

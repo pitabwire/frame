@@ -15,6 +15,7 @@ func ErrorIsNoRows(err error) bool {
 }
 
 // gormErrorMap maps known GORM errors to Connect RPC codes.
+//
 //nolint:gochecknoglobals // this mapping allows for efficient error conversion
 var gormErrorMap = map[error]connect.Code{
 	gorm.ErrRecordNotFound:      connect.CodeNotFound,

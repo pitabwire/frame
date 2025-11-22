@@ -14,7 +14,8 @@ func ErrorIsNoRows(err error) bool {
 	return errors.Is(err, gorm.ErrRecordNotFound) || errors.Is(err, sql.ErrNoRows)
 }
 
-// gormErrorMap maps known GORM errors to Connect RPC codes
+// gormErrorMap maps known GORM errors to Connect RPC codes.
+//nolint:gochecknoglobals // this mapping allows for efficient error conversion
 var gormErrorMap = map[error]connect.Code{
 	gorm.ErrRecordNotFound:      connect.CodeNotFound,
 	gorm.ErrInvalidTransaction:  connect.CodeFailedPrecondition,
@@ -73,7 +74,7 @@ func ErrorConvertToAPI(err error) error {
 	return connect.NewError(connect.CodeInternal, err)
 }
 
-// containsAny checks if any of the substrings exist in s (avoids repeated calls)
+// containsAny checks if any of the substrings exist in s (avoids repeated calls).
 func containsAny(s string, substrs ...string) bool {
 	for _, sub := range substrs {
 		if strings.Contains(s, sub) {

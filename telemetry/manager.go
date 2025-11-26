@@ -2,10 +2,10 @@ package telemetry
 
 import (
 	"context"
+	"log/slog"
 	"os"
 	"runtime"
 
-	"github.com/pitabwire/util"
 	"go.opentelemetry.io/contrib/bridges/otelslog"
 	"go.opentelemetry.io/contrib/exporters/autoexport"
 	"go.opentelemetry.io/contrib/propagators/autoprop"
@@ -25,7 +25,7 @@ import (
 type Manager interface {
 	Init(ctx context.Context) error
 	Disabled() bool
-	Log() *util.LogEntry
+	LogHandler() slog.Handler
 }
 
 type manager struct {
@@ -43,11 +43,11 @@ type manager struct {
 	metricsReader     sdkmetrics.Reader
 	traceLogsExporter sdklogs.Exporter
 
-	logger *util.LogEntry
+	logHandler slog.Handler
 }
 
-func (m *manager) Log() *util.LogEntry {
-	return m.logger
+func (m *manager) LogHandler() slog.Handler {
+	return m.logHandler
 }
 
 func (m *manager) Disabled() bool {
@@ -176,7 +176,7 @@ func (m *manager) setupLogsExporter(ctx context.Context) error {
 }
 
 // setupProviders initializes the OpenTelemetry providers and logger.
-func (m *manager) setupProviders(ctx context.Context, res *resource.Resource) error {
+func (m *manager) setupProviders(_ context.Context, res *resource.Resource) error {
 	otel.SetTextMapPropagator(m.traceTextMap)
 
 	tp := sdktrace.NewTracerProvider(
@@ -199,12 +199,10 @@ func (m *manager) setupProviders(ctx context.Context, res *resource.Resource) er
 	)
 	global.SetLoggerProvider(lp)
 
-	logHandler := otelslog.NewHandler("",
+	m.logHandler = otelslog.NewHandler("",
 		otelslog.WithSource(true),
 		otelslog.WithLoggerProvider(lp),
 		otelslog.WithAttributes(res.Attributes()...))
-
-	m.logger = util.NewLogger(ctx, util.WithLogHandler(logHandler))
 
 	return nil
 }

@@ -471,9 +471,9 @@ func TestService_ConfigurationSetup(t *testing.T) {
 
 func TestService_TelemetryConfiguration(t *testing.T) {
 	testCases := []struct {
-		name                   string
-		config                 *config.ConfigurationDefault
-		expectTelemetryWorking bool
+		name                    string
+		config                  *config.ConfigurationDefault
+		expectTelemetryDisabled bool
 	}{
 		{
 			name: "Telemetry enabled with tracing",
@@ -485,7 +485,7 @@ func TestService_TelemetryConfiguration(t *testing.T) {
 				WorkerPoolCount:      10,
 				WorkerPoolCapacity:   100,
 			},
-			expectTelemetryWorking: true,
+			expectTelemetryDisabled: false,
 		},
 		{
 			name: "Telemetry disabled",
@@ -497,7 +497,7 @@ func TestService_TelemetryConfiguration(t *testing.T) {
 				WorkerPoolCount:      10,
 				WorkerPoolCapacity:   100,
 			},
-			expectTelemetryWorking: false,
+			expectTelemetryDisabled: true,
 		},
 	}
 
@@ -508,7 +508,7 @@ func TestService_TelemetryConfiguration(t *testing.T) {
 			telemetryManager := svc.TelemetryManager()
 			// Verify telemetry manager is created
 			require.NotNil(t, telemetryManager)
-			assert.Equal(t, tt.expectTelemetryWorking, !telemetryManager.Disabled())
+			assert.Equal(t, tt.expectTelemetryDisabled, telemetryManager.Disabled())
 
 			// Verify service properties are set from config
 			assert.Equal(t, tt.config.ServiceName, svc.Name())

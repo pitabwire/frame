@@ -138,7 +138,7 @@ func NewServiceWithContext(ctx context.Context, opts ...Option) (context.Context
 	}
 
 	opts = append(
-		[]Option{WithLogger(), WithTelemetry(), WithHTTPClient()},
+		[]Option{WithTelemetry(), WithLogger(), WithHTTPClient()},
 		opts...) // Ensure prerequisites are initialized early
 
 	svc.Init(ctx, opts...) // Apply all options, using the signal-aware context

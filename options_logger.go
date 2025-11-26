@@ -27,6 +27,11 @@ func WithLogger(opts ...util.Option) Option {
 			}
 		}
 
+		// Add the telemetry log handler to the logger
+		if s.telemetryManager != nil {
+			opts = append(opts, util.WithLogHandler(s.telemetryManager.LogHandler()))
+		}
+
 		log := util.NewLogger(ctx, opts...)
 		log.WithField("service", s.Name())
 		s.logger = log

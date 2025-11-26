@@ -9,7 +9,6 @@ import (
 	"github.com/stretchr/testify/suite"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/network"
-	"go.uber.org/mock/gomock"
 
 	"github.com/pitabwire/frame/frametests/definition"
 )
@@ -19,7 +18,6 @@ type FrameBaseTestSuite struct {
 	suite.Suite
 	Network   *testcontainers.DockerNetwork
 	resources []definition.TestResource
-	Ctrl      *gomock.Controller
 
 	InitResourceFunc func(ctx context.Context) []definition.TestResource
 }
@@ -27,8 +25,6 @@ type FrameBaseTestSuite struct {
 // SetupSuite initialises the test environment for the test suite.
 func (s *FrameBaseTestSuite) SetupSuite() {
 	t := s.T()
-
-	s.Ctrl = gomock.NewController(t)
 
 	ctx := t.Context()
 
@@ -63,10 +59,6 @@ func (s *FrameBaseTestSuite) Resources() []definition.DependancyConn {
 
 // TearDownSuite cleans up resources after all tests are completed.
 func (s *FrameBaseTestSuite) TearDownSuite() {
-	if s.Ctrl != nil {
-		s.Ctrl.Finish()
-	}
-
 	t := s.T()
 	ctx := t.Context()
 

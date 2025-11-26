@@ -5,6 +5,7 @@ import (
 
 	"github.com/pitabwire/frame/config"
 	"github.com/pitabwire/frame/telemetry"
+	"github.com/pitabwire/util"
 )
 
 // WithTelemetry adds required telemetry config options to the service.
@@ -12,7 +13,7 @@ func WithTelemetry(opts ...telemetry.Option) Option {
 	return func(ctx context.Context, s *Service) {
 		cfg, ok := s.Config().(config.ConfigurationTelemetry)
 		if !ok {
-			s.Log(ctx).Error("configuration object not of type : ConfigurationTelemetry")
+			util.Log(ctx).Error("configuration object not of type : ConfigurationTelemetry")
 			return
 		}
 
@@ -30,10 +31,8 @@ func WithTelemetry(opts ...telemetry.Option) Option {
 		s.telemetryManager = telemetry.NewManager(ctx, cfg, extOpts...)
 		err := s.telemetryManager.Init(ctx)
 		if err != nil {
-			s.Log(ctx).WithError(err).Fatal("failed to initialize telemetry")
+			util.Log(ctx).WithError(err).Fatal("failed to initialize telemetry")
 		}
-
-		s.logger = s.telemetryManager.Log()
 	}
 }
 

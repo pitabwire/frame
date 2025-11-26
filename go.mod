@@ -1,6 +1,6 @@
 module github.com/pitabwire/frame
 
-go 1.25.0
+go 1.25.2
 
 require (
 	buf.build/go/protovalidate v1.0.1
@@ -17,7 +17,7 @@ require (
 	github.com/nicksnyder/go-i18n/v2 v2.6.0
 	github.com/panjf2000/ants/v2 v2.11.3
 	github.com/pitabwire/natspubsub v0.7.5
-	github.com/pitabwire/util v0.3.5
+	github.com/pitabwire/util v0.3.6
 	github.com/redis/go-redis/v9 v9.16.0
 	github.com/rs/xid v1.6.0
 	github.com/stretchr/testify v1.11.1
@@ -37,7 +37,6 @@ require (
 	go.opentelemetry.io/otel/sdk/log v0.14.0
 	go.opentelemetry.io/otel/sdk/metric v1.38.0
 	go.opentelemetry.io/otel/trace v1.38.0
-	go.uber.org/mock v0.6.0
 	gocloud.dev v0.43.0
 	golang.org/x/net v0.47.0
 	golang.org/x/oauth2 v0.33.0

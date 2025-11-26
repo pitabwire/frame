@@ -92,19 +92,19 @@ func (l *dbLogger) Trace(ctx context.Context, begin time.Time, fc func() (string
 		return
 	}
 
-	if log.LevelEnabled(ctx, slog.LevelDebug) {
+	if log.Enabled(ctx, slog.LevelDebug) {
 		log.Debug("query executed")
 		return
 	}
 
-	if log.LevelEnabled(ctx, slog.LevelInfo) {
+	if log.Enabled(ctx, slog.LevelInfo) {
 		if l.logQueries {
 			log.Info("query executed ")
 		}
 		return
 	}
 
-	if log.LevelEnabled(ctx, slog.LevelWarn) {
+	if log.Enabled(ctx, slog.LevelWarn) {
 		if queryIsSlow {
 			log.Warn("query is slow")
 		}

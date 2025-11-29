@@ -3,9 +3,10 @@ package frame
 import (
 	"context"
 
+	"github.com/pitabwire/util"
+
 	"github.com/pitabwire/frame/config"
 	"github.com/pitabwire/frame/telemetry"
-	"github.com/pitabwire/util"
 )
 
 // WithTelemetry adds required telemetry config options to the service.

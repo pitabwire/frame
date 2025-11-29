@@ -11,14 +11,21 @@ type Option func(*Options)
 
 // Options holds Datastore connection configuration.
 type Options struct {
-	DSN    data.DSN
-	Name   string
-	MaxAge time.Duration
+	DSN       data.DSN
+	CredsFile string
+	Name      string
+	MaxAge    time.Duration
 }
 
 func WithDSN(dsn data.DSN) Option {
 	return func(o *Options) {
 		o.DSN = dsn
+	}
+}
+
+func WithCredsFile(credsFile string) Option {
+	return func(o *Options) {
+		o.CredsFile = credsFile
 	}
 }
 

@@ -1,4 +1,4 @@
-package jetstream
+package jetstreamkv
 
 import (
 	"context"
@@ -29,7 +29,13 @@ func New(opts ...cache.Option) (cache.RawCache, error) {
 		opt(cacheOpts)
 	}
 
-	natsConn, err := nats.Connect(cacheOpts.DSN.String())
+	var options []nats.Option
+
+	if cacheOpts.CredsFile != "" {
+		options = append(options, nats.UserCredentials(cacheOpts.CredsFile))
+	}
+
+	natsConn, err := nats.Connect(cacheOpts.DSN.String(), options...)
 	if err != nil {
 		return nil, err
 	}

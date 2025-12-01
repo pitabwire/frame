@@ -85,7 +85,8 @@ type ConfigurationDefault struct {
 
 	LogShowStackTrace bool `envDefault:"false" env:"LOG_SHOW_STACK_TRACE" yaml:"log_show_stack_trace"`
 
-	TraceRequests bool `envDefault:"false" env:"TRACE_REQUESTS" yaml:"trace_requests"`
+	TraceRequests        bool `envDefault:"false" env:"TRACE_REQUESTS"          yaml:"trace_requests"`
+	TraceRequestsLogBody bool `envDefault:"false" env:"TRACE_REQUESTS_LOG_BODY" yaml:"trace_requests_log_body"`
 
 	OpenTelemetryDisable    bool    `envDefault:"false" env:"OPENTELEMETRY_DISABLE"        yaml:"opentelemetry_disable"`
 	OpenTelemetryTraceRatio float64 `envDefault:"1"     env:"OPENTELEMETRY_TRACE_ID_RATIO" yaml:"opentelemetry_trace_id_ratio"`
@@ -207,12 +208,17 @@ func (c *ConfigurationDefault) LoggingLevelIsDebug() bool {
 
 type ConfigurationTraceRequests interface {
 	TraceReq() bool
+	TraceReqLogBody() bool
 }
 
 var _ ConfigurationTraceRequests = new(ConfigurationDefault)
 
 func (c *ConfigurationDefault) TraceReq() bool {
 	return c.TraceRequests
+}
+
+func (c *ConfigurationDefault) TraceReqLogBody() bool {
+	return c.TraceRequestsLogBody
 }
 
 type ConfigurationPorts interface {

@@ -3,6 +3,7 @@ package http
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"io"
 	"net"
 	"net/http"
@@ -53,12 +54,12 @@ func (w *responseWriterWrapper) Hijack() (net.Conn, *bufio.ReadWriter, error) {
 }
 
 // LoggingMiddleware creates an HTTP middleware that logs requests and responses when tracing is enabled.
-func LoggingMiddleware(next http.Handler) http.Handler {
+func LoggingMiddleware(next http.Handler, logBody bool) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 		logger := util.Log(ctx)
 
-		requestBody := readRequestBody(r)
+		requestBody := readRequestBody(r, logBody)
 		wrapped := wrapResponseWriter(w)
 
 		start := time.Now()
@@ -69,10 +70,23 @@ func LoggingMiddleware(next http.Handler) http.Handler {
 	})
 }
 
+// ContextLoggingMiddleware propagates logger in main context into HTTP context.
+func ContextLoggingMiddleware(mainCtx context.Context, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		logger := util.Log(mainCtx)
+		ctx := util.ContextWithLogger(r.Context(), logger)
+
+		// Replace the request with the merged context
+		r = r.WithContext(ctx)
+
+		next.ServeHTTP(w, r)
+	})
+}
+
 // readRequestBody reads and returns the request body, restoring it for further processing.
-func readRequestBody(r *http.Request) []byte {
+func readRequestBody(r *http.Request, logBody bool) []byte {
 	var requestBody []byte
-	if r.Body != nil {
+	if logBody && r.Body != nil {
 		// Read only up to the max log size to avoid loading large bodies into memory.
 		lr := io.LimitReader(r.Body, maxBodyLogSize)
 		requestBody, _ = io.ReadAll(lr)

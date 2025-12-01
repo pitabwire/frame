@@ -441,7 +441,7 @@ func (s *Service) determineGRPCPort(currentPort string) string {
 	return cfg.GrpcPort()
 }
 
-func (s *Service) createAndConfigureMux(_ context.Context) *http.ServeMux {
+func (s *Service) createAndConfigureMux(ctx context.Context) *http.ServeMux {
 	mux := http.NewServeMux()
 
 	applicationHandler := s.handler
@@ -449,10 +449,12 @@ func (s *Service) createAndConfigureMux(_ context.Context) *http.ServeMux {
 		applicationHandler = http.DefaultServeMux
 	}
 
+	applicationHandler = httpInterceptor.ContextLoggingMiddleware(ctx, applicationHandler)
+
 	cfg, ok := s.Config().(config.ConfigurationTraceRequests)
 	if ok {
 		if cfg.TraceReq() {
-			applicationHandler = httpInterceptor.LoggingMiddleware(applicationHandler)
+			applicationHandler = httpInterceptor.LoggingMiddleware(applicationHandler, cfg.TraceReqLogBody())
 		}
 	}
 

@@ -397,14 +397,13 @@ func (s *ServerTestSuite) TestServiceContextRun() {
 	s.WithTestDependancies(s.T(), func(t *testing.T, _ *definition.DependencyOption) {
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
-
 				var buf1 bytes.Buffer
 
 				httpTestOpt, testSrvFn := frametests.WithHTTPTestDriver()
 
 				ctx, svc := frame.NewServiceWithContext(t.Context(), frame.WithName(tc.serviceName),
 					frame.WithLogger(util.WithLogOutput(&buf1)),
-					httpTestOpt, frame.WithHTTPHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					httpTestOpt, frame.WithHTTPHandler(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
 						util.Log(r.Context()).Info(tc.logData)
 					})))
 

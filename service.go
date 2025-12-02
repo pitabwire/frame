@@ -442,7 +442,6 @@ func (s *Service) determineGRPCPort(currentPort string) string {
 }
 
 func (s *Service) createAndConfigureMux(_ context.Context) *http.ServeMux {
-
 	applicationHandler := s.handler
 	if applicationHandler == nil {
 		applicationHandler = http.DefaultServeMux

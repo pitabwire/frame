@@ -28,6 +28,7 @@ import (
 	httpInterceptor "github.com/pitabwire/frame/security/interceptors/http"
 	securityManager "github.com/pitabwire/frame/security/manager"
 	"github.com/pitabwire/frame/telemetry"
+	"github.com/pitabwire/frame/version"
 	"github.com/pitabwire/frame/workerpool"
 )
 
@@ -371,12 +372,12 @@ func (s *Service) AddHealthCheck(checker Checker) {
 
 // Run keeps the service useful by handling incoming requests.
 func (s *Service) Run(ctx context.Context, address string) error {
-	log := util.Log(ctx).WithFields(map[string]any{
-		"version": Version,
-		"commit":  Commit,
-		"date":    Date,
-	})
-	log.Info("Initiating service operations")
+	log := util.Log(ctx)
+	log.WithFields(map[string]any{
+		"version": version.Version,
+		"commit":  version.Commit,
+		"date":    version.Date,
+	}).Info("Build info")
 
 	// Check for any errors that occurred during startup initialization
 	if startupErrs := s.GetStartupErrors(); len(startupErrs) > 0 {
@@ -534,7 +535,9 @@ func (s *Service) executeStartupMethods(ctx context.Context) {
 }
 
 // startServerDriver starts either TLS or non-TLS server based on configuration.
-func (s *Service) startServerDriver(httpPort string) error {
+func (s *Service) startServerDriver(ctx context.Context, httpPort string) error {
+	util.Log(ctx).WithField("port", httpPort).Info("Initiating server operations")
+
 	if s.TLSEnabled() {
 		cfg, ok := s.Config().(config.ConfigurationTLS)
 		if !ok {
@@ -580,7 +583,7 @@ func (s *Service) initServer(ctx context.Context, httpPort string) error {
 	// Execute pre-start methods
 	s.executeStartupMethods(ctx)
 
-	return s.startServerDriver(httpPort)
+	return s.startServerDriver(ctx, httpPort)
 }
 
 // Stop Used to gracefully run clean up methods ensuring all requests that

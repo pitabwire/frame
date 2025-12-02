@@ -10,13 +10,6 @@ import (
 	"github.com/pitabwire/frame/data"
 )
 
-//nolint:gochecknoglobals //version information is set at build time
-var (
-	Version string
-	Commit  string
-	Date    string
-)
-
 // ErrorIsNotFound checks if an error represents a "not found" condition.
 // It handles multiple error types:
 // - Database errors: gorm.ErrRecordNotFound, sql.ErrNoRows (via ErrorIsNoRows)

@@ -20,6 +20,7 @@ import (
 	semconv "go.opentelemetry.io/otel/semconv/v1.37.0"
 
 	"github.com/pitabwire/frame/config"
+	"github.com/pitabwire/frame/version"
 )
 
 type Manager interface {
@@ -105,6 +106,10 @@ func (m *manager) setupResource() (*resource.Resource, error) {
 		semconv.ProcessPID(os.Getpid()),
 		semconv.ProcessRuntimeName("go"),
 		semconv.ProcessRuntimeVersion(runtime.Version()),
+		semconv.VCSRepositoryName(version.Repository),
+		semconv.VCSRefBaseRevision(version.Commit),
+		semconv.VCSRefBaseName(version.Version),
+		attribute.String("build_date", version.Date),
 	}
 
 	return resource.Merge(resource.Default(), resource.NewWithAttributes(semconv.SchemaURL, attrs...))

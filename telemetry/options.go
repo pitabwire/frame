@@ -28,14 +28,14 @@ func WithServiceName(name string) Option {
 // WithServiceVersion sets the service version for resource tagging.
 func WithServiceVersion(version string) Option {
 	return func(_ context.Context, s *manager) {
-		s.serviceName = version
+		s.serviceVersion = version
 	}
 }
 
 // WithServiceEnvironment sets the service environment for resource tagging.
 func WithServiceEnvironment(env string) Option {
 	return func(_ context.Context, s *manager) {
-		s.serviceName = env
+		s.serviceEnvironment = env
 	}
 }
 

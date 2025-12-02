@@ -3,7 +3,6 @@ package http
 import (
 	"bufio"
 	"bytes"
-	"context"
 	"io"
 	"net"
 	"net/http"
@@ -71,9 +70,8 @@ func LoggingMiddleware(next http.Handler, logBody bool) http.Handler {
 }
 
 // ContextLoggingMiddleware propagates logger in main context into HTTP context.
-func ContextLoggingMiddleware(mainCtx context.Context, next http.Handler) http.Handler {
+func ContextLoggingMiddleware(logger *util.LogEntry, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		logger := util.Log(mainCtx)
 		ctx := util.ContextWithLogger(r.Context(), logger)
 
 		// Replace the request with the merged context

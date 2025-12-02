@@ -1,6 +1,7 @@
 package frame_test
 
 import (
+	"bytes"
 	"context"
 	"crypto/tls"
 	"crypto/x509"
@@ -12,6 +13,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pitabwire/util"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
@@ -373,4 +376,56 @@ func (s *ServerTestSuite) clientInvokeGrpcHealth(ctx context.Context, conn *grpc
 		return errors.New("The response status should be all good ")
 	}
 	return conn.Close()
+}
+
+// TestServiceContextRun tests service run functionality.
+func (s *ServerTestSuite) TestServiceContextRun() {
+	testCases := []struct {
+		name        string
+		serviceName string
+		port        string
+		logData     string
+	}{
+		{
+			name:        "service context propagation test",
+			serviceName: "Testing",
+			port:        ":",
+			logData:     "testing hello we are live",
+		},
+	}
+
+	s.WithTestDependancies(s.T(), func(t *testing.T, _ *definition.DependencyOption) {
+		for _, tc := range testCases {
+			t.Run(tc.name, func(t *testing.T) {
+
+				var buf1 bytes.Buffer
+
+				httpTestOpt, testSrvFn := frametests.WithHTTPTestDriver()
+
+				ctx, svc := frame.NewServiceWithContext(t.Context(), frame.WithName(tc.serviceName),
+					frame.WithLogger(util.WithLogOutput(&buf1)),
+					httpTestOpt, frame.WithHTTPHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+						util.Log(r.Context()).Info(tc.logData)
+					})))
+
+				if err := svc.Run(ctx, tc.port); err != nil {
+					if !errors.Is(err, context.Canceled) {
+						_ = err
+					}
+				}
+
+				client := svc.HTTPClientManager()
+				_, _, err := client.Invoke(t.Context(), "GET", testSrvFn().URL, nil, nil)
+				require.NoError(t, err)
+
+				if !strings.Contains(buf1.String(), tc.logData) {
+					t.Error("Handler did not log required message")
+				}
+
+				time.Sleep(1 * time.Second)
+				svc.Stop(ctx)
+				time.Sleep(1 * time.Second)
+			})
+		}
+	})
 }

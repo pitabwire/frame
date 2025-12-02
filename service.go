@@ -376,7 +376,7 @@ func (s *Service) Run(ctx context.Context, address string) error {
 		"commit":  Commit,
 		"date":    Date,
 	})
-	log.Info("service starting")
+	log.Info("Initiating service operations")
 
 	// Check for any errors that occurred during startup initialization
 	if startupErrs := s.GetStartupErrors(); len(startupErrs) > 0 {

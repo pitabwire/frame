@@ -371,6 +371,13 @@ func (s *Service) AddHealthCheck(checker Checker) {
 
 // Run keeps the service useful by handling incoming requests.
 func (s *Service) Run(ctx context.Context, address string) error {
+	log := util.Log(ctx).WithFields(map[string]any{
+		"version": Version,
+		"commit":  Commit,
+		"date":    Date,
+	})
+	log.Info("service starting")
+
 	// Check for any errors that occurred during startup initialization
 	if startupErrs := s.GetStartupErrors(); len(startupErrs) > 0 {
 		return startupErrs[0] // Return the first error
@@ -584,11 +591,13 @@ func (s *Service) Stop(ctx context.Context) {
 	}
 	defer s.stopMutex.Unlock()
 
-	s.Log(ctx).Info("service stopping")
+	log := util.Log(ctx)
+
+	log.Info("service stopping")
 
 	// Cancel the service's main context.
 	if s.cancelFunc != nil {
-		s.logger.Info("canceling service context")
+		log.Info("canceling service context")
 		s.cancelFunc()
 	}
 

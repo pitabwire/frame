@@ -374,9 +374,10 @@ func (s *Service) AddHealthCheck(checker Checker) {
 func (s *Service) Run(ctx context.Context, address string) error {
 	log := util.Log(ctx)
 	log.WithFields(map[string]any{
-		"version": version.Version,
-		"commit":  version.Commit,
-		"date":    version.Date,
+		"repository": version.Repository,
+		"version":    version.Version,
+		"commit":     version.Commit,
+		"date":       version.Date,
 	}).Info("Build info")
 
 	// Check for any errors that occurred during startup initialization

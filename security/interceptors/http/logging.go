@@ -6,6 +6,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/pitabwire/util"
@@ -15,6 +16,31 @@ const (
 	maxBodyLogSize = 1024 // Max body size to log (1KB)
 	clientError    = 400
 	serverError    = 500
+)
+
+var (
+	// Pool for reusing responseWriterWrapper instances.
+	//nolint:gochecknoglobals // Global pool is idiomatic for sync.Pool usage in middleware
+	responseWriterPool = sync.Pool{
+		New: func() interface{} {
+			return &responseWriterWrapper{
+				statusCode: http.StatusOK,
+				body:       &bytes.Buffer{},
+			}
+		},
+	}
+
+	// Pre-defined sensitive headers map for O(1) lookups.
+	//nolint:gochecknoglobals // Global map is appropriate for static sensitive header list
+	sensitiveHeaders = map[string]struct{}{
+		"Authorization": {},
+		"Cookie":        {},
+		"Set-Cookie":    {},
+		"X-Api-Key":     {},
+		"X-Auth-Token":  {},
+		"X-Csrf-Token":  {},
+		"X-Session-Id":  {},
+	}
 )
 
 // responseWriterWrapper wraps http.ResponseWriter to capture response status and body.
@@ -61,34 +87,50 @@ func LoggingMiddleware(next http.Handler, logBody bool) http.Handler {
 		requestBody := readRequestBody(r, logBody)
 		wrapped := wrapResponseWriter(w)
 
+		// Ensure cleanup happens even if panic occurs
+		defer releaseResponseWriter(wrapped)
+
 		start := time.Now()
 		next.ServeHTTP(wrapped, r)
 		duration := time.Since(start)
 
-		logHTTPRequest(logger, r, wrapped, requestBody, duration)
+		logHTTPRequest(logger, r, wrapped, requestBody, duration, logBody)
 	})
 }
 
 // readRequestBody reads and returns the request body, restoring it for further processing.
 func readRequestBody(r *http.Request, logBody bool) []byte {
-	var requestBody []byte
-	if logBody && r.Body != nil {
-		// Read only up to the max log size to avoid loading large bodies into memory.
-		lr := io.LimitReader(r.Body, maxBodyLogSize)
-		requestBody, _ = io.ReadAll(lr)
-		// Re-construct the body with what was read plus the rest of the original stream.
-		r.Body = io.NopCloser(io.MultiReader(bytes.NewReader(requestBody), r.Body))
+	if !logBody || r.Body == nil {
+		return nil
 	}
+
+	// Read only up to the max log size to avoid loading large bodies into memory.
+	lr := io.LimitReader(r.Body, maxBodyLogSize)
+	requestBody, _ := io.ReadAll(lr)
+	// Re-construct the body with what was read plus the rest of the original stream.
+	r.Body = io.NopCloser(io.MultiReader(bytes.NewReader(requestBody), r.Body))
 	return requestBody
 }
 
 // wrapResponseWriter creates a wrapped response writer to capture status and body.
 func wrapResponseWriter(w http.ResponseWriter) *responseWriterWrapper {
-	return &responseWriterWrapper{
-		ResponseWriter: w,
-		statusCode:     http.StatusOK,
-		body:           &bytes.Buffer{},
+	wrapped, ok := responseWriterPool.Get().(*responseWriterWrapper)
+	if !ok {
+		wrapped = &responseWriterWrapper{
+			statusCode: http.StatusOK,
+			body:       &bytes.Buffer{},
+		}
 	}
+	wrapped.ResponseWriter = w
+	wrapped.statusCode = http.StatusOK
+	wrapped.body.Reset() // Clear any previous content
+	return wrapped
+}
+
+// releaseResponseWriter returns the wrapper to the pool.
+func releaseResponseWriter(w *responseWriterWrapper) {
+	w.ResponseWriter = nil
+	responseWriterPool.Put(w)
 }
 
 // logHTTPRequest logs the HTTP request and response details.
@@ -98,21 +140,33 @@ func logHTTPRequest(
 	wrapped *responseWriterWrapper,
 	requestBody []byte,
 	duration time.Duration,
+	logBody bool,
 ) {
-	logEntry := logger.WithFields(map[string]any{
-		"method":         r.Method,
-		"path":           r.URL.Path,
-		"query":          r.URL.RawQuery,
-		"remote_addr":    r.RemoteAddr,
-		"user_agent":     r.UserAgent(),
-		"status_code":    wrapped.statusCode,
-		"duration_ms":    duration.Milliseconds(),
-		"content_length": r.ContentLength})
+	// Pre-allocate map with known capacity to reduce allocations
+	const typicalFieldCount = 8
+	fields := make(map[string]any, typicalFieldCount) // Estimate typical field count
+	fields["method"] = r.Method
+	fields["path"] = r.URL.Path
+	fields["query"] = r.URL.RawQuery
+	fields["remote_addr"] = r.RemoteAddr
+	fields["user_agent"] = r.UserAgent()
+	fields["status_code"] = wrapped.statusCode
+	fields["duration_ms"] = duration.Milliseconds()
+	fields["content_length"] = r.ContentLength
+
+	logEntry := logger.WithFields(fields)
+
+	// Only add body if it exists and within limits
+	if logBody && len(requestBody) > 0 && len(requestBody) < maxBodyLogSize {
+		logEntry = logEntry.WithField("request_body", string(requestBody))
+	}
+
+	if wrapped.body != nil && wrapped.body.Len() > 0 && wrapped.body.Len() < maxBodyLogSize {
+		logEntry = logEntry.WithField("response_body", wrapped.body.String())
+	}
 
 	logEntry = addRequestHeaders(logEntry, r.Header)
-	logEntry = addRequestBody(logEntry, requestBody)
 	logEntry = addResponseHeaders(logEntry, wrapped.Header())
-	logEntry = addResponseBody(logEntry, wrapped.body)
 
 	logByStatusCode(logEntry, wrapped.statusCode)
 }
@@ -127,28 +181,12 @@ func addRequestHeaders(logEntry *util.LogEntry, headers http.Header) *util.LogEn
 	return logEntry
 }
 
-// addRequestBody adds the request body to the log entry if within size limits.
-func addRequestBody(logEntry *util.LogEntry, requestBody []byte) *util.LogEntry {
-	if len(requestBody) > 0 && len(requestBody) < maxBodyLogSize {
-		logEntry = logEntry.WithField("request_body", string(requestBody))
-	}
-	return logEntry
-}
-
 // addResponseHeaders adds non-sensitive response headers to the log entry.
 func addResponseHeaders(logEntry *util.LogEntry, headers http.Header) *util.LogEntry {
 	for name, values := range headers {
 		if !isSensitiveHeader(name) {
 			logEntry = logEntry.WithField("resp_header_"+name, values)
 		}
-	}
-	return logEntry
-}
-
-// addResponseBody adds the response body to the log entry if within size limits.
-func addResponseBody(logEntry *util.LogEntry, body *bytes.Buffer) *util.LogEntry {
-	if body.Len() > 0 && body.Len() < maxBodyLogSize {
-		logEntry = logEntry.WithField("response_body", body.String())
 	}
 	return logEntry
 }
@@ -167,16 +205,6 @@ func logByStatusCode(logEntry *util.LogEntry, statusCode int) {
 
 // isSensitiveHeader checks if a header contains sensitive information.
 func isSensitiveHeader(name string) bool {
-	// Use a map for efficient, case-insensitive lookups after canonicalization.
-	sensitiveHeaders := map[string]struct{}{
-		"Authorization": {},
-		"Cookie":        {},
-		"Set-Cookie":    {},
-		"X-Api-Key":     {},
-		"X-Auth-Token":  {},
-		"X-Csrf-Token":  {},
-		"X-Session-Id":  {},
-	}
 	_, ok := sensitiveHeaders[http.CanonicalHeaderKey(name)]
 	return ok
 }

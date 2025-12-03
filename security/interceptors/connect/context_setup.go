@@ -34,7 +34,7 @@ func (c *ctxSetupInterceptor) propagate(ctx context.Context) context.Context {
 	}
 
 	for _, pi := range c.propagators {
-		reqCtx = pi(reqCtx)
+		reqCtx := pi(reqCtx)
 	}
 	return reqCtx
 }

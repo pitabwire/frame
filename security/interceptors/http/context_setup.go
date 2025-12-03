@@ -10,7 +10,11 @@ import (
 )
 
 // ContextSetupMiddleware propagates logger in main context into HTTP context.
-func ContextSetupMiddleware(mainCtx context.Context, next http.Handler, propagators ...func(ctx context.Context) context.Context) http.Handler {
+func ContextSetupMiddleware(
+	mainCtx context.Context,
+	next http.Handler,
+	propagators ...func(ctx context.Context) context.Context,
+) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		reqCtx := r.Context()
 		cfg := config.FromContext[any](mainCtx)

@@ -338,7 +338,7 @@ func SafeChannelRead[T any](ctx context.Context, ch <-chan JobResult[T]) (JobRes
 	}
 }
 
-func ConsumeResultStream[T any](ctx context.Context, job JobResultPipe[T], consumer func(T) error) error {
+func ConsumeResultStream[T any](ctx context.Context, job JobResultPipe[T], consumer func(T)) error {
 	for {
 		select {
 		case <-ctx.Done():
@@ -354,10 +354,7 @@ func ConsumeResultStream[T any](ctx context.Context, job JobResultPipe[T], consu
 				return res.Error()
 			}
 
-			err := consumer(res.Item())
-			if err != nil {
-				return err
-			}
+			consumer(res.Item())
 		}
 	}
 }

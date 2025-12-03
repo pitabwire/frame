@@ -433,7 +433,7 @@ func (s *Service) determineHTTPPort(currentPort string) string {
 		if tlsOk && tlsCfg.TLSCertPath() != "" && tlsCfg.TLSCertKeyPath() != "" {
 			return ":https"
 		}
-		return "http" // Existing logic; consider ":http" or a default port like ":8080"
+		return ":http" // Existing logic; consider ":http" or a default port like ":8080"
 	}
 	return cfg.HTTPPort()
 }
@@ -456,19 +456,19 @@ func (s *Service) createAndConfigureMux(ctx context.Context) *http.ServeMux {
 		applicationHandler = http.DefaultServeMux
 	}
 
-	loggedAppHandler := httpInterceptor.ContextSetupMiddleware(ctx, applicationHandler)
+	contextSetupHandler := httpInterceptor.ContextSetupMiddleware(ctx, applicationHandler)
 
 	cfg, ok := s.Config().(config.ConfigurationTraceRequests)
 	if ok {
 		if cfg.TraceReq() {
-			loggedAppHandler = httpInterceptor.LoggingMiddleware(loggedAppHandler, cfg.TraceReqLogBody())
+			contextSetupHandler = httpInterceptor.LoggingMiddleware(contextSetupHandler, cfg.TraceReqLogBody())
 		}
 	}
 
 	mux := http.NewServeMux()
 
 	mux.HandleFunc(s.healthCheckPath, s.HandleHealth)
-	mux.Handle("/", loggedAppHandler)
+	mux.Handle("/", contextSetupHandler)
 	return mux
 }
 

@@ -269,6 +269,30 @@ func (ji *JobImpl[T]) WriteResult(ctx context.Context, val T) error {
 	return SafeChannelWrite(ctx, ji.resultChan, Result[T](val))
 }
 
+func (ji *JobImpl[T]) ConsumeResultStream(ctx context.Context, consumer func(T) error) error {
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+
+			res, ok := ji.ReadResult(ctx)
+			if !ok {
+				return nil
+			}
+
+			if res.IsError() {
+				return res.Error()
+			}
+
+			err := consumer(res.Item())
+			if err != nil {
+				return err
+			}
+		}
+	}
+}
+
 func (ji *JobImpl[T]) Close() {
 	if ji.resultChanDone.CompareAndSwap(false, true) {
 		close(ji.resultChan)

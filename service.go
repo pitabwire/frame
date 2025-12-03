@@ -450,13 +450,13 @@ func (s *Service) determineGRPCPort(currentPort string) string {
 	return cfg.GrpcPort()
 }
 
-func (s *Service) createAndConfigureMux(_ context.Context) *http.ServeMux {
+func (s *Service) createAndConfigureMux(ctx context.Context) *http.ServeMux {
 	applicationHandler := s.handler
 	if applicationHandler == nil {
 		applicationHandler = http.DefaultServeMux
 	}
 
-	loggedAppHandler := httpInterceptor.ContextLoggingMiddleware(s.logger, applicationHandler)
+	loggedAppHandler := httpInterceptor.ContextSetupMiddleware(ctx, applicationHandler)
 
 	cfg, ok := s.Config().(config.ConfigurationTraceRequests)
 	if ok {

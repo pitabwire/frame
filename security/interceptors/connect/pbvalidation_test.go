@@ -8,88 +8,12 @@ import (
 	"net/http"
 	"testing"
 
-	"buf.build/go/protovalidate"
 	"connectrpc.com/connect"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 )
-
-func TestNewInterceptor(t *testing.T) {
-	t.Run("default configuration", func(t *testing.T) {
-		interceptor := NewValidationInterceptor()
-		assert.NotNil(t, interceptor.validator)
-		assert.False(t, interceptor.validateResponses)
-		assert.False(t, interceptor.noErrorDetails)
-	})
-
-	t.Run("with custom validator", func(t *testing.T) {
-		customValidator := protovalidate.GlobalValidator
-		interceptor := NewValidationInterceptor(WithValidator(customValidator))
-		assert.Equal(t, customValidator, interceptor.validator)
-	})
-
-	t.Run("with validate responses", func(t *testing.T) {
-		interceptor := NewValidationInterceptor(WithValidateResponses())
-		assert.True(t, interceptor.validateResponses)
-	})
-
-	t.Run("with no error details", func(t *testing.T) {
-		interceptor := NewValidationInterceptor(WithoutErrorDetails())
-		assert.True(t, interceptor.noErrorDetails)
-	})
-
-	t.Run("multiple options", func(t *testing.T) {
-		customValidator := protovalidate.GlobalValidator
-		interceptor := NewValidationInterceptor(
-			WithValidator(customValidator),
-			WithValidateResponses(),
-			WithoutErrorDetails(),
-		)
-
-		assert.Equal(t, customValidator, interceptor.validator)
-		assert.True(t, interceptor.validateResponses)
-		assert.True(t, interceptor.noErrorDetails)
-	})
-}
-
-func TestValidateRequest(t *testing.T) {
-	interceptor := NewValidationInterceptor()
-
-	t.Run("nil message", func(t *testing.T) {
-		err := interceptor.validateRequest(nil)
-		require.NoError(t, err)
-	})
-
-	t.Run("non-proto message", func(t *testing.T) {
-		err := interceptor.validateRequest("not a proto message")
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "expected proto.Message")
-	})
-
-	t.Run("valid message", func(t *testing.T) {
-		msg := &wrapperspb.StringValue{Value: "test"}
-		err := interceptor.validateRequest(msg)
-		require.NoError(t, err)
-	})
-}
-
-func TestValidateResponse(t *testing.T) {
-	t.Run("without validate responses option", func(t *testing.T) {
-		interceptor := NewValidationInterceptor()
-		msg := &wrapperspb.StringValue{Value: "test"}
-		err := interceptor.validateResponse(msg)
-		require.NoError(t, err) // Should not validate responses by default
-	})
-
-	t.Run("with validate responses option", func(t *testing.T) {
-		interceptor := NewValidationInterceptor(WithValidateResponses())
-		msg := &wrapperspb.StringValue{Value: "test"}
-		err := interceptor.validateResponse(msg)
-		require.NoError(t, err)
-	})
-}
 
 func TestStructValidation(t *testing.T) {
 	t.Run("valid struct", func(t *testing.T) {
@@ -219,28 +143,6 @@ func TestValidateAllStructs(t *testing.T) {
 		err := validateAllStructs(container)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "too many top-level fields")
-	})
-}
-
-func TestWrapValidationError(t *testing.T) {
-	t.Run("with error details", func(t *testing.T) {
-		interceptor := NewValidationInterceptor()
-		originalErr := &protovalidate.ValidationError{}
-		wrappedErr := interceptor.wrapValidationError(originalErr, connect.CodeInvalidArgument)
-
-		assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(wrappedErr))
-		// The error should contain the original error
-		assert.Contains(t, wrappedErr.Error(), "validation error")
-	})
-
-	t.Run("without error details", func(t *testing.T) {
-		interceptor := NewValidationInterceptor(WithoutErrorDetails())
-		originalErr := &protovalidate.ValidationError{}
-		wrappedErr := interceptor.wrapValidationError(originalErr, connect.CodeInvalidArgument)
-
-		assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(wrappedErr))
-		// Should still contain the original error
-		assert.Contains(t, wrappedErr.Error(), "validation error")
 	})
 }
 

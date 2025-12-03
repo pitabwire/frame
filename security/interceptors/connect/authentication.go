@@ -26,20 +26,20 @@ var (
 	ErrInvalidToken = errors.New("invalid authorization token")
 )
 
-// AuthInterceptor implements connect.ValidationInterceptor for JWT authentication.
-type AuthInterceptor struct {
+// authInterceptor implements connect.validationInterceptor for JWT authentication.
+type authInterceptor struct {
 	authenticator security.Authenticator
 }
 
 // NewAuthInterceptor creates a new authentication interceptor.
-func NewAuthInterceptor(authenticator security.Authenticator) *AuthInterceptor {
-	return &AuthInterceptor{
+func NewAuthInterceptor(authenticator security.Authenticator) connect.Interceptor {
+	return &authInterceptor{
 		authenticator: authenticator,
 	}
 }
 
 // extractToken extracts and validates the bearer token from the header.
-func (a *AuthInterceptor) extractToken(authHeader string) (string, error) {
+func (a *authInterceptor) extractToken(authHeader string) (string, error) {
 	if authHeader == "" {
 		return "", ErrMissingToken
 	}
@@ -59,19 +59,17 @@ func (a *AuthInterceptor) extractToken(authHeader string) (string, error) {
 }
 
 // authenticate performs the authentication check.
-func (a *AuthInterceptor) authenticate(ctx context.Context, authHeader string) (context.Context, error) {
-	logger := util.Log(ctx).WithField("has_auth_header", authHeader != "")
-
+func (a *authInterceptor) authenticate(ctx context.Context, authHeader string) (context.Context, error) {
 	token, err := a.extractToken(authHeader)
 	if err != nil {
-		logger.WithError(err).Debug("failed to extract authentication token")
+		util.Log(ctx).WithError(err).Debug("failed to extract authentication token")
 		return nil, connect.NewError(connect.CodeUnauthenticated, err)
 	}
 
 	// Authenticate the token
 	authCtx, err := a.authenticator.Authenticate(ctx, token)
 	if err != nil {
-		logger.WithError(err).Info("authentication failed")
+		util.Log(ctx).WithField("has_auth_header", authHeader != "").WithError(err).Info("authentication failed")
 		return nil, connect.NewError(connect.CodeUnauthenticated, ErrInvalidToken)
 	}
 
@@ -79,7 +77,7 @@ func (a *AuthInterceptor) authenticate(ctx context.Context, authHeader string) (
 }
 
 // WrapUnary implements the unary interceptor for authentication.
-func (a *AuthInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
+func (a *authInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
 	return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
 		authCtx, err := a.authenticate(ctx, req.Header().Get(authorizationKey))
 		if err != nil {
@@ -91,12 +89,12 @@ func (a *AuthInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
 }
 
 // WrapStreamingClient implements the streaming client interceptor (pass-through for server-side).
-func (a *AuthInterceptor) WrapStreamingClient(next connect.StreamingClientFunc) connect.StreamingClientFunc {
+func (a *authInterceptor) WrapStreamingClient(next connect.StreamingClientFunc) connect.StreamingClientFunc {
 	return next
 }
 
 // WrapStreamingHandler implements the streaming handler interceptor for authentication.
-func (a *AuthInterceptor) WrapStreamingHandler(next connect.StreamingHandlerFunc) connect.StreamingHandlerFunc {
+func (a *authInterceptor) WrapStreamingHandler(next connect.StreamingHandlerFunc) connect.StreamingHandlerFunc {
 	return func(ctx context.Context, conn connect.StreamingHandlerConn) error {
 		authCtx, err := a.authenticate(ctx, conn.RequestHeader().Get(authorizationKey))
 		if err != nil {

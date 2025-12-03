@@ -13,7 +13,7 @@ import (
 func ContextSetupMiddleware(
 	mainCtx context.Context,
 	next http.Handler,
-	propagators ...func(ctx context.Context) context.Context,
+	ctxFnList ...func(ctx context.Context) context.Context,
 ) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		reqCtx := r.Context()
@@ -24,11 +24,14 @@ func ContextSetupMiddleware(
 		logger := util.Log(mainCtx)
 		reqCtx = util.ContextWithLogger(reqCtx, logger)
 
-		for _, pi := range propagators {
-			reqCtx = pi(reqCtx)
+		if len(ctxFnList) > 0 {
+			ctxFn := ctxFnList[0]
+			ctx := ctxFn(reqCtx)
+			if ctx != nil {
+				reqCtx = ctx
+			}
 		}
 
-		// Replace the request with the merged context
 		r = r.WithContext(reqCtx)
 
 		next.ServeHTTP(w, r)

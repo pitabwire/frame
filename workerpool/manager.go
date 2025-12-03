@@ -88,7 +88,8 @@ func createJobExecutionTask[T any](ctx context.Context, s Manager, job Job[T]) f
 		executionErr := job.F()(ctx, job)
 
 		// Handle successful execution first and return early
-		if executionErr == nil || errors.Is(executionErr, context.Canceled) {
+		if executionErr == nil || errors.Is(executionErr, context.Canceled) ||
+			errors.Is(executionErr, ErrWorkerPoolResultChannelIsClosed) {
 			job.Close()
 			return
 		}

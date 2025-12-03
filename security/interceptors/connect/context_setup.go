@@ -10,9 +10,9 @@ import (
 )
 
 type ctxSetupInterceptor struct {
-	cfg         any
-	logger      *util.LogEntry
-	propagators []func(ctx context.Context) context.Context
+	cfg    any
+	logger *util.LogEntry
+	fn     func(ctx context.Context) context.Context
 }
 
 // NewContextSetupInterceptor creates a new context propagation interceptor.
@@ -20,22 +20,31 @@ func NewContextSetupInterceptor(
 	mainCtx context.Context,
 	propagators ...func(ctx context.Context) context.Context,
 ) connect.Interceptor {
+	var ctxFn func(ctx context.Context) context.Context
+	if len(propagators) > 0 {
+		ctxFn = propagators[0]
+	}
+
 	return &ctxSetupInterceptor{
-		cfg:         config.FromContext[any](mainCtx),
-		logger:      util.Log(mainCtx),
-		propagators: propagators,
+		cfg:    config.FromContext[any](mainCtx),
+		logger: util.Log(mainCtx),
+		fn:     ctxFn,
 	}
 }
 
 func (c *ctxSetupInterceptor) propagate(ctx context.Context) context.Context {
-	reqCtx := util.ContextWithLogger(ctx, c.logger)
+	var reqCtx = util.ContextWithLogger(ctx, c.logger)
 	if c.cfg != nil {
 		reqCtx = config.ToContext(reqCtx, c.cfg)
 	}
 
-	for _, pi := range c.propagators {
-		reqCtx := pi(reqCtx)
+	if c.fn != nil {
+		fnCtx := c.fn(reqCtx)
+		if fnCtx != nil {
+			reqCtx = fnCtx
+		}
 	}
+
 	return reqCtx
 }
 

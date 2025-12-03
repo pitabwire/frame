@@ -228,7 +228,7 @@ func (ji *JobImpl[T]) F() func(ctx context.Context, result JobResultPipe[T]) err
 }
 
 func (ji *JobImpl[T]) CanRun() bool {
-	return ji.Retries() >= ji.Runs()
+	return !ji.resultChanDone.Load() && ji.Retries() >= ji.Runs()
 }
 
 func (ji *JobImpl[T]) Retries() int {
@@ -338,23 +338,22 @@ func SafeChannelRead[T any](ctx context.Context, ch <-chan JobResult[T]) (JobRes
 	}
 }
 
-func ConsumeResultStream[T any](ctx context.Context, job JobResultPipe[T], consumer func(T)) error {
+func ConsumeResultStream[T any](ctx context.Context, job JobResultPipe[T], consumer func(T) error) error {
+	defer job.Close()
+
 	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		default:
+		res, ok := job.ReadResult(ctx)
+		if !ok {
+			return nil
+		}
 
-			res, ok := job.ReadResult(ctx)
-			if !ok {
-				return nil
-			}
+		if res.IsError() {
+			return res.Error()
+		}
 
-			if res.IsError() {
-				return res.Error()
-			}
-
-			consumer(res.Item())
+		err := consumer(res.Item())
+		if err != nil {
+			return nil
 		}
 	}
 }

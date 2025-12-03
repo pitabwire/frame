@@ -9,7 +9,7 @@ import (
 	"github.com/pitabwire/frame/security"
 )
 
-func DefaultInterceptorList(ctx context.Context, authI security.Authenticator) ([]connect.Interceptor, error) {
+func DefaultList(ctx context.Context, authI security.Authenticator, moreInterceptors ...connect.Interceptor) ([]connect.Interceptor, error) {
 	var interceptorList []connect.Interceptor
 
 	otelInterceptor, err := otelconnect.NewInterceptor()
@@ -18,7 +18,7 @@ func DefaultInterceptorList(ctx context.Context, authI security.Authenticator) (
 	}
 
 	interceptorList = append(
-		interceptorList, NewContextSetupInterceptor(ctx),
+		moreInterceptors, NewContextSetupInterceptor(ctx),
 		otelInterceptor, NewValidationInterceptor(), NewAuthInterceptor(authI))
 
 	return interceptorList, nil

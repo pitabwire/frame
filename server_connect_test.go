@@ -208,6 +208,73 @@ func (s *ConnectServerTestSuite) TestServiceConnectContextSetup() {
 	}
 }
 
+// TestServiceRequestTraces tests server request tracing functionality.
+func (s *ConnectServerTestSuite) TestServiceRequestTraces() {
+	testCases := []struct {
+		name        string
+		serviceName string
+		logData     string
+	}{
+		{
+			name:        "Server request tracing tests",
+			serviceName: "Testing Request Traces",
+			logData:     "Test logging",
+		},
+	}
+
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			t := s.T()
+			var buf1 bytes.Buffer
+
+			cfg, err := config.FromEnv[config.ConfigurationDefault]()
+			if err != nil {
+				_ = err
+				return
+			}
+
+			cfg.TraceRequests = true
+			cfg.TraceRequestsLogBody = true
+
+			httOpt, httpFn := frametests.WithHTTPTestDriver()
+
+			ctx, svc := frame.NewServiceWithContext(
+				t.Context(),
+				frame.WithName(tc.serviceName),
+				frame.WithConfig(&cfg),
+				frame.WithLogger(util.WithLogOutput(&buf1)),
+				httOpt,
+			)
+			defer svc.Stop(ctx)
+
+			_, h := pingv1connect.NewPingServiceHandler(&connectRPCHandler{})
+
+			svc.Init(ctx, frame.WithHTTPHandler(h))
+
+			runErr := svc.Run(ctx, "") // Empty port for httptest
+			if runErr != nil && !errors.Is(runErr, context.Canceled) && !errors.Is(runErr, http.ErrServerClosed) {
+				t.Errorf("TestServiceConnectContextSetup:  svc.Run failed: %v", runErr)
+			}
+
+			err = s.clientInvokeConnectHealth(httpFn().URL, tc.logData)
+			if err != nil {
+				_ = err
+			}
+
+			logData := buf1.String()
+			// Check for the actual log message that the handler produces
+			if !strings.Contains(logData, "We received : "+tc.logData) {
+				t.Errorf("Handler did not log required message. Got: %s", logData)
+			}
+
+			if !strings.Contains(logData, "HTTP request completed") ||
+				!strings.Contains(logData, "/ping.v1.PingService/Ping") {
+				t.Errorf("Handler did not log request tracing data. Got: %s", logData)
+			}
+		})
+	}
+}
+
 // TestServiceConnectServer tests service Connect RPC server functionality.
 func (s *ConnectServerTestSuite) TestServiceConnectServer() {
 	testCases := []struct {

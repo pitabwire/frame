@@ -456,19 +456,19 @@ func (s *Service) createAndConfigureMux(ctx context.Context) *http.ServeMux {
 		applicationHandler = http.DefaultServeMux
 	}
 
-	contextSetupHandler := httpInterceptor.ContextSetupMiddleware(ctx, applicationHandler)
-
 	cfg, ok := s.Config().(config.ConfigurationTraceRequests)
 	if ok {
 		if cfg.TraceReq() {
-			contextSetupHandler = httpInterceptor.LoggingMiddleware(contextSetupHandler, cfg.TraceReqLogBody())
+			applicationHandler = httpInterceptor.LoggingMiddleware(applicationHandler, cfg.TraceReqLogBody())
 		}
 	}
+
+	applicationHandler = httpInterceptor.ContextSetupMiddleware(ctx, applicationHandler)
 
 	mux := http.NewServeMux()
 
 	mux.HandleFunc(s.healthCheckPath, s.HandleHealth)
-	mux.Handle("/", contextSetupHandler)
+	mux.Handle("/", applicationHandler)
 	return mux
 }
 

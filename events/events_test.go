@@ -106,27 +106,27 @@ func (s *EventsTestSuite) TestServiceRegisterEventsWorks() {
 				}
 				cfg.EventsQueueName = tc.queueName
 				events := frame.WithRegisterEvents(&MessageToTest{})
-				ctx, srv := frame.NewService(
+				ctx, svc := frame.NewService(
 					frame.WithName(tc.serviceName),
 					events,
 					frame.WithConfig(&cfg),
 					frametests.WithNoopDriver(),
 				)
 
-				qm := srv.QueueManager()
+				qm := svc.QueueManager()
 
 				subs, _ := qm.GetSubscriber(cfg.EventsQueueName)
 				if subs != nil && subs.Initiated() {
 					t.Fatalf("Subscription to event queue is invalid")
 				}
 
-				err = srv.Run(ctx, "")
+				err = svc.Run(ctx, "")
 				require.NoError(t, err, "service should run without error")
 
 				subs, _ = qm.GetSubscriber(cfg.EventsQueueName)
 				require.True(t, subs.Initiated(), "subscription to event queue should be initiated")
 
-				srv.Stop(ctx)
+				svc.Stop(ctx)
 			})
 		}
 	})
@@ -194,20 +194,20 @@ func (s *EventsTestSuite) TestServiceEventsPublishingWorks() {
 					}
 				}
 
-				ctx, srv := frame.NewService(
+				ctx, svc := frame.NewService(
 					frame.WithName(tc.serviceName),
 					frame.WithConfig(&cfg),
 					frametests.WithNoopDriver(),
 				)
 
-				testEvent := MessageToTest{Service: srv, Count: tc.initialCount}
+				testEvent := MessageToTest{Service: svc, Count: tc.initialCount}
 				events := frame.WithRegisterEvents(&testEvent)
 
-				srv.Init(ctx, events)
-				err = srv.Run(ctx, "")
+				svc.Init(ctx, events)
+				err = svc.Run(ctx, "")
 				require.NoError(t, err, "service should run without error")
 
-				evtMan := srv.EventsManager()
+				evtMan := svc.EventsManager()
 				err = evtMan.Emit(ctx, testEvent.Name(), tc.payload)
 				require.NoError(t, err, "event emission should succeed")
 
@@ -221,7 +221,7 @@ func (s *EventsTestSuite) TestServiceEventsPublishingWorks() {
 					)
 				}
 
-				srv.Stop(ctx)
+				svc.Stop(ctx)
 			})
 		}
 	})

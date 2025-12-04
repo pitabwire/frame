@@ -134,10 +134,10 @@ func (s *CommonTestSuite) TestConfigCastingIssues() {
 				require.NoError(t, err, "configuration loading should succeed")
 
 				// Test service creation and config casting
-				_, srv := frame.NewService(frame.WithName("Test Srv"), frame.WithConfig(&conf))
-				require.NotNil(t, srv, "service should be created successfully")
+				_, svc := frame.NewService(frame.WithName("Test Srv"), frame.WithConfig(&conf))
+				require.NotNil(t, svc, "service should be created successfully")
 
-				_, ok := srv.Config().(config.ConfigurationOAUTH2)
+				_, ok := svc.Config().(config.ConfigurationOAUTH2)
 				if tc.expectCast {
 					require.True(t, ok, "configuration should be castable to OAUTH2 interface")
 				} else {

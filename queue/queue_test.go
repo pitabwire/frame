@@ -47,9 +47,9 @@ func (s *QueueTestSuite) TestServiceRegisterPublisherNotSet() {
 	s.WithTestDependancies(s.T(), func(t *testing.T, _ *definition.DependencyOption) {
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
-				ctx, srv := frame.NewService(frame.WithName(tc.serviceName))
+				ctx, svc := frame.NewService(frame.WithName(tc.serviceName))
 
-				qm := srv.QueueManager()
+				qm := svc.QueueManager()
 
 				err := qm.Publish(ctx, tc.topic, tc.message)
 				require.Error(t, err, "Publishing to unregistered topic should fail")
@@ -115,9 +115,9 @@ func (s *QueueTestSuite) TestServiceRegisterPublisherNotInitialized() {
 				}
 
 				opt := frame.WithRegisterPublisher("test", queueURL)
-				ctx, srv := frame.NewService(frame.WithName(tc.serviceName), opt)
+				ctx, svc := frame.NewService(frame.WithName(tc.serviceName), opt)
 
-				qm := srv.QueueManager()
+				qm := svc.QueueManager()
 
 				err = qm.Publish(ctx, tc.topic, tc.message)
 				require.Error(t, err, "Publishing to uninitialized publisher should fail")
@@ -183,16 +183,16 @@ func (s *QueueTestSuite) TestServiceRegisterPublisher() {
 				}
 
 				opt := frame.WithRegisterPublisher(tc.topic, queueURL)
-				ctx, srv := frame.NewService(frame.WithName(tc.serviceName), opt, frametests.WithNoopDriver())
+				ctx, svc := frame.NewService(frame.WithName(tc.serviceName), opt, frametests.WithNoopDriver())
 
-				err = srv.Run(ctx, "")
+				err = svc.Run(ctx, "")
 				require.NoError(t, err, "Service should start successfully")
 
-				qm := srv.QueueManager()
+				qm := svc.QueueManager()
 				err = qm.Publish(ctx, tc.topic, tc.message)
 				require.NoError(t, err, "Publishing to registered topic should succeed")
 
-				srv.Stop(ctx)
+				svc.Stop(ctx)
 			})
 		}
 	})
@@ -265,12 +265,12 @@ func (s *QueueTestSuite) TestServiceRegisterPublisherMultiple() {
 					opts = append(opts, frame.WithRegisterPublisher(topic, queueURL))
 				}
 
-				ctx, srv := frame.NewService(opts...)
+				ctx, svc := frame.NewService(opts...)
 
-				err = srv.Run(ctx, "")
+				err = svc.Run(ctx, "")
 				require.NoError(t, err, "Service should start successfully")
 
-				qm := srv.QueueManager()
+				qm := svc.QueueManager()
 				// Test publishing to valid topics
 				for topic, message := range tc.testMessages {
 					err = qm.Publish(ctx, topic, message)
@@ -281,7 +281,7 @@ func (s *QueueTestSuite) TestServiceRegisterPublisherMultiple() {
 				err = qm.Publish(ctx, tc.invalidTopic, []byte("Testament"))
 				require.Error(t, err, "Publishing to unregistered topic should fail")
 
-				srv.Stop(ctx)
+				svc.Stop(ctx)
 			})
 		}
 	})
@@ -361,18 +361,18 @@ func (s *QueueTestSuite) TestServiceRegisterSubscriber() {
 
 				handler := &msgHandler{f: tc.handler}
 				opt := frame.WithRegisterSubscriber(tc.topic, queueURL, handler)
-				ctx, srv := frame.NewService(frame.WithName(tc.serviceName), opt, frametests.WithNoopDriver())
+				ctx, svc := frame.NewService(frame.WithName(tc.serviceName), opt, frametests.WithNoopDriver())
 
-				err = srv.Run(ctx, "")
+				err = svc.Run(ctx, "")
 				require.NoError(t, err, "Service should start successfully")
 
-				qm := srv.QueueManager()
+				qm := svc.QueueManager()
 				subscriber, err := qm.GetSubscriber(tc.topic)
 				require.NoError(t, err, "Subscriber should exist")
 				require.NotNil(t, subscriber, "Subscriber should be registered")
 				require.True(t, subscriber.Initiated(), "Subscriber should be initiated")
 
-				srv.Stop(ctx)
+				svc.Stop(ctx)
 			})
 		}
 	})
@@ -450,12 +450,12 @@ func (s *QueueTestSuite) TestServiceRegisterSubscriberValidateMessages() {
 
 				opt := frame.WithRegisterSubscriber(tc.topic, queueURL, handler)
 				pubOpt := frame.WithRegisterPublisher(tc.topic, queueURL)
-				ctx, srv := frame.NewService(frame.WithName(tc.serviceName), opt, pubOpt, frametests.WithNoopDriver())
+				ctx, svc := frame.NewService(frame.WithName(tc.serviceName), opt, pubOpt, frametests.WithNoopDriver())
 
-				err = srv.Run(ctx, "")
+				err = svc.Run(ctx, "")
 				require.NoError(t, err, "Service should start successfully")
 
-				qm := srv.QueueManager()
+				qm := svc.QueueManager()
 				// Publish messages
 				for _, msg := range tc.messages {
 					err = qm.Publish(ctx, tc.topic, []byte(msg))
@@ -470,7 +470,7 @@ func (s *QueueTestSuite) TestServiceRegisterSubscriberValidateMessages() {
 				mu.Unlock()
 				require.Equal(t, tc.expectCount, count, "Should receive expected number of messages")
 
-				srv.Stop(ctx)
+				svc.Stop(ctx)
 			})
 		}
 	})
@@ -555,12 +555,12 @@ func (s *QueueTestSuite) TestServiceSubscriberValidateJetstreamMessages() {
 
 				opt := frame.WithRegisterSubscriber(tc.topic, queueURL, handler)
 				pubOpt := frame.WithRegisterPublisher(tc.topic, queueURL)
-				ctx, srv := frame.NewService(frame.WithName(tc.serviceName), opt, pubOpt, frametests.WithNoopDriver())
+				ctx, svc := frame.NewService(frame.WithName(tc.serviceName), opt, pubOpt, frametests.WithNoopDriver())
 
-				err = srv.Run(ctx, "")
+				err = svc.Run(ctx, "")
 				require.NoError(t, err, "Service should start successfully")
 
-				qm := srv.QueueManager()
+				qm := svc.QueueManager()
 				// Publish messages
 				for _, msg := range tc.messages {
 					data, _ := json.Marshal(msg)
@@ -576,7 +576,7 @@ func (s *QueueTestSuite) TestServiceSubscriberValidateJetstreamMessages() {
 				mu.Unlock()
 				require.Equal(t, tc.expectCount, count, "Should receive expected number of messages")
 
-				srv.Stop(ctx)
+				svc.Stop(ctx)
 			})
 		}
 	})
@@ -638,18 +638,18 @@ func (s *QueueTestSuite) TestServiceRegisterSubscriberWithError() {
 
 				handler := &handlerWithError{}
 				opt := frame.WithRegisterSubscriber(tc.topic, queueURL, handler)
-				ctx, srv := frame.NewService(frame.WithName(tc.serviceName), opt, frametests.WithNoopDriver())
+				ctx, svc := frame.NewService(frame.WithName(tc.serviceName), opt, frametests.WithNoopDriver())
 
-				err = srv.Run(ctx, "")
+				err = svc.Run(ctx, "")
 				require.NoError(t, err, "Service should start successfully")
 
-				qm := srv.QueueManager()
+				qm := svc.QueueManager()
 				subscriber, err := qm.GetSubscriber(tc.topic)
 				require.NoError(t, err, "Could not get subscriber")
 				require.NotNil(t, subscriber, "Subscriber should be registered")
 				require.True(t, subscriber.Initiated(), "Subscriber should be initiated")
 
-				srv.Stop(ctx)
+				svc.Stop(ctx)
 			})
 		}
 	})
@@ -678,9 +678,9 @@ func (s *QueueTestSuite) TestServiceRegisterSubscriberInvalid() {
 					return nil
 				}}
 				opt := frame.WithRegisterSubscriber(tc.topic, tc.queueURL, handler)
-				ctx, srv := frame.NewService(frame.WithName(tc.serviceName), opt, frametests.WithNoopDriver())
+				ctx, svc := frame.NewService(frame.WithName(tc.serviceName), opt, frametests.WithNoopDriver())
 
-				err := srv.Run(ctx, "")
+				err := svc.Run(ctx, "")
 				require.Error(t, err, "Service should fail to start with invalid queueManager URL")
 			})
 		}
@@ -745,18 +745,18 @@ func (s *QueueTestSuite) TestServiceRegisterSubscriberContextCancelWorks() {
 					return nil
 				}}
 				opt := frame.WithRegisterSubscriber(tc.topic, queueURL, handler)
-				ctx, srv := frame.NewService(frame.WithName(tc.serviceName), opt, frametests.WithNoopDriver())
+				ctx, svc := frame.NewService(frame.WithName(tc.serviceName), opt, frametests.WithNoopDriver())
 
-				err = srv.Run(ctx, "")
+				err = svc.Run(ctx, "")
 				require.NoError(t, err, "Service should start successfully")
 
-				qm := srv.QueueManager()
+				qm := svc.QueueManager()
 				subscriber, err := qm.GetSubscriber(tc.topic)
 				require.NoError(t, err, "Subscriber not found")
 				require.NotNil(t, subscriber, "Subscriber should be registered")
 				require.True(t, subscriber.Initiated(), "Subscriber should be initiated")
 
-				srv.Stop(ctx)
+				svc.Stop(ctx)
 			})
 		}
 	})
@@ -818,19 +818,19 @@ func (s *QueueTestSuite) TestServiceAddPublisher() {
 					}
 				}
 
-				ctx, srv := frame.NewService(frame.WithName(tc.serviceName), frametests.WithNoopDriver())
+				ctx, svc := frame.NewService(frame.WithName(tc.serviceName), frametests.WithNoopDriver())
 
-				err = srv.Run(ctx, "")
+				err = svc.Run(ctx, "")
 				require.NoError(t, err, "Service should start successfully")
 
-				qm := srv.QueueManager()
+				qm := svc.QueueManager()
 				err = qm.AddPublisher(ctx, tc.topic, queueURL)
 				require.NoError(t, err, "Adding publisher should succeed")
 
 				err = qm.Publish(ctx, tc.topic, tc.message)
 				require.NoError(t, err, "Publishing to dynamically added topic should succeed")
 
-				srv.Stop(ctx)
+				svc.Stop(ctx)
 			})
 		}
 	})
@@ -855,12 +855,12 @@ func (s *QueueTestSuite) TestServiceAddPublisherInvalidURL() {
 	s.WithTestDependancies(s.T(), func(t *testing.T, _ *definition.DependencyOption) {
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
-				ctx, srv := frame.NewService(frame.WithName(tc.serviceName), frametests.WithNoopDriver())
+				ctx, svc := frame.NewService(frame.WithName(tc.serviceName), frametests.WithNoopDriver())
 
-				err := srv.Run(ctx, "")
+				err := svc.Run(ctx, "")
 				require.NoError(t, err, "Service should start successfully")
 
-				qm := srv.QueueManager()
+				qm := svc.QueueManager()
 				err = qm.AddPublisher(ctx, tc.topic, tc.queueURL)
 				require.Error(t, err, "Adding publisher with invalid URL should fail")
 			})
@@ -926,12 +926,12 @@ func (s *QueueTestSuite) TestServiceAddSubscriber() {
 					return nil
 				}}
 
-				ctx, srv := frame.NewService(frame.WithName(tc.serviceName), frametests.WithNoopDriver())
+				ctx, svc := frame.NewService(frame.WithName(tc.serviceName), frametests.WithNoopDriver())
 
-				err = srv.Run(ctx, "")
+				err = svc.Run(ctx, "")
 				require.NoError(t, err, "Service should start successfully")
 
-				qm := srv.QueueManager()
+				qm := svc.QueueManager()
 				err = qm.AddSubscriber(ctx, tc.topic, queueURL, handler)
 				require.NoError(t, err, "Adding subscriber should succeed")
 
@@ -940,7 +940,7 @@ func (s *QueueTestSuite) TestServiceAddSubscriber() {
 				require.NotNil(t, subscriber, "Subscriber should be registered")
 				require.True(t, subscriber.Initiated(), "Subscriber should be initiated")
 
-				srv.Stop(ctx)
+				svc.Stop(ctx)
 			})
 		}
 	})
@@ -1000,12 +1000,12 @@ func (s *QueueTestSuite) TestServiceAddSubscriberWithoutHandler() {
 					}
 				}
 
-				ctx, srv := frame.NewService(frame.WithName(tc.serviceName), frametests.WithNoopDriver())
+				ctx, svc := frame.NewService(frame.WithName(tc.serviceName), frametests.WithNoopDriver())
 
-				err = srv.Run(ctx, "")
+				err = svc.Run(ctx, "")
 				require.NoError(t, err, "Service should start successfully")
 
-				qm := srv.QueueManager()
+				qm := svc.QueueManager()
 				err = qm.AddSubscriber(ctx, tc.topic, queueURL)
 				require.NoError(
 					t,
@@ -1040,12 +1040,12 @@ func (s *QueueTestSuite) TestServiceAddSubscriberInvalidURL() {
 					return nil
 				}}
 
-				ctx, srv := frame.NewService(frame.WithName(tc.serviceName), frametests.WithNoopDriver())
+				ctx, svc := frame.NewService(frame.WithName(tc.serviceName), frametests.WithNoopDriver())
 
-				err := srv.Run(ctx, "")
+				err := svc.Run(ctx, "")
 				require.NoError(t, err, "Service should start successfully")
 
-				qm := srv.QueueManager()
+				qm := svc.QueueManager()
 				err = qm.AddSubscriber(ctx, tc.topic, tc.queueURL, handler)
 				require.Error(t, err, "Adding subscriber with invalid URL should fail")
 			})

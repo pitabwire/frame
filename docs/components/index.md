@@ -192,7 +192,7 @@ Utilizing the registered publisher is as shown below.
 	
 ...
 
-	err = srv.Publish(ctx, "test", []byte(" we are testing message publishing"))
+	err =  svc.Publish(ctx, "test", []byte(" we are testing message publishing"))
 ...
 
 ````

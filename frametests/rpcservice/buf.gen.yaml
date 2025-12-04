@@ -1,0 +1,18 @@
+version: v2
+plugins:
+  - local: protoc-gen-go
+    out: ./
+    opt: paths=source_relative
+  - local: protoc-gen-go-grpc
+    out: ./
+    opt: paths=source_relative
+  - local: protoc-gen-connect-go
+    out: ./
+    opt:
+      - paths=source_relative
+      - simple
+managed:
+  enabled: true
+  override:
+    - file_option: go_package_prefix
+      value: github.com/pitabwire/frame/frametests/rpcservice

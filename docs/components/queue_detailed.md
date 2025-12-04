@@ -83,7 +83,7 @@ type NotificationMessage struct {
     CreatedAt   time.Time `json:"created_at"`
 }
 
-func sendNotification(ctx context.Context, srv *frame.Service, userID, content string) error {
+func sendNotification(ctx context.Context, svc *frame.Service, userID, content string) error {
     msg := NotificationMessage{
         UserID:    userID,
         Type:      "general",
@@ -96,7 +96,7 @@ func sendNotification(ctx context.Context, srv *frame.Service, userID, content s
         return fmt.Errorf("failed to marshal message: %w", err)
     }
     
-    return srv.Publish(ctx, "notifications", data)
+    return  svc.Publish(ctx, "notifications", data)
 }
 ```
 

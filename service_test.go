@@ -55,9 +55,9 @@ func (s *ServiceTestSuite) TestDefaultService() {
 	s.WithTestDependancies(s.T(), func(t *testing.T, _ *definition.DependencyOption) {
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
-				_, srv := frame.NewService(frame.WithName(tc.serviceName))
-				require.NotNil(t, srv, "default service should be instantiated")
-				require.Equal(t, tc.serviceName, srv.Name(), "service name should match")
+				_, svc := frame.NewService(frame.WithName(tc.serviceName))
+				require.NotNil(t, svc, "default service should be instantiated")
+				require.Equal(t, tc.serviceName, svc.Name(), "service name should match")
 			})
 		}
 	})
@@ -78,8 +78,8 @@ func (s *ServiceTestSuite) TestService() {
 	s.WithTestDependancies(s.T(), func(t *testing.T, _ *definition.DependencyOption) {
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
-				_, srv := frame.NewService(frame.WithName(tc.serviceName))
-				require.NotNil(t, srv, "service should be instantiated")
+				_, svc := frame.NewService(frame.WithName(tc.serviceName))
+				require.NotNil(t, svc, "service should be instantiated")
 			})
 		}
 	})
@@ -111,10 +111,10 @@ func (s *ServiceTestSuite) TestFromContext() {
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
 				ctx := s.T().Context()
-				_, srv := frame.NewService(frame.WithName(tc.serviceName))
+				_, svc := frame.NewService(frame.WithName(tc.serviceName))
 
 				if tc.setService {
-					ctx = frame.ToContext(ctx, srv)
+					ctx = frame.ToContext(ctx, svc)
 				}
 
 				retrievedSrv := frame.FromContext(ctx)
@@ -146,19 +146,19 @@ func (s *ServiceTestSuite) TestServiceAddCleanupMethod() {
 	s.WithTestDependancies(s.T(), func(t *testing.T, _ *definition.DependencyOption) {
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
-				ctx, srv := frame.NewService(frame.WithName(tc.serviceName))
+				ctx, svc := frame.NewService(frame.WithName(tc.serviceName))
 
 				a := 30
 
 				for range tc.cleanupCount {
-					srv.AddCleanupMethod(func(_ context.Context) {
+					svc.AddCleanupMethod(func(_ context.Context) {
 						a++
 					})
 				}
 
 				require.Equal(t, 30, a, "cleanup methods should not run prematurely")
 
-				srv.Stop(ctx)
+				svc.Stop(ctx)
 
 				require.Equal(t, 30+tc.cleanupCount, a, "cleanup methods should run at shutdown")
 			})
@@ -197,17 +197,17 @@ func (s *ServiceTestSuite) TestServiceAddHealthCheck() {
 	s.WithTestDependancies(s.T(), func(t *testing.T, _ *definition.DependencyOption) {
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
-				_, srv := frame.NewService(frame.WithName(tc.serviceName))
+				_, svc := frame.NewService(frame.WithName(tc.serviceName))
 
 				if tc.addHealthCheck {
 					healthChecker := new(testHC)
-					require.Nil(t, srv.HealthCheckers(), "health checkers should not be present by default")
+					require.Nil(t, svc.HealthCheckers(), "health checkers should not be present by default")
 
-					srv.AddHealthCheck(healthChecker)
+					svc.AddHealthCheck(healthChecker)
 
-					require.Len(t, srv.HealthCheckers(), tc.expectCount, "health checkers should be added")
+					require.Len(t, svc.HealthCheckers(), tc.expectCount, "health checkers should be added")
 				} else {
-					require.Nil(t, srv.HealthCheckers(), "health checkers should not be present by default")
+					require.Nil(t, svc.HealthCheckers(), "health checkers should not be present by default")
 				}
 			})
 		}
@@ -243,12 +243,12 @@ func (s *ServiceTestSuite) TestBackGroundConsumer() {
 	s.WithTestDependancies(s.T(), func(t *testing.T, _ *definition.DependencyOption) {
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
-				ctx, srv := frame.NewService(
+				ctx, svc := frame.NewService(
 					frame.WithName(tc.serviceName),
 					frame.WithBackgroundConsumer(tc.consumerFunc),
 				)
 
-				err := srv.Run(ctx, ":")
+				err := svc.Run(ctx, ":")
 
 				if tc.expectError {
 					require.Error(t, err, "background consumer error should be propagated")
@@ -277,12 +277,12 @@ func (s *ServiceTestSuite) TestServiceExitByOSSignal() {
 	s.WithTestDependancies(s.T(), func(t *testing.T, _ *definition.DependencyOption) {
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
-				ctx, srv := frame.NewService(frame.WithName(tc.serviceName))
+				ctx, svc := frame.NewService(frame.WithName(tc.serviceName))
 
-				go func(srv *frame.Service) {
-					err := srv.Run(ctx, ":")
+				go func(svc *frame.Service) {
+					err := svc.Run(ctx, ":")
 					assert.ErrorIs(t, err, context.Canceled, "service should exit correctly on context cancellation")
-				}(srv)
+				}(svc)
 
 				time.Sleep(1 * time.Second)
 				err := syscall.Kill(os.Getpid(), tc.signal)
@@ -380,13 +380,13 @@ func (s *ServiceTestSuite) TestHealthCheckEndpoints() {
 					opts = append(opts, frame.WithHTTPHandler(tc.handler))
 				}
 
-				ctx, srv := frame.NewService(opts...)
-				defer srv.Stop(ctx)
+				ctx, svc := frame.NewService(opts...)
+				defer svc.Stop(ctx)
 
-				err := srv.Run(ctx, ":41576")
+				err := svc.Run(ctx, ":41576")
 				require.NoError(t, err, "server should start without error")
 
-				ts := httptest.NewServer(srv.H())
+				ts := httptest.NewServer(svc.H())
 				defer ts.Close()
 
 				resp, err := http.Get(fmt.Sprintf("%s%s", ts.URL, tc.path))
@@ -565,8 +565,8 @@ func TestService_HTTPClientTracing(t *testing.T) {
 			clientManager := svc.HTTPClientManager()
 			require.NotNil(t, clientManager)
 
-			client := clientManager.Client(ctx)
-			require.NotNil(t, client)
+			clmgr := clientManager.Client(ctx)
+			require.NotNil(t, clmgr)
 
 			// Create a test server to capture requests
 			testServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -579,8 +579,8 @@ func TestService_HTTPClientTracing(t *testing.T) {
 			req, err := http.NewRequestWithContext(ctx, http.MethodGet, testServer.URL, nil)
 			require.NoError(t, err)
 
-			// Make a request with the traced client using our context
-			resp, err := client.Do(req)
+			// Make a request with the traced clmgr using our context
+			resp, err := clmgr.Do(req)
 			require.NoError(t, err)
 			defer resp.Body.Close()
 
@@ -604,7 +604,7 @@ func TestService_HTTPClientTracing(t *testing.T) {
 				assert.Contains(t, logOutput, "status=200",
 					"Should log response status when tracing is enabled")
 
-				t.Log("✓ HTTP client tracing is enabled - logs captured and verified")
+				t.Log("✓ HTTP clmgr tracing is enabled - logs captured and verified")
 			} else {
 				// Should NOT contain HTTP request and response logs
 				assert.NotContains(t, logOutput, "HTTP request sent",
@@ -612,7 +612,7 @@ func TestService_HTTPClientTracing(t *testing.T) {
 				assert.NotContains(t, logOutput, "HTTP response received",
 					"Should not log HTTP response when tracing is disabled")
 
-				t.Log("✓ HTTP client tracing is disabled - no logs generated")
+				t.Log("✓ HTTP clmgr tracing is disabled - no logs generated")
 			}
 		})
 	}

@@ -54,14 +54,14 @@ func (s *RepositoryTestSuite) TestServiceDatastore() {
 			t.Run(tc.name, func(t *testing.T) {
 				db := dep.ByIsDatabase(t.Context())
 
-				ctx, srv := frame.NewService(frame.WithName(tc.serviceName), frametests.WithNoopDriver())
+				ctx, svc := frame.NewService(frame.WithName(tc.serviceName), frametests.WithNoopDriver())
 
 				mainDB := frame.WithDatastoreConnection(db.GetDS(ctx).String(), false)
-				srv.Init(ctx, mainDB)
+				svc.Init(ctx, mainDB)
 
-				require.Equal(t, tc.serviceName, srv.Name(), "dbPool name should match")
+				require.Equal(t, tc.serviceName, svc.Name(), "dbPool name should match")
 
-				dbPool := srv.DatastoreManager().GetPool(ctx, datastore.DefaultPoolName)
+				dbPool := svc.DatastoreManager().GetPool(ctx, datastore.DefaultPoolName)
 				w := dbPool.DB(ctx, false)
 				require.NotNil(t, w, "write database should be instantiated")
 
@@ -72,7 +72,7 @@ func (s *RepositoryTestSuite) TestServiceDatastore() {
 				wd, _ := w.DB()
 				require.Equal(t, wd, rd, "read and write db services should be the same for single connection")
 
-				srv.Stop(ctx)
+				svc.Stop(ctx)
 			})
 		}
 	})
@@ -107,14 +107,14 @@ func (s *RepositoryTestSuite) TestServiceDatastoreSet() {
 
 				defConf.DatabaseTraceQueries = tc.traceQueries
 
-				ctx, srv := frame.NewService(
+				ctx, svc := frame.NewService(
 					frame.WithName("Test Srv"),
 					frame.WithConfig(&defConf),
 					frame.WithDatastore(),
 				)
-				srv.Init(ctx)
+				svc.Init(ctx)
 
-				dbPool := srv.DatastoreManager().GetPool(ctx, datastore.DefaultPoolName)
+				dbPool := svc.DatastoreManager().GetPool(ctx, datastore.DefaultPoolName)
 				w := dbPool.DB(ctx, false)
 				require.NotNil(t, w, "write database should be available")
 
@@ -203,15 +203,15 @@ func (s *RepositoryTestSuite) TestServiceDatastoreRead() {
 			t.Run(tc.name, func(t *testing.T) {
 				db := dep.ByIsDatabase(t.Context())
 
-				ctx, srv := frame.NewService(
+				ctx, svc := frame.NewService(
 					frame.WithName(tc.serviceName),
 					frame.WithDatastore(pool.WithConnection(db.GetDS(t.Context()).String(), false)),
 				)
 
 				readDB := frame.WithDatastoreConnection(db.GetDS(ctx).String(), true)
-				srv.Init(ctx, readDB)
+				svc.Init(ctx, readDB)
 
-				dbPool := srv.DatastoreManager().GetPool(ctx, datastore.DefaultPoolName)
+				dbPool := svc.DatastoreManager().GetPool(ctx, datastore.DefaultPoolName)
 				w := dbPool.DB(ctx, false)
 				require.NotNil(t, w, "write database should be available")
 
@@ -246,11 +246,11 @@ func (s *RepositoryTestSuite) TestServiceDatastoreNotSet() {
 	s.WithTestDependancies(s.T(), func(t *testing.T, _ *definition.DependencyOption) {
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
-				_, srv := frame.NewService(frame.WithName(tc.serviceName))
+				_, svc := frame.NewService(frame.WithName(tc.serviceName))
 
 				require.Nil(
 					t,
-					srv.DatastoreManager(),
+					svc.DatastoreManager(),
 					"no database manager should be available when none is configured",
 				)
 			})
@@ -398,21 +398,21 @@ func (s *RepositoryTestSuite) TestCreate() {
 				ctx := t.Context()
 				db := dep.ByIsDatabase(ctx)
 
-				ctx, srv := frame.NewService(
+				ctx, svc := frame.NewService(
 					frame.WithName("Test Create Service"),
 					frame.WithDatastore(pool.WithConnection(db.GetDS(t.Context()).String(), false)),
 				)
-				srv.Init(ctx)
-				defer srv.Stop(ctx)
+				svc.Init(ctx)
+				defer svc.Stop(ctx)
 
-				dbPool := srv.DatastoreManager().GetPool(ctx, datastore.DefaultPoolName)
+				dbPool := svc.DatastoreManager().GetPool(ctx, datastore.DefaultPoolName)
 				err := dbPool.DB(ctx, false).AutoMigrate(&TestEntity{})
 				require.NoError(t, err, "auto-migrate should succeed")
 
 				repo := datastore.NewBaseRepository[*TestEntity](
 					ctx,
 					dbPool,
-					srv.WorkManager(),
+					svc.WorkManager(),
 					func() *TestEntity { return &TestEntity{} },
 				)
 
@@ -448,21 +448,21 @@ func (s *RepositoryTestSuite) TestImmutableFields() {
 		ctx := t.Context()
 		db := dep.ByIsDatabase(ctx)
 
-		ctx, srv := frame.NewService(
+		ctx, svc := frame.NewService(
 			frame.WithName("Test Immutable Service"),
 			frame.WithDatastore(pool.WithConnection(db.GetDS(t.Context()).String(), false)),
 		)
-		srv.Init(ctx)
-		defer srv.Stop(ctx)
+		svc.Init(ctx)
+		defer svc.Stop(ctx)
 
-		dbPool := srv.DatastoreManager().GetPool(ctx, datastore.DefaultPoolName)
+		dbPool := svc.DatastoreManager().GetPool(ctx, datastore.DefaultPoolName)
 		err := dbPool.DB(ctx, false).AutoMigrate(&TestEntity{})
 		require.NoError(t, err)
 
 		repo := datastore.NewBaseRepository[*TestEntity](
 			ctx,
 			dbPool,
-			srv.WorkManager(),
+			svc.WorkManager(),
 			func() *TestEntity { return &TestEntity{} },
 		)
 
@@ -550,21 +550,21 @@ func (s *RepositoryTestSuite) TestBulkCreate() {
 				ctx := t.Context()
 				db := dep.ByIsDatabase(ctx)
 
-				ctx, srv := frame.NewService(
+				ctx, svc := frame.NewService(
 					frame.WithName("Test Bulk Create Service"),
 					frame.WithDatastore(pool.WithConnection(db.GetDS(t.Context()).String(), false)),
 				)
-				srv.Init(ctx)
-				defer srv.Stop(ctx)
+				svc.Init(ctx)
+				defer svc.Stop(ctx)
 
-				dbPool := srv.DatastoreManager().GetPool(ctx, datastore.DefaultPoolName)
+				dbPool := svc.DatastoreManager().GetPool(ctx, datastore.DefaultPoolName)
 				err := dbPool.DB(ctx, false).AutoMigrate(&TestEntity{})
 				require.NoError(t, err)
 
 				repo := datastore.NewBaseRepository[*TestEntity](
 					ctx,
 					dbPool,
-					srv.WorkManager(),
+					svc.WorkManager(),
 					func() *TestEntity { return &TestEntity{} },
 				)
 
@@ -624,21 +624,21 @@ func (s *RepositoryTestSuite) TestBulkCreateBatchSize() {
 		ctx := t.Context()
 		db := dep.ByIsDatabase(ctx)
 
-		ctx, srv := frame.NewService(
+		ctx, svc := frame.NewService(
 			frame.WithName("Test Batch Size Service"),
 			frame.WithDatastore(pool.WithConnection(db.GetDS(t.Context()).String(), false)),
 		)
-		srv.Init(ctx)
-		defer srv.Stop(ctx)
+		svc.Init(ctx)
+		defer svc.Stop(ctx)
 
-		dbPool := srv.DatastoreManager().GetPool(ctx, datastore.DefaultPoolName)
+		dbPool := svc.DatastoreManager().GetPool(ctx, datastore.DefaultPoolName)
 		err := dbPool.DB(ctx, false).AutoMigrate(&TestEntity{})
 		require.NoError(t, err)
 
 		repo := datastore.NewBaseRepository[*TestEntity](
 			ctx,
 			dbPool,
-			srv.WorkManager(),
+			svc.WorkManager(),
 			func() *TestEntity { return &TestEntity{} },
 		)
 
@@ -750,21 +750,21 @@ func (s *RepositoryTestSuite) TestBulkUpdate() {
 				ctx := t.Context()
 				db := dep.ByIsDatabase(ctx)
 
-				ctx, srv := frame.NewService(
+				ctx, svc := frame.NewService(
 					frame.WithName("Test Bulk Update Service"),
 					frame.WithDatastore(pool.WithConnection(db.GetDS(t.Context()).String(), false)),
 				)
-				srv.Init(ctx)
-				defer srv.Stop(ctx)
+				svc.Init(ctx)
+				defer svc.Stop(ctx)
 
-				dbPool := srv.DatastoreManager().GetPool(ctx, datastore.DefaultPoolName)
+				dbPool := svc.DatastoreManager().GetPool(ctx, datastore.DefaultPoolName)
 				err := dbPool.DB(ctx, false).AutoMigrate(&TestEntity{})
 				require.NoError(t, err)
 
 				repo := datastore.NewBaseRepository[*TestEntity](
 					ctx,
 					dbPool,
-					srv.WorkManager(),
+					svc.WorkManager(),
 					func() *TestEntity { return &TestEntity{} },
 				)
 
@@ -842,21 +842,21 @@ func (s *RepositoryTestSuite) TestBulkUpdateInvalidColumn() {
 		ctx := t.Context()
 		db := dep.ByIsDatabase(ctx)
 
-		ctx, srv := frame.NewService(
+		ctx, svc := frame.NewService(
 			frame.WithName("Test Invalid Column Service"),
 			frame.WithDatastore(pool.WithConnection(db.GetDS(t.Context()).String(), false)),
 		)
-		srv.Init(ctx)
-		defer srv.Stop(ctx)
+		svc.Init(ctx)
+		defer svc.Stop(ctx)
 
-		dbPool := srv.DatastoreManager().GetPool(ctx, datastore.DefaultPoolName)
+		dbPool := svc.DatastoreManager().GetPool(ctx, datastore.DefaultPoolName)
 		err := dbPool.DB(ctx, false).AutoMigrate(&TestEntity{})
 		require.NoError(t, err)
 
 		repo := datastore.NewBaseRepository[*TestEntity](
 			ctx,
 			dbPool,
-			srv.WorkManager(),
+			svc.WorkManager(),
 			func() *TestEntity { return &TestEntity{} },
 		)
 
@@ -883,21 +883,21 @@ func (s *RepositoryTestSuite) TestBulkUpdateConcurrent() {
 		ctx := t.Context()
 		db := dep.ByIsDatabase(ctx)
 
-		ctx, srv := frame.NewService(
+		ctx, svc := frame.NewService(
 			frame.WithName("Test Concurrent Bulk Service"),
 			frame.WithDatastore(pool.WithConnection(db.GetDS(t.Context()).String(), false)),
 		)
-		srv.Init(ctx)
-		defer srv.Stop(ctx)
+		svc.Init(ctx)
+		defer svc.Stop(ctx)
 
-		dbPool := srv.DatastoreManager().GetPool(ctx, datastore.DefaultPoolName)
+		dbPool := svc.DatastoreManager().GetPool(ctx, datastore.DefaultPoolName)
 		err := dbPool.DB(ctx, false).AutoMigrate(&TestEntity{})
 		require.NoError(t, err)
 
 		repo := datastore.NewBaseRepository[*TestEntity](
 			ctx,
 			dbPool,
-			srv.WorkManager(),
+			svc.WorkManager(),
 			func() *TestEntity { return &TestEntity{} },
 		)
 
@@ -967,21 +967,21 @@ func (s *RepositoryTestSuite) TestBulkUpdatePerformance() {
 		ctx := t.Context()
 		db := dep.ByIsDatabase(ctx)
 
-		ctx, srv := frame.NewService(
+		ctx, svc := frame.NewService(
 			frame.WithName("Test Performance Service"),
 			frame.WithDatastore(pool.WithConnection(db.GetDS(t.Context()).String(), false)),
 		)
-		srv.Init(ctx)
-		defer srv.Stop(ctx)
+		svc.Init(ctx)
+		defer svc.Stop(ctx)
 
-		dbPool := srv.DatastoreManager().GetPool(ctx, datastore.DefaultPoolName)
+		dbPool := svc.DatastoreManager().GetPool(ctx, datastore.DefaultPoolName)
 		err := dbPool.DB(ctx, false).AutoMigrate(&TestEntity{})
 		require.NoError(t, err)
 
 		repo := datastore.NewBaseRepository[*TestEntity](
 			ctx,
 			dbPool,
-			srv.WorkManager(),
+			svc.WorkManager(),
 			func() *TestEntity { return &TestEntity{} },
 		)
 

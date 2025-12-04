@@ -80,14 +80,14 @@ func (s *JwtTestSuite) TestServiceRegisterForJwtWithParams() {
 				ctx := t.Context()
 				hydra := dep.ByImageName(testoryhydra.OryHydraImage)
 
-				ctx, srv := frame.NewService(
+				ctx, svc := frame.NewService(
 					frame.WithName(tc.serviceName),
 					frame.WithConfig(&config.ConfigurationDefault{
 						Oauth2ServiceAdminURI: hydra.GetDS(ctx).String(),
 					}),
 				)
 
-				sm := srv.SecurityManager()
+				sm := svc.SecurityManager()
 				clientRegistrar := sm.GetOauth2ClientRegistrar(ctx)
 
 				response, err := clientRegistrar.RegisterForJwtWithParams(
@@ -103,7 +103,7 @@ func (s *JwtTestSuite) TestServiceRegisterForJwtWithParams() {
 				require.NotEmpty(t, response, "JWT registration response should not be empty")
 
 				sm.SetJwtClient(tc.clientID, tc.clientSecret, response)
-				srv.Log(ctx).WithField("client id", response).Info("successfully registered for JWT")
+				svc.Log(ctx).WithField("client id", response).Info("successfully registered for JWT")
 
 				err = clientRegistrar.UnRegisterForJwt(ctx, hydra.GetDS(ctx).String(), sm.JwtClientID())
 				require.NoError(t, err, "JWT unregistration should succeed")

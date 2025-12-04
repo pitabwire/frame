@@ -168,7 +168,7 @@ func (s *AuthorizationTestSuite) TestAuthorizationControlListWrite() {
 				require.NoError(t, err)
 
 				// Setup service and context
-				ctx, srv := frame.NewService(frame.WithName("Test Srv"), frame.WithConfig(&config.ConfigurationDefault{
+				ctx, svc := frame.NewService(frame.WithName("Test Srv"), frame.WithConfig(&config.ConfigurationDefault{
 					AuthorizationServiceWriteURI: ketoAdminURI.String(),
 					AuthorizationServiceReadURI:  ketoReadURI.String(),
 				}))
@@ -261,7 +261,7 @@ func (s *AuthorizationTestSuite) TestAuthHasAccess() {
 				require.NoError(t, err)
 
 				// Setup service and context
-				ctx, srv := frame.NewService(frame.WithName("Test Srv"), frame.WithConfig(
+				ctx, svc := frame.NewService(frame.WithName("Test Srv"), frame.WithConfig(
 					&config.ConfigurationDefault{
 						AuthorizationServiceReadURI:  ketoReadURI.String(),
 						AuthorizationServiceWriteURI: ketoAdminURI.String(),
@@ -269,7 +269,7 @@ func (s *AuthorizationTestSuite) TestAuthHasAccess() {
 
 				ctx = tc.setupClaims(ctx, tc.checkSubject)
 
-				sm := srv.SecurityManager()
+				sm := svc.SecurityManager()
 				// First write the permission
 				err = s.authorizationControlListWrite(ctx, ketoAdminURI.String(), tc.objectID, tc.action, tc.subject)
 				if tc.subject == tc.checkSubject { // Only expect success if we're checking the subject we wrote

@@ -26,7 +26,7 @@ import (
 	"github.com/pitabwire/frame/config"
 	"github.com/pitabwire/frame/frametests"
 	"github.com/pitabwire/frame/frametests/definition"
-	grpcping2 "github.com/pitabwire/frame/frametests/grpcping"
+	pingv1 "github.com/pitabwire/frame/frametests/rpcservice/ping/v1"
 	"github.com/pitabwire/frame/tests"
 )
 
@@ -40,27 +40,27 @@ func TestServerSuite(t *testing.T) {
 	suite.Run(t, &ServerTestSuite{})
 }
 
-type grpcServer struct {
-	grpcping2.UnimplementedFramePingServer
+type connectServer struct {
+	pingv1.UnimplementedPingServiceServer
 }
 
-func (s *grpcServer) SayPing(_ context.Context, in *grpcping2.HelloRequest) (
-	*grpcping2.HelloResponse, error) {
-	return &grpcping2.HelloResponse{Message: "Hello " + in.GetName() + " from frame"}, nil
+func (s *connectServer) SayPing(_ context.Context, in *pingv1.PingRequest) (
+	*pingv1.PingResponse, error) {
+	return &pingv1.PingResponse{Message: "Hello " + in.GetName() + " from frame"}, nil
 }
 
 func (s *ServerTestSuite) startGRPCServer(_ *testing.T) (*grpc.Server, *bufconn.Listener) {
 	bufferSize := 1024 * 1024
 	listener := bufconn.Listen(bufferSize)
-	srv := grpc.NewServer()
-	grpcping2.RegisterFramePingServer(srv, &grpcServer{})
+	gsrv := grpc.NewServer()
+	pingv1.RegisterPingServiceServer(gsrv, &connectServer{})
 
 	go func() {
-		if err := srv.Serve(listener); err != nil {
+		if err := gsrv.Serve(listener); err != nil {
 			_ = err
 		}
 	}()
-	return srv, listener
+	return gsrv, listener
 }
 
 func (s *ServerTestSuite) getBufDialer(listener *bufconn.Listener) func(context.Context, string) (net.Conn, error) {
@@ -69,8 +69,8 @@ func (s *ServerTestSuite) getBufDialer(listener *bufconn.Listener) func(context.
 	}
 }
 
-// TestRawGrpcServer tests raw gRPC server functionality.
-func (s *ServerTestSuite) TestRawGrpcServer() {
+// TestRawConnectServer tests raw gRPC server functionality.
+func (s *ServerTestSuite) TestRawConnectServer() {
 	testCases := []struct {
 		name string
 	}{
@@ -82,10 +82,10 @@ func (s *ServerTestSuite) TestRawGrpcServer() {
 	s.WithTestDependancies(s.T(), func(t *testing.T, _ *definition.DependencyOption) {
 		for _, tc := range testCases {
 			t.Run(tc.name, func(_ *testing.T) {
-				srv, listener := s.startGRPCServer(t)
+				svc, listener := s.startGRPCServer(t)
 				// it is here to properly stop the server
 				defer func() { time.Sleep(10 * time.Millisecond) }()
-				defer srv.Stop()
+				defer svc.Stop()
 
 				transportCred := grpc.WithTransportCredentials(insecure.NewCredentials())
 				ctx, cancel, conn, err := s.getBufferedClConn(listener, transportCred)
@@ -123,7 +123,7 @@ func (s *ServerTestSuite) TestServiceGrpcHealthServer() {
 				bufferSize := 1024 * 1024
 				listener := bufconn.Listen(bufferSize)
 				gsrv := grpc.NewServer()
-				grpcping2.RegisterFramePingServer(gsrv, &grpcServer{})
+				pingv1.RegisterPingServiceServer(gsrv, &connectServer{})
 
 				defConf, err := config.FromEnv[config.ConfigurationDefault]()
 				if err != nil {
@@ -134,7 +134,7 @@ func (s *ServerTestSuite) TestServiceGrpcHealthServer() {
 
 				httpTestOpt, _ := frametests.WithHTTPTestDriver()
 
-				ctx, srv := frame.NewService(
+				ctx, svc := frame.NewService(
 					frame.WithName(tc.serviceName),
 					httpTestOpt,
 					frame.WithGRPCServer(gsrv),
@@ -142,9 +142,9 @@ func (s *ServerTestSuite) TestServiceGrpcHealthServer() {
 					frame.WithConfig(&defConf),
 				)
 
-				runErr := srv.Run(ctx, "") // Changed srv.Start to srv.Run, empty port for bufconn
+				runErr := svc.Run(ctx, "") // Changed  svc.Start to  svc.Run, empty port for bufconn
 				if runErr != nil && !errors.Is(runErr, context.Canceled) && !errors.Is(runErr, http.ErrServerClosed) {
-					t.Errorf("TestServiceGrpcHealthServer: srv.Run failed: %v", runErr)
+					t.Errorf("TestServiceGrpcHealthServer:  svc.Run failed: %v", runErr)
 				}
 
 				transportCred := grpc.WithTransportCredentials(insecure.NewCredentials())
@@ -159,7 +159,7 @@ func (s *ServerTestSuite) TestServiceGrpcHealthServer() {
 					_ = err
 				}
 
-				srv.Stop(ctx)
+				svc.Stop(ctx)
 			})
 		}
 	})
@@ -185,22 +185,22 @@ func (s *ServerTestSuite) TestServiceGrpcServer() {
 				bufferSize := 1024 * 1024
 				listener := bufconn.Listen(bufferSize)
 				gsrv := grpc.NewServer()
-				grpcping2.RegisterFramePingServer(gsrv, &grpcServer{})
+				pingv1.RegisterPingServiceServer(gsrv, &connectServer{})
 
 				httpTestOpt, _ := frametests.WithHTTPTestDriver()
 
-				ctx, srv := frame.NewService(
+				ctx, svc := frame.NewService(
 					frame.WithName(tc.serviceName),
 					httpTestOpt,
 					frame.WithGRPCServer(gsrv),
 					frame.WithGRPCServerListener(listener),
 				)
 
-				srv.Init(ctx, frame.WithGRPCServer(gsrv), frame.WithGRPCPort(tc.grpcPort))
+				svc.Init(ctx, frame.WithGRPCServer(gsrv), frame.WithGRPCPort(tc.grpcPort))
 
-				err := srv.Run(ctx, "")
+				err := svc.Run(ctx, "")
 				if err != nil {
-					srv.Log(ctx).WithError(err).Error(" failed to run server ")
+					svc.Log(ctx).WithError(err).Error(" failed to run server ")
 				}
 
 				transportCred := grpc.WithTransportCredentials(insecure.NewCredentials())
@@ -215,7 +215,7 @@ func (s *ServerTestSuite) TestServiceGrpcServer() {
 					_ = err
 				}
 
-				srv.Stop(ctx)
+				svc.Stop(ctx)
 			})
 		}
 	})
@@ -243,17 +243,17 @@ func (s *ServerTestSuite) TestServiceGrpcTLSServer() {
 		for _, tc := range testCases {
 			t.Run(tc.name, func(_ *testing.T) {
 				gsrv := grpc.NewServer()
-				grpcping2.RegisterFramePingServer(gsrv, &grpcServer{})
+				pingv1.RegisterPingServiceServer(gsrv, &connectServer{})
 
-				ctx, srv := frame.NewService(frame.WithName(tc.serviceName))
+				ctx, svc := frame.NewService(frame.WithName(tc.serviceName))
 
 				httpTestOpt, _ := frametests.WithHTTPTestDriver()
 
-				srv.Init(ctx, httpTestOpt, frame.WithGRPCServer(gsrv), frame.WithGRPCPort(tc.grpcPort))
+				svc.Init(ctx, httpTestOpt, frame.WithGRPCServer(gsrv), frame.WithGRPCPort(tc.grpcPort))
 
-				err := srv.Run(ctx, "")
+				err := svc.Run(ctx, "")
 				if err != nil {
-					srv.Log(ctx).WithError(err).Error(" failed to run server ")
+					svc.Log(ctx).WithError(err).Error(" failed to run server ")
 				}
 
 				cert, err := os.ReadFile(tc.certFile)
@@ -282,7 +282,7 @@ func (s *ServerTestSuite) TestServiceGrpcTLSServer() {
 				}
 
 				time.Sleep(2 * time.Second)
-				srv.Stop(ctx)
+				svc.Stop(ctx)
 			})
 		}
 	})
@@ -343,13 +343,13 @@ func (s *ServerTestSuite) getNetworkClConn(address string, opts ...grpc.DialOpti
 }
 
 func (s *ServerTestSuite) clientInvokeGrpc(ctx context.Context, conn *grpc.ClientConn) error {
-	cli := grpcping2.NewFramePingClient(conn)
+	cli := pingv1.NewPingServiceClient(conn)
 
-	req := grpcping2.HelloRequest{
+	req := pingv1.PingRequest{
 		Name: "Testing Roma",
 	}
 
-	resp, err := cli.SayPing(ctx, &req)
+	resp, err := cli.Ping(ctx, &req)
 	if err != nil {
 		return err
 	}
@@ -401,7 +401,8 @@ func (s *ServerTestSuite) TestServiceContextRun() {
 
 				httpTestOpt, testSrvFn := frametests.WithHTTPTestDriver()
 
-				ctx, svc := frame.NewServiceWithContext(t.Context(), frame.WithName(tc.serviceName),
+				ctx, svc := frame.NewServiceWithContext(t.Context(),
+					frame.WithName(tc.serviceName),
 					frame.WithLogger(util.WithLogOutput(&buf1)),
 					httpTestOpt, frame.WithHTTPHandler(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
 						util.Log(r.Context()).Info(tc.logData)

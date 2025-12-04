@@ -27,7 +27,7 @@ func LanguageStreamInterceptor() grpc.StreamServerInterceptor {
 		ctx := ss.Context()
 		l := localization.ExtractLanguageFromGrpcRequest(ctx)
 		if l == nil {
-			return handler(srv, ss)
+			return handler(svc, ss)
 		}
 
 		ctx = localization.ToContext(ctx, l)
@@ -35,7 +35,7 @@ func LanguageStreamInterceptor() grpc.StreamServerInterceptor {
 		// Wrap the original stream with ctx this ensures the handlers always receives a stream from which it can get the correct context.
 		languageStream := &serverStreamWrapper{ctx, ss}
 
-		return handler(srv, languageStream)
+		return handler(svc, languageStream)
 	}
 }
 

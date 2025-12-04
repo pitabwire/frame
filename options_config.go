@@ -26,9 +26,9 @@ func WithConfig(cfg any) Option {
 			}
 		}
 
-		WithLogger()(ctx, s)
-
 		WithTelemetry()(ctx, s)
+
+		WithLogger()(ctx, s)
 
 		WithHTTPClient()(ctx, s)
 	}

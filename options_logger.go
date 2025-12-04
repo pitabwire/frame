@@ -12,29 +12,44 @@ import (
 // WithLogger Option that helps with initialization of our internal dbLogger.
 func WithLogger(opts ...util.Option) Option {
 	return func(ctx context.Context, s *Service) {
-		if s.Config() != nil {
-			config, ok := s.Config().(config2.ConfigurationLogLevel)
-			if ok {
-				logLevelStr := config.LoggingLevel()
-				logLevel, err := util.ParseLevel(logLevelStr)
-				if err == nil {
-					opts = append(opts, util.WithLogLevel(logLevel))
-				}
-				opts = append(opts,
-					util.WithLogTimeFormat(config.LoggingTimeFormat()),
-					util.WithLogNoColor(!config.LoggingColored()),
-					util.WithLogStackTrace())
-			}
-		}
+		var configOpts []util.Option
 
-		// Add the telemetry log handler to the logger
+		// Add telemetry log handler if available
 		if s.telemetryManager != nil {
-			opts = append(opts, util.WithLogHandler(s.telemetryManager.LogHandler()))
+			configOpts = append(configOpts, util.WithLogHandler(s.telemetryManager.LogHandler()))
 		}
 
-		log := util.NewLogger(ctx, opts...)
-		log.WithField("service", s.Name())
-		s.logger = log
+		// Early return if no config is available
+		if s.Config() == nil {
+			log := util.NewLogger(ctx, append(configOpts, opts...)...)
+			s.logger = log.WithField("service", s.Name())
+			return
+		}
+
+		config, ok := s.Config().(config2.ConfigurationLogLevel)
+		if !ok {
+			log := util.NewLogger(ctx, append(configOpts, opts...)...)
+			s.logger = log.WithField("service", s.Name())
+			return
+		}
+
+		// Parse log level
+		if logLevel, err := util.ParseLevel(config.LoggingLevel()); err == nil {
+			configOpts = append(configOpts, util.WithLogLevel(logLevel))
+		}
+
+		// Add standard config options
+		configOpts = append(configOpts,
+			util.WithLogTimeFormat(config.LoggingTimeFormat()),
+			util.WithLogNoColor(!config.LoggingColored()))
+
+		// Add stack trace if enabled
+		if config.LoggingShowStackTrace() {
+			configOpts = append(configOpts, util.WithLogStackTrace())
+		}
+
+		log := util.NewLogger(ctx, append(configOpts, opts...)...)
+		s.logger = log.WithField("service", s.Name())
 	}
 }
 

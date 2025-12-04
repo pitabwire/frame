@@ -123,18 +123,13 @@ func NewServiceWithContext(ctx context.Context, opts ...Option) (context.Context
 		syscall.SIGQUIT)
 
 	var err error
-	log := util.Log(ctx)
-	ctx = util.ContextWithLogger(ctx, log)
 
 	cfg, _ := config.FromEnv[config.ConfigurationDefault]()
 
 	svc := &Service{
-		name:         cfg.Name(),
-		cancelFunc:   signalCancelFunc, // Store its cancel function
-		errorChannel: make(chan error, 1),
-
-		logger: log,
-
+		name:          cfg.Name(),
+		cancelFunc:    signalCancelFunc, // Store its cancel function
+		errorChannel:  make(chan error, 1),
 		configuration: &cfg,
 	}
 
@@ -206,7 +201,12 @@ func NewServiceWithContext(ctx context.Context, opts ...Option) (context.Context
 	// Prepare context to be returned, embedding svc and config
 	ctx = ToContext(ctx, svc)
 	ctx = config.ToContext(ctx, svc.Config())
-	ctx = util.ContextWithLogger(ctx, svc.Log(ctx))
+	// Put the raw logger into context, not the context-aware one
+	ctx = util.ContextWithLogger(ctx, svc.logger)
+
+	svc.logger.WithField("log", svc.logger).
+		Info("Confirming service log")
+
 	return ctx, svc
 }
 

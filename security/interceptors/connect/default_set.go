@@ -10,7 +10,7 @@ import (
 )
 
 func DefaultList(
-	ctx context.Context,
+	_ context.Context,
 	authI security.Authenticator,
 	moreInterceptors ...connect.Interceptor,
 ) ([]connect.Interceptor, error) {
@@ -24,7 +24,6 @@ func DefaultList(
 	interceptorList = append(interceptorList, moreInterceptors...)
 	interceptorList = append(
 		interceptorList,
-		NewContextSetupInterceptor(ctx),
 		otelInterceptor,
 		NewValidationInterceptor(),
 		NewAuthInterceptor(authI),

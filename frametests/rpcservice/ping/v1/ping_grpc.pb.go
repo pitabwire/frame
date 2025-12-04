@@ -83,7 +83,7 @@ func RegisterPingServiceServer(s grpc.ServiceRegistrar, svc PingServiceServer) {
 	// embedded by pointer and is nil.  This will cause panics if an
 	// unimplemented method is ever invoked, so we test this at initialization
 	// time to prevent it from happening at runtime later due to I/O.
-	if t, ok :=  svc.(interface{ testEmbeddedByValue() }); ok {
+	if t, ok := svc.(interface{ testEmbeddedByValue() }); ok {
 		t.testEmbeddedByValue()
 	}
 	s.RegisterService(&PingService_ServiceDesc, svc)
@@ -95,14 +95,14 @@ func _PingService_Ping_Handler(srv interface{}, ctx context.Context, dec func(in
 		return nil, err
 	}
 	if interceptor == nil {
-		return  srv.(PingServiceServer).Ping(ctx, in)
+		return srv.(PingServiceServer).Ping(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
-		Server:      srv,
+		Server:     srv,
 		FullMethod: PingService_Ping_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return  srv.(PingServiceServer).Ping(ctx, req.(*PingRequest))
+		return srv.(PingServiceServer).Ping(ctx, req.(*PingRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }

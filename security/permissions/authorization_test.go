@@ -172,7 +172,7 @@ func (s *AuthorizationTestSuite) TestAuthorizationControlListWrite() {
 					AuthorizationServiceWriteURI: ketoAdminURI.String(),
 					AuthorizationServiceReadURI:  ketoReadURI.String(),
 				}))
-				ctx = frame.ToContext(ctx, srv)
+				ctx = frame.ToContext(ctx, svc)
 				ctx = tc.setupClaims(ctx)
 
 				err = s.authorizationControlListWrite(ctx, ketoAdminURI.String(), tc.objectID, tc.action, tc.subject)

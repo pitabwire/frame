@@ -6,7 +6,6 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"errors"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -25,7 +24,6 @@ import (
 	"github.com/pitabwire/frame/frametests/definition"
 	pingv1 "github.com/pitabwire/frame/frametests/rpcservice/ping/v1"
 	"github.com/pitabwire/frame/frametests/rpcservice/ping/v1/pingv1connect"
-	connectInterceptor "github.com/pitabwire/frame/security/interceptors/connect"
 	"github.com/pitabwire/frame/tests"
 )
 
@@ -45,10 +43,12 @@ type connectRPCHandler struct {
 
 func (s *connectRPCHandler) Ping(ctx context.Context, req *pingv1.PingRequest) (
 	*pingv1.PingResponse, error) {
-
-	cfg := config.FromContext[*config.ConfigurationDefault](ctx)
-	cfgExists := cfg == nil
-	util.Log(ctx).WithField("config exists", cfgExists).Info("We received : " + req.GetName())
+	log := util.Log(ctx)
+	cfg := config.FromContext[config.ConfigurationLogLevel](ctx)
+	cfgExists := cfg != nil
+	log.WithField("config exists", cfgExists).
+		WithField("log", log).
+		Info("We received : " + req.GetName())
 
 	return &pingv1.PingResponse{
 		Message: "Hello " + req.GetName() + " from frame",
@@ -113,48 +113,99 @@ func (s *ConnectServerTestSuite) TestServiceConnectHealthServer() {
 	s.WithTestDependancies(s.T(), func(t *testing.T, _ *definition.DependencyOption) {
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
-
 				var buf1 bytes.Buffer
 
 				defConf, err := config.FromEnv[config.ConfigurationDefault]()
-				if err != nil {
-					_ = err
-					return
-				}
-				serverPort, err := frametests.GetFreePort(t.Context())
-				defConf.HTTPServerPort = fmt.Sprintf(":%d", serverPort)
+				require.NoError(t, err)
+
+				httOpt, httpFn := frametests.WithHTTPTestDriver()
 
 				ctx, svc := frame.NewService(
 					frame.WithName(tc.serviceName),
-					frame.WithLogger(util.WithLogOutput(&buf1)),
 					frame.WithConfig(&defConf),
+					frame.WithLogger(util.WithLogOutput(&buf1)),
+					httOpt,
 				)
 				defer svc.Stop(ctx)
 
-				_, h := pingv1connect.NewPingServiceHandler(&connectRPCHandler{},
-					connect.WithInterceptors(connectInterceptor.NewContextSetupInterceptor(ctx)))
+				_, h := pingv1connect.NewPingServiceHandler(&connectRPCHandler{})
 
 				svc.Init(ctx, frame.WithHTTPHandler(h))
 
 				go func() {
 					runErr := svc.Run(ctx, "") // Empty port for httptest
-					if runErr != nil && !errors.Is(runErr, context.Canceled) && !errors.Is(runErr, http.ErrServerClosed) {
+					if runErr != nil && !errors.Is(runErr, context.Canceled) &&
+						!errors.Is(runErr, http.ErrServerClosed) {
 						t.Errorf("TestServiceConnectHealthServer:  svc.Run failed: %v", runErr)
 					}
 				}()
 				time.Sleep(1 * time.Second)
-				err = s.clientInvokeConnectHealth(fmt.Sprintf("http://localhost:%d", serverPort), tc.logData)
+				err = s.clientInvokeConnectHealth(httpFn().URL, tc.logData)
 				if err != nil {
 					_ = err
 				}
-
-				if !strings.Contains(buf1.String(), tc.logData) {
-					t.Errorf("Handler did not log required message:  %s", buf1.String())
-				}
-
 			})
 		}
 	})
+}
+
+// TestServiceConnectContextSetup tests Connect RPC health server functionality.
+func (s *ConnectServerTestSuite) TestServiceConnectContextSetup() {
+	testCases := []struct {
+		name        string
+		serviceName string
+		logData     string
+	}{
+		{
+			name:        "Connect RPC context setup tests",
+			serviceName: "Testing Connect Service",
+			logData:     "Test logging",
+		},
+	}
+
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			t := s.T()
+			var buf1 bytes.Buffer
+
+			defConf, err := config.FromEnv[config.ConfigurationDefault]()
+			if err != nil {
+				_ = err
+				return
+			}
+
+			httOpt, httpFn := frametests.WithHTTPTestDriver()
+
+			ctx, svc := frame.NewServiceWithContext(
+				t.Context(),
+				frame.WithName(tc.serviceName),
+				frame.WithConfig(&defConf),
+				frame.WithLogger(util.WithLogOutput(&buf1)),
+				httOpt,
+			)
+			defer svc.Stop(ctx)
+
+			_, h := pingv1connect.NewPingServiceHandler(&connectRPCHandler{})
+
+			svc.Init(ctx, frame.WithHTTPHandler(h))
+
+			runErr := svc.Run(ctx, "") // Empty port for httptest
+			if runErr != nil && !errors.Is(runErr, context.Canceled) && !errors.Is(runErr, http.ErrServerClosed) {
+				t.Errorf("TestServiceConnectContextSetup:  svc.Run failed: %v", runErr)
+			}
+
+			err = s.clientInvokeConnectHealth(httpFn().URL, tc.logData)
+			if err != nil {
+				_ = err
+			}
+
+			logData := buf1.String()
+			// Check for the actual log message that the handler produces
+			if !strings.Contains(logData, "We received : "+tc.logData) {
+				t.Errorf("Handler did not log required message. Got: %s", logData)
+			}
+		})
+	}
 }
 
 // TestServiceConnectServer tests service Connect RPC server functionality.

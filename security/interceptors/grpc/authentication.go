@@ -185,6 +185,6 @@ func StreamAuthInterceptor(
 		if err != nil {
 			return err
 		}
-		return handler(svc, authenticatedStream)
+		return handler(srv, authenticatedStream)
 	}
 }

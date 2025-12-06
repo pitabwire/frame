@@ -167,7 +167,9 @@ func (br *baseRepository[T]) Create(ctx context.Context, entity T) error {
 	}
 
 	// Use GORM's Create for new entities, which is more direct than Save.
-	return br.Pool().DB(ctx, false).Create(entity).Error
+	return br.Pool().DB(ctx, false).Clauses(clause.OnConflict{
+		DoNothing: true,
+	}).Create(entity).Error
 }
 
 func (br *baseRepository[T]) BatchSize() int {
@@ -182,7 +184,9 @@ func (br *baseRepository[T]) BulkCreate(ctx context.Context, entities []T) error
 
 	// CreateInBatches uses GORM's batch insert which is more efficient
 	// The batch size is configured in pool options (InsertBatchSize)
-	return br.Pool().DB(ctx, false).CreateInBatches(entities, br.BatchSize()).Error
+	return br.Pool().DB(ctx, false).Clauses(clause.OnConflict{
+		DoNothing: true,
+	}).CreateInBatches(entities, br.BatchSize()).Error
 }
 
 // validateAffectedColumns checks if all columns are valid and allowed.

@@ -1,4 +1,4 @@
-package http
+package httptor
 
 import (
 	"context"

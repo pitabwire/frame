@@ -25,7 +25,7 @@ import (
 	"github.com/pitabwire/frame/localization"
 	"github.com/pitabwire/frame/queue"
 	"github.com/pitabwire/frame/security"
-	httpInterceptor "github.com/pitabwire/frame/security/interceptors/http"
+	httpInterceptor "github.com/pitabwire/frame/security/interceptors/httptor"
 	securityManager "github.com/pitabwire/frame/security/manager"
 	"github.com/pitabwire/frame/telemetry"
 	"github.com/pitabwire/frame/version"

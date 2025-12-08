@@ -94,8 +94,23 @@ func (d DSN) ToURI() (*url.URL, error) {
 }
 
 func (d DSN) Valid() bool {
-	_, err := url.Parse(string(d))
-	return err == nil
+	// Check if the string is empty or whitespace-only
+	if strings.TrimSpace(string(d)) == "" {
+		return false
+	}
+	
+	// Try to parse as URL
+	u, err := url.Parse(string(d))
+	if err != nil {
+		return false
+	}
+	
+	// Ensure it has a scheme (required for valid connection URLs)
+	if u.Scheme == "" {
+		return false
+	}
+	
+	return true
 }
 
 func (d DSN) ExtendPath(epath ...string) DSN {

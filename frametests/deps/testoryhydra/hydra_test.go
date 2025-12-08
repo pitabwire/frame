@@ -79,7 +79,7 @@ func (h *HydraImageSetupTestSuite) TestHydraImageSetup() {
 			name:      "Straight to hydra",
 			path:      "",
 			portToUse: "4444/tcp",
-			status:    404,
+			status:    301,
 		},
 		{
 			name:      "Open ID Configuration admin",
@@ -115,7 +115,14 @@ func (h *HydraImageSetupTestSuite) TestHydraImageSetup() {
 				ds, err = ds.ChangePort(portMapping)
 				require.NoError(t, err)
 
-				resp, err := http.Get(ds.String() + tc.path)
+				// Create a client that doesn't follow redirects to properly test redirect responses
+				client := &http.Client{
+					CheckRedirect: func(req *http.Request, via []*http.Request) error {
+						return http.ErrUseLastResponse
+					},
+				}
+				
+				resp, err := client.Get(ds.String() + tc.path)
 				require.NoError(t, err)
 
 				defer util.CloseAndLogOnError(ctx, resp.Body) // Important to close the response body

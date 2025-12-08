@@ -573,10 +573,20 @@ type ConfigurationEvents interface {
 var _ ConfigurationEvents = new(ConfigurationDefault)
 
 func (c *ConfigurationDefault) GetEventsQueueName() string {
+
+	if strings.TrimSpace(c.EventsQueueName) == "" {
+		return "frame.events.internal_._queue"
+	}
+
 	return c.EventsQueueName
 }
 
 func (c *ConfigurationDefault) GetEventsQueueURL() string {
+
+	if strings.TrimSpace(c.EventsQueueURL) == "" {
+		return "mem://frame.events.internal_._queue"
+	}
+
 	return c.EventsQueueURL
 }
 

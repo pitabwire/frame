@@ -6,6 +6,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/pitabwire/frame/data"
 	"github.com/pitabwire/util"
 
 	"github.com/pitabwire/frame/workerpool"
@@ -37,10 +38,10 @@ func (s *queueManager) AddPublisher(ctx context.Context, reference string, queue
 	if strings.TrimSpace(reference) == "" {
 		return fmt.Errorf("publisher reference cannot be empty")
 	}
-	if strings.TrimSpace(queueURL) == "" {
+	if !data.DSN(queueURL).Valid() {
 		return fmt.Errorf("publisher queueURL cannot be empty")
 	}
-	
+
 	pub, _ := s.GetPublisher(reference)
 	if pub != nil {
 		return nil
@@ -97,10 +98,10 @@ func (s *queueManager) AddSubscriber(
 	if strings.TrimSpace(reference) == "" {
 		return fmt.Errorf("subscriber reference cannot be empty")
 	}
-	if strings.TrimSpace(queueURL) == "" {
+	if !data.DSN(queueURL).Valid() {
 		return fmt.Errorf("subscriber queueURL cannot be empty")
 	}
-	
+
 	subs0, _ := s.GetSubscriber(reference)
 	if subs0 != nil {
 		return nil

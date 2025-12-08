@@ -32,7 +32,7 @@ func TestOptionEarlyFailure(t *testing.T) {
 			name:      "WithRegisterPublisher empty queueURL panics",
 			reference: "test",
 			queueURL:  "",
-			panicMsg:  "publisher queueURL cannot be empty",
+			panicMsg:  "publisher queueURL cannot be invalid",
 		},
 		{
 			name:      "WithRegisterSubscriber empty reference panics",
@@ -44,7 +44,7 @@ func TestOptionEarlyFailure(t *testing.T) {
 			name:      "WithRegisterSubscriber empty queueURL panics",
 			reference: "test",
 			queueURL:  "",
-			panicMsg:  "subscriber queueURL cannot be empty",
+			panicMsg:  "subscriber queueURL cannot be invalid",
 		},
 	}
 

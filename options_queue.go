@@ -17,7 +17,7 @@ func WithRegisterPublisher(reference string, queueURL string) Option {
 	if strings.TrimSpace(reference) == "" {
 		panic("publisher reference cannot be empty")
 	}
-	if data.DSN(queueURL).Valid() {
+	if !data.DSN(queueURL).Valid() {
 		panic("publisher queueURL cannot be invalid")
 	}
 
@@ -45,7 +45,7 @@ func WithRegisterSubscriber(reference string, queueURL string,
 	if strings.TrimSpace(reference) == "" {
 		panic("subscriber reference cannot be empty")
 	}
-	if data.DSN(queueURL).Valid() {
+	if !data.DSN(queueURL).Valid() {
 		panic("subscriber queueURL cannot be invalid")
 	}
 

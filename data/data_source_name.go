@@ -93,6 +93,11 @@ func (d DSN) ToURI() (*url.URL, error) {
 	return url.Parse(string(d))
 }
 
+func (d DSN) Valid() bool {
+	_, err := url.Parse(string(d))
+	return err == nil
+}
+
 func (d DSN) ExtendPath(epath ...string) DSN {
 	nuURI, err := d.ToURI()
 	if err != nil {

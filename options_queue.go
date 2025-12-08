@@ -2,7 +2,9 @@ package frame
 
 import (
 	"context"
+	"strings"
 
+	"github.com/pitabwire/frame/data"
 	_ "github.com/pitabwire/natspubsub" // required for NATS pubsub driver registration
 	_ "gocloud.dev/pubsub/mempubsub"    // required for in-memory pubsub driver registration
 
@@ -11,6 +13,14 @@ import (
 
 // WithRegisterPublisher Option to register publishing path referenced within the system.
 func WithRegisterPublisher(reference string, queueURL string) Option {
+	// Validate inputs immediately - fail fast
+	if strings.TrimSpace(reference) == "" {
+		panic("publisher reference cannot be empty")
+	}
+	if data.DSN(queueURL).Valid() {
+		panic("publisher queueURL cannot be invalid")
+	}
+
 	return func(_ context.Context, s *Service) {
 		// QueueManager manager is initialized after options are applied,
 		// so defer registration to pre-start phase
@@ -31,6 +41,14 @@ func WithRegisterPublisher(reference string, queueURL string) Option {
 // WithRegisterSubscriber Option to register a new subscription handlers.
 func WithRegisterSubscriber(reference string, queueURL string,
 	handlers ...queue.SubscribeWorker) Option {
+	// Validate inputs immediately - fail fast
+	if strings.TrimSpace(reference) == "" {
+		panic("subscriber reference cannot be empty")
+	}
+	if data.DSN(queueURL).Valid() {
+		panic("subscriber queueURL cannot be invalid")
+	}
+
 	return func(_ context.Context, s *Service) {
 		// QueueManager manager is initialized after options are applied,
 		// so defer registration to pre-start phase

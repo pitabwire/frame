@@ -3,6 +3,7 @@ package queue
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 
 	"github.com/pitabwire/util"
@@ -32,6 +33,14 @@ func NewQueueManager(_ context.Context, workPool workerpool.Manager) Manager {
 }
 
 func (s *queueManager) AddPublisher(ctx context.Context, reference string, queueURL string) error {
+	// Validate inputs before proceeding
+	if strings.TrimSpace(reference) == "" {
+		return fmt.Errorf("publisher reference cannot be empty")
+	}
+	if strings.TrimSpace(queueURL) == "" {
+		return fmt.Errorf("publisher queueURL cannot be empty")
+	}
+	
 	pub, _ := s.GetPublisher(reference)
 	if pub != nil {
 		return nil
@@ -84,6 +93,14 @@ func (s *queueManager) AddSubscriber(
 	queueURL string,
 	handlers ...SubscribeWorker,
 ) error {
+	// Validate inputs before proceeding
+	if strings.TrimSpace(reference) == "" {
+		return fmt.Errorf("subscriber reference cannot be empty")
+	}
+	if strings.TrimSpace(queueURL) == "" {
+		return fmt.Errorf("subscriber queueURL cannot be empty")
+	}
+	
 	subs0, _ := s.GetSubscriber(reference)
 	if subs0 != nil {
 		return nil

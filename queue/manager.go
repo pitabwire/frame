@@ -2,13 +2,14 @@ package queue
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
 
-	"github.com/pitabwire/frame/data"
 	"github.com/pitabwire/util"
 
+	"github.com/pitabwire/frame/data"
 	"github.com/pitabwire/frame/workerpool"
 )
 
@@ -36,10 +37,10 @@ func NewQueueManager(_ context.Context, workPool workerpool.Manager) Manager {
 func (s *queueManager) AddPublisher(ctx context.Context, reference string, queueURL string) error {
 	// Validate inputs before proceeding
 	if strings.TrimSpace(reference) == "" {
-		return fmt.Errorf("publisher reference cannot be empty")
+		return errors.New("publisher reference cannot be empty")
 	}
 	if !data.DSN(queueURL).Valid() {
-		return fmt.Errorf("publisher queueURL cannot be empty")
+		return errors.New("publisher queueURL cannot be empty")
 	}
 
 	pub, _ := s.GetPublisher(reference)
@@ -96,10 +97,10 @@ func (s *queueManager) AddSubscriber(
 ) error {
 	// Validate inputs before proceeding
 	if strings.TrimSpace(reference) == "" {
-		return fmt.Errorf("subscriber reference cannot be empty")
+		return errors.New("subscriber reference cannot be empty")
 	}
 	if !data.DSN(queueURL).Valid() {
-		return fmt.Errorf("subscriber queueURL cannot be empty")
+		return errors.New("subscriber queueURL cannot be empty")
 	}
 
 	subs0, _ := s.GetSubscriber(reference)

@@ -1,12 +1,14 @@
-package frame
+package frame_test
 
 import (
 	"context"
 	"strings"
 	"testing"
+
+	"github.com/pitabwire/frame"
 )
 
-// msgHandler is a simple test handler
+// msgHandler is a simple test handler.
 type msgHandler struct {
 	f func(context.Context, map[string]string, []byte) error
 }
@@ -61,12 +63,12 @@ func TestOptionEarlyFailure(t *testing.T) {
 			}()
 
 			if strings.Contains(tt.name, "Publisher") {
-				_ = WithRegisterPublisher(tt.reference, tt.queueURL)
+				_ = frame.WithRegisterPublisher(tt.reference, tt.queueURL)
 			} else {
 				handler := &msgHandler{f: func(_ context.Context, _ map[string]string, _ []byte) error {
 					return nil
 				}}
-				_ = WithRegisterSubscriber(tt.reference, tt.queueURL, handler)
+				_ = frame.WithRegisterSubscriber(tt.reference, tt.queueURL, handler)
 			}
 		})
 	}

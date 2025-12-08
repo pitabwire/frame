@@ -67,7 +67,7 @@ func (s *subscriber) createSubscription(ctx context.Context) error {
 
 	// Validate URL before attempting to open subscription
 	if strings.TrimSpace(s.url) == "" {
-		return fmt.Errorf("subscriber URL cannot be empty")
+		return errors.New("subscriber URL cannot be empty")
 	}
 
 	if !strings.HasPrefix(s.url, "http") {

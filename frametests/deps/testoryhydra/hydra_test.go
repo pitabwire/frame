@@ -117,11 +117,11 @@ func (h *HydraImageSetupTestSuite) TestHydraImageSetup() {
 
 				// Create a client that doesn't follow redirects to properly test redirect responses
 				client := &http.Client{
-					CheckRedirect: func(req *http.Request, via []*http.Request) error {
+					CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
 						return http.ErrUseLastResponse
 					},
 				}
-				
+
 				resp, err := client.Get(ds.String() + tc.path)
 				require.NoError(t, err)
 

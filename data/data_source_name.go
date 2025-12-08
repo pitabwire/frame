@@ -98,18 +98,18 @@ func (d DSN) Valid() bool {
 	if strings.TrimSpace(string(d)) == "" {
 		return false
 	}
-	
+
 	// Try to parse as URL
 	u, err := url.Parse(string(d))
 	if err != nil {
 		return false
 	}
-	
+
 	// Ensure it has a scheme (required for valid connection URLs)
 	if u.Scheme == "" {
 		return false
 	}
-	
+
 	return true
 }
 

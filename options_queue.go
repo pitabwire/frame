@@ -4,10 +4,10 @@ import (
 	"context"
 	"strings"
 
-	"github.com/pitabwire/frame/data"
 	_ "github.com/pitabwire/natspubsub" // required for NATS pubsub driver registration
 	_ "gocloud.dev/pubsub/mempubsub"    // required for in-memory pubsub driver registration
 
+	"github.com/pitabwire/frame/data"
 	"github.com/pitabwire/frame/queue"
 )
 

@@ -23,6 +23,7 @@ import (
 	"github.com/pitabwire/frame/datastore"
 	"github.com/pitabwire/frame/events"
 	"github.com/pitabwire/frame/localization"
+	"github.com/pitabwire/frame/profiler"
 	"github.com/pitabwire/frame/queue"
 	"github.com/pitabwire/frame/security"
 	httpInterceptor "github.com/pitabwire/frame/security/interceptors/httptor"
@@ -90,6 +91,8 @@ type Service struct {
 	datastoreManager    datastore.Manager
 
 	telemetryManager telemetry.Manager
+
+	profilerServer *profiler.Server
 
 	startOnce            sync.Once
 	startupOnce          sync.Once
@@ -581,10 +584,27 @@ func (s *Service) initServer(ctx context.Context, httpPort string) error {
 		s.initializeServerDrivers(ctx, httpPort)
 	})
 
+	// Start profiler if enabled
+	if err := s.startProfilerIfEnabled(ctx); err != nil {
+		return err
+	}
+
 	// Execute pre-start methods
 	s.executeStartupMethods(ctx)
 
 	return s.startServerDriver(ctx, httpPort)
+}
+
+// startProfilerIfEnabled checks if profiler is enabled and starts pprof server.
+func (s *Service) startProfilerIfEnabled(ctx context.Context) error {
+	cfg, ok := s.Config().(config.ConfigurationProfiler)
+	if !ok {
+		// Configuration doesn't implement profiler interface, assume disabled
+		return nil
+	}
+
+	s.profilerServer = profiler.NewServer()
+	return s.profilerServer.StartIfEnabled(ctx, cfg)
 }
 
 // Stop Used to gracefully run clean up methods ensuring all requests that
@@ -598,6 +618,13 @@ func (s *Service) Stop(ctx context.Context) {
 	log := util.Log(ctx)
 
 	log.Info("service stopping")
+
+	// Stop profiler server if it was started
+	if s.profilerServer != nil {
+		if err := s.profilerServer.Stop(ctx); err != nil {
+			log.WithError(err).Error("failed to shutdown pprof server")
+		}
+	}
 
 	// Cancel the service's main context.
 	if s.cancelFunc != nil {

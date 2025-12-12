@@ -88,6 +88,9 @@ type ConfigurationDefault struct {
 	TraceRequests        bool `envDefault:"false" env:"TRACE_REQUESTS"          yaml:"trace_requests"`
 	TraceRequestsLogBody bool `envDefault:"false" env:"TRACE_REQUESTS_LOG_BODY" yaml:"trace_requests_log_body"`
 
+	ProfilerEnable   bool   `envDefault:"false" env:"PROFILER_ENABLE" yaml:"profiler_enable"`
+	ProfilerPortAddr string `envDefault:":6060" env:"PROFILER_PORT"   yaml:"profiler_port"`
+
 	OpenTelemetryDisable    bool    `envDefault:"false" env:"OPENTELEMETRY_DISABLE"        yaml:"opentelemetry_disable"`
 	OpenTelemetryTraceRatio float64 `envDefault:"1"     env:"OPENTELEMETRY_TRACE_ID_RATIO" yaml:"opentelemetry_trace_id_ratio"`
 
@@ -219,6 +222,24 @@ func (c *ConfigurationDefault) TraceReq() bool {
 
 func (c *ConfigurationDefault) TraceReqLogBody() bool {
 	return c.TraceRequestsLogBody
+}
+
+type ConfigurationProfiler interface {
+	ProfilerEnabled() bool
+	ProfilerPort() string
+}
+
+var _ ConfigurationProfiler = new(ConfigurationDefault)
+
+func (c *ConfigurationDefault) ProfilerEnabled() bool {
+	return c.ProfilerEnable
+}
+
+func (c *ConfigurationDefault) ProfilerPort() string {
+	if c.ProfilerPortAddr != "" {
+		return c.ProfilerPortAddr
+	}
+	return ":6060"
 }
 
 type ConfigurationPorts interface {

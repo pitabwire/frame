@@ -227,9 +227,10 @@ func (s *subscriber) listen(ctx context.Context) {
 		WithField("function", "subscription").
 		WithField("url", s.url)
 	logger.Debug("starting to listen for messages")
+
+	var consecutiveReceiveErrors int
 	for {
-		select {
-		case <-ctx.Done():
+		if ctx.Err() != nil {
 			err := s.Stop(ctx)
 			if err != nil {
 				logger.WithError(err).Error("could not stop subscription")
@@ -237,31 +238,58 @@ func (s *subscriber) listen(ctx context.Context) {
 			}
 			logger.Debug("exiting due to canceled context")
 			return
+		}
 
-		default:
-			msg, err := s.Receive(ctx)
-			if err != nil {
-				if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-					// Context cancelled or deadline exceeded, loop again to check ctx.Done()
+		msg, err := s.Receive(ctx)
+		if err != nil {
+			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+				// Context cancelled or deadline exceeded, loop again to check ctx.Done()
+				if ctx.Err() != nil {
 					continue
 				}
-				// Other errors from Receive are critical for the listener.
-				logger.WithError(err).Error("could not pull message")
-
-				// Recreate subscription
-				s.recreateSubscription(ctx)
-				continue
 			}
 
-			// Process the received message. Errors from processing (like job submission failure)
-			// will be logged by processReceivedMessage. If it's a critical submission error,
-			// it will be returned and will stop the whole application.
-			if procErr := s.processReceivedMessage(ctx, msg); procErr != nil {
-				// processReceivedMessage already logs details. This error is for critical failures.
-				logger.WithError(procErr).Error("critical error processing message, stopping listener")
-				s.SendStopError(ctx, procErr) // procErr
-				return                        // Exit listen loop
+			// Other errors from Receive are critical for the listener.
+			consecutiveReceiveErrors++
+			logger.WithError(err).Error("could not pull message")
+
+			// Recreate subscription
+			s.recreateSubscription(ctx)
+
+			delay := time.Duration(0)
+			if consecutiveReceiveErrors > 0 {
+				if consecutiveReceiveErrors > 10 {
+					consecutiveReceiveErrors = 10
+				}
+				delay = 100 * time.Millisecond * time.Duration(1<<uint(consecutiveReceiveErrors-1))
+				if delay > 30*time.Second {
+					delay = 30 * time.Second
+				}
 			}
+
+			if delay > 0 {
+				timer := time.NewTimer(delay)
+				select {
+				case <-ctx.Done():
+					timer.Stop()
+					continue
+				case <-timer.C:
+				}
+			}
+
+			continue
+		}
+
+		consecutiveReceiveErrors = 0
+
+		// Process the received message. Errors from processing (like job submission failure)
+		// will be logged by processReceivedMessage. If it's a critical submission error,
+		// it will be returned and will stop the whole application.
+		if procErr := s.processReceivedMessage(ctx, msg); procErr != nil {
+			// processReceivedMessage already logs details. This error is for critical failures.
+			logger.WithError(procErr).Error("critical error processing message, stopping listener")
+			s.SendStopError(ctx, procErr) // procErr
+			return                        // Exit listen loop
 		}
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/pitabwire/util"
 
@@ -105,6 +106,39 @@ func createJobExecutionTask[T any](ctx context.Context, s Manager, job Job[T]) f
 
 		// Job can be retried to resolve error
 		log.Warn("Job failed, attempting to retry it")
+
+		attempt := job.Runs()
+		if attempt > 10 {
+			attempt = 10
+		}
+
+		delay := 100 * time.Millisecond * time.Duration(1<<uint(attempt-1))
+		if delay > 30*time.Second {
+			delay = 30 * time.Second
+		}
+
+		if delay > 0 {
+			go func() {
+				timer := time.NewTimer(delay)
+				defer timer.Stop()
+
+				select {
+				case <-ctx.Done():
+					job.Close()
+					return
+				case <-timer.C:
+				}
+
+				resubmitErr := SubmitJob(ctx, s, job)
+				if resubmitErr != nil {
+					log.WithError(resubmitErr).Error("Failed to resubmit job")
+					_ = job.WriteError(ctx, fmt.Errorf("failed to resubmit job: %w", executionErr))
+					job.Close()
+				}
+			}()
+			return
+		}
+
 		resubmitErr := SubmitJob(ctx, s, job) // Recursive call to SubmitJob for retry
 		if resubmitErr != nil {
 			log.WithError(resubmitErr).Error("Failed to resubmit job")

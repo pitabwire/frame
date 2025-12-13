@@ -18,6 +18,12 @@ import (
 	"github.com/pitabwire/frame/workerpool"
 )
 
+const (
+	subscriberReceiveErrorBackoffBaseDelay          = 100 * time.Millisecond
+	subscriberReceiveErrorBackoffMaxDelay           = 30 * time.Second
+	subscriberReceiveErrorBackoffMaxConsecutiveErrs = 10
+)
+
 type subscriber struct {
 	reference    string
 	url          string
@@ -28,6 +34,38 @@ type subscriber struct {
 	metrics      *subscriberMetrics
 
 	workManager workerpool.Manager
+}
+
+func subscriberReceiveErrorBackoffDelay(consecutiveErrors int) time.Duration {
+	if consecutiveErrors <= 0 {
+		return 0
+	}
+
+	attempt := consecutiveErrors
+	if attempt > subscriberReceiveErrorBackoffMaxConsecutiveErrs {
+		attempt = subscriberReceiveErrorBackoffMaxConsecutiveErrs
+	}
+
+	delay := subscriberReceiveErrorBackoffBaseDelay * time.Duration(1<<(attempt-1))
+	if delay > subscriberReceiveErrorBackoffMaxDelay {
+		return subscriberReceiveErrorBackoffMaxDelay
+	}
+
+	return delay
+}
+
+func waitForDelay(ctx context.Context, delay time.Duration) {
+	if delay <= 0 {
+		return
+	}
+
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+
+	select {
+	case <-ctx.Done():
+	case <-timer.C:
+	}
 }
 
 func (s *subscriber) Ref() string {
@@ -242,41 +280,23 @@ func (s *subscriber) listen(ctx context.Context) {
 
 		msg, err := s.Receive(ctx)
 		if err != nil {
-			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			if ctx.Err() != nil && (errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)) {
 				// Context cancelled or deadline exceeded, loop again to check ctx.Done()
-				if ctx.Err() != nil {
-					continue
-				}
+				continue
 			}
 
 			// Other errors from Receive are critical for the listener.
 			consecutiveReceiveErrors++
+			if consecutiveReceiveErrors > subscriberReceiveErrorBackoffMaxConsecutiveErrs {
+				consecutiveReceiveErrors = subscriberReceiveErrorBackoffMaxConsecutiveErrs
+			}
 			logger.WithError(err).Error("could not pull message")
 
 			// Recreate subscription
 			s.recreateSubscription(ctx)
 
-			delay := time.Duration(0)
-			if consecutiveReceiveErrors > 0 {
-				if consecutiveReceiveErrors > 10 {
-					consecutiveReceiveErrors = 10
-				}
-				delay = 100 * time.Millisecond * time.Duration(1<<uint(consecutiveReceiveErrors-1))
-				if delay > 30*time.Second {
-					delay = 30 * time.Second
-				}
-			}
-
-			if delay > 0 {
-				timer := time.NewTimer(delay)
-				select {
-				case <-ctx.Done():
-					timer.Stop()
-					continue
-				case <-timer.C:
-				}
-			}
-
+			delay := subscriberReceiveErrorBackoffDelay(consecutiveReceiveErrors)
+			waitForDelay(ctx, delay)
 			continue
 		}
 

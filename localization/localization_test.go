@@ -14,7 +14,7 @@ import (
 	"github.com/pitabwire/frame"
 	"github.com/pitabwire/frame/localization"
 	lgrpc "github.com/pitabwire/frame/localization/interceptors/grpc"
-	lhttp "github.com/pitabwire/frame/localization/interceptors/http"
+	lhttp "github.com/pitabwire/frame/localization/interceptors/httpi"
 	"github.com/pitabwire/frame/tests"
 )
 
@@ -255,7 +255,7 @@ func (s *LocalizationTestSuite) TestLanguageHTTPMiddleware() {
 			middleware := lhttp.LanguageHTTPMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				lang := localization.FromContext(r.Context())
 				w.WriteHeader(http.StatusOK)
-				w.Write([]byte(strings.Join(lang, ",")))
+				_, _ = w.Write([]byte(strings.Join(lang, ",")))
 			}))
 
 			req := httptest.NewRequest(http.MethodGet, tc.requestPath, nil)

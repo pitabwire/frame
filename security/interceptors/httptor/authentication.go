@@ -72,10 +72,10 @@ func AuthenticationMiddleware(
 		}
 
 		security.SetupSecondaryClaims(ctx,
-			r.Header.Get("Tenant_id"), r.Header.Get("Partition_id"),
-			r.Header.Get("Access_id"), r.Header.Get("Contact_id"),
-			r.Header.Get("Session_id"), r.Header.Get("Device_id"),
-			r.Header.Get("Roles"))
+			r.Header.Get("X-Tenant-Id"), r.Header.Get("X-Partition-Id"),
+			r.Header.Get("X-Profile-Id"), r.Header.Get("X-Access-Id"),
+			r.Header.Get("X-Contact-Id"), r.Header.Get("X-Session-Id"),
+			r.Header.Get("X-Device-Id"), r.Header.Get("X-Roles"))
 
 		r = r.WithContext(ctx)
 

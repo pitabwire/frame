@@ -91,10 +91,10 @@ func UnaryAuthInterceptor(
 			return nil, status.Error(codes.Unauthenticated, err.Error())
 		}
 
-		ctx = security.SetupSecondaryClaims(ctx, getGrpcMetadata(ctx, "tenant_id"),
-			getGrpcMetadata(ctx, "partition_id"), getGrpcMetadata(ctx, "access_id"),
-			getGrpcMetadata(ctx, "contact_id"), getGrpcMetadata(ctx, "session_id"),
-			getGrpcMetadata(ctx, "device_id"),
+		ctx = security.SetupSecondaryClaims(ctx, getGrpcMetadata(ctx, "tenant-id"),
+			getGrpcMetadata(ctx, "partition-id"), getGrpcMetadata(ctx, "profile-id"),
+			getGrpcMetadata(ctx, "access-id"), getGrpcMetadata(ctx, "contact-id"),
+			getGrpcMetadata(ctx, "session-id"), getGrpcMetadata(ctx, "device-id"),
 			getGrpcMetadata(ctx, "roles"))
 
 		return handler(ctx, req)
@@ -162,12 +162,13 @@ func ensureAuthenticatedStreamContext(
 
 	// Pad partition info if authentication was successful and service runs securely.
 	newCtx := security.SetupSecondaryClaims(authenticatedCtx, // Use the authenticated context
-		getGrpcMetadata(ss.Context(), "tenant_id"), // Extract metadata from original stream context
-		getGrpcMetadata(ss.Context(), "partition_id"),
-		getGrpcMetadata(ss.Context(), "access_id"),
-		getGrpcMetadata(ss.Context(), "contact_id"),
-		getGrpcMetadata(ss.Context(), "session_id"),
-		getGrpcMetadata(ss.Context(), "device_id"),
+		getGrpcMetadata(ss.Context(), "tenant-id"), // Extract metadata from original stream context
+		getGrpcMetadata(ss.Context(), "partition-id"),
+		getGrpcMetadata(ss.Context(), "profile-id"),
+		getGrpcMetadata(ss.Context(), "access-id"),
+		getGrpcMetadata(ss.Context(), "contact-id"),
+		getGrpcMetadata(ss.Context(), "session-id"),
+		getGrpcMetadata(ss.Context(), "device-id"),
 		getGrpcMetadata(ss.Context(), "roles"))
 
 	// Wrap the original stream with newCtx (which is original ctx if not secure or auth failed/skipped, or authenticated ctx if successful).

@@ -18,7 +18,11 @@ func TenancyPartition(ctx context.Context) func(db *gorm.DB) *gorm.DB {
 
 		skipTenancyChecksOnClaims := security.IsTenancyChecksOnClaimSkipped(ctx)
 		if skipTenancyChecksOnClaims {
-			return db
+
+			authClaim = security.SecondaryClaimsFromContext(ctx)
+			if authClaim == nil {
+				return db
+			}
 		}
 
 		// Safely retrieve the table name (fallback to empty string if nil)

@@ -339,12 +339,13 @@ func ClaimsFromMap(m map[string]string) *AuthenticationClaims {
 // This should be done with very high caution though.
 func SetupSecondaryClaims(
 	ctx context.Context,
-	tenantID, partitionID, accessID, contactID, sessionID, deviceID, roles string,
+	tenantID, partitionID, profileID, accessID,
+	contactID, sessionID, deviceID, roles string,
 ) context.Context {
 	claims := ClaimsFromContext(ctx)
 
 	// If no claims or not an internal system, no padding is needed.
-	if claims == nil || !claims.isInternalSystem() {
+	if claims == nil || !claims.isInternalSystem() || tenantID == "" || partitionID == "" {
 		return ctx
 	}
 
@@ -357,6 +358,7 @@ func SetupSecondaryClaims(
 
 	secondaryClaims.TenantID = tenantID
 	secondaryClaims.PartitionID = partitionID
+	secondaryClaims.Subject = profileID
 	secondaryClaims.AccessID = accessID
 	secondaryClaims.ContactID = contactID
 	secondaryClaims.SessionID = sessionID

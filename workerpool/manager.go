@@ -4,11 +4,80 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/pitabwire/util"
 
 	"github.com/pitabwire/frame/config"
 )
+
+const (
+	jobRetryBackoffBaseDelay    = 100 * time.Millisecond
+	jobRetryBackoffMaxDelay     = 30 * time.Second
+	jobRetryBackoffMaxRunNumber = 10
+)
+
+func shouldCloseJob(executionErr error) bool {
+	return executionErr == nil || errors.Is(executionErr, context.Canceled) ||
+		errors.Is(executionErr, ErrWorkerPoolResultChannelIsClosed)
+}
+
+func jobRetryBackoffDelay(run int) time.Duration {
+	if run < 1 {
+		run = 1
+	}
+
+	if run > jobRetryBackoffMaxRunNumber {
+		run = jobRetryBackoffMaxRunNumber
+	}
+
+	delay := jobRetryBackoffBaseDelay * time.Duration(1<<(run-1))
+	if delay > jobRetryBackoffMaxDelay {
+		return jobRetryBackoffMaxDelay
+	}
+
+	return delay
+}
+
+func handleResubmitError[T any](
+	ctx context.Context,
+	job Job[T],
+	log *util.LogEntry,
+	executionErr error,
+	resubmitErr error,
+) {
+	if resubmitErr == nil {
+		return
+	}
+
+	log.WithError(resubmitErr).Error("Failed to resubmit job")
+	_ = job.WriteError(ctx, fmt.Errorf("failed to resubmit job: %w", executionErr))
+	job.Close()
+}
+
+func scheduleRetryResubmission[T any](
+	ctx context.Context,
+	s Manager,
+	job Job[T],
+	delay time.Duration,
+	log *util.LogEntry,
+	executionErr error,
+) {
+	go func() {
+		timer := time.NewTimer(delay)
+		defer timer.Stop()
+
+		select {
+		case <-ctx.Done():
+			job.Close()
+			return
+		case <-timer.C:
+		}
+
+		resubmitErr := SubmitJob(ctx, s, job)
+		handleResubmitError(ctx, job, log, executionErr, resubmitErr)
+	}()
+}
 
 type manager struct {
 	pool    WorkerPool
@@ -88,8 +157,7 @@ func createJobExecutionTask[T any](ctx context.Context, s Manager, job Job[T]) f
 		executionErr := job.F()(ctx, job)
 
 		// Handle successful execution first and return early
-		if executionErr == nil || errors.Is(executionErr, context.Canceled) ||
-			errors.Is(executionErr, ErrWorkerPoolResultChannelIsClosed) {
+		if shouldCloseJob(executionErr) {
 			job.Close()
 			return
 		}
@@ -105,11 +173,8 @@ func createJobExecutionTask[T any](ctx context.Context, s Manager, job Job[T]) f
 
 		// Job can be retried to resolve error
 		log.Warn("Job failed, attempting to retry it")
-		resubmitErr := SubmitJob(ctx, s, job) // Recursive call to SubmitJob for retry
-		if resubmitErr != nil {
-			log.WithError(resubmitErr).Error("Failed to resubmit job")
-			_ = job.WriteError(ctx, fmt.Errorf("failed to resubmit job: %w", executionErr))
-			job.Close()
-		}
+
+		delay := jobRetryBackoffDelay(job.Runs())
+		scheduleRetryResubmission(ctx, s, job, delay, log, executionErr)
 	}
 }

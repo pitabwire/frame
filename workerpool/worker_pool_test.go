@@ -18,6 +18,22 @@ type WorkerPoolTestSuite struct {
 	tests.BaseTestSuite
 }
 
+type testWorkerPool struct{}
+
+func (p *testWorkerPool) Submit(_ context.Context, task func()) error {
+	task()
+	return nil
+}
+
+func (p *testWorkerPool) Shutdown() {}
+
+type testManager struct {
+	pool workerpool.WorkerPool
+}
+
+func (m *testManager) GetPool() (workerpool.WorkerPool, error) { return m.pool, nil }
+func (m *testManager) StopError(_ context.Context, _ error)    {}
+
 // TestWorkerPoolSuite runs the worker pool test suite.
 func TestWorkerPoolSuite(t *testing.T) {
 	suite.Run(t, &WorkerPoolTestSuite{})
@@ -70,6 +86,45 @@ func (s *WorkerPoolTestSuite) TestJobImplChannelOperations() {
 			}
 		})
 	}
+}
+
+func (s *WorkerPoolTestSuite) TestJobRetryUsesBackoff() {
+	ctx, cancel := context.WithTimeout(s.T().Context(), 2*time.Second)
+	defer cancel()
+
+	var mu sync.Mutex
+	var executionTimes []time.Time
+
+	job := workerpool.NewJobWithRetry[any](func(_ context.Context, _ workerpool.JobResultPipe[any]) error {
+		mu.Lock()
+		executionTimes = append(executionTimes, time.Now())
+		mu.Unlock()
+		return errors.New("fail")
+	}, 1)
+
+	mgr := &testManager{pool: &testWorkerPool{}}
+	err := workerpool.SubmitJob(ctx, mgr, job)
+	s.Require().NoError(err)
+
+	mu.Lock()
+	s.Require().Len(executionTimes, 1)
+	mu.Unlock()
+
+	time.Sleep(20 * time.Millisecond)
+	mu.Lock()
+	s.Require().Len(executionTimes, 1)
+	mu.Unlock()
+
+	s.Require().Eventually(func() bool {
+		mu.Lock()
+		defer mu.Unlock()
+		return len(executionTimes) == 2
+	}, 500*time.Millisecond, 10*time.Millisecond)
+
+	mu.Lock()
+	delta := executionTimes[1].Sub(executionTimes[0])
+	mu.Unlock()
+	s.Require().GreaterOrEqual(delta, 80*time.Millisecond)
 }
 
 func (s *WorkerPoolTestSuite) writeIntRangeAsResult(

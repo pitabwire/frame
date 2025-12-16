@@ -18,6 +18,12 @@ import (
 	"github.com/pitabwire/frame/workerpool"
 )
 
+const (
+	subscriberReceiveErrorBackoffBaseDelay          = 100 * time.Millisecond
+	subscriberReceiveErrorBackoffMaxDelay           = 30 * time.Second
+	subscriberReceiveErrorBackoffMaxConsecutiveErrs = 10
+)
+
 type subscriber struct {
 	reference    string
 	url          string
@@ -28,6 +34,38 @@ type subscriber struct {
 	metrics      *subscriberMetrics
 
 	workManager workerpool.Manager
+}
+
+func subscriberReceiveErrorBackoffDelay(consecutiveErrors int) time.Duration {
+	if consecutiveErrors <= 0 {
+		return 0
+	}
+
+	attempt := consecutiveErrors
+	if attempt > subscriberReceiveErrorBackoffMaxConsecutiveErrs {
+		attempt = subscriberReceiveErrorBackoffMaxConsecutiveErrs
+	}
+
+	delay := subscriberReceiveErrorBackoffBaseDelay * time.Duration(1<<(attempt-1))
+	if delay > subscriberReceiveErrorBackoffMaxDelay {
+		return subscriberReceiveErrorBackoffMaxDelay
+	}
+
+	return delay
+}
+
+func waitForDelay(ctx context.Context, delay time.Duration) {
+	if delay <= 0 {
+		return
+	}
+
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+
+	select {
+	case <-ctx.Done():
+	case <-timer.C:
+	}
 }
 
 func (s *subscriber) Ref() string {
@@ -227,9 +265,10 @@ func (s *subscriber) listen(ctx context.Context) {
 		WithField("function", "subscription").
 		WithField("url", s.url)
 	logger.Debug("starting to listen for messages")
+
+	var consecutiveReceiveErrors int
 	for {
-		select {
-		case <-ctx.Done():
+		if ctx.Err() != nil {
 			err := s.Stop(ctx)
 			if err != nil {
 				logger.WithError(err).Error("could not stop subscription")
@@ -237,31 +276,40 @@ func (s *subscriber) listen(ctx context.Context) {
 			}
 			logger.Debug("exiting due to canceled context")
 			return
+		}
 
-		default:
-			msg, err := s.Receive(ctx)
-			if err != nil {
-				if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-					// Context cancelled or deadline exceeded, loop again to check ctx.Done()
-					continue
-				}
-				// Other errors from Receive are critical for the listener.
-				logger.WithError(err).Error("could not pull message")
-
-				// Recreate subscription
-				s.recreateSubscription(ctx)
+		msg, err := s.Receive(ctx)
+		if err != nil {
+			if ctx.Err() != nil && (errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)) {
+				// Context cancelled or deadline exceeded, loop again to check ctx.Done()
 				continue
 			}
 
-			// Process the received message. Errors from processing (like job submission failure)
-			// will be logged by processReceivedMessage. If it's a critical submission error,
-			// it will be returned and will stop the whole application.
-			if procErr := s.processReceivedMessage(ctx, msg); procErr != nil {
-				// processReceivedMessage already logs details. This error is for critical failures.
-				logger.WithError(procErr).Error("critical error processing message, stopping listener")
-				s.SendStopError(ctx, procErr) // procErr
-				return                        // Exit listen loop
+			// Other errors from Receive are critical for the listener.
+			consecutiveReceiveErrors++
+			if consecutiveReceiveErrors > subscriberReceiveErrorBackoffMaxConsecutiveErrs {
+				consecutiveReceiveErrors = subscriberReceiveErrorBackoffMaxConsecutiveErrs
 			}
+			logger.WithError(err).Error("could not pull message")
+
+			// Recreate subscription
+			s.recreateSubscription(ctx)
+
+			delay := subscriberReceiveErrorBackoffDelay(consecutiveReceiveErrors)
+			waitForDelay(ctx, delay)
+			continue
+		}
+
+		consecutiveReceiveErrors = 0
+
+		// Process the received message. Errors from processing (like job submission failure)
+		// will be logged by processReceivedMessage. If it's a critical submission error,
+		// it will be returned and will stop the whole application.
+		if procErr := s.processReceivedMessage(ctx, msg); procErr != nil {
+			// processReceivedMessage already logs details. This error is for critical failures.
+			logger.WithError(procErr).Error("critical error processing message, stopping listener")
+			s.SendStopError(ctx, procErr) // procErr
+			return                        // Exit listen loop
 		}
 	}
 }

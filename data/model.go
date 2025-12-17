@@ -44,7 +44,6 @@ func (model *BaseModel) GenID(ctx context.Context) {
 	}
 
 	if authClaim.GetTenantID() == "" {
-
 		secondaryClaims := security.SecondaryClaimsFromContext(ctx)
 		if secondaryClaims != nil {
 			authClaim = secondaryClaims

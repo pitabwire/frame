@@ -34,11 +34,9 @@ func (model *BaseModel) GetID() string {
 
 // GenID creates a new id for model if its not existent.
 func (model *BaseModel) GenID(ctx context.Context) {
-	if model.ID != "" {
-		return
+	if model.ID == "" {
+		model.ID = util.IDString()
 	}
-
-	model.ID = util.IDString()
 
 	authClaim := security.ClaimsFromContext(ctx)
 	if authClaim == nil {

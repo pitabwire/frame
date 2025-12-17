@@ -45,6 +45,14 @@ func (model *BaseModel) GenID(ctx context.Context) {
 		return
 	}
 
+	if authClaim.GetTenantID() == "" {
+
+		secondaryClaims := security.SecondaryClaimsFromContext(ctx)
+		if secondaryClaims != nil {
+			authClaim = secondaryClaims
+		}
+	}
+
 	if model.AccessID == "" && authClaim.GetAccessID() != "" {
 		model.AccessID = authClaim.GetAccessID()
 	}

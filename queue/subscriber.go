@@ -207,6 +207,10 @@ func (s *subscriber) Stop(ctx context.Context) error {
 	return nil
 }
 
+func (s *subscriber) As(i any) bool {
+	return s.subscription.As(i)
+}
+
 func (s *subscriber) processReceivedMessage(ctx context.Context, msg *pubsub.Message) error {
 	job := workerpool.NewJob[any](func(jobCtx context.Context, _ workerpool.JobResultPipe[any]) error {
 		var err error

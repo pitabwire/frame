@@ -40,6 +40,7 @@ type Publisher interface {
 
 	Publish(ctx context.Context, payload any, headers ...map[string]string) error
 	Stop(ctx context.Context) error
+	As(i any) bool
 }
 
 type Subscriber interface {
@@ -54,6 +55,7 @@ type Subscriber interface {
 	Init(ctx context.Context) error
 	Receive(ctx context.Context) (*pubsub.Message, error)
 	Stop(ctx context.Context) error
+	As(i any) bool
 }
 
 type SubscribeWorker interface {

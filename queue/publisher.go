@@ -112,3 +112,7 @@ func (p *publisher) Stop(ctx context.Context) error {
 
 	return nil
 }
+
+func (p *publisher) As(i any) bool {
+	return p.topic.As(i)
+}

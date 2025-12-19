@@ -79,12 +79,19 @@ func (a *authInterceptor) authenticate(ctx context.Context, authHeader string) (
 // WrapUnary implements the unary interceptor for authentication.
 func (a *authInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
 	return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-		authCtx, err := a.authenticate(ctx, req.Header().Get(authorizationKey))
+		headers := req.Header()
+		authCtx, err := a.authenticate(ctx, headers.Get(authorizationKey))
 		if err != nil {
 			return nil, err
 		}
 
-		return next(authCtx, req)
+		secCtx := security.SetupSecondaryClaims(authCtx,
+			headers.Get("X-Tenant-Id"), headers.Get("X-Partition-Id"),
+			headers.Get("X-Profile-Id"), headers.Get("X-Access-Id"),
+			headers.Get("X-Contact-Id"), headers.Get("X-Session-Id"),
+			headers.Get("X-Device-Id"), headers.Get("X-Roles"))
+
+		return next(secCtx, req)
 	}
 }
 
@@ -96,11 +103,18 @@ func (a *authInterceptor) WrapStreamingClient(next connect.StreamingClientFunc) 
 // WrapStreamingHandler implements the streaming handler interceptor for authentication.
 func (a *authInterceptor) WrapStreamingHandler(next connect.StreamingHandlerFunc) connect.StreamingHandlerFunc {
 	return func(ctx context.Context, conn connect.StreamingHandlerConn) error {
-		authCtx, err := a.authenticate(ctx, conn.RequestHeader().Get(authorizationKey))
+		headers := conn.RequestHeader()
+		authCtx, err := a.authenticate(ctx, headers.Get(authorizationKey))
 		if err != nil {
 			return err
 		}
 
-		return next(authCtx, conn)
+		secCtx := security.SetupSecondaryClaims(authCtx,
+			headers.Get("X-Tenant-Id"), headers.Get("X-Partition-Id"),
+			headers.Get("X-Profile-Id"), headers.Get("X-Access-Id"),
+			headers.Get("X-Contact-Id"), headers.Get("X-Session-Id"),
+			headers.Get("X-Device-Id"), headers.Get("X-Roles"))
+
+		return next(secCtx, conn)
 	}
 }

@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/pitabwire/util"
 )
 
 type contextKey string
@@ -14,7 +15,6 @@ func (c contextKey) String() string {
 }
 
 const ctxKeyAuthenticationClaim = contextKey("authenticationClaimKey")
-const ctxKeySecondaryAuthenticationClaim = contextKey("secondaryAuthenticationClaimKey")
 const ctxKeySkipTenancyCheckOnClaim = contextKey("skipTenancyCheckOnClaimKey")
 const ctxKeyAuthenticationJwt = contextKey("authenticationJwtKey")
 
@@ -237,11 +237,6 @@ func (a *AuthenticationClaims) ClaimsToContext(ctx context.Context) context.Cont
 	return ctx
 }
 
-// secondaryClaimsToContext adds authentication claims to the current supplied context.
-func (a *AuthenticationClaims) secondaryClaimsToContext(ctx context.Context) context.Context {
-	return context.WithValue(ctx, ctxKeySecondaryAuthenticationClaim, a)
-}
-
 // SkipTenancyChecksOnClaims removes authentication claims from the current supplied context.
 func SkipTenancyChecksOnClaims(ctx context.Context) context.Context {
 	return context.WithValue(ctx, ctxKeySkipTenancyCheckOnClaim, true)
@@ -280,7 +275,7 @@ func ClaimsFromContext(ctx context.Context) *AuthenticationClaims {
 	}
 
 	if authenticationClaims.isInternalSystem() {
-		secondaryClaims := secondaryClaimsFromContext(ctx)
+		secondaryClaims := util.GetTenancy(ctx)
 		if secondaryClaims != nil {
 			// Return enriched copy to avoid mutating the original claims in context
 			enriched := *authenticationClaims
@@ -289,16 +284,6 @@ func ClaimsFromContext(ctx context.Context) *AuthenticationClaims {
 			enriched.AccessID = secondaryClaims.GetAccessID()
 			return &enriched
 		}
-	}
-
-	return authenticationClaims
-}
-
-// secondaryClaimsFromContext extracts secondary authentication claims from the supplied context if any exist.
-func secondaryClaimsFromContext(ctx context.Context) *AuthenticationClaims {
-	authenticationClaims, ok := ctx.Value(ctxKeySecondaryAuthenticationClaim).(*AuthenticationClaims)
-	if !ok {
-		return nil
 	}
 
 	return authenticationClaims
@@ -378,5 +363,5 @@ func SetupSecondaryClaims(
 	secondaryClaims.DeviceID = deviceID
 	secondaryClaims.Roles = strings.Split(roles, ",")
 
-	return secondaryClaims.secondaryClaimsToContext(ctx)
+	return util.SetTenancy(ctx, secondaryClaims)
 }

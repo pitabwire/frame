@@ -85,13 +85,12 @@ func (a *authInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
 			return nil, err
 		}
 
-		secCtx := security.SetupSecondaryClaims(authCtx,
-			headers.Get("X-Tenant-Id"), headers.Get("X-Partition-Id"),
-			headers.Get("X-Profile-Id"), headers.Get("X-Access-Id"),
-			headers.Get("X-Contact-Id"), headers.Get("X-Session-Id"),
-			headers.Get("X-Device-Id"), headers.Get("X-Roles"))
+		authCtx = security.EnrichTenancyClaims(authCtx,
+			headers.Get("X-Tenant-Id"),
+			headers.Get("X-Partition-Id"),
+			headers.Get("X-Access-Id"))
 
-		return next(secCtx, req)
+		return next(authCtx, req)
 	}
 }
 
@@ -109,12 +108,10 @@ func (a *authInterceptor) WrapStreamingHandler(next connect.StreamingHandlerFunc
 			return err
 		}
 
-		secCtx := security.SetupSecondaryClaims(authCtx,
+		authCtx = security.EnrichTenancyClaims(authCtx,
 			headers.Get("X-Tenant-Id"), headers.Get("X-Partition-Id"),
-			headers.Get("X-Profile-Id"), headers.Get("X-Access-Id"),
-			headers.Get("X-Contact-Id"), headers.Get("X-Session-Id"),
-			headers.Get("X-Device-Id"), headers.Get("X-Roles"))
+			headers.Get("X-Access-Id"))
 
-		return next(secCtx, conn)
+		return next(authCtx, conn)
 	}
 }

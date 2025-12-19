@@ -331,14 +331,12 @@ func ClaimsFromMap(m map[string]string) *AuthenticationClaims {
 	return claims
 }
 
-// SetupSecondaryClaims internal services act on behalf of different users
+// EnrichTenancyClaims internal services act on behalf of different users
 // Although they have their claims in place there may be situations where there is need to login as
 // This is where secondary claims come into play and implementing systems can decide to use the secondary claims
 // This should be done with very high caution though.
-func SetupSecondaryClaims(
-	ctx context.Context,
-	tenantID, partitionID, profileID, accessID,
-	contactID, sessionID, deviceID, roles string,
+func EnrichTenancyClaims(
+	ctx context.Context, tenantID, partitionID, accessID string,
 ) context.Context {
 	claims := ClaimsFromContext(ctx)
 
@@ -356,12 +354,7 @@ func SetupSecondaryClaims(
 
 	secondaryClaims.TenantID = tenantID
 	secondaryClaims.PartitionID = partitionID
-	secondaryClaims.Subject = profileID
 	secondaryClaims.AccessID = accessID
-	secondaryClaims.ContactID = contactID
-	secondaryClaims.SessionID = sessionID
-	secondaryClaims.DeviceID = deviceID
-	secondaryClaims.Roles = strings.Split(roles, ",")
 
 	return util.SetTenancy(ctx, secondaryClaims)
 }

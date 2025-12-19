@@ -71,11 +71,10 @@ func AuthenticationMiddleware(
 			return
 		}
 
-		security.SetupSecondaryClaims(ctx,
-			r.Header.Get("X-Tenant-Id"), r.Header.Get("X-Partition-Id"),
-			r.Header.Get("X-Profile-Id"), r.Header.Get("X-Access-Id"),
-			r.Header.Get("X-Contact-Id"), r.Header.Get("X-Session-Id"),
-			r.Header.Get("X-Device-Id"), r.Header.Get("X-Roles"))
+		ctx = security.EnrichTenancyClaims(ctx,
+			r.Header.Get("X-Tenant-Id"),
+			r.Header.Get("X-Partition-Id"),
+			r.Header.Get("X-Access-Id"))
 
 		r = r.WithContext(ctx)
 

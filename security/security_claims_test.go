@@ -255,85 +255,6 @@ func (s *AuthenticationTestSuite) TestTenancySkipFunctions() {
 		checkResult func(*testing.T, context.Context, map[string]string)
 	}{
 		{
-			name: "SkipTenancyChecksFromMap with skip_tenancy_check=true should set skip flag",
-			setup: func(ctx context.Context, m map[string]string) (context.Context, map[string]string) {
-				m["skip_tenancy_check"] = "true"
-				ctx = security.SkipTenancyChecksFromMap(ctx, m)
-				return ctx, m
-			},
-			checkResult: func(t *testing.T, ctx context.Context, _ map[string]string) {
-				require.True(t, security.IsTenancyChecksOnClaimSkipped(ctx), "tenancy checks should be skipped")
-			},
-		},
-		{
-			name: "SkipTenancyChecksFromMap with skip_tenancy_check=false should not set skip flag",
-			setup: func(ctx context.Context, m map[string]string) (context.Context, map[string]string) {
-				m["skip_tenancy_check"] = "false"
-				ctx = security.SkipTenancyChecksFromMap(ctx, m)
-				return ctx, m
-			},
-			checkResult: func(t *testing.T, ctx context.Context, _ map[string]string) {
-				require.False(t, security.IsTenancyChecksOnClaimSkipped(ctx), "tenancy checks should not be skipped")
-			},
-		},
-		{
-			name: "SkipTenancyChecksFromMap without skip_tenancy_check should not set skip flag",
-			setup: func(ctx context.Context, m map[string]string) (context.Context, map[string]string) {
-				ctx = security.SkipTenancyChecksFromMap(ctx, m)
-				return ctx, m
-			},
-			checkResult: func(t *testing.T, ctx context.Context, _ map[string]string) {
-				require.False(t, security.IsTenancyChecksOnClaimSkipped(ctx), "tenancy checks should not be skipped")
-			},
-		},
-		{
-			name: "SkipTenancyChecksFromMap with other values should not set skip flag",
-			setup: func(ctx context.Context, m map[string]string) (context.Context, map[string]string) {
-				m["skip_tenancy_check"] = "maybe"
-				m["other_key"] = "value"
-				ctx = security.SkipTenancyChecksFromMap(ctx, m)
-				return ctx, m
-			},
-			checkResult: func(t *testing.T, ctx context.Context, _ map[string]string) {
-				require.False(t, security.IsTenancyChecksOnClaimSkipped(ctx), "tenancy checks should not be skipped")
-			},
-		},
-		{
-			name: "SkipTenancyChecksToMap with skip flag should not set skip_tenancy_check in map",
-			setup: func(ctx context.Context, m map[string]string) (context.Context, map[string]string) {
-				ctx = security.SkipTenancyChecksOnClaims(ctx)
-				m = security.SkipTenancyChecksToMap(ctx, m)
-				return ctx, m
-			},
-			checkResult: func(t *testing.T, ctx context.Context, m map[string]string) {
-				require.True(t, security.IsTenancyChecksOnClaimSkipped(ctx), "tenancy checks should be skipped")
-				require.NotContains(t, m, "skip_tenancy_check", "map should not contain skip_tenancy_check key")
-			},
-		},
-		{
-			name: "SkipTenancyChecksToMap without skip flag should set skip_tenancy_check=true in map",
-			setup: func(ctx context.Context, m map[string]string) (context.Context, map[string]string) {
-				m = security.SkipTenancyChecksToMap(ctx, m)
-				return ctx, m
-			},
-			checkResult: func(t *testing.T, ctx context.Context, m map[string]string) {
-				require.False(t, security.IsTenancyChecksOnClaimSkipped(ctx), "tenancy checks should not be skipped")
-				require.Equal(t, "true", m["skip_tenancy_check"], "map should contain skip_tenancy_check=true")
-			},
-		},
-		{
-			name: "SkipTenancyChecksToMap preserves existing map values",
-			setup: func(ctx context.Context, m map[string]string) (context.Context, map[string]string) {
-				m["existing_key"] = "existing_value"
-				m = security.SkipTenancyChecksToMap(ctx, m)
-				return ctx, m
-			},
-			checkResult: func(t *testing.T, _ context.Context, m map[string]string) {
-				require.Equal(t, "existing_value", m["existing_key"], "existing map values should be preserved")
-				require.Equal(t, "true", m["skip_tenancy_check"], "skip_tenancy_check should be set to true")
-			},
-		},
-		{
 			name: "IsTenancyChecksOnClaimSkipped with skip flag returns true",
 			setup: func(ctx context.Context, m map[string]string) (context.Context, map[string]string) {
 				ctx = security.SkipTenancyChecksOnClaims(ctx)
@@ -381,26 +302,6 @@ func (s *AuthenticationTestSuite) TestTenancySkipFunctions() {
 					t,
 					security.IsTenancyChecksOnClaimSkipped(ctx),
 					"SkipTenancyChecksOnClaims should set skip flag",
-				)
-			},
-		},
-		{
-			name: "Round trip: FromMap -> ToMap preserves skip state",
-			setup: func(ctx context.Context, m map[string]string) (context.Context, map[string]string) {
-				m["skip_tenancy_check"] = "true"
-				ctx = security.SkipTenancyChecksFromMap(ctx, m)
-				// Clear the original map and recreate it
-				newMap := make(map[string]string)
-				newMap = security.SkipTenancyChecksToMap(ctx, newMap)
-				return ctx, newMap
-			},
-			checkResult: func(t *testing.T, ctx context.Context, m map[string]string) {
-				require.True(t, security.IsTenancyChecksOnClaimSkipped(ctx), "context should have skip flag")
-				require.NotContains(
-					t,
-					m,
-					"skip_tenancy_check",
-					"map should not contain skip_tenancy_check when context has skip flag",
 				)
 			},
 		},

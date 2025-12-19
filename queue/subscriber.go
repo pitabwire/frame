@@ -218,7 +218,7 @@ func (s *subscriber) processReceivedMessage(ctx context.Context, msg *pubsub.Mes
 
 		var metadata propagation.MapCarrier = msg.Metadata
 
-		pCtx := security.SkipTenancyChecksFromMap(jobCtx, metadata)
+		pCtx := security.SkipTenancyChecksOnClaims(jobCtx)
 
 		authClaim := security.ClaimsFromMap(metadata)
 		if authClaim != nil {

@@ -272,17 +272,30 @@ func IsTenancyChecksOnClaimSkipped(ctx context.Context) bool {
 }
 
 // ClaimsFromContext extracts authentication claims from the supplied context if any exist.
+// For internal systems, the returned claims are enriched with tenancy data from secondary claims.
 func ClaimsFromContext(ctx context.Context) *AuthenticationClaims {
 	authenticationClaims, ok := ctx.Value(ctxKeyAuthenticationClaim).(*AuthenticationClaims)
 	if !ok {
 		return nil
 	}
 
+	if authenticationClaims.isInternalSystem() {
+		secondaryClaims := secondaryClaimsFromContext(ctx)
+		if secondaryClaims != nil {
+			// Return enriched copy to avoid mutating the original claims in context
+			enriched := *authenticationClaims
+			enriched.TenantID = secondaryClaims.GetTenantID()
+			enriched.PartitionID = secondaryClaims.GetPartitionID()
+			enriched.AccessID = secondaryClaims.GetAccessID()
+			return &enriched
+		}
+	}
+
 	return authenticationClaims
 }
 
-// SecondaryClaimsFromContext extracts secondary authentication claims from the supplied context if any exist.
-func SecondaryClaimsFromContext(ctx context.Context) *AuthenticationClaims {
+// secondaryClaimsFromContext extracts secondary authentication claims from the supplied context if any exist.
+func secondaryClaimsFromContext(ctx context.Context) *AuthenticationClaims {
 	authenticationClaims, ok := ctx.Value(ctxKeySecondaryAuthenticationClaim).(*AuthenticationClaims)
 	if !ok {
 		return nil

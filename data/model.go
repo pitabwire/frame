@@ -66,6 +66,22 @@ func (model *BaseModel) GetVersion() uint {
 	return model.Version
 }
 
+var _ BaseModelI = (*BaseModel)(nil)
+
+func (model *BaseModel) GetTenantID() string {
+	return model.TenantID
+}
+
+func (model *BaseModel) GetPartitionID() string {
+	return model.PartitionID
+}
+
+func (model *BaseModel) GetAccessID() string {
+	return model.AccessID
+}
+
+var _ util.TenancyInfo = (*BaseModel)(nil)
+
 // BeforeSave Ensures we update a migrations time stamps.
 func (model *BaseModel) BeforeSave(db *gorm.DB) error {
 	return model.BeforeCreate(db)

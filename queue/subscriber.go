@@ -223,6 +223,8 @@ func (s *subscriber) processReceivedMessage(ctx context.Context, msg *pubsub.Mes
 		authClaim := security.ClaimsFromMap(metadata)
 		if authClaim != nil {
 			pCtx = authClaim.ClaimsToContext(pCtx)
+			// allows tenancy claim propagation through queues
+			pCtx = util.SetTenancy(pCtx, authClaim)
 		}
 
 		pCtx = otel.GetTextMapPropagator().Extract(pCtx, metadata)

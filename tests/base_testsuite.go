@@ -71,8 +71,8 @@ func (bs *BaseTestSuite) WithTestDependancies(
 	allDepsWQ = append(allDepsWQ, queueDR)
 
 	options := []*definition.DependencyOption{
-		definition.NewDependancyOption("default", util.RandomString(DefaultRandomStringLength), allDeps),
-		definition.NewDependancyOption("natsQ", util.RandomString(DefaultRandomStringLength), allDepsWQ),
+		definition.NewDependancyOption("default", util.RandomAlphaNumericString(DefaultRandomStringLength), allDeps),
+		definition.NewDependancyOption("natsQ", util.RandomAlphaNumericString(DefaultRandomStringLength), allDepsWQ),
 	}
 
 	frametests.WithTestDependencies(t, options, testFn)

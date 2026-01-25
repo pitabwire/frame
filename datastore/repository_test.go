@@ -822,7 +822,12 @@ func (s *RepositoryTestSuite) TestBulkUpdate() {
 								case "counter":
 									require.Equal(t, expectedValue, updated.Counter, "counter should be updated")
 								case "description":
-									require.Equal(t, expectedValue, updated.Description, "description should be updated")
+									require.Equal(
+										t,
+										expectedValue,
+										updated.Description,
+										"description should be updated",
+									)
 								}
 							}
 

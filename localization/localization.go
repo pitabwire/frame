@@ -132,7 +132,9 @@ func (s *managerImpl) TranslateWithMapAndCount(
 
 	default:
 		logger := util.Log(ctx).WithField("messageID", messageID).WithField("variables", variables)
-		logger.Warn("TranslateWithMapAndCount -- no valid request object found, use string, []string, context or http.Request")
+		logger.Warn(
+			"TranslateWithMapAndCount -- no valid request object found, use string, []string, context or http.Request",
+		)
 		return messageID
 	}
 

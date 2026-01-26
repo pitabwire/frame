@@ -944,9 +944,10 @@ func TestToContent_TruncatesExactly(t *testing.T) {
 	resp := &InvokeResponse{
 		StatusCode: http.StatusOK,
 		Body:       io.NopCloser(strings.NewReader(content)),
+		maxBodyLen: 50,
 	}
 
-	data, err := resp.ToContent(context.Background(), 50)
+	data, err := resp.ToContent(context.Background())
 	if !errors.Is(err, ErrResponseTooLarge) {
 		t.Fatalf("expected ErrResponseTooLarge, got: %v", err)
 	}
@@ -960,9 +961,10 @@ func TestToContent_UnderLimit(t *testing.T) {
 	resp := &InvokeResponse{
 		StatusCode: http.StatusOK,
 		Body:       io.NopCloser(strings.NewReader(content)),
+		maxBodyLen: 100,
 	}
 
-	data, err := resp.ToContent(context.Background(), 100)
+	data, err := resp.ToContent(context.Background())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -978,7 +980,7 @@ func TestToContent_NoLimit(t *testing.T) {
 		Body:       io.NopCloser(strings.NewReader(content)),
 	}
 
-	data, err := resp.ToContent(context.Background(), 0)
+	data, err := resp.ToContent(context.Background())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1035,19 +1037,23 @@ func TestInvoke_Success(t *testing.T) {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 	}))
 	defer srv.Close()
 
 	inv := newTestInvoker(srv.Client(), noRetry())
 	ctx := context.Background()
 
-	status, body, err := inv.Invoke(ctx, http.MethodGet, srv.URL, nil, nil)
+	resp, err := inv.Invoke(ctx, http.MethodGet, srv.URL, nil, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if status != http.StatusOK {
-		t.Errorf("status = %d, want 200", status)
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("status = %d, want 200", resp.StatusCode)
+	}
+	body, err := resp.ToContent(ctx)
+	if err != nil {
+		t.Fatalf("unexpected error reading body: %v", err)
 	}
 	if len(body) == 0 {
 		t.Error("expected non-empty body")
@@ -1057,9 +1063,9 @@ func TestInvoke_Success(t *testing.T) {
 func TestInvoke_WithPayload(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var payload map[string]string
-		json.NewDecoder(r.Body).Decode(&payload)
+		_ = json.NewDecoder(r.Body).Decode(&payload)
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(payload)
+		_ = json.NewEncoder(w).Encode(payload)
 	}))
 	defer srv.Close()
 
@@ -1067,16 +1073,19 @@ func TestInvoke_WithPayload(t *testing.T) {
 	ctx := context.Background()
 
 	input := map[string]string{"key": "value"}
-	status, body, err := inv.Invoke(ctx, http.MethodPost, srv.URL, input, nil)
+	resp, err := inv.Invoke(ctx, http.MethodPost, srv.URL, input, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if status != http.StatusOK {
-		t.Errorf("status = %d, want 200", status)
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("status = %d, want 200", resp.StatusCode)
 	}
 
 	var result map[string]string
-	json.Unmarshal(body, &result)
+	err = resp.Decode(ctx, &result)
+	if err != nil {
+		t.Fatalf("unexpected decode error: %v", err)
+	}
 	if result["key"] != "value" {
 		t.Errorf("result = %v, want map[key:value]", result)
 	}
@@ -1085,19 +1094,23 @@ func TestInvoke_WithPayload(t *testing.T) {
 func TestInvoke_ServerError_ReturnsStatusAndBody(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte(`{"error":"something broke"}`))
+		_, _ = w.Write([]byte(`{"error":"something broke"}`))
 	}))
 	defer srv.Close()
 
 	inv := newTestInvoker(srv.Client(), noRetry())
 	ctx := context.Background()
 
-	status, body, err := inv.Invoke(ctx, http.MethodGet, srv.URL, nil, nil)
+	resp, err := inv.Invoke(ctx, http.MethodGet, srv.URL, nil, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if status != http.StatusInternalServerError {
-		t.Errorf("status = %d, want 500", status)
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Errorf("status = %d, want 500", resp.StatusCode)
+	}
+	body, err := resp.ToContent(ctx)
+	if err != nil {
+		t.Fatalf("unexpected error reading body: %v", err)
 	}
 	if !strings.Contains(string(body), "something broke") {
 		t.Errorf("body = %q, want it to contain error message", body)
@@ -1113,9 +1126,9 @@ func TestInvokeWithURLEncoded_Success(t *testing.T) {
 		if ct := r.Header.Get("Content-Type"); ct != "application/x-www-form-urlencoded" {
 			t.Errorf("Content-Type = %q, want application/x-www-form-urlencoded", ct)
 		}
-		r.ParseForm()
+		_ = r.ParseForm()
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(r.FormValue("key")))
+		_, _ = w.Write([]byte(r.FormValue("key")))
 	}))
 	defer srv.Close()
 
@@ -1123,12 +1136,16 @@ func TestInvokeWithURLEncoded_Success(t *testing.T) {
 	ctx := context.Background()
 
 	payload := url.Values{"key": {"value"}}
-	status, body, err := inv.InvokeWithURLEncoded(ctx, http.MethodPost, srv.URL, payload, nil)
+	resp, err := inv.InvokeWithURLEncoded(ctx, http.MethodPost, srv.URL, payload, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if status != http.StatusOK {
-		t.Errorf("status = %d, want 200", status)
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("status = %d, want 200", resp.StatusCode)
+	}
+	body, err := resp.ToContent(ctx)
+	if err != nil {
+		t.Fatalf("unexpected error reading body: %v", err)
 	}
 	if string(body) != "value" {
 		t.Errorf("body = %q, want %q", body, "value")

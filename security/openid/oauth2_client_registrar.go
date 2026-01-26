@@ -2,7 +2,6 @@ package openid
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -79,31 +78,34 @@ func (s *clientRegistrar) RegisterForJwtWithParams(ctx context.Context,
 	oauth2AdminURI := fmt.Sprintf("%s/admin/clients", oauth2ServiceAdminHost)
 	oauth2AdminIDURI := fmt.Sprintf("%s/%s", oauth2AdminURI, clientID)
 
-	status, response, err := s.invoker.Invoke(ctx, http.MethodGet, oauth2AdminIDURI, nil, nil)
+	resp, err := s.invoker.Invoke(ctx, http.MethodGet, oauth2AdminIDURI, nil, nil)
 	if err != nil {
 		util.Log(ctx).WithError(err).Error("could not get existing clients")
 		return nil, err
 	}
-	if status != http.StatusNotFound && (status > 299 || status < 200) {
+
+	if resp.StatusCode != http.StatusNotFound && (resp.StatusCode > 299 || resp.StatusCode < 200) {
+		body, _ := resp.ToContent(ctx)
 		util.Log(ctx).
-			WithField("status", status).
-			WithField("result", string(response)).
+			WithField("status", resp.StatusCode).
+			WithField("result", string(body)).
 			Error(" invalid response from oauth2 server")
 
-		return nil, fmt.Errorf("invalid existing clients check response : %s", response)
+		return nil, fmt.Errorf("invalid existing clients check response : %s", body)
 	}
 
-	if status != http.StatusNotFound {
+	if resp.StatusCode != http.StatusNotFound {
 		var existingClient map[string]any
-		err = json.Unmarshal(response, &existingClient)
+		err = resp.Decode(ctx, &existingClient)
 		if err != nil {
-			util.Log(ctx).WithError(err).WithField("payload", string(response)).
-				Error("could not unmarshal existing clients")
+			util.Log(ctx).WithError(err).Error("could not unmarshal existing clients")
 			return nil, err
 		}
 
 		return existingClient, nil
 	}
+
+	_ = resp.Close()
 
 	payload := map[string]any{
 		"client_id":                  clientID,
@@ -119,23 +121,24 @@ func (s *clientRegistrar) RegisterForJwtWithParams(ctx context.Context,
 		payload["scope"] = scope
 	}
 
-	status, response, err = s.invoker.Invoke(ctx, http.MethodPost, oauth2AdminURI, payload, nil)
+	resp, err = s.invoker.Invoke(ctx, http.MethodPost, oauth2AdminURI, payload, nil)
 	if err != nil {
 		util.Log(ctx).WithError(err).Error("could not create a new client")
 		return nil, err
 	}
 
-	if status > 299 || status < 200 {
+	if resp.StatusCode > 299 || resp.StatusCode < 200 {
+		body, _ := resp.ToContent(ctx)
 		util.Log(ctx).
-			WithField("status", status).
-			WithField("result", string(response)).
+			WithField("status", resp.StatusCode).
+			WithField("result", string(body)).
 			Error(" invalid response from server")
 
-		return nil, fmt.Errorf("invalid registration response : %s", response)
+		return nil, fmt.Errorf("invalid registration response : %s", body)
 	}
 
 	var newClient map[string]any
-	err = json.Unmarshal(response, &newClient)
+	err = resp.Decode(ctx, &newClient)
 	if err != nil {
 		util.Log(ctx).WithError(err).Error("could not un marshal new client")
 		return nil, err
@@ -149,7 +152,7 @@ func (s *clientRegistrar) UnRegisterForJwt(ctx context.Context,
 	oauth2ServiceAdminHost string, clientID string) error {
 	oauth2AdminURI := fmt.Sprintf("%s/admin/clients/%s", oauth2ServiceAdminHost, clientID)
 
-	status, result, err := s.invoker.Invoke(
+	resp, err := s.invoker.Invoke(
 		ctx,
 		http.MethodDelete,
 		oauth2AdminURI,
@@ -159,10 +162,11 @@ func (s *clientRegistrar) UnRegisterForJwt(ctx context.Context,
 	if err != nil {
 		util.Log(ctx).
 			WithError(err).
-			WithField("status", status).
-			WithField("result", string(result)).
 			Error(" invalid response from server")
 		return err
 	}
+
+	_ = resp.Close()
+
 	return nil
 }

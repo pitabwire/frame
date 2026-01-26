@@ -513,7 +513,7 @@ func (s *ConnectServerTestSuite) TestServiceConnectContextRun() {
 				}
 
 				client := svc.HTTPClientManager()
-				_, _, err := client.Invoke(t.Context(), "GET", testSrvFn().URL, nil, nil)
+				_, err := client.Invoke(t.Context(), "GET", testSrvFn().URL, nil, nil)
 				require.NoError(t, err)
 
 				if !strings.Contains(buf1.String(), tc.logData) {

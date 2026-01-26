@@ -504,6 +504,8 @@ func (c *ConfigurationDefault) GetVerificationIssuer() string {
 type ConfigurationAuthorization interface {
 	GetAuthorizationServiceReadURI() string
 	GetAuthorizationServiceWriteURI() string
+	AuthorizationServiceCanRead() bool
+	AuthorizationServiceCanWrite() bool
 }
 
 var _ ConfigurationAuthorization = new(ConfigurationDefault)
@@ -514,6 +516,13 @@ func (c *ConfigurationDefault) GetAuthorizationServiceReadURI() string {
 
 func (c *ConfigurationDefault) GetAuthorizationServiceWriteURI() string {
 	return c.AuthorizationServiceWriteURI
+}
+func (c *ConfigurationDefault) AuthorizationServiceCanRead() bool {
+	return c.AuthorizationServiceReadURI != ""
+}
+
+func (c *ConfigurationDefault) AuthorizationServiceCanWrite() bool {
+	return c.AuthorizationServiceWriteURI != ""
 }
 
 type ConfigurationDatabase interface {

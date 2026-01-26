@@ -44,10 +44,10 @@ type Manager interface {
 
 	Invoke(ctx context.Context,
 		method string, endpointURL string, payload any,
-		headers http.Header, opts ...HTTPOption) (int, []byte, error)
+		headers http.Header, opts ...HTTPOption) (*InvokeResponse, error)
 	InvokeWithURLEncoded(ctx context.Context,
 		method string, endpointURL string, payload url.Values,
-		headers http.Header, opts ...HTTPOption) (int, []byte, error)
+		headers http.Header, opts ...HTTPOption) (*InvokeResponse, error)
 	InvokeStream(
 		ctx context.Context,
 		method string, endpointURL string,
@@ -76,22 +76,31 @@ type InvokeResponse struct {
 	StatusCode int
 	Headers    http.Header
 	Body       io.ReadCloser
+
+	maxBodyLen int64
+}
+
+func (s *InvokeResponse) Close() error {
+	if s.Body != nil {
+		return s.Body.Close()
+	}
+	return nil
 }
 
 func (s *InvokeResponse) ToFile(ctx context.Context, writer io.Writer) (int64, error) {
-	defer util.CloseAndLogOnError(ctx, s.Body)
+	defer util.CloseAndLogOnError(ctx, s)
 
 	return io.Copy(writer, s.Body)
 }
 
-func (s *InvokeResponse) ToContent(ctx context.Context, maxBodyLen int64) ([]byte, error) {
-	defer util.CloseAndLogOnError(ctx, s.Body)
+func (s *InvokeResponse) ToContent(ctx context.Context) ([]byte, error) {
+	defer util.CloseAndLogOnError(ctx, s)
 
 	reader := io.Reader(s.Body)
 
 	// Hard cap for large files
-	if maxBodyLen > 0 {
-		reader = io.LimitReader(s.Body, maxBodyLen+1)
+	if s.maxBodyLen > 0 {
+		reader = io.LimitReader(s.Body, s.maxBodyLen+1)
 	}
 
 	data, err := io.ReadAll(reader)
@@ -99,8 +108,8 @@ func (s *InvokeResponse) ToContent(ctx context.Context, maxBodyLen int64) ([]byt
 		return nil, err
 	}
 
-	if maxBodyLen > 0 && int64(len(data)) > maxBodyLen {
-		return data[:maxBodyLen], ErrResponseTooLarge
+	if s.maxBodyLen > 0 && int64(len(data)) > s.maxBodyLen {
+		return data[:s.maxBodyLen], ErrResponseTooLarge
 	}
 
 	return data, nil
@@ -261,7 +270,7 @@ func (s *invoker) execute(
 // Options can be used to configure timeout and other HTTP client behavior.
 func (s *invoker) Invoke(ctx context.Context,
 	method string, endpointURL string, payload any,
-	headers http.Header, opts ...HTTPOption) (int, []byte, error) {
+	headers http.Header, opts ...HTTPOption) (*InvokeResponse, error) {
 	if headers == nil {
 		headers = http.Header{
 			"Content-Type": {"application/json"},
@@ -273,7 +282,7 @@ func (s *invoker) Invoke(ctx context.Context,
 	if payload != nil {
 		postBody, err := json.Marshal(payload)
 		if err != nil {
-			return 0, nil, err
+			return nil, err
 		}
 
 		body = bytes.NewReader(postBody)
@@ -281,22 +290,18 @@ func (s *invoker) Invoke(ctx context.Context,
 
 	resp, err := s.InvokeStream(ctx, method, endpointURL, body, headers, opts...)
 	if err != nil {
-		return 0, nil, err
+		return nil, err
 	}
+	resp.maxBodyLen = s.maxBodyLen
 
-	bodyRead, err := resp.ToContent(ctx, s.maxBodyLen)
-	if err != nil {
-		return 0, nil, err
-	}
-
-	return resp.StatusCode, bodyRead, err
+	return resp, err
 }
 
 // InvokeWithURLEncoded sends an HTTP request to the specified endpoint with a URL-encoded payload.
 // Options can be used to configure timeout and other HTTP client behavior.
 func (s *invoker) InvokeWithURLEncoded(ctx context.Context,
 	method string, endpointURL string, payload url.Values,
-	headers http.Header, opts ...HTTPOption) (int, []byte, error) {
+	headers http.Header, opts ...HTTPOption) (*InvokeResponse, error) {
 	if headers == nil {
 		headers = http.Header{
 			"Content-Type": []string{"application/x-www-form-urlencoded"},
@@ -305,15 +310,11 @@ func (s *invoker) InvokeWithURLEncoded(ctx context.Context,
 
 	resp, err := s.InvokeStream(ctx, method, endpointURL, strings.NewReader(payload.Encode()), headers, opts...)
 	if err != nil {
-		return 0, nil, err
+		return nil, err
 	}
 
-	bodyRead, err := resp.ToContent(ctx, s.maxBodyLen)
-	if err != nil {
-		return 0, nil, err
-	}
-
-	return resp.StatusCode, bodyRead, err
+	resp.maxBodyLen = s.maxBodyLen
+	return resp, err
 }
 
 func (s *invoker) InvokeStream(

@@ -6,8 +6,8 @@ import (
 	"github.com/pitabwire/frame/client"
 	"github.com/pitabwire/frame/config"
 	"github.com/pitabwire/frame/security"
+	"github.com/pitabwire/frame/security/authorizer"
 	"github.com/pitabwire/frame/security/openid"
-	"github.com/pitabwire/frame/security/permissions"
 )
 
 // SecurityConfiguration combines all configuration interfaces needed by the security manager.
@@ -33,7 +33,11 @@ func NewManager(_ context.Context, serviceName, serviceEnv string,
 	return &managerImpl{
 		clientRegistrar: openid.NewClientRegistrar(serviceName, serviceEnv, cfg, invoker),
 		authenticator:   openid.NewJwtTokenAuthenticator(cfg),
-		authorizer:      permissions.NewKetoAuthorizer(cfg, invoker),
+		authorizer: authorizer.NewKetoAdapter(
+			cfg,
+			invoker,
+			authorizer.NewAuditLogger(authorizer.AuditLoggerConfig{}),
+		),
 	}
 }
 

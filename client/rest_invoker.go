@@ -16,7 +16,15 @@ import (
 	"github.com/sony/gobreaker/v2"
 )
 
-const defaultMaxResponseBodyLen = 100 << 20 // 100MB default safety ca
+const (
+	defaultMaxResponseBodyLen        = 100 << 20 // 100MB default safety cap
+	defaultCircuitBreakerMaxRequests = 3
+	defaultCircuitBreakerInterval    = 30 * time.Second
+	defaultCircuitBreakerTimeout     = 45 * time.Second
+	defaultCircuitBreakerThreshold   = 20
+	defaultCircuitBreakerFailureRate = 0.5
+)
+
 var ErrResponseTooLarge = errors.New("response body truncated, it exceeds configured limit")
 
 type Manager interface {
@@ -45,7 +53,6 @@ type InvokeResponse struct {
 }
 
 func (s *InvokeResponse) ToFile(ctx context.Context, writer io.Writer) (int64, error) {
-
 	defer util.CloseAndLogOnError(ctx, s.Body)
 
 	return io.Copy(writer, s.Body)
@@ -96,21 +103,24 @@ func NewManager(ctx context.Context, opts ...HTTPOption) Manager {
 
 func (s *invoker) breakerFor(key string) *gobreaker.CircuitBreaker[*http.Response] {
 	if cb, ok := s.breakers.Load(key); ok {
-		fcb, _ := cb.(*gobreaker.CircuitBreaker[*http.Response])
+		fcb, fok := cb.(*gobreaker.CircuitBreaker[*http.Response])
+		if !fok {
+			return nil
+		}
 		return fcb
 	}
 
 	st := gobreaker.Settings{
 		Name:        "http:" + key,
-		MaxRequests: 3,
-		Interval:    30 * time.Second,
-		Timeout:     45 * time.Second,
+		MaxRequests: defaultCircuitBreakerMaxRequests,
+		Interval:    defaultCircuitBreakerInterval,
+		Timeout:     defaultCircuitBreakerTimeout,
 
 		ReadyToTrip: func(c gobreaker.Counts) bool {
-			if c.Requests < 20 {
+			if c.Requests < defaultCircuitBreakerThreshold {
 				return false
 			}
-			return float64(c.TotalFailures)/float64(c.Requests) >= 0.5
+			return float64(c.TotalFailures)/float64(c.Requests) >= defaultCircuitBreakerFailureRate
 		},
 	}
 
@@ -118,13 +128,15 @@ func (s *invoker) breakerFor(key string) *gobreaker.CircuitBreaker[*http.Respons
 	cb := gobreaker.NewCircuitBreaker[*http.Response](st)
 
 	actual, _ := s.breakers.LoadOrStore(key, cb)
-	fcb, _ := actual.(*gobreaker.CircuitBreaker[*http.Response])
+	fcb, ok := actual.(*gobreaker.CircuitBreaker[*http.Response])
+	if !ok {
+		return nil
+	}
 	return fcb
 }
 
 func breakerKey(req *http.Request) string {
 	u := *req.URL
-
 	return req.Method + " " + u.Host
 }
 
@@ -274,12 +286,12 @@ func (s *invoker) InvokeStream(
 	}
 	req.Header = headers
 
+	//nolint:bodyclose //InvokeResponse allows autoclosing after using ToFunctions
 	resp, err := s.execute(ctx, req, s.retryPolicy)
 	if err != nil {
 		return nil, err
 	}
 
-	//nolint:bodyclose //InvokeResponse allows autoclosing after using ToFunctions
 	// Caller owns body lifecycle
 	return &InvokeResponse{
 		StatusCode: resp.StatusCode,

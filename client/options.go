@@ -13,7 +13,15 @@ import (
 const (
 	defaultHTTPTimeoutSeconds     = 30
 	defaultHTTPIdleTimeoutSeconds = 90
+
+	defaultMaxRetryAttempts = 3
+	defaultMinRetryDuration = 100 * time.Millisecond
 )
+
+type RetryPolicy struct {
+	MaxAttempts int
+	Backoff     func(attempt int) time.Duration
+}
 
 // HTTPOption configures HTTP client behavior.
 // It can be used to configure timeout, transport, and other HTTP client settings.
@@ -32,6 +40,23 @@ type httpConfig struct {
 
 	traceRequests       bool
 	traceRequestHeaders bool
+
+	retryPolicy *RetryPolicy
+}
+
+func (hc *httpConfig) process(opts ...HTTPOption) {
+	for _, opt := range opts {
+		opt(hc)
+	}
+
+	if hc.retryPolicy == nil {
+		hc.retryPolicy = &RetryPolicy{
+			MaxAttempts: defaultMaxRetryAttempts,
+			Backoff: func(attempt int) time.Duration {
+				return time.Duration(attempt*attempt) * defaultMinRetryDuration
+			},
+		}
+	}
 }
 
 // WithHTTPTimeout sets the request timeout.
@@ -97,6 +122,13 @@ func WithHTTPTraceRequestHeaders() HTTPOption {
 	}
 }
 
+// WithHTTPRetryPolicy setts required retry policy.
+func WithHTTPRetryPolicy(retryPolicy *RetryPolicy) HTTPOption {
+	return func(c *httpConfig) {
+		c.retryPolicy = retryPolicy
+	}
+}
+
 // NewHTTPClient creates a new HTTP client with the provided options.
 // If no transport is specified, it defaults to otelhttp.NewTransport(http.DefaultTransport).
 func NewHTTPClient(ctx context.Context, opts ...HTTPOption) *http.Client {
@@ -106,9 +138,7 @@ func NewHTTPClient(ctx context.Context, opts ...HTTPOption) *http.Client {
 		transport:   http.DefaultTransport,
 	}
 
-	for _, opt := range opts {
-		opt(cfg)
-	}
+	cfg.process(opts...)
 
 	base := cfg.transport
 

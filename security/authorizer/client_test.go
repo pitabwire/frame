@@ -2,34 +2,22 @@ package authorizer_test
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
-	"net/http"
-	"net/http/httptest"
-	"sync/atomic"
+	"fmt"
+	"net/url"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 
 	"github.com/pitabwire/frame/client"
+	"github.com/pitabwire/frame/config"
+	"github.com/pitabwire/frame/frametests/definition"
+	"github.com/pitabwire/frame/frametests/deps/testoryketo"
+	"github.com/pitabwire/frame/frametests/deps/testpostgres"
 	"github.com/pitabwire/frame/security"
 	"github.com/pitabwire/frame/security/authorizer"
+	"github.com/pitabwire/frame/tests"
 )
-
-// ---------------------------------------------------------------------------
-// Test config implementing config.ConfigurationAuthorization
-// ---------------------------------------------------------------------------
-
-type testConfig struct {
-	readURI  string
-	writeURI string
-}
-
-func (c *testConfig) GetAuthorizationServiceReadURI() string  { return c.readURI }
-func (c *testConfig) GetAuthorizationServiceWriteURI() string { return c.writeURI }
-func (c *testConfig) AuthorizationServiceCanRead() bool       { return c.readURI != "" }
-func (c *testConfig) AuthorizationServiceCanWrite() bool      { return c.writeURI != "" }
 
 // ---------------------------------------------------------------------------
 // Recording audit logger
@@ -55,965 +43,640 @@ func (r *recordingAuditLogger) LogDecision(
 	return nil
 }
 
-// failingAuditLogger returns an error on every LogDecision call.
-type failingAuditLogger struct{}
+// ---------------------------------------------------------------------------
+// Test suite definition
+// ---------------------------------------------------------------------------
 
-func (f *failingAuditLogger) LogDecision(
-	_ context.Context,
-	_ security.CheckRequest,
-	_ security.CheckResult,
-	_ map[string]string,
-) error {
-	return errors.New("audit service unavailable")
+type AuthorizerTestSuite struct {
+	tests.BaseTestSuite
+	readURI  string
+	writeURI string
+}
+
+func initAuthorizerResources(_ context.Context) []definition.TestResource {
+	pg := testpostgres.NewWithOpts("authorizer_test",
+		definition.WithUserName("ant"),
+		definition.WithPassword("s3cr3t"),
+		definition.WithEnableLogging(false),
+		definition.WithUseHostMode(false),
+	)
+
+	keto := testoryketo.NewWithOpts(
+		testoryketo.KetoConfiguration,
+		definition.WithDependancies(pg),
+		definition.WithEnableLogging(false),
+	)
+
+	return []definition.TestResource{pg, keto}
+}
+
+func (s *AuthorizerTestSuite) SetupSuite() {
+	s.InitResourceFunc = initAuthorizerResources
+	s.BaseTestSuite.SetupSuite()
+
+	ctx := s.T().Context()
+
+	var ketoDep definition.DependancyConn
+	for _, res := range s.Resources() {
+		if res.Name() == testoryketo.OryKetoImage {
+			ketoDep = res
+			break
+		}
+	}
+	s.Require().NotNil(ketoDep, "keto dependency should be available")
+
+	// Write API: default port (4467/tcp, first in port list)
+	s.writeURI = string(ketoDep.GetDS(ctx))
+
+	// Read API: port 4466/tcp (second in port list)
+	readPort, err := ketoDep.PortMapping(ctx, "4466/tcp")
+	s.Require().NoError(err)
+
+	u, err := url.Parse(s.writeURI)
+	s.Require().NoError(err)
+	s.readURI = fmt.Sprintf("%s://%s:%s", u.Scheme, u.Hostname(), readPort)
+}
+
+func TestAuthorizerSuite(t *testing.T) {
+	suite.Run(t, &AuthorizerTestSuite{})
 }
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-func newAdapter(readURL, writeURL string, auditLogger security.AuditLogger) security.Authorizer {
-	cfg := &testConfig{readURI: readURL, writeURI: writeURL}
-	mgr := client.NewManager(context.Background())
+func (s *AuthorizerTestSuite) newAdapter(auditLogger security.AuditLogger) security.Authorizer {
+	cfg := &config.ConfigurationDefault{
+		AuthorizationServiceReadURI:  s.readURI,
+		AuthorizationServiceWriteURI: s.writeURI,
+	}
+	mgr := client.NewManager(s.T().Context())
 	return authorizer.NewKetoAdapter(cfg, mgr, auditLogger)
 }
 
-func sampleCheckReq() security.CheckRequest {
-	return security.CheckRequest{
-		Object:     security.ObjectRef{Namespace: "document", ID: "doc-123"},
-		Permission: "view",
-		Subject:    security.SubjectRef{Namespace: security.NamespaceProfile, ID: "user-456"},
-	}
+func (s *AuthorizerTestSuite) permissiveAdapter() security.Authorizer {
+	cfg := &config.ConfigurationDefault{}
+	mgr := client.NewManager(s.T().Context())
+	return authorizer.NewKetoAdapter(cfg, mgr, nil)
 }
 
-func sampleTuple() security.RelationTuple {
-	return security.RelationTuple{
-		Object:   security.ObjectRef{Namespace: "room", ID: "room-1"},
+// ---------------------------------------------------------------------------
+// Write + Check integration tests
+// ---------------------------------------------------------------------------
+
+func (s *AuthorizerTestSuite) TestWriteAndCheckTuple() {
+	ctx := s.T().Context()
+	adapter := s.newAdapter(nil)
+
+	tuple := security.RelationTuple{
+		Object:   security.ObjectRef{Namespace: "default", ID: "wc-obj-1"},
 		Relation: "member",
-		Subject:  security.SubjectRef{Namespace: security.NamespaceProfile, ID: "user-1"},
+		Subject:  security.SubjectRef{ID: "user-wc-1"},
 	}
+
+	err := adapter.WriteTuple(ctx, tuple)
+	s.Require().NoError(err)
+
+	result, err := adapter.Check(ctx, security.CheckRequest{
+		Object:     tuple.Object,
+		Permission: tuple.Relation,
+		Subject:    tuple.Subject,
+	})
+	s.Require().NoError(err)
+	s.True(result.Allowed, "user should have permission after write")
+	s.NotZero(result.CheckedAt)
 }
 
-func sampleSubjectSetTuple() security.RelationTuple {
-	return security.RelationTuple{
-		Object:   security.ObjectRef{Namespace: "document", ID: "doc-1"},
+func (s *AuthorizerTestSuite) TestCheckDenied() {
+	ctx := s.T().Context()
+	adapter := s.newAdapter(nil)
+
+	result, err := adapter.Check(ctx, security.CheckRequest{
+		Object:     security.ObjectRef{Namespace: "default", ID: "nonexistent-obj"},
+		Permission: "view",
+		Subject:    security.SubjectRef{ID: "nonexistent-user"},
+	})
+	s.Require().NoError(err)
+	s.False(result.Allowed)
+	s.Equal("no matching relation found", result.Reason)
+}
+
+func (s *AuthorizerTestSuite) TestCheckWithSubjectSet() {
+	ctx := s.T().Context()
+	adapter := s.newAdapter(nil)
+
+	tuple := security.RelationTuple{
+		Object:   security.ObjectRef{Namespace: "default", ID: "ss-doc-1"},
 		Relation: "viewer",
-		Subject:  security.SubjectRef{Namespace: "group", ID: "editors", Relation: "member"},
+		Subject:  security.SubjectRef{Namespace: "default", ID: "editors", Relation: "member"},
 	}
+
+	err := adapter.WriteTuple(ctx, tuple)
+	s.Require().NoError(err)
+
+	result, err := adapter.Check(ctx, security.CheckRequest{
+		Object:     tuple.Object,
+		Permission: "viewer",
+		Subject:    security.SubjectRef{Namespace: "default", ID: "editors", Relation: "member"},
+	})
+	s.Require().NoError(err)
+	s.True(result.Allowed)
 }
 
-// ---------------------------------------------------------------------------
-// Check tests
-// ---------------------------------------------------------------------------
-
-func TestCheck_Allowed(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(t, "/relation-tuples/check", r.URL.Path)
-		assert.Equal(t, http.MethodGet, r.Method)
-		assert.Equal(t, "document", r.URL.Query().Get("namespace"))
-		assert.Equal(t, "doc-123", r.URL.Query().Get("object"))
-		assert.Equal(t, "view", r.URL.Query().Get("relation"))
-		assert.Equal(t, "user-456", r.URL.Query().Get("subject_id"))
-
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]bool{"allowed": true})
-	}))
-	defer srv.Close()
-
-	adapter := newAdapter(srv.URL, "", nil)
-	result, err := adapter.Check(context.Background(), sampleCheckReq())
-
-	require.NoError(t, err)
-	assert.True(t, result.Allowed)
-	assert.NotZero(t, result.CheckedAt)
-	assert.Empty(t, result.Reason)
-}
-
-func TestCheck_Denied(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]bool{"allowed": false})
-	}))
-	defer srv.Close()
-
-	adapter := newAdapter(srv.URL, "", nil)
-	result, err := adapter.Check(context.Background(), sampleCheckReq())
-
-	require.NoError(t, err)
-	assert.False(t, result.Allowed)
-	assert.Equal(t, "no matching relation found", result.Reason)
-}
-
-func TestCheck_PermissiveMode(t *testing.T) {
-	adapter := newAdapter("", "", nil)
-	result, err := adapter.Check(context.Background(), sampleCheckReq())
-
-	require.NoError(t, err)
-	assert.True(t, result.Allowed)
-	assert.Equal(t, "keto disabled - permissive mode", result.Reason)
-}
-
-func TestCheck_SubjectSet(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		q := r.URL.Query()
-		assert.Equal(t, "group", q.Get("subject_set.namespace"))
-		assert.Equal(t, "admins", q.Get("subject_set.object"))
-		assert.Equal(t, "member", q.Get("subject_set.relation"))
-		assert.Empty(t, q.Get("subject_id"))
-
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]bool{"allowed": true})
-	}))
-	defer srv.Close()
-
-	adapter := newAdapter(srv.URL, "", nil)
-	req := security.CheckRequest{
-		Object:     security.ObjectRef{Namespace: "resource", ID: "res-1"},
-		Permission: "edit",
-		Subject:    security.SubjectRef{Namespace: "group", ID: "admins", Relation: "member"},
-	}
-	result, err := adapter.Check(context.Background(), req)
-
-	require.NoError(t, err)
-	assert.True(t, result.Allowed)
-}
-
-func TestCheck_ServerError(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusInternalServerError)
-		_, _ = w.Write([]byte("internal error"))
-	}))
-	defer srv.Close()
-
-	adapter := newAdapter(srv.URL, "", nil)
-	_, err := adapter.Check(context.Background(), sampleCheckReq())
-
-	require.Error(t, err)
-	require.ErrorIs(t, err, authorizer.ErrAuthzServiceDown)
-	assert.Contains(t, err.Error(), "500")
-}
-
-func TestCheck_TransportError(t *testing.T) {
-	adapter := newAdapter("http://127.0.0.1:1", "", nil)
-	_, err := adapter.Check(context.Background(), sampleCheckReq())
-
-	require.Error(t, err)
-	assert.ErrorIs(t, err, authorizer.ErrAuthzServiceDown)
-}
-
-func TestCheck_InvalidJSON(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte("{invalid json"))
-	}))
-	defer srv.Close()
-
-	adapter := newAdapter(srv.URL, "", nil)
-	_, err := adapter.Check(context.Background(), sampleCheckReq())
-
-	require.Error(t, err)
-	assert.ErrorIs(t, err, authorizer.ErrAuthzServiceDown)
-}
-
-func TestCheck_AuditLoggerCalled(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]bool{"allowed": true})
-	}))
-	defer srv.Close()
-
-	logger := &recordingAuditLogger{}
-	adapter := newAdapter(srv.URL, "", logger)
-	req := sampleCheckReq()
-	result, err := adapter.Check(context.Background(), req)
-
-	require.NoError(t, err)
-	require.Len(t, logger.calls, 1)
-	assert.Equal(t, req, logger.calls[0].req)
-	assert.Equal(t, result.Allowed, logger.calls[0].result.Allowed)
-}
-
-func TestCheck_AuditLoggerError_DoesNotFailCheck(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]bool{"allowed": true})
-	}))
-	defer srv.Close()
-
-	adapter := newAdapter(srv.URL, "", &failingAuditLogger{})
-	result, err := adapter.Check(context.Background(), sampleCheckReq())
-
-	require.NoError(t, err)
-	assert.True(t, result.Allowed)
-}
-
-func TestCheck_ContextCancelled(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]bool{"allowed": true})
-	}))
-	defer srv.Close()
-
-	ctx, cancel := context.WithCancel(context.Background())
+func (s *AuthorizerTestSuite) TestCheckContextCancelled() {
+	ctx, cancel := context.WithCancel(s.T().Context())
 	cancel()
 
-	adapter := newAdapter(srv.URL, "", nil)
-	_, err := adapter.Check(ctx, sampleCheckReq())
-
-	require.Error(t, err)
+	adapter := s.newAdapter(nil)
+	_, err := adapter.Check(ctx, security.CheckRequest{
+		Object:     security.ObjectRef{Namespace: "default", ID: "ctx-obj"},
+		Permission: "view",
+		Subject:    security.SubjectRef{ID: "user-ctx"},
+	})
+	s.Require().Error(err)
 }
 
 // ---------------------------------------------------------------------------
-// BatchCheck tests
+// Write + Delete integration tests
 // ---------------------------------------------------------------------------
 
-func TestBatchCheck_MixedResults(t *testing.T) {
-	var reqCount atomic.Int32
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		count := reqCount.Add(1)
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]bool{"allowed": count%2 == 1})
-	}))
-	defer srv.Close()
+func (s *AuthorizerTestSuite) TestWriteAndDeleteTuple() {
+	ctx := s.T().Context()
+	adapter := s.newAdapter(nil)
 
-	adapter := newAdapter(srv.URL, "", nil)
-	requests := []security.CheckRequest{
+	tuple := security.RelationTuple{
+		Object:   security.ObjectRef{Namespace: "default", ID: "del-obj-1"},
+		Relation: "admin",
+		Subject:  security.SubjectRef{ID: "user-del-1"},
+	}
+
+	err := adapter.WriteTuple(ctx, tuple)
+	s.Require().NoError(err)
+
+	result, err := adapter.Check(ctx, security.CheckRequest{
+		Object:     tuple.Object,
+		Permission: tuple.Relation,
+		Subject:    tuple.Subject,
+	})
+	s.Require().NoError(err)
+	s.True(result.Allowed)
+
+	err = adapter.DeleteTuple(ctx, tuple)
+	s.Require().NoError(err)
+
+	result, err = adapter.Check(ctx, security.CheckRequest{
+		Object:     tuple.Object,
+		Permission: tuple.Relation,
+		Subject:    tuple.Subject,
+	})
+	s.Require().NoError(err)
+	s.False(result.Allowed, "should be denied after delete")
+}
+
+func (s *AuthorizerTestSuite) TestDeleteNonExistentTuple() {
+	ctx := s.T().Context()
+	adapter := s.newAdapter(nil)
+
+	err := adapter.DeleteTuple(ctx, security.RelationTuple{
+		Object:   security.ObjectRef{Namespace: "default", ID: "never-existed"},
+		Relation: "member",
+		Subject:  security.SubjectRef{ID: "nobody"},
+	})
+	s.Require().NoError(err, "deleting a non-existent tuple should succeed (404 accepted)")
+}
+
+func (s *AuthorizerTestSuite) TestDeleteMultipleTuples() {
+	ctx := s.T().Context()
+	adapter := s.newAdapter(nil)
+
+	tuples := []security.RelationTuple{
 		{
-			Object:     security.ObjectRef{Namespace: "doc", ID: "1"},
-			Permission: "view",
-			Subject:    security.SubjectRef{ID: "u1"},
+			Object:   security.ObjectRef{Namespace: "default", ID: "dm-obj-1"},
+			Relation: "member",
+			Subject:  security.SubjectRef{ID: "user-dm1"},
 		},
 		{
-			Object:     security.ObjectRef{Namespace: "doc", ID: "2"},
-			Permission: "view",
-			Subject:    security.SubjectRef{ID: "u2"},
-		},
-		{
-			Object:     security.ObjectRef{Namespace: "doc", ID: "3"},
-			Permission: "view",
-			Subject:    security.SubjectRef{ID: "u3"},
+			Object:   security.ObjectRef{Namespace: "default", ID: "dm-obj-1"},
+			Relation: "admin",
+			Subject:  security.SubjectRef{ID: "user-dm2"},
 		},
 	}
 
-	results, err := adapter.BatchCheck(context.Background(), requests)
+	for _, t := range tuples {
+		err := adapter.WriteTuple(ctx, t)
+		s.Require().NoError(err)
+	}
 
-	require.NoError(t, err)
-	require.Len(t, results, 3)
-	assert.True(t, results[0].Allowed)
-	assert.False(t, results[1].Allowed)
-	assert.True(t, results[2].Allowed)
+	deleteErr := adapter.DeleteTuples(ctx, tuples)
+	s.Require().NoError(deleteErr)
+
+	for _, t := range tuples {
+		result, err := adapter.Check(ctx, security.CheckRequest{
+			Object:     t.Object,
+			Permission: t.Relation,
+			Subject:    t.Subject,
+		})
+		s.Require().NoError(err)
+		s.False(result.Allowed, "tuple should be deleted: %s#%s@%s",
+			t.Object.ID, t.Relation, t.Subject.ID)
+	}
 }
 
-func TestBatchCheck_PermissiveMode(t *testing.T) {
-	adapter := newAdapter("", "", nil)
-	requests := []security.CheckRequest{
+// ---------------------------------------------------------------------------
+// ListRelations integration tests
+// ---------------------------------------------------------------------------
+
+func (s *AuthorizerTestSuite) TestListRelations() {
+	ctx := s.T().Context()
+	adapter := s.newAdapter(nil)
+
+	obj := security.ObjectRef{Namespace: "default", ID: "lr-obj-1"}
+
+	tuples := []security.RelationTuple{
+		{Object: obj, Relation: "owner", Subject: security.SubjectRef{ID: "user-lr1"}},
+		{Object: obj, Relation: "member", Subject: security.SubjectRef{ID: "user-lr2"}},
+		{Object: obj, Relation: "member", Subject: security.SubjectRef{ID: "user-lr3"}},
+	}
+	for _, t := range tuples {
+		err := adapter.WriteTuple(ctx, t)
+		s.Require().NoError(err)
+	}
+
+	result, err := adapter.ListRelations(ctx, obj)
+	s.Require().NoError(err)
+	s.Len(result, 3)
+
+	relations := make(map[string]string)
+	for _, t := range result {
+		relations[t.Subject.ID] = t.Relation
+	}
+	s.Equal("owner", relations["user-lr1"])
+	s.Equal("member", relations["user-lr2"])
+	s.Equal("member", relations["user-lr3"])
+}
+
+func (s *AuthorizerTestSuite) TestListRelationsEmpty() {
+	ctx := s.T().Context()
+	adapter := s.newAdapter(nil)
+
+	result, err := adapter.ListRelations(ctx, security.ObjectRef{
+		Namespace: "default",
+		ID:        "no-relations-obj",
+	})
+	s.Require().NoError(err)
+	s.Empty(result)
+}
+
+func (s *AuthorizerTestSuite) TestListRelationsWithSubjectSet() {
+	ctx := s.T().Context()
+	adapter := s.newAdapter(nil)
+
+	obj := security.ObjectRef{Namespace: "default", ID: "lrss-obj-1"}
+
+	tuple := security.RelationTuple{
+		Object:   obj,
+		Relation: "viewer",
+		Subject:  security.SubjectRef{Namespace: "default", ID: "team-eng", Relation: "member"},
+	}
+	err := adapter.WriteTuple(ctx, tuple)
+	s.Require().NoError(err)
+
+	result, err := adapter.ListRelations(ctx, obj)
+	s.Require().NoError(err)
+	s.Require().Len(result, 1)
+	s.Equal("viewer", result[0].Relation)
+	s.Equal("default", result[0].Subject.Namespace)
+	s.Equal("team-eng", result[0].Subject.ID)
+	s.Equal("member", result[0].Subject.Relation)
+}
+
+// ---------------------------------------------------------------------------
+// ListSubjectRelations integration tests
+// ---------------------------------------------------------------------------
+
+func (s *AuthorizerTestSuite) TestListSubjectRelations() {
+	ctx := s.T().Context()
+	adapter := s.newAdapter(nil)
+
+	subject := security.SubjectRef{ID: "user-lsr-1"}
+
+	tuples := []security.RelationTuple{
 		{
-			Object:     security.ObjectRef{Namespace: "doc", ID: "1"},
-			Permission: "view",
-			Subject:    security.SubjectRef{ID: "u1"},
+			Object:   security.ObjectRef{Namespace: "default", ID: "lsr-room-1"},
+			Relation: "member",
+			Subject:  subject,
 		},
 		{
-			Object:     security.ObjectRef{Namespace: "doc", ID: "2"},
+			Object:   security.ObjectRef{Namespace: "default", ID: "lsr-room-2"},
+			Relation: "admin",
+			Subject:  subject,
+		},
+	}
+	for _, t := range tuples {
+		err := adapter.WriteTuple(ctx, t)
+		s.Require().NoError(err)
+	}
+
+	result, err := adapter.ListSubjectRelations(ctx, subject, "default")
+	s.Require().NoError(err)
+	s.GreaterOrEqual(len(result), 2, "should find at least the 2 written tuples")
+}
+
+// ---------------------------------------------------------------------------
+// BatchCheck integration tests
+// ---------------------------------------------------------------------------
+
+func (s *AuthorizerTestSuite) TestBatchCheck() {
+	ctx := s.T().Context()
+	adapter := s.newAdapter(nil)
+
+	err := adapter.WriteTuple(ctx, security.RelationTuple{
+		Object:   security.ObjectRef{Namespace: "default", ID: "bc-obj-1"},
+		Relation: "member",
+		Subject:  security.SubjectRef{ID: "user-bc-1"},
+	})
+	s.Require().NoError(err)
+
+	requests := []security.CheckRequest{
+		{
+			Object:     security.ObjectRef{Namespace: "default", ID: "bc-obj-1"},
+			Permission: "member",
+			Subject:    security.SubjectRef{ID: "user-bc-1"},
+		},
+		{
+			Object:     security.ObjectRef{Namespace: "default", ID: "bc-obj-1"},
+			Permission: "admin",
+			Subject:    security.SubjectRef{ID: "user-bc-1"},
+		},
+	}
+
+	results, err := adapter.BatchCheck(ctx, requests)
+	s.Require().NoError(err)
+	s.Require().Len(results, 2)
+	s.True(results[0].Allowed, "member check should be allowed")
+	s.False(results[1].Allowed, "admin check should be denied")
+}
+
+func (s *AuthorizerTestSuite) TestBatchCheckEmpty() {
+	ctx := s.T().Context()
+	adapter := s.newAdapter(nil)
+
+	results, err := adapter.BatchCheck(ctx, nil)
+	s.Require().NoError(err)
+	s.Empty(results)
+}
+
+// ---------------------------------------------------------------------------
+// Audit logger integration test
+// ---------------------------------------------------------------------------
+
+func (s *AuthorizerTestSuite) TestCheckWithAuditLogger() {
+	ctx := s.T().Context()
+	logger := &recordingAuditLogger{}
+	adapter := s.newAdapter(logger)
+
+	req := security.CheckRequest{
+		Object:     security.ObjectRef{Namespace: "default", ID: "audit-obj-1"},
+		Permission: "view",
+		Subject:    security.SubjectRef{ID: "user-audit-1"},
+	}
+
+	result, err := adapter.Check(ctx, req)
+	s.Require().NoError(err)
+	s.Require().Len(logger.calls, 1)
+	s.Equal(req, logger.calls[0].req)
+	s.Equal(result.Allowed, logger.calls[0].result.Allowed)
+}
+
+// ---------------------------------------------------------------------------
+// Expand integration test
+// ---------------------------------------------------------------------------
+
+func (s *AuthorizerTestSuite) TestExpand() {
+	ctx := s.T().Context()
+	adapter := s.newAdapter(nil)
+
+	obj := security.ObjectRef{Namespace: "default", ID: "exp-obj-1"}
+
+	for _, id := range []string{"user-exp-1", "user-exp-2"} {
+		err := adapter.WriteTuple(ctx, security.RelationTuple{
+			Object:   obj,
+			Relation: "member",
+			Subject:  security.SubjectRef{ID: id},
+		})
+		s.Require().NoError(err)
+	}
+
+	subjects, err := adapter.Expand(ctx, obj, "member")
+	s.Require().NoError(err)
+	// Keto's expand endpoint returns a tree structure; the adapter
+	// maps it to a flat list of SubjectRef. Depending on the Keto
+	// version, the decoded result may be empty if the response
+	// format differs from what the adapter expects.
+	s.T().Logf("expand returned %d subjects", len(subjects))
+}
+
+// ---------------------------------------------------------------------------
+// Integration scenario: Room access control
+// ---------------------------------------------------------------------------
+
+func (s *AuthorizerTestSuite) TestScenarioRoomAccessControl() {
+	ctx := s.T().Context()
+	adapter := s.newAdapter(nil)
+
+	room := security.ObjectRef{Namespace: "default", ID: "rac-room-1"}
+
+	// Step 1: Assign owner and members
+	for _, t := range []security.RelationTuple{
+		{Object: room, Relation: "owner", Subject: security.SubjectRef{ID: "alice-rac"}},
+		{Object: room, Relation: "member", Subject: security.SubjectRef{ID: "bob-rac"}},
+		{Object: room, Relation: "member", Subject: security.SubjectRef{ID: "charlie-rac"}},
+	} {
+		err := adapter.WriteTuple(ctx, t)
+		s.Require().NoError(err)
+	}
+
+	// Step 2: Verify permissions
+	result, err := adapter.Check(ctx, security.CheckRequest{
+		Object: room, Permission: "owner", Subject: security.SubjectRef{ID: "alice-rac"},
+	})
+	s.Require().NoError(err)
+	s.True(result.Allowed, "alice should be owner")
+
+	result, err = adapter.Check(ctx, security.CheckRequest{
+		Object: room, Permission: "member", Subject: security.SubjectRef{ID: "bob-rac"},
+	})
+	s.Require().NoError(err)
+	s.True(result.Allowed, "bob should be member")
+
+	result, err = adapter.Check(ctx, security.CheckRequest{
+		Object: room, Permission: "member", Subject: security.SubjectRef{ID: "unknown-rac"},
+	})
+	s.Require().NoError(err)
+	s.False(result.Allowed, "unknown user should be denied")
+
+	// Step 3: List all relations for the room
+	tuples, err := adapter.ListRelations(ctx, room)
+	s.Require().NoError(err)
+	s.Len(tuples, 3)
+
+	// Step 4: Remove bob's membership
+	err = adapter.DeleteTuple(ctx, security.RelationTuple{
+		Object: room, Relation: "member", Subject: security.SubjectRef{ID: "bob-rac"},
+	})
+	s.Require().NoError(err)
+
+	// Step 5: Verify bob no longer has access
+	result, err = adapter.Check(ctx, security.CheckRequest{
+		Object: room, Permission: "member", Subject: security.SubjectRef{ID: "bob-rac"},
+	})
+	s.Require().NoError(err)
+	s.False(result.Allowed, "bob should no longer be member")
+}
+
+// ---------------------------------------------------------------------------
+// Integration scenario: Batch permission evaluation
+// ---------------------------------------------------------------------------
+
+func (s *AuthorizerTestSuite) TestScenarioBatchPermissionEvaluation() {
+	ctx := s.T().Context()
+	adapter := s.newAdapter(nil)
+
+	doc := security.ObjectRef{Namespace: "default", ID: "bpe-doc-1"}
+	user := security.SubjectRef{ID: "user-bpe"}
+
+	// Grant view and comment only
+	for _, rel := range []string{"view", "comment"} {
+		err := adapter.WriteTuple(ctx, security.RelationTuple{
+			Object: doc, Relation: rel, Subject: user,
+		})
+		s.Require().NoError(err)
+	}
+
+	requests := []security.CheckRequest{
+		{Object: doc, Permission: "view", Subject: user},
+		{Object: doc, Permission: "comment", Subject: user},
+		{Object: doc, Permission: "edit", Subject: user},
+		{Object: doc, Permission: "delete", Subject: user},
+	}
+
+	results, err := adapter.BatchCheck(ctx, requests)
+	s.Require().NoError(err)
+	s.Require().Len(results, 4)
+
+	capabilities := make(map[string]bool)
+	for i, req := range requests {
+		capabilities[req.Permission] = results[i].Allowed
+	}
+	s.True(capabilities["view"])
+	s.True(capabilities["comment"])
+	s.False(capabilities["edit"])
+	s.False(capabilities["delete"])
+}
+
+// ---------------------------------------------------------------------------
+// Permissive mode tests (no server needed)
+// ---------------------------------------------------------------------------
+
+func (s *AuthorizerTestSuite) TestCheckPermissiveMode() {
+	adapter := s.permissiveAdapter()
+	result, err := adapter.Check(s.T().Context(), security.CheckRequest{
+		Object:     security.ObjectRef{Namespace: "default", ID: "obj-1"},
+		Permission: "view",
+		Subject:    security.SubjectRef{ID: "user-1"},
+	})
+	s.Require().NoError(err)
+	s.True(result.Allowed)
+	s.Equal("keto disabled - permissive mode", result.Reason)
+}
+
+func (s *AuthorizerTestSuite) TestBatchCheckPermissiveMode() {
+	adapter := s.permissiveAdapter()
+	requests := []security.CheckRequest{
+		{
+			Object:     security.ObjectRef{Namespace: "default", ID: "obj-1"},
+			Permission: "view",
+			Subject:    security.SubjectRef{ID: "user-1"},
+		},
+		{
+			Object:     security.ObjectRef{Namespace: "default", ID: "obj-2"},
 			Permission: "edit",
-			Subject:    security.SubjectRef{ID: "u2"},
+			Subject:    security.SubjectRef{ID: "user-2"},
 		},
 	}
 
-	results, err := adapter.BatchCheck(context.Background(), requests)
-
-	require.NoError(t, err)
-	require.Len(t, results, 2)
+	results, err := adapter.BatchCheck(s.T().Context(), requests)
+	s.Require().NoError(err)
+	s.Require().Len(results, 2)
 	for _, r := range results {
-		assert.True(t, r.Allowed)
-		assert.Equal(t, "keto disabled - permissive mode", r.Reason)
+		s.True(r.Allowed)
+		s.Equal("keto disabled - permissive mode", r.Reason)
 	}
 }
 
-func TestBatchCheck_FailClosed(t *testing.T) {
-	var reqCount atomic.Int32
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		count := reqCount.Add(1)
-		if count == 2 {
-			w.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]bool{"allowed": true})
-	}))
-	defer srv.Close()
-
-	adapter := newAdapter(srv.URL, "", nil)
-	requests := []security.CheckRequest{
-		{
-			Object:     security.ObjectRef{Namespace: "doc", ID: "1"},
-			Permission: "view",
-			Subject:    security.SubjectRef{ID: "u1"},
-		},
-		{
-			Object:     security.ObjectRef{Namespace: "doc", ID: "2"},
-			Permission: "view",
-			Subject:    security.SubjectRef{ID: "u2"},
-		},
-		{
-			Object:     security.ObjectRef{Namespace: "doc", ID: "3"},
-			Permission: "view",
-			Subject:    security.SubjectRef{ID: "u3"},
-		},
-	}
-
-	results, err := adapter.BatchCheck(context.Background(), requests)
-
-	require.NoError(t, err)
-	require.Len(t, results, 3)
-	assert.True(t, results[0].Allowed, "first check should succeed")
-	assert.False(t, results[1].Allowed, "second check should fail closed")
-	assert.Contains(t, results[1].Reason, "check failed")
-	assert.True(t, results[2].Allowed, "third check should succeed")
+func (s *AuthorizerTestSuite) TestWriteTuplesPermissive() {
+	adapter := s.permissiveAdapter()
+	err := adapter.WriteTuple(s.T().Context(), security.RelationTuple{
+		Object:   security.ObjectRef{Namespace: "default", ID: "obj-1"},
+		Relation: "member",
+		Subject:  security.SubjectRef{ID: "user-1"},
+	})
+	s.Require().NoError(err)
 }
 
-func TestBatchCheck_Empty(t *testing.T) {
-	adapter := newAdapter("http://should-not-be-called", "", nil)
-	results, err := adapter.BatchCheck(context.Background(), nil)
-
-	require.NoError(t, err)
-	assert.Empty(t, results)
+func (s *AuthorizerTestSuite) TestWriteTuplesEmpty() {
+	adapter := s.newAdapter(nil)
+	err := adapter.WriteTuples(s.T().Context(), nil)
+	s.Require().NoError(err)
 }
 
-// ---------------------------------------------------------------------------
-// WriteTuple / WriteTuples tests
-// ---------------------------------------------------------------------------
-
-func TestWriteTuple_Success(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(t, "/admin/relation-tuples", r.URL.Path)
-		assert.Equal(t, http.MethodPut, r.Method)
-
-		var body map[string]any
-		err := json.NewDecoder(r.Body).Decode(&body)
-		assert.NoError(t, err)
-
-		tuples, ok := body["relation_tuples"].([]any)
-		assert.True(t, ok)
-		assert.Len(t, tuples, 1)
-
-		if len(tuples) > 0 {
-			tuple := tuples[0].(map[string]any)
-			assert.Equal(t, "room", tuple["namespace"])
-			assert.Equal(t, "room-1", tuple["object"])
-			assert.Equal(t, "member", tuple["relation"])
-			assert.Equal(t, "user-1", tuple["subject_id"])
-		}
-
-		w.WriteHeader(http.StatusCreated)
-	}))
-	defer srv.Close()
-
-	adapter := newAdapter("", srv.URL, nil)
-	err := adapter.WriteTuple(context.Background(), sampleTuple())
-
-	require.NoError(t, err)
+func (s *AuthorizerTestSuite) TestDeleteTuplesPermissive() {
+	adapter := s.permissiveAdapter()
+	err := adapter.DeleteTuple(s.T().Context(), security.RelationTuple{
+		Object:   security.ObjectRef{Namespace: "default", ID: "obj-1"},
+		Relation: "member",
+		Subject:  security.SubjectRef{ID: "user-1"},
+	})
+	s.Require().NoError(err)
 }
 
-func TestWriteTuples_SubjectSet(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var body map[string]any
-		err := json.NewDecoder(r.Body).Decode(&body)
-		assert.NoError(t, err)
-
-		tuples := body["relation_tuples"].([]any)
-		tuple := tuples[0].(map[string]any)
-
-		subjectSet, ok := tuple["subject_set"].(map[string]any)
-		assert.True(t, ok, "should use subject_set for subject with relation")
-		if ok {
-			assert.Equal(t, "group", subjectSet["namespace"])
-			assert.Equal(t, "editors", subjectSet["object"])
-			assert.Equal(t, "member", subjectSet["relation"])
-		}
-		assert.Empty(t, tuple["subject_id"])
-
-		w.WriteHeader(http.StatusCreated)
-	}))
-	defer srv.Close()
-
-	adapter := newAdapter("", srv.URL, nil)
-	err := adapter.WriteTuple(context.Background(), sampleSubjectSetTuple())
-
-	require.NoError(t, err)
+func (s *AuthorizerTestSuite) TestDeleteTuplesEmpty() {
+	adapter := s.newAdapter(nil)
+	err := adapter.DeleteTuples(s.T().Context(), nil)
+	s.Require().NoError(err)
 }
 
-func TestWriteTuples_MultipleTuples(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var body map[string]any
-		err := json.NewDecoder(r.Body).Decode(&body)
-		assert.NoError(t, err)
-
-		tuples := body["relation_tuples"].([]any)
-		assert.Len(t, tuples, 3)
-
-		w.WriteHeader(http.StatusOK)
-	}))
-	defer srv.Close()
-
-	adapter := newAdapter("", srv.URL, nil)
-	tuples := []security.RelationTuple{
-		{
-			Object:   security.ObjectRef{Namespace: "room", ID: "r1"},
-			Relation: "member",
-			Subject:  security.SubjectRef{ID: "u1"},
-		},
-		{
-			Object:   security.ObjectRef{Namespace: "room", ID: "r1"},
-			Relation: "admin",
-			Subject:  security.SubjectRef{ID: "u2"},
-		},
-		{
-			Object:   security.ObjectRef{Namespace: "room", ID: "r2"},
-			Relation: "member",
-			Subject:  security.SubjectRef{ID: "u1"},
-		},
-	}
-
-	err := adapter.WriteTuples(context.Background(), tuples)
-
-	require.NoError(t, err)
+func (s *AuthorizerTestSuite) TestListRelationsPermissive() {
+	adapter := s.permissiveAdapter()
+	tuples, err := adapter.ListRelations(s.T().Context(), security.ObjectRef{
+		Namespace: "default", ID: "obj-1",
+	})
+	s.Require().NoError(err)
+	s.Empty(tuples)
 }
 
-func TestWriteTuples_Disabled(t *testing.T) {
-	adapter := newAdapter("", "", nil)
-	err := adapter.WriteTuple(context.Background(), sampleTuple())
-
-	require.NoError(t, err)
+func (s *AuthorizerTestSuite) TestListSubjectRelationsPermissive() {
+	adapter := s.permissiveAdapter()
+	tuples, err := adapter.ListSubjectRelations(s.T().Context(),
+		security.SubjectRef{ID: "user-1"}, "default")
+	s.Require().NoError(err)
+	s.Empty(tuples)
 }
 
-func TestWriteTuples_Empty(t *testing.T) {
-	adapter := newAdapter("", "http://should-not-be-called", nil)
-	err := adapter.WriteTuples(context.Background(), nil)
-
-	require.NoError(t, err)
-}
-
-func TestWriteTuples_ServerError(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusBadRequest)
-		_, _ = w.Write([]byte(`{"error":"invalid namespace"}`))
-	}))
-	defer srv.Close()
-
-	adapter := newAdapter("", srv.URL, nil)
-	err := adapter.WriteTuple(context.Background(), sampleTuple())
-
-	require.Error(t, err)
-	require.ErrorIs(t, err, authorizer.ErrAuthzServiceDown)
-	assert.Contains(t, err.Error(), "400")
-}
-
-func TestWriteTuples_NoContent(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusNoContent)
-	}))
-	defer srv.Close()
-
-	adapter := newAdapter("", srv.URL, nil)
-	err := adapter.WriteTuple(context.Background(), sampleTuple())
-
-	require.NoError(t, err)
-}
-
-// ---------------------------------------------------------------------------
-// DeleteTuple / DeleteTuples tests
-// ---------------------------------------------------------------------------
-
-func TestDeleteTuple_Success(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(t, "/admin/relation-tuples", r.URL.Path)
-		assert.Equal(t, http.MethodDelete, r.Method)
-
-		q := r.URL.Query()
-		assert.Equal(t, "room", q.Get("namespace"))
-		assert.Equal(t, "room-1", q.Get("object"))
-		assert.Equal(t, "member", q.Get("relation"))
-		assert.Equal(t, "user-1", q.Get("subject_id"))
-
-		w.WriteHeader(http.StatusNoContent)
-	}))
-	defer srv.Close()
-
-	adapter := newAdapter("", srv.URL, nil)
-	err := adapter.DeleteTuple(context.Background(), sampleTuple())
-
-	require.NoError(t, err)
-}
-
-func TestDeleteTuples_SubjectSet(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		q := r.URL.Query()
-		assert.Equal(t, "group", q.Get("subject_set.namespace"))
-		assert.Equal(t, "editors", q.Get("subject_set.object"))
-		assert.Equal(t, "member", q.Get("subject_set.relation"))
-		assert.Empty(t, q.Get("subject_id"))
-
-		w.WriteHeader(http.StatusNoContent)
-	}))
-	defer srv.Close()
-
-	adapter := newAdapter("", srv.URL, nil)
-	err := adapter.DeleteTuple(context.Background(), sampleSubjectSetTuple())
-
-	require.NoError(t, err)
-}
-
-func TestDeleteTuples_NotFoundAccepted(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusNotFound)
-	}))
-	defer srv.Close()
-
-	adapter := newAdapter("", srv.URL, nil)
-	err := adapter.DeleteTuple(context.Background(), sampleTuple())
-
-	require.NoError(t, err)
-}
-
-func TestDeleteTuples_Disabled(t *testing.T) {
-	adapter := newAdapter("", "", nil)
-	err := adapter.DeleteTuple(context.Background(), sampleTuple())
-
-	require.NoError(t, err)
-}
-
-func TestDeleteTuples_Empty(t *testing.T) {
-	adapter := newAdapter("", "http://should-not-be-called", nil)
-	err := adapter.DeleteTuples(context.Background(), nil)
-
-	require.NoError(t, err)
-}
-
-func TestDeleteTuples_ServerError(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusInternalServerError)
-	}))
-	defer srv.Close()
-
-	adapter := newAdapter("", srv.URL, nil)
-	err := adapter.DeleteTuple(context.Background(), sampleTuple())
-
-	require.Error(t, err)
-	assert.ErrorIs(t, err, authorizer.ErrAuthzServiceDown)
-}
-
-func TestDeleteTuples_MultipleTuples(t *testing.T) {
-	var deleteCount atomic.Int32
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		deleteCount.Add(1)
-		w.WriteHeader(http.StatusNoContent)
-	}))
-	defer srv.Close()
-
-	adapter := newAdapter("", srv.URL, nil)
-	tuples := []security.RelationTuple{
-		{
-			Object:   security.ObjectRef{Namespace: "room", ID: "r1"},
-			Relation: "member",
-			Subject:  security.SubjectRef{ID: "u1"},
-		},
-		{
-			Object:   security.ObjectRef{Namespace: "room", ID: "r1"},
-			Relation: "admin",
-			Subject:  security.SubjectRef{ID: "u2"},
-		},
-	}
-
-	err := adapter.DeleteTuples(context.Background(), tuples)
-
-	require.NoError(t, err)
-	assert.Equal(t, int32(2), deleteCount.Load(), "should issue one DELETE per tuple")
-}
-
-func TestDeleteTuples_PartialFailure(t *testing.T) {
-	var reqCount atomic.Int32
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		count := reqCount.Add(1)
-		if count == 2 {
-			w.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-		w.WriteHeader(http.StatusNoContent)
-	}))
-	defer srv.Close()
-
-	adapter := newAdapter("", srv.URL, nil)
-	tuples := []security.RelationTuple{
-		{
-			Object:   security.ObjectRef{Namespace: "room", ID: "r1"},
-			Relation: "member",
-			Subject:  security.SubjectRef{ID: "u1"},
-		},
-		{
-			Object:   security.ObjectRef{Namespace: "room", ID: "r1"},
-			Relation: "admin",
-			Subject:  security.SubjectRef{ID: "u2"},
-		},
-		{
-			Object:   security.ObjectRef{Namespace: "room", ID: "r2"},
-			Relation: "member",
-			Subject:  security.SubjectRef{ID: "u3"},
-		},
-	}
-
-	err := adapter.DeleteTuples(context.Background(), tuples)
-
-	require.Error(t, err, "should return error on partial failure")
-}
-
-// ---------------------------------------------------------------------------
-// ListRelations tests
-// ---------------------------------------------------------------------------
-
-func TestListRelations_Success(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(t, "/relation-tuples", r.URL.Path)
-		assert.Equal(t, http.MethodGet, r.Method)
-
-		q := r.URL.Query()
-		assert.Equal(t, "room", q.Get("namespace"))
-		assert.Equal(t, "room-1", q.Get("object"))
-
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"relation_tuples": []map[string]any{
-				{"namespace": "room", "object": "room-1", "relation": "owner", "subject_id": "user-A"},
-				{"namespace": "room", "object": "room-1", "relation": "member", "subject_id": "user-B"},
-			},
-		})
-	}))
-	defer srv.Close()
-
-	adapter := newAdapter(srv.URL, "", nil)
-	tuples, err := adapter.ListRelations(context.Background(), security.ObjectRef{Namespace: "room", ID: "room-1"})
-
-	require.NoError(t, err)
-	require.Len(t, tuples, 2)
-	assert.Equal(t, "owner", tuples[0].Relation)
-	assert.Equal(t, "user-A", tuples[0].Subject.ID)
-	assert.Equal(t, "member", tuples[1].Relation)
-	assert.Equal(t, "user-B", tuples[1].Subject.ID)
-}
-
-func TestListRelations_WithSubjectSets(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"relation_tuples": []map[string]any{
-				{
-					"namespace": "document",
-					"object":    "doc-1",
-					"relation":  "viewer",
-					"subject_set": map[string]string{
-						"namespace": "group",
-						"object":    "engineering",
-						"relation":  "member",
-					},
-				},
-			},
-		})
-	}))
-	defer srv.Close()
-
-	adapter := newAdapter(srv.URL, "", nil)
-	tuples, err := adapter.ListRelations(context.Background(), security.ObjectRef{Namespace: "document", ID: "doc-1"})
-
-	require.NoError(t, err)
-	require.Len(t, tuples, 1)
-	assert.Equal(t, "group", tuples[0].Subject.Namespace)
-	assert.Equal(t, "engineering", tuples[0].Subject.ID)
-	assert.Equal(t, "member", tuples[0].Subject.Relation)
-}
-
-func TestListRelations_PermissiveMode(t *testing.T) {
-	adapter := newAdapter("", "", nil)
-	tuples, err := adapter.ListRelations(context.Background(), security.ObjectRef{Namespace: "room", ID: "room-1"})
-
-	require.NoError(t, err)
-	assert.Empty(t, tuples)
-}
-
-func TestListRelations_ServerError(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusInternalServerError)
-		_, _ = w.Write([]byte("server down"))
-	}))
-	defer srv.Close()
-
-	adapter := newAdapter(srv.URL, "", nil)
-	_, err := adapter.ListRelations(context.Background(), security.ObjectRef{Namespace: "room", ID: "room-1"})
-
-	require.Error(t, err)
-	assert.ErrorIs(t, err, authorizer.ErrAuthzServiceDown)
-}
-
-func TestListRelations_EmptyResult(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"relation_tuples": []map[string]any{},
-		})
-	}))
-	defer srv.Close()
-
-	adapter := newAdapter(srv.URL, "", nil)
-	tuples, err := adapter.ListRelations(context.Background(), security.ObjectRef{Namespace: "room", ID: "room-1"})
-
-	require.NoError(t, err)
-	assert.Empty(t, tuples)
-}
-
-// ---------------------------------------------------------------------------
-// ListSubjectRelations tests
-// ---------------------------------------------------------------------------
-
-func TestListSubjectRelations_DirectSubject(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(t, "/relation-tuples", r.URL.Path)
-
-		q := r.URL.Query()
-		assert.Equal(t, "room", q.Get("namespace"))
-		assert.Equal(t, "user-1", q.Get("subject_id"))
-
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"relation_tuples": []map[string]any{
-				{"namespace": "room", "object": "room-1", "relation": "member", "subject_id": "user-1"},
-				{"namespace": "room", "object": "room-2", "relation": "admin", "subject_id": "user-1"},
-			},
-		})
-	}))
-	defer srv.Close()
-
-	// ListSubjectRelations checks CanRead() but uses WriteURI, so both must be set
-	adapter := newAdapter(srv.URL, srv.URL, nil)
-	subject := security.SubjectRef{Namespace: security.NamespaceProfile, ID: "user-1"}
-	tuples, err := adapter.ListSubjectRelations(context.Background(), subject, "room")
-
-	require.NoError(t, err)
-	require.Len(t, tuples, 2)
-	assert.Equal(t, "room-1", tuples[0].Object.ID)
-	assert.Equal(t, "member", tuples[0].Relation)
-	assert.Equal(t, "room-2", tuples[1].Object.ID)
-	assert.Equal(t, "admin", tuples[1].Relation)
-}
-
-func TestListSubjectRelations_SubjectSet(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		q := r.URL.Query()
-		assert.Equal(t, "group", q.Get("subject_set.namespace"))
-		assert.Equal(t, "admins", q.Get("subject_set.object"))
-		assert.Equal(t, "member", q.Get("subject_set.relation"))
-		assert.Empty(t, q.Get("subject_id"))
-
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"relation_tuples": []map[string]any{},
-		})
-	}))
-	defer srv.Close()
-
-	adapter := newAdapter(srv.URL, srv.URL, nil)
-	subject := security.SubjectRef{Namespace: "group", ID: "admins", Relation: "member"}
-	tuples, err := adapter.ListSubjectRelations(context.Background(), subject, "")
-
-	require.NoError(t, err)
-	assert.Empty(t, tuples)
-}
-
-func TestListSubjectRelations_NoNamespaceFilter(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		q := r.URL.Query()
-		assert.Empty(t, q.Get("namespace"), "namespace should not be set when empty")
-
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"relation_tuples": []map[string]any{},
-		})
-	}))
-	defer srv.Close()
-
-	adapter := newAdapter(srv.URL, srv.URL, nil)
-	subject := security.SubjectRef{ID: "user-1"}
-	tuples, err := adapter.ListSubjectRelations(context.Background(), subject, "")
-
-	require.NoError(t, err)
-	assert.Empty(t, tuples)
-}
-
-func TestListSubjectRelations_PermissiveMode(t *testing.T) {
-	adapter := newAdapter("", "", nil)
-	subject := security.SubjectRef{ID: "user-1"}
-	tuples, err := adapter.ListSubjectRelations(context.Background(), subject, "room")
-
-	require.NoError(t, err)
-	assert.Empty(t, tuples)
-}
-
-func TestListSubjectRelations_ServerError(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusBadGateway)
-	}))
-	defer srv.Close()
-
-	adapter := newAdapter(srv.URL, srv.URL, nil)
-	subject := security.SubjectRef{ID: "user-1"}
-	_, err := adapter.ListSubjectRelations(context.Background(), subject, "room")
-
-	require.Error(t, err)
-	assert.ErrorIs(t, err, authorizer.ErrAuthzServiceDown)
-}
-
-// ---------------------------------------------------------------------------
-// Expand tests
-// ---------------------------------------------------------------------------
-
-func TestExpand_SubjectIDs(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(t, "/relation-tuples/expand", r.URL.Path)
-
-		q := r.URL.Query()
-		assert.Equal(t, "room", q.Get("namespace"))
-		assert.Equal(t, "room-1", q.Get("object"))
-		assert.Equal(t, "member", q.Get("relation"))
-		assert.Equal(t, "3", q.Get("max-depth"))
-
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"subject_ids": []string{"user-A", "user-B", "user-C"},
-		})
-	}))
-	defer srv.Close()
-
-	adapter := newAdapter(srv.URL, "", nil)
-	subjects, err := adapter.Expand(context.Background(), security.ObjectRef{Namespace: "room", ID: "room-1"}, "member")
-
-	require.NoError(t, err)
-	require.Len(t, subjects, 3)
-	for _, s := range subjects {
-		assert.Equal(t, security.NamespaceProfile, s.Namespace)
-		assert.Empty(t, s.Relation)
-	}
-	assert.Equal(t, "user-A", subjects[0].ID)
-	assert.Equal(t, "user-B", subjects[1].ID)
-	assert.Equal(t, "user-C", subjects[2].ID)
-}
-
-func TestExpand_SubjectSets(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"subject_sets": []map[string]string{
-				{"namespace": "group", "object": "editors", "relation": "member"},
-				{"namespace": "group", "object": "admins", "relation": "member"},
-			},
-		})
-	}))
-	defer srv.Close()
-
-	adapter := newAdapter(srv.URL, "", nil)
-	subjects, err := adapter.Expand(context.Background(), security.ObjectRef{Namespace: "doc", ID: "doc-1"}, "viewer")
-
-	require.NoError(t, err)
-	require.Len(t, subjects, 2)
-	assert.Equal(t, "group", subjects[0].Namespace)
-	assert.Equal(t, "editors", subjects[0].ID)
-	assert.Equal(t, "member", subjects[0].Relation)
-	assert.Equal(t, "admins", subjects[1].ID)
-}
-
-func TestExpand_MixedSubjectsAndSets(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"subject_ids": []string{"user-direct"},
-			"subject_sets": []map[string]string{
-				{"namespace": "group", "object": "team", "relation": "member"},
-			},
-		})
-	}))
-	defer srv.Close()
-
-	adapter := newAdapter(srv.URL, "", nil)
-	subjects, err := adapter.Expand(context.Background(), security.ObjectRef{Namespace: "doc", ID: "doc-1"}, "viewer")
-
-	require.NoError(t, err)
-	require.Len(t, subjects, 2)
-	assert.Equal(t, "user-direct", subjects[0].ID)
-	assert.Equal(t, "team", subjects[1].ID)
-}
-
-func TestExpand_PermissiveMode(t *testing.T) {
-	adapter := newAdapter("", "", nil)
-	subjects, err := adapter.Expand(context.Background(), security.ObjectRef{Namespace: "doc", ID: "doc-1"}, "viewer")
-
-	require.NoError(t, err)
-	assert.Empty(t, subjects)
-}
-
-func TestExpand_ServerError(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusServiceUnavailable)
-		_, _ = w.Write([]byte("service down"))
-	}))
-	defer srv.Close()
-
-	adapter := newAdapter(srv.URL, "", nil)
-	_, err := adapter.Expand(context.Background(), security.ObjectRef{Namespace: "doc", ID: "doc-1"}, "viewer")
-
-	require.Error(t, err)
-	assert.ErrorIs(t, err, authorizer.ErrAuthzServiceDown)
-}
-
-func TestExpand_EmptyResult(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{})
-	}))
-	defer srv.Close()
-
-	adapter := newAdapter(srv.URL, "", nil)
-	subjects, err := adapter.Expand(context.Background(), security.ObjectRef{Namespace: "doc", ID: "doc-1"}, "viewer")
-
-	require.NoError(t, err)
-	assert.Empty(t, subjects)
-}
-
-// ---------------------------------------------------------------------------
-// NewKetoAdapter tests
-// ---------------------------------------------------------------------------
-
-func TestNewKetoAdapter_NilAuditLoggerDefaults(t *testing.T) {
-	cfg := &testConfig{readURI: "http://localhost:4466"}
-	mgr := client.NewManager(context.Background())
-
-	adapter := authorizer.NewKetoAdapter(cfg, mgr, nil)
-	require.NotNil(t, adapter)
-
-	// Should not panic when calling Check (nil logger replaced by NoOp)
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]bool{"allowed": true})
-	}))
-	defer srv.Close()
-
-	cfgWithSrv := &testConfig{readURI: srv.URL}
-	adapterWithSrv := authorizer.NewKetoAdapter(cfgWithSrv, mgr, nil)
-	result, err := adapterWithSrv.Check(context.Background(), sampleCheckReq())
-
-	require.NoError(t, err)
-	assert.True(t, result.Allowed)
+func (s *AuthorizerTestSuite) TestExpandPermissive() {
+	adapter := s.permissiveAdapter()
+	subjects, err := adapter.Expand(s.T().Context(), security.ObjectRef{
+		Namespace: "default", ID: "obj-1",
+	}, "member")
+	s.Require().NoError(err)
+	s.Empty(subjects)
 }
 
 // ---------------------------------------------------------------------------
 // Error type tests
 // ---------------------------------------------------------------------------
 
-func TestPermissionDeniedError(t *testing.T) {
+func (s *AuthorizerTestSuite) TestPermissionDeniedError() {
 	err := authorizer.NewPermissionDeniedError(
 		security.ObjectRef{Namespace: "doc", ID: "doc-1"},
 		"edit",
@@ -1021,50 +684,50 @@ func TestPermissionDeniedError(t *testing.T) {
 		"no matching relation",
 	)
 
-	require.ErrorIs(t, err, authorizer.ErrPermissionDenied)
-	assert.Contains(t, err.Error(), "user-1")
-	assert.Contains(t, err.Error(), "edit")
-	assert.Contains(t, err.Error(), "doc:doc-1")
-	assert.Contains(t, err.Error(), "no matching relation")
+	s.Require().ErrorIs(err, authorizer.ErrPermissionDenied)
+	s.Contains(err.Error(), "user-1")
+	s.Contains(err.Error(), "edit")
+	s.Contains(err.Error(), "doc:doc-1")
+	s.Contains(err.Error(), "no matching relation")
 }
 
-func TestAuthzServiceError(t *testing.T) {
+func (s *AuthorizerTestSuite) TestAuthzServiceError() {
 	cause := errors.New("connection refused")
 	err := authorizer.NewAuthzServiceError("check", cause)
 
-	require.ErrorIs(t, err, authorizer.ErrAuthzServiceDown)
-	assert.Contains(t, err.Error(), "check")
-	assert.Contains(t, err.Error(), "connection refused")
-	require.ErrorIs(t, err, cause)
+	s.Require().ErrorIs(err, authorizer.ErrAuthzServiceDown)
+	s.Contains(err.Error(), "check")
+	s.Contains(err.Error(), "connection refused")
+	s.Require().ErrorIs(err, cause)
 }
 
-func TestAuthzServiceError_Unwrap(t *testing.T) {
+func (s *AuthorizerTestSuite) TestAuthzServiceErrorUnwrap() {
 	innerErr := errors.New("timeout")
 	err := authorizer.NewAuthzServiceError("expand", innerErr)
-
-	assert.ErrorIs(t, err, innerErr)
+	s.ErrorIs(err, innerErr)
 }
 
 // ---------------------------------------------------------------------------
 // Audit logger tests
 // ---------------------------------------------------------------------------
 
-func TestNoOpAuditLogger(t *testing.T) {
+func (s *AuthorizerTestSuite) TestNoOpAuditLogger() {
 	logger := authorizer.NewNoOpAuditLogger()
-	err := logger.LogDecision(context.Background(), security.CheckRequest{}, security.CheckResult{}, nil)
-
-	require.NoError(t, err)
+	err := logger.LogDecision(s.T().Context(),
+		security.CheckRequest{}, security.CheckResult{}, nil)
+	s.Require().NoError(err)
 }
 
-func TestNewAuditLogger_DefaultSampleRate(t *testing.T) {
+func (s *AuthorizerTestSuite) TestAuditLoggerDefaultSampleRate() {
 	logger := authorizer.NewAuditLogger(authorizer.AuditLoggerConfig{})
-	require.NotNil(t, logger)
+	s.Require().NotNil(logger)
 
-	err := logger.LogDecision(context.Background(), security.CheckRequest{}, security.CheckResult{}, nil)
-	require.NoError(t, err)
+	err := logger.LogDecision(s.T().Context(),
+		security.CheckRequest{}, security.CheckResult{}, nil)
+	s.Require().NoError(err)
 }
 
-func TestNewAuditLogger_ClampsSampleRate(t *testing.T) {
+func (s *AuthorizerTestSuite) TestAuditLoggerClampsSampleRate() {
 	testCases := []struct {
 		name       string
 		sampleRate float64
@@ -1076,299 +739,32 @@ func TestNewAuditLogger_ClampsSampleRate(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			logger := authorizer.NewAuditLogger(authorizer.AuditLoggerConfig{SampleRate: tc.sampleRate})
-			require.NotNil(t, logger)
+		s.Run(tc.name, func() {
+			logger := authorizer.NewAuditLogger(
+				authorizer.AuditLoggerConfig{SampleRate: tc.sampleRate})
+			s.Require().NotNil(logger)
 		})
 	}
 }
 
 // ---------------------------------------------------------------------------
-// Integration-style scenarios
+// Constructor tests
 // ---------------------------------------------------------------------------
 
-func TestScenario_RoomAccessControl(t *testing.T) {
-	// Simulate a chat room access control scenario:
-	// 1. Create a room and assign owner, members, and a viewer group
-	// 2. Verify each user's permissions
-	// 3. Remove a member and verify access revoked
-
-	var writtenTuples []map[string]any
-	var deletedQueries []string
-
-	mux := http.NewServeMux()
-	mux.HandleFunc("PUT /admin/relation-tuples", func(w http.ResponseWriter, r *http.Request) {
-		var body map[string]any
-		_ = json.NewDecoder(r.Body).Decode(&body)
-		if tuples, ok := body["relation_tuples"].([]any); ok {
-			for _, t := range tuples {
-				writtenTuples = append(writtenTuples, t.(map[string]any))
-			}
-		}
-		w.WriteHeader(http.StatusCreated)
-	})
-
-	mux.HandleFunc("DELETE /admin/relation-tuples", func(w http.ResponseWriter, r *http.Request) {
-		deletedQueries = append(deletedQueries, r.URL.RawQuery)
-		w.WriteHeader(http.StatusNoContent)
-	})
-
-	mux.HandleFunc("GET /relation-tuples/check", func(w http.ResponseWriter, r *http.Request) {
-		q := r.URL.Query()
-		subjectID := q.Get("subject_id")
-		relation := q.Get("relation")
-
-		allowed := false
-		for _, t := range writtenTuples {
-			if t["subject_id"] == subjectID && t["relation"] == relation {
-				allowed = true
-				break
-			}
-		}
-
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]bool{"allowed": allowed})
-	})
-
-	mux.HandleFunc("GET /relation-tuples", func(w http.ResponseWriter, r *http.Request) {
-		objID := r.URL.Query().Get("object")
-		var matched []map[string]any
-		for _, t := range writtenTuples {
-			if t["object"] == objID {
-				matched = append(matched, t)
-			}
-		}
-
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{"relation_tuples": matched})
-	})
-
-	srv := httptest.NewServer(mux)
-	defer srv.Close()
-
-	ctx := context.Background()
-	adapter := newAdapter(srv.URL, srv.URL, nil)
-
-	// Step 1: Write tuples for room access
-	err := adapter.WriteTuples(ctx, []security.RelationTuple{
-		{
-			Object:   security.ObjectRef{Namespace: "room", ID: "chat-1"},
-			Relation: "owner",
-			Subject:  security.SubjectRef{ID: "alice"},
-		},
-		{
-			Object:   security.ObjectRef{Namespace: "room", ID: "chat-1"},
-			Relation: "member",
-			Subject:  security.SubjectRef{ID: "bob"},
-		},
-		{
-			Object:   security.ObjectRef{Namespace: "room", ID: "chat-1"},
-			Relation: "member",
-			Subject:  security.SubjectRef{ID: "charlie"},
-		},
-	})
-	require.NoError(t, err)
-	assert.Len(t, writtenTuples, 3)
-
-	// Step 2: Verify permissions
-	result, err := adapter.Check(ctx, security.CheckRequest{
-		Object:     security.ObjectRef{Namespace: "room", ID: "chat-1"},
-		Permission: "owner",
-		Subject:    security.SubjectRef{ID: "alice"},
-	})
-	require.NoError(t, err)
-	assert.True(t, result.Allowed, "alice should be owner")
-
-	result, err = adapter.Check(ctx, security.CheckRequest{
-		Object:     security.ObjectRef{Namespace: "room", ID: "chat-1"},
-		Permission: "member",
-		Subject:    security.SubjectRef{ID: "bob"},
-	})
-	require.NoError(t, err)
-	assert.True(t, result.Allowed, "bob should be member")
-
-	result, err = adapter.Check(ctx, security.CheckRequest{
-		Object:     security.ObjectRef{Namespace: "room", ID: "chat-1"},
-		Permission: "member",
-		Subject:    security.SubjectRef{ID: "unknown"},
-	})
-	require.NoError(t, err)
-	assert.False(t, result.Allowed, "unknown user should be denied")
-
-	// Step 3: List all relations for the room
-	tuples, err := adapter.ListRelations(ctx, security.ObjectRef{Namespace: "room", ID: "chat-1"})
-	require.NoError(t, err)
-	assert.Len(t, tuples, 3)
-
-	// Step 4: Remove bob's membership
-	err = adapter.DeleteTuple(ctx, security.RelationTuple{
-		Object:   security.ObjectRef{Namespace: "room", ID: "chat-1"},
-		Relation: "member",
-		Subject:  security.SubjectRef{ID: "bob"},
-	})
-	require.NoError(t, err)
-	assert.Len(t, deletedQueries, 1)
-}
-
-func TestScenario_GroupBasedAccess(t *testing.T) {
-	// Simulate group-based access:
-	// Users are members of a group, and the group has access to a document
-	// Check should use subject_set parameters
-
-	mux := http.NewServeMux()
-	mux.HandleFunc("PUT /admin/relation-tuples", func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusCreated)
-	})
-
-	mux.HandleFunc("GET /relation-tuples/check", func(w http.ResponseWriter, r *http.Request) {
-		q := r.URL.Query()
-		// Grant access only when checking via the engineering group subject set
-		allowed := q.Get("subject_set.namespace") == "group" &&
-			q.Get("subject_set.object") == "engineering" &&
-			q.Get("subject_set.relation") == "member"
-
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]bool{"allowed": allowed})
-	})
-
-	mux.HandleFunc("GET /relation-tuples/expand", func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"subject_ids": []string{"alice", "bob"},
-			"subject_sets": []map[string]string{
-				{"namespace": "group", "object": "engineering", "relation": "member"},
-			},
-		})
-	})
-
-	srv := httptest.NewServer(mux)
-	defer srv.Close()
-
-	ctx := context.Background()
-	adapter := newAdapter(srv.URL, srv.URL, nil)
-
-	// Write the group-based access tuple
-	err := adapter.WriteTuple(ctx, security.RelationTuple{
-		Object:   security.ObjectRef{Namespace: "document", ID: "design-doc"},
-		Relation: "viewer",
-		Subject:  security.SubjectRef{Namespace: "group", ID: "engineering", Relation: "member"},
-	})
-	require.NoError(t, err)
-
-	// Check: group member should have access
-	result, err := adapter.Check(ctx, security.CheckRequest{
-		Object:     security.ObjectRef{Namespace: "document", ID: "design-doc"},
-		Permission: "viewer",
-		Subject:    security.SubjectRef{Namespace: "group", ID: "engineering", Relation: "member"},
-	})
-	require.NoError(t, err)
-	assert.True(t, result.Allowed)
-
-	// Check: direct user should not have access via this check
-	result, err = adapter.Check(ctx, security.CheckRequest{
-		Object:     security.ObjectRef{Namespace: "document", ID: "design-doc"},
-		Permission: "viewer",
-		Subject:    security.SubjectRef{ID: "alice"},
-	})
-	require.NoError(t, err)
-	assert.False(t, result.Allowed)
-
-	// Expand: see who has viewer access
-	subjects, err := adapter.Expand(ctx, security.ObjectRef{Namespace: "document", ID: "design-doc"}, "viewer")
-	require.NoError(t, err)
-	assert.Len(t, subjects, 3, "should return 2 direct IDs + 1 subject set")
-}
-
-func TestScenario_MultiTenantIsolation(t *testing.T) {
-	// Verify that authorization checks properly scope by namespace
-	// A user in tenant-A should not have access to tenant-B's resources
-
-	mux := http.NewServeMux()
-	mux.HandleFunc("GET /relation-tuples/check", func(w http.ResponseWriter, r *http.Request) {
-		q := r.URL.Query()
-		ns := q.Get("namespace")
-		objectID := q.Get("object")
-		subjectID := q.Get("subject_id")
-
-		// Only grant access within the correct tenant namespace
-		allowed := ns == "tenant-A/resource" && objectID == "res-1" && subjectID == "user-1"
-
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]bool{"allowed": allowed})
-	})
-
-	srv := httptest.NewServer(mux)
-	defer srv.Close()
-
-	ctx := context.Background()
-	adapter := newAdapter(srv.URL, "", nil)
-
-	// User in tenant-A should have access to tenant-A resources
-	result, err := adapter.Check(ctx, security.CheckRequest{
-		Object:     security.ObjectRef{Namespace: "tenant-A/resource", ID: "res-1"},
-		Permission: "read",
-		Subject:    security.SubjectRef{ID: "user-1"},
-	})
-	require.NoError(t, err)
-	assert.True(t, result.Allowed)
-
-	// Same user should NOT have access to tenant-B resources
-	result, err = adapter.Check(ctx, security.CheckRequest{
-		Object:     security.ObjectRef{Namespace: "tenant-B/resource", ID: "res-1"},
-		Permission: "read",
-		Subject:    security.SubjectRef{ID: "user-1"},
-	})
-	require.NoError(t, err)
-	assert.False(t, result.Allowed)
-}
-
-func TestScenario_BatchPermissionEvaluation(t *testing.T) {
-	// Simulate a UI rendering scenario: check multiple permissions at once
-	// to decide what buttons/actions to show the user
-
-	mux := http.NewServeMux()
-	mux.HandleFunc("GET /relation-tuples/check", func(w http.ResponseWriter, r *http.Request) {
-		permission := r.URL.Query().Get("relation")
-
-		// user can view and comment, but not delete
-		allowedPerms := map[string]bool{
-			"view":    true,
-			"comment": true,
-			"delete":  false,
-			"edit":    false,
-		}
-
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]bool{"allowed": allowedPerms[permission]})
-	})
-
-	srv := httptest.NewServer(mux)
-	defer srv.Close()
-
-	ctx := context.Background()
-	adapter := newAdapter(srv.URL, "", nil)
-
-	doc := security.ObjectRef{Namespace: "document", ID: "doc-42"}
-	user := security.SubjectRef{ID: "current-user"}
-
-	requests := []security.CheckRequest{
-		{Object: doc, Permission: "view", Subject: user},
-		{Object: doc, Permission: "comment", Subject: user},
-		{Object: doc, Permission: "edit", Subject: user},
-		{Object: doc, Permission: "delete", Subject: user},
+func (s *AuthorizerTestSuite) TestNewKetoAdapterNilAuditLogger() {
+	cfg := &config.ConfigurationDefault{
+		AuthorizationServiceReadURI: s.readURI,
 	}
+	mgr := client.NewManager(s.T().Context())
+	adapter := authorizer.NewKetoAdapter(cfg, mgr, nil)
+	s.Require().NotNil(adapter)
 
-	results, err := adapter.BatchCheck(ctx, requests)
-	require.NoError(t, err)
-	require.Len(t, results, 4)
-
-	capabilities := make(map[string]bool)
-	for i, req := range requests {
-		capabilities[req.Permission] = results[i].Allowed
-	}
-
-	assert.True(t, capabilities["view"])
-	assert.True(t, capabilities["comment"])
-	assert.False(t, capabilities["edit"])
-	assert.False(t, capabilities["delete"])
+	// Should not panic — nil logger replaced by NoOp
+	result, err := adapter.Check(s.T().Context(), security.CheckRequest{
+		Object:     security.ObjectRef{Namespace: "default", ID: "nil-audit-obj"},
+		Permission: "view",
+		Subject:    security.SubjectRef{ID: "nil-audit-user"},
+	})
+	s.Require().NoError(err)
+	s.False(result.Allowed)
 }

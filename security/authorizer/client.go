@@ -59,10 +59,6 @@ type ketoSubjectSet struct {
 	Relation  string `json:"relation"`
 }
 
-type ketoWriteRequest struct {
-	RelationTuples []*ketoRelationTuple `json:"relation_tuples,omitempty"`
-}
-
 type ketoListResponse struct {
 	RelationTuples []*ketoRelationTuple `json:"relation_tuples"`
 	NextPageToken  string               `json:"next_page_token,omitempty"`
@@ -116,7 +112,8 @@ func (k *ketoAdapter) Check(ctx context.Context, req security.CheckRequest) (sec
 		return security.CheckResult{}, NewAuthzServiceError("check", err)
 	}
 
-	if resp.StatusCode != http.StatusOK {
+	// Keto returns 200 for allowed and 403 for denied; both carry a JSON body.
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusForbidden {
 		body, _ := resp.ToContent(ctx)
 		return security.CheckResult{}, NewAuthzServiceError("check",
 			fmt.Errorf("unexpected status %d: %s", resp.StatusCode, string(body)))
@@ -190,7 +187,9 @@ func (k *ketoAdapter) WriteTuple(ctx context.Context, tuple security.RelationTup
 	return k.WriteTuples(ctx, []security.RelationTuple{tuple})
 }
 
-// WriteTuples creates multiple relationship tuples atomically.
+// WriteTuples creates multiple relationship tuples.
+// Keto's PUT endpoint accepts a single tuple per request, so each tuple
+// is written individually.
 func (k *ketoAdapter) WriteTuples(ctx context.Context, tuples []security.RelationTuple) error {
 	cfg := k.config
 
@@ -202,34 +201,28 @@ func (k *ketoAdapter) WriteTuples(ctx context.Context, tuples []security.Relatio
 		return nil
 	}
 
-	ketoTuples := make([]*ketoRelationTuple, len(tuples))
-	for i, t := range tuples {
-		ketoTuples[i] = k.toKetoTuple(t)
-	}
+	for _, t := range tuples {
+		kt := k.toKetoTuple(t)
 
-	reqBody := ketoWriteRequest{
-		RelationTuples: ketoTuples,
-	}
+		resp, err := k.httpClient.Invoke(
+			ctx,
+			http.MethodPut,
+			cfg.GetAuthorizationServiceWriteURI()+"/admin/relation-tuples",
+			kt,
+			nil,
+		)
+		if err != nil {
+			return NewAuthzServiceError("write_tuples", err)
+		}
 
-	// Execute request with retries
-	resp, err := k.httpClient.Invoke(
-		ctx,
-		http.MethodPut,
-		cfg.GetAuthorizationServiceWriteURI()+"/admin/relation-tuples",
-		reqBody,
-		nil,
-	)
-	if err != nil {
-		return NewAuthzServiceError("write_tuples", err)
-	}
+		if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK &&
+			resp.StatusCode != http.StatusNoContent {
+			respBody, _ := resp.ToContent(ctx)
+			return NewAuthzServiceError("write_tuples",
+				fmt.Errorf("unexpected status %d: %s", resp.StatusCode, string(respBody)))
+		}
 
-	defer util.CloseAndLogOnError(ctx, resp)
-
-	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK &&
-		resp.StatusCode != http.StatusNoContent {
-		respBody, _ := resp.ToContent(ctx)
-		return NewAuthzServiceError("write_tuples",
-			fmt.Errorf("unexpected status %d: %s", resp.StatusCode, string(respBody)))
+		util.CloseAndLogOnError(ctx, resp)
 	}
 
 	return nil
@@ -346,7 +339,7 @@ func (k *ketoAdapter) ListSubjectRelations(
 		return []security.RelationTuple{}, nil
 	}
 
-	u, err := url.Parse(cfg.GetAuthorizationServiceWriteURI() + "/relation-tuples")
+	u, err := url.Parse(cfg.GetAuthorizationServiceReadURI() + "/relation-tuples")
 	if err != nil {
 		return nil, NewAuthzServiceError("list_subject_relations", err)
 	}

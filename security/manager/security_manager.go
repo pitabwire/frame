@@ -52,3 +52,14 @@ func (s *managerImpl) GetAuthenticator(_ context.Context) security.Authenticator
 func (s *managerImpl) GetAuthorizer(_ context.Context) security.Authorizer {
 	return s.authorizer
 }
+
+// Close releases resources held by the security manager components.
+func (s *managerImpl) Close() {
+	type closer interface {
+		Close()
+	}
+
+	if c, ok := s.authenticator.(closer); ok {
+		c.Close()
+	}
+}

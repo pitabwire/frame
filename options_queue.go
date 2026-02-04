@@ -2,6 +2,8 @@ package frame
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"strings"
 
 	_ "github.com/pitabwire/natspubsub" // required for NATS pubsub driver registration
@@ -13,15 +15,17 @@ import (
 
 // WithRegisterPublisher Option to register publishing path referenced within the system.
 func WithRegisterPublisher(reference string, queueURL string) Option {
-	// Validate inputs immediately - fail fast
-	if strings.TrimSpace(reference) == "" {
-		panic("publisher reference cannot be empty")
-	}
-	if !data.DSN(queueURL).Valid() {
-		panic("publisher queueURL cannot be invalid")
-	}
-
 	return func(_ context.Context, s *Service) {
+		// Validate inputs and report via startup errors instead of panicking
+		if strings.TrimSpace(reference) == "" {
+			s.AddStartupError(errors.New("publisher reference cannot be empty"))
+			return
+		}
+		if !data.DSN(queueURL).Valid() {
+			s.AddStartupError(fmt.Errorf("publisher queueURL is invalid: %s", queueURL))
+			return
+		}
+
 		// QueueManager manager is initialized after options are applied,
 		// so defer registration to pre-start phase
 		// Publishers must be registered before subscribers (for mem:// driver)
@@ -41,15 +45,17 @@ func WithRegisterPublisher(reference string, queueURL string) Option {
 // WithRegisterSubscriber Option to register a new subscription handlers.
 func WithRegisterSubscriber(reference string, queueURL string,
 	handlers ...queue.SubscribeWorker) Option {
-	// Validate inputs immediately - fail fast
-	if strings.TrimSpace(reference) == "" {
-		panic("subscriber reference cannot be empty")
-	}
-	if !data.DSN(queueURL).Valid() {
-		panic("subscriber queueURL cannot be invalid")
-	}
-
 	return func(_ context.Context, s *Service) {
+		// Validate inputs and report via startup errors instead of panicking
+		if strings.TrimSpace(reference) == "" {
+			s.AddStartupError(errors.New("subscriber reference cannot be empty"))
+			return
+		}
+		if !data.DSN(queueURL).Valid() {
+			s.AddStartupError(fmt.Errorf("subscriber queueURL is invalid: %s", queueURL))
+			return
+		}
+
 		// QueueManager manager is initialized after options are applied,
 		// so defer registration to pre-start phase
 		// Subscribers must be registered after publishers (for mem:// driver)

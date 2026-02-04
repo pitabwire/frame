@@ -3,6 +3,7 @@ package events
 import (
 	"context"
 	"errors"
+	"sync"
 
 	"github.com/pitabwire/util"
 
@@ -14,14 +15,19 @@ type manager struct {
 	qm  queue.Manager
 	cfg config.ConfigurationEvents
 
+	mu            sync.RWMutex
 	eventRegistry map[string]EventI
 }
 
 func (m *manager) Add(evt EventI) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.eventRegistry[evt.Name()] = evt
 }
 
 func (m *manager) Get(eventName string) (EventI, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 	evt, ok := m.eventRegistry[eventName]
 	if !ok {
 		return nil, errors.New("event not found in registry: " + eventName)

@@ -41,6 +41,7 @@ func New(opts ...cache.Option) (cache.RawCache, error) {
 
 	err = client.Ping(ctx).Err()
 	if err != nil {
+		_ = client.Close()
 		return nil, err
 	}
 

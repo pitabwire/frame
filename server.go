@@ -130,7 +130,7 @@ type grpcDriver struct {
 	internalHTTPDriver ServerDriver
 	grpcPort           string
 
-	errorChannel chan error
+	reportError func(ctx context.Context, err error)
 
 	grpcServer *grpc.Server
 
@@ -141,7 +141,7 @@ func (gd *grpcDriver) ListenAndServe(addr string, h http.Handler) error {
 	go func(address string) {
 		ln, err2 := getListener(gd.ctx, address, "", "", gd.grpcListener)
 		if err2 != nil {
-			gd.errorChannel <- err2
+			gd.reportError(gd.ctx, err2)
 			return
 		}
 		log := util.Log(gd.ctx).WithField("grpc port", address)
@@ -149,7 +149,7 @@ func (gd *grpcDriver) ListenAndServe(addr string, h http.Handler) error {
 
 		err2 = gd.grpcServer.Serve(ln)
 		if err2 != nil {
-			gd.errorChannel <- err2
+			gd.reportError(gd.ctx, err2)
 			return
 		}
 	}(gd.grpcPort)
@@ -161,7 +161,7 @@ func (gd *grpcDriver) ListenAndServeTLS(addr, certFile, certKeyFile string, h ht
 	go func(address, certPath, certKeyPath string) {
 		ln, err2 := getListener(gd.ctx, address, certPath, certKeyPath, gd.grpcListener)
 		if err2 != nil {
-			gd.errorChannel <- err2
+			gd.reportError(gd.ctx, err2)
 			return
 		}
 
@@ -170,7 +170,7 @@ func (gd *grpcDriver) ListenAndServeTLS(addr, certFile, certKeyFile string, h ht
 
 		err2 = gd.grpcServer.Serve(ln)
 		if err2 != nil {
-			gd.errorChannel <- err2
+			gd.reportError(gd.ctx, err2)
 			return
 		}
 	}(gd.grpcPort, certFile, certKeyFile)

@@ -543,8 +543,8 @@ func (s *QueueTestSuite) TestServiceSubscriberValidateJetstreamMessages() {
 				handler := &msgHandler{
 					f: func(_ context.Context, _ map[string]string, message []byte) error {
 						var data map[string]any
-						if err = json.Unmarshal(message, &data); err != nil {
-							return err
+						if unmarshalErr := json.Unmarshal(message, &data); unmarshalErr != nil {
+							return unmarshalErr
 						}
 						mu.Lock()
 						receivedCount++

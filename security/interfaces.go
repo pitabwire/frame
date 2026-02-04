@@ -65,4 +65,6 @@ type Manager interface {
 	GetOauth2ClientRegistrar(ctx context.Context) Oauth2ClientRegistrar
 	GetAuthenticator(ctx context.Context) Authenticator
 	GetAuthorizer(ctx context.Context) Authorizer
+	// Close releases resources held by the security manager and its components.
+	Close()
 }

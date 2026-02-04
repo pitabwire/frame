@@ -54,6 +54,13 @@ func NewJwtTokenAuthenticator(cfg config.ConfigurationJWTVerification) security.
 	}
 }
 
+// Close stops the background JWKS refresh goroutine.
+func (a *jwtTokenAuthenticator) Close() {
+	if a.tokenAuthenticator != nil {
+		a.tokenAuthenticator.Stop()
+	}
+}
+
 func (a *jwtTokenAuthenticator) Authenticate(
 	ctx context.Context,
 	jwtToken string,
@@ -131,6 +138,7 @@ type TokenAuthenticator struct {
 	keys     map[string]any
 	lastErr  error
 	stopChan chan struct{}
+	stopOnce sync.Once
 }
 
 // ------------------------------
@@ -173,7 +181,9 @@ func (a *TokenAuthenticator) Start() {
 }
 
 func (a *TokenAuthenticator) Stop() {
-	close(a.stopChan)
+	a.stopOnce.Do(func() {
+		close(a.stopChan)
+	})
 }
 
 // GetKeyCount returns the number of currently loaded keys (for testing purposes).

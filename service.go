@@ -3,6 +3,7 @@ package frame
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net"
 	"net/http"
 	"os/signal"
@@ -130,10 +131,11 @@ func NewServiceWithContext(ctx context.Context, opts ...Option) (context.Context
 	cfg, _ := config.FromEnv[config.ConfigurationDefault]()
 
 	svc := &Service{
-		name:          cfg.Name(),
-		cancelFunc:    signalCancelFunc, // Store its cancel function
-		errorChannel:  make(chan error, 1),
-		configuration: &cfg,
+		name:           cfg.Name(),
+		cancelFunc:     signalCancelFunc, // Store its cancel function
+		errorChannel:   make(chan error, 1),
+		configuration:  &cfg,
+		profilerServer: profiler.NewServer(),
 	}
 
 	opts = append(
@@ -149,6 +151,13 @@ func NewServiceWithContext(ctx context.Context, opts ...Option) (context.Context
 	}
 	svc.securityManager = securityManager.NewManager(ctx, svc.name, svc.environment, smCfg, svc.clientManager)
 
+	// Register cleanup for the security manager to stop background goroutines (e.g., JWKS refresh)
+	svc.AddCleanupMethod(func(_ context.Context) {
+		if svc.securityManager != nil {
+			svc.securityManager.Close()
+		}
+	})
+
 	if svc.registerOauth2Cli {
 		sm := svc.SecurityManager()
 		clr := sm.GetOauth2ClientRegistrar(ctx)
@@ -156,7 +165,7 @@ func NewServiceWithContext(ctx context.Context, opts ...Option) (context.Context
 		// Register for JWT
 		err = clr.RegisterForJwt(ctx, sm)
 		if err != nil {
-			svc.Log(ctx).WithError(err).Fatal("could not register server client for jwt")
+			svc.AddStartupError(fmt.Errorf("could not register server client for jwt: %w", err))
 		}
 	}
 
@@ -164,7 +173,10 @@ func NewServiceWithContext(ctx context.Context, opts ...Option) (context.Context
 	if !ok {
 		wkpCfg = &cfg
 	}
-	svc.workerPoolManager = workerpool.NewManager(ctx, wkpCfg, svc.sendStopError)
+	svc.workerPoolManager, err = workerpool.NewManager(ctx, wkpCfg, svc.sendStopError)
+	if err != nil {
+		svc.AddStartupError(err)
+	}
 
 	svc.queueManager = queue.NewQueueManager(ctx, svc.workerPoolManager)
 
@@ -172,7 +184,7 @@ func NewServiceWithContext(ctx context.Context, opts ...Option) (context.Context
 	// This registers the internal events publisher/subscriber
 	err = svc.setupEventsQueue(ctx)
 	if err != nil {
-		svc.Log(ctx).WithError(err).Panic("could not setup application events")
+		svc.AddStartupError(fmt.Errorf("could not setup application events: %w", err))
 	}
 
 	// Execute pre-start methods now that queue manager is initialized
@@ -506,6 +518,7 @@ func (s *Service) initializeServerDrivers(ctx context.Context, httpPort string) 
 			ctx:                ctx,
 			internalHTTPDriver: s.driver, // Embed the fully configured defaultServer
 			grpcPort:           s.grpcPort,
+			reportError:        s.sendStopError,
 			grpcServer:         s.grpcServer,
 			grpcListener:       s.grpcListener, // Use the primary listener established for gRPC
 		}
@@ -603,7 +616,6 @@ func (s *Service) startProfilerIfEnabled(ctx context.Context) error {
 		return nil
 	}
 
-	s.profilerServer = profiler.NewServer()
 	return s.profilerServer.StartIfEnabled(ctx, cfg)
 }
 

@@ -22,53 +22,68 @@ func TestOptionEarlyFailure(t *testing.T) {
 		name      string
 		reference string
 		queueURL  string
-		panicMsg  string
+		errMsg    string
+		isSub     bool
 	}{
 		{
-			name:      "WithRegisterPublisher empty reference panics",
+			name:      "WithRegisterPublisher empty reference reports error",
 			reference: "",
 			queueURL:  "mem://test",
-			panicMsg:  "publisher reference cannot be empty",
+			errMsg:    "publisher reference cannot be empty",
+			isSub:     false,
 		},
 		{
-			name:      "WithRegisterPublisher empty queueURL panics",
+			name:      "WithRegisterPublisher invalid queueURL reports error",
 			reference: "test",
 			queueURL:  "",
-			panicMsg:  "publisher queueURL cannot be invalid",
+			errMsg:    "publisher queueURL is invalid",
+			isSub:     false,
 		},
 		{
-			name:      "WithRegisterSubscriber empty reference panics",
+			name:      "WithRegisterSubscriber empty reference reports error",
 			reference: "",
 			queueURL:  "mem://test",
-			panicMsg:  "subscriber reference cannot be empty",
+			errMsg:    "subscriber reference cannot be empty",
+			isSub:     true,
 		},
 		{
-			name:      "WithRegisterSubscriber empty queueURL panics",
+			name:      "WithRegisterSubscriber invalid queueURL reports error",
 			reference: "test",
 			queueURL:  "",
-			panicMsg:  "subscriber queueURL cannot be invalid",
+			errMsg:    "subscriber queueURL is invalid",
+			isSub:     true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			defer func() {
-				if r := recover(); r != nil {
-					if r != tt.panicMsg {
-						t.Errorf("expected panic message '%s', got '%v'", tt.panicMsg, r)
-					}
-				} else {
-					t.Errorf("expected panic with message '%s', but no panic occurred", tt.panicMsg)
-				}
-			}()
-
-			if strings.Contains(tt.name, "Publisher") {
-				_ = frame.WithRegisterPublisher(tt.reference, tt.queueURL)
-			} else {
+			var opt frame.Option
+			if tt.isSub {
 				handler := &msgHandler{f: func(_ context.Context, _ map[string]string, _ []byte) error {
 					return nil
 				}}
-				_ = frame.WithRegisterSubscriber(tt.reference, tt.queueURL, handler)
+				opt = frame.WithRegisterSubscriber(tt.reference, tt.queueURL, handler)
+			} else {
+				opt = frame.WithRegisterPublisher(tt.reference, tt.queueURL)
+			}
+
+			ctx, svc := frame.NewService(opt)
+			defer svc.Stop(ctx)
+
+			errs := svc.GetStartupErrors()
+			if len(errs) == 0 {
+				t.Fatalf("expected startup error containing '%s', but got none", tt.errMsg)
+			}
+
+			found := false
+			for _, err := range errs {
+				if err != nil && strings.Contains(err.Error(), tt.errMsg) {
+					found = true
+					break
+				}
+			}
+			if !found {
+				t.Errorf("expected startup error containing '%s', got %v", tt.errMsg, errs)
 			}
 		})
 	}

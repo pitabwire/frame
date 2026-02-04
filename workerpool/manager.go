@@ -89,7 +89,7 @@ func NewManager(
 	cfg config.ConfigurationWorkerPool,
 	stopOnErr func(ctx context.Context, err error),
 	opts ...Option,
-) Manager {
+) (Manager, error) {
 	log := util.Log(ctx)
 
 	poolOpts := defaultWorkerPoolOpts(cfg, log)
@@ -100,13 +100,13 @@ func NewManager(
 
 	pool, err := setupWorkerPool(ctx, poolOpts)
 	if err != nil {
-		log.WithError(err).Panic("could not create a default worker pool")
+		return nil, fmt.Errorf("could not create a default worker pool: %w", err)
 	}
 
 	return &manager{
 		pool:    pool,
 		stopErr: stopOnErr,
-	}
+	}, nil
 }
 
 func (m manager) GetPool() (WorkerPool, error) {

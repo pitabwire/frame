@@ -42,6 +42,7 @@ func New(opts ...cache.Option) (cache.RawCache, error) {
 
 	js, err := natsConn.JetStream()
 	if err != nil {
+		natsConn.Close()
 		return nil, err
 	}
 	// Create the client
@@ -58,15 +59,18 @@ func New(opts ...cache.Option) (cache.RawCache, error) {
 			// If the bucket already exists, just get a handle to it.
 			client, err = js.KeyValue(cacheOpts.Name)
 			if err != nil {
+				natsConn.Close()
 				return nil, err
 			}
 		} else {
 			// Another error occurred during creation.
+			natsConn.Close()
 			return nil, err
 		}
 	}
 
 	if _, err = client.Status(); err != nil {
+		natsConn.Close()
 		return nil, err
 	}
 

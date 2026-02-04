@@ -3,6 +3,7 @@ package events_test
 import (
 	"context"
 	"fmt"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -23,7 +24,7 @@ type EventsTestSuite struct {
 
 type MessageToTest struct {
 	Service *frame.Service
-	Count   int
+	Count   atomic.Int64
 }
 
 func (event *MessageToTest) Name() string {
@@ -46,7 +47,7 @@ func (event *MessageToTest) Execute(ctx context.Context, payload any) error {
 	message := *m
 	logger := event.Service.Log(ctx).WithField("payload", message).WithField("type", event.Name())
 	logger.Info("handling event")
-	event.Count++
+	event.Count.Add(1)
 	return nil
 }
 
@@ -200,7 +201,8 @@ func (s *EventsTestSuite) TestServiceEventsPublishingWorks() {
 					frametests.WithNoopDriver(),
 				)
 
-				testEvent := MessageToTest{Service: svc, Count: tc.initialCount}
+				testEvent := MessageToTest{Service: svc}
+				testEvent.Count.Store(int64(tc.initialCount))
 				events := frame.WithRegisterEvents(&testEvent)
 
 				svc.Init(ctx, events)
@@ -215,8 +217,8 @@ func (s *EventsTestSuite) TestServiceEventsPublishingWorks() {
 					time.Sleep(2 * time.Second)
 					require.Equal(
 						t,
-						tc.expectedCount,
-						testEvent.Count,
+						int64(tc.expectedCount),
+						testEvent.Count.Load(),
 						"event should be processed and count incremented",
 					)
 				}

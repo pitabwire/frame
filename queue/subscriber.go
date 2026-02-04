@@ -11,10 +11,12 @@ import (
 	"github.com/pitabwire/util"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/propagation"
+	"go.opentelemetry.io/otel/trace"
 	"gocloud.dev/pubsub"
 
 	"github.com/pitabwire/frame/localization"
 	"github.com/pitabwire/frame/security"
+	"github.com/pitabwire/frame/telemetry"
 	"github.com/pitabwire/frame/workerpool"
 )
 
@@ -32,6 +34,7 @@ type subscriber struct {
 	isInit       atomic.Bool
 	state        SubscriberState
 	metrics      *subscriberMetrics
+	tracer       telemetry.Tracer
 
 	workManager workerpool.Manager
 }
@@ -227,7 +230,19 @@ func (s *subscriber) processReceivedMessage(ctx context.Context, msg *pubsub.Mes
 			pCtx = util.SetTenancy(pCtx, authClaim)
 		}
 
-		pCtx = otel.GetTextMapPropagator().Extract(pCtx, metadata)
+		// Extract remote span context for linking, not parenting.
+		// This prevents zombie parent traces from publisher-subscriber propagation.
+		extractedCtx := otel.GetTextMapPropagator().Extract(pCtx, metadata)
+		remoteSpanCtx := trace.SpanContextFromContext(extractedCtx)
+
+		var spanOpts []trace.SpanStartOption
+		spanOpts = append(spanOpts, trace.WithNewRoot())
+		if remoteSpanCtx.IsValid() {
+			spanOpts = append(spanOpts, trace.WithLinks(trace.Link{SpanContext: remoteSpanCtx}))
+		}
+
+		pCtx, span := s.tracer.Start(pCtx, "process", spanOpts...)
+		defer func() { s.tracer.End(pCtx, span, err) }()
 
 		languages := localization.FromMap(metadata)
 		if len(languages) > 0 {
@@ -265,6 +280,12 @@ func (s *subscriber) processReceivedMessage(ctx context.Context, msg *pubsub.Mes
 	return nil
 }
 
+// detachedTraceContext returns a context with an empty span context,
+// preventing gocloud.dev's internal tracing from creating spans on every poll.
+func detachedTraceContext(ctx context.Context) context.Context {
+	return trace.ContextWithSpanContext(ctx, trace.SpanContext{})
+}
+
 func (s *subscriber) listen(ctx context.Context) {
 	logger := util.Log(ctx).
 		WithField("name", s.reference).
@@ -284,7 +305,7 @@ func (s *subscriber) listen(ctx context.Context) {
 			return
 		}
 
-		msg, err := s.Receive(ctx)
+		msg, err := s.Receive(detachedTraceContext(ctx))
 		if err != nil {
 			if ctx.Err() != nil && (errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)) {
 				// Context cancelled or deadline exceeded, loop again to check ctx.Done()
@@ -336,6 +357,7 @@ func newSubscriber(
 		reference: reference,
 		url:       queueURL,
 		handlers:  handlers,
+		tracer:    telemetry.NewTracer("queue/subscriber/" + reference),
 		metrics: &subscriberMetrics{
 			ActiveMessages: &atomic.Int64{},
 			LastActivity:   &atomic.Int64{},

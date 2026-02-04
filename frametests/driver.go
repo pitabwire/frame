@@ -5,6 +5,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 
 	"github.com/pitabwire/util"
 
@@ -28,25 +29,34 @@ func GetFreePort(ctx context.Context) (int, error) {
 }
 
 type testDriver struct {
+	mu  sync.RWMutex
 	srv *httptest.Server
 }
 
 func (t *testDriver) ListenAndServe(_ string, h http.Handler) error {
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	t.srv = httptest.NewServer(h)
 
 	return nil
 }
 func (t *testDriver) ListenAndServeTLS(_, _, _ string, h http.Handler) error {
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	t.srv = httptest.NewTLSServer(h)
 	return nil
 }
 
 func (t *testDriver) Shutdown(_ context.Context) error {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
 	t.srv.Close()
 	return nil
 }
 
 func (t *testDriver) GetTestServer() *httptest.Server {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
 	return t.srv
 }
 

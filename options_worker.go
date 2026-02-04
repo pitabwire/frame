@@ -24,7 +24,12 @@ func WithWorkerPoolOptions(options ...workerpool.Option) Option {
 			return
 		}
 
-		s.workerPoolManager = workerpool.NewManager(ctx, cfg, s.sendStopError, options...)
+		wpm, err := workerpool.NewManager(ctx, cfg, s.sendStopError, options...)
+		if err != nil {
+			s.AddStartupError(err)
+			return
+		}
+		s.workerPoolManager = wpm
 	}
 }
 

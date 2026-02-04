@@ -3,8 +3,6 @@ package frame
 import (
 	"context"
 
-	"github.com/pitabwire/util"
-
 	"github.com/pitabwire/frame/config"
 	"github.com/pitabwire/frame/datastore"
 	"github.com/pitabwire/frame/datastore/manager"
@@ -19,7 +17,8 @@ func WithDatastoreManager() Option {
 			var err error
 			s.datastoreManager, err = manager.NewManager(ctx)
 			if err != nil {
-				util.Log(ctx).WithError(err).Fatal("error initiating datastore manager")
+				s.AddStartupError(err)
+				return
 			}
 
 			// Register cleanup method
@@ -62,7 +61,7 @@ func WithDatastoreConnectionWithOptions(name string, opts ...pool.Option) Option
 
 		err := dbPool.AddConnection(ctx, opts...)
 		if err != nil {
-			util.Log(ctx).WithError(err).Fatal("error initiating datastore connection")
+			s.AddStartupError(err)
 		}
 	}
 }

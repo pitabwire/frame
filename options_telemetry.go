@@ -32,7 +32,7 @@ func WithTelemetry(opts ...telemetry.Option) Option {
 		s.telemetryManager = telemetry.NewManager(ctx, cfg, extOpts...)
 		err := s.telemetryManager.Init(ctx)
 		if err != nil {
-			util.Log(ctx).WithError(err).Fatal("failed to initialize telemetry")
+			s.AddStartupError(err)
 		}
 	}
 }

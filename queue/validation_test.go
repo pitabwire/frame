@@ -20,7 +20,10 @@ func (t *testConfig) GetExpiryDuration() time.Duration { return time.Minute }
 func TestAddSubscriberValidation(t *testing.T) {
 	ctx := context.Background()
 	cfg := &testConfig{}
-	workPool := workerpool.NewManager(ctx, cfg, func(_ context.Context, _ error) {})
+	workPool, err := workerpool.NewManager(ctx, cfg, func(_ context.Context, _ error) {})
+	if err != nil {
+		t.Fatalf("failed to create worker pool manager: %v", err)
+	}
 	qm := queue.NewQueueManager(ctx, workPool)
 
 	tests := []struct {
@@ -69,18 +72,18 @@ func TestAddSubscriberValidation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := qm.AddSubscriber(ctx, tt.reference, tt.queueURL)
+			subErr := qm.AddSubscriber(ctx, tt.reference, tt.queueURL)
 
 			if tt.expectError {
-				if err == nil {
+				if subErr == nil {
 					t.Errorf("expected error but got none")
 					return
 				}
-				if err.Error() != tt.errorMsg {
-					t.Errorf("expected error message '%s', got '%s'", tt.errorMsg, err.Error())
+				if subErr.Error() != tt.errorMsg {
+					t.Errorf("expected error message '%s', got '%s'", tt.errorMsg, subErr.Error())
 				}
-			} else if err != nil {
-				t.Errorf("expected no error but got: %v", err)
+			} else if subErr != nil {
+				t.Errorf("expected no error but got: %v", subErr)
 			}
 		})
 	}
@@ -89,7 +92,10 @@ func TestAddSubscriberValidation(t *testing.T) {
 func TestAddPublisherValidation(t *testing.T) {
 	ctx := context.Background()
 	cfg := &testConfig{}
-	workPool := workerpool.NewManager(ctx, cfg, func(_ context.Context, _ error) {})
+	workPool, err := workerpool.NewManager(ctx, cfg, func(_ context.Context, _ error) {})
+	if err != nil {
+		t.Fatalf("failed to create worker pool manager: %v", err)
+	}
 	qm := queue.NewQueueManager(ctx, workPool)
 
 	tests := []struct {
@@ -138,18 +144,18 @@ func TestAddPublisherValidation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := qm.AddPublisher(ctx, tt.reference, tt.queueURL)
+			pubErr := qm.AddPublisher(ctx, tt.reference, tt.queueURL)
 
 			if tt.expectError {
-				if err == nil {
+				if pubErr == nil {
 					t.Errorf("expected error but got none")
 					return
 				}
-				if err.Error() != tt.errorMsg {
-					t.Errorf("expected error message '%s', got '%s'", tt.errorMsg, err.Error())
+				if pubErr.Error() != tt.errorMsg {
+					t.Errorf("expected error message '%s', got '%s'", tt.errorMsg, pubErr.Error())
 				}
-			} else if err != nil {
-				t.Errorf("expected no error but got: %v", err)
+			} else if pubErr != nil {
+				t.Errorf("expected no error but got: %v", pubErr)
 			}
 		})
 	}

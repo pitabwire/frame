@@ -6,12 +6,23 @@ import (
 	"strings"
 
 	"connectrpc.com/connect"
+	"github.com/jackc/pgx/v5/pgconn"
 	"gorm.io/gorm"
 )
 
 // ErrorIsNoRows validate if supplied error is because of record missing in DB.
 func ErrorIsNoRows(err error) bool {
 	return errors.Is(err, gorm.ErrRecordNotFound) || errors.Is(err, sql.ErrNoRows)
+}
+
+// ErrorIsDuplicateKey validate if supplied error is because of duplicate key in DB.
+func ErrorIsDuplicateKey(err error) bool {
+	if errors.Is(err, gorm.ErrDuplicatedKey) {
+		return true
+	}
+
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == "23505"
 }
 
 // gormErrorMap maps known GORM errors to Connect RPC codes.

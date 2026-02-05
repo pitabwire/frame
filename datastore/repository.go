@@ -167,9 +167,8 @@ func (br *baseRepository[T]) Create(ctx context.Context, entity T) error {
 	}
 
 	// Use GORM's Create for new entities, which is more direct than Save.
-	return br.Pool().DB(ctx, false).Clauses(clause.OnConflict{
-		DoNothing: true,
-	}).Create(entity).Error
+	// Create overrides the base repository's Create to use a plain insert.
+	return br.Pool().DB(ctx, false).Create(entity).Error
 }
 
 func (br *baseRepository[T]) BatchSize() int {

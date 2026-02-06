@@ -366,7 +366,6 @@ func (s *invoker) InvokeStream(
 		}
 	}
 
-	//nolint:bodyclose //InvokeResponse allows autoclosing after using ToFunctions
 	resp, err := s.client.Do(req)
 	if err != nil {
 		// client.Do may return (resp, err) on redirect errors; close body to avoid leak.

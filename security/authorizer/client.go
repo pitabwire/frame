@@ -4,80 +4,83 @@ package authorizer
 import (
 	"context"
 	"fmt"
-	"net/http"
-	"net/url"
 	"time"
 
+	rts "github.com/ory/keto/proto/ory/keto/relation_tuples/v1alpha2"
 	"github.com/pitabwire/util"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 
-	"github.com/pitabwire/frame/client"
 	"github.com/pitabwire/frame/config"
 	"github.com/pitabwire/frame/security"
 )
 
-// ketoAdapter implements the security.securityService interface using Ory Keto.
+// ketoAdapter implements the security.Authorizer interface using Ory Keto gRPC.
 type ketoAdapter struct {
-	httpClient  client.Manager
-	config      config.ConfigurationAuthorization
-	auditLogger security.AuditLogger
+	readConn     *grpc.ClientConn
+	writeConn    *grpc.ClientConn
+	checkClient  rts.CheckServiceClient
+	readClient   rts.ReadServiceClient
+	writeClient  rts.WriteServiceClient
+	expandClient rts.ExpandServiceClient
+	config       config.ConfigurationAuthorization
+	auditLogger  security.AuditLogger
 }
 
 // NewKetoAdapter creates a new Keto adapter with the given configuration.
 func NewKetoAdapter(
 	cfg config.ConfigurationAuthorization,
-	cl client.Manager,
 	auditLogger security.AuditLogger,
 ) security.Authorizer {
 	if auditLogger == nil {
 		auditLogger = NewNoOpAuditLogger()
 	}
 
-	return &ketoAdapter{
-		httpClient:  cl,
+	adapter := &ketoAdapter{
 		config:      cfg,
 		auditLogger: auditLogger,
 	}
+
+	if cfg.AuthorizationServiceCanRead() {
+		readConn, err := grpc.NewClient(
+			cfg.GetAuthorizationServiceReadURI(),
+			grpc.WithTransportCredentials(insecure.NewCredentials()),
+		)
+		if err == nil {
+			adapter.readConn = readConn
+			adapter.checkClient = rts.NewCheckServiceClient(readConn)
+			adapter.readClient = rts.NewReadServiceClient(readConn)
+			adapter.expandClient = rts.NewExpandServiceClient(readConn)
+		}
+	}
+
+	if cfg.AuthorizationServiceCanWrite() {
+		writeConn, err := grpc.NewClient(
+			cfg.GetAuthorizationServiceWriteURI(),
+			grpc.WithTransportCredentials(insecure.NewCredentials()),
+		)
+		if err == nil {
+			adapter.writeConn = writeConn
+			adapter.writeClient = rts.NewWriteServiceClient(writeConn)
+		}
+	}
+
+	return adapter
 }
 
-// Keto API request/response types
-
-type ketoCheckResponse struct {
-	Allowed bool `json:"allowed"`
-}
-
-type ketoRelationTuple struct {
-	Namespace string          `json:"namespace"`
-	Object    string          `json:"object"`
-	Relation  string          `json:"relation"`
-	SubjectID string          `json:"subject_id,omitempty"`
-	Subject   *ketoSubjectSet `json:"subject_set,omitempty"`
-}
-
-type ketoSubjectSet struct {
-	Namespace string `json:"namespace"`
-	Object    string `json:"object"`
-	Relation  string `json:"relation"`
-}
-
-type ketoListResponse struct {
-	RelationTuples []*ketoRelationTuple `json:"relation_tuples"`
-	NextPageToken  string               `json:"next_page_token,omitempty"`
-}
-
-type ketoExpandResponse struct {
-	SubjectSets []struct {
-		Namespace string `json:"namespace"`
-		Object    string `json:"object"`
-		Relation  string `json:"relation"`
-	} `json:"subject_sets,omitempty"`
-	SubjectIDs []string `json:"subject_ids,omitempty"`
+// Close releases gRPC connections.
+func (k *ketoAdapter) Close() {
+	if k.readConn != nil {
+		_ = k.readConn.Close()
+	}
+	if k.writeConn != nil {
+		_ = k.writeConn.Close()
+	}
 }
 
 // Check verifies if a subject has permission on an object.
 func (k *ketoAdapter) Check(ctx context.Context, req security.CheckRequest) (security.CheckResult, error) {
-	cfg := k.config
-
-	if !cfg.AuthorizationServiceCanRead() {
+	if !k.config.AuthorizationServiceCanRead() {
 		return security.CheckResult{
 			Allowed:   true,
 			Reason:    "keto disabled - permissive mode",
@@ -85,52 +88,26 @@ func (k *ketoAdapter) Check(ctx context.Context, req security.CheckRequest) (sec
 		}, nil
 	}
 
-	// Build URL with query parameters
-	u, err := url.Parse(cfg.GetAuthorizationServiceReadURI() + "/relation-tuples/check")
-	if err != nil {
-		return security.CheckResult{}, NewAuthzServiceError("check", err)
+	tuple := &rts.RelationTuple{
+		Namespace: req.Object.Namespace,
+		Object:    req.Object.ID,
+		Relation:  req.Permission,
+		Subject:   toKetoSubject(req.Subject),
 	}
 
-	q := u.Query()
-	q.Set("namespace", req.Object.Namespace)
-	q.Set("object", req.Object.ID)
-	q.Set("relation", req.Permission)
-
-	if req.Subject.Relation != "" {
-		// Subject set
-		q.Set("subject_set.namespace", req.Subject.Namespace)
-		q.Set("subject_set.object", req.Subject.ID)
-		q.Set("subject_set.relation", req.Subject.Relation)
-	} else {
-		q.Set("subject_id", req.Subject.ID)
-	}
-	u.RawQuery = q.Encode()
-
-	// Execute request with retries
-	resp, err := k.httpClient.Invoke(ctx, http.MethodGet, u.String(), nil, nil)
-	if err != nil {
-		return security.CheckResult{}, NewAuthzServiceError("check", err)
-	}
-
-	// Keto returns 200 for allowed and 403 for denied; both carry a JSON body.
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusForbidden {
-		body, _ := resp.ToContent(ctx)
-		return security.CheckResult{}, NewAuthzServiceError("check",
-			fmt.Errorf("unexpected status %d: %s", resp.StatusCode, string(body)))
-	}
-
-	var checkResp ketoCheckResponse
-	err = resp.Decode(ctx, &checkResp)
+	resp, err := k.checkClient.Check(ctx, &rts.CheckRequest{
+		Tuple: tuple,
+	})
 	if err != nil {
 		return security.CheckResult{}, NewAuthzServiceError("check", err)
 	}
 
 	result := security.CheckResult{
-		Allowed:   checkResp.Allowed,
+		Allowed:   resp.Allowed,
 		CheckedAt: time.Now().Unix(),
 	}
 
-	if !checkResp.Allowed {
+	if !resp.Allowed {
 		result.Reason = "no matching relation found"
 	}
 
@@ -148,9 +125,7 @@ func (k *ketoAdapter) BatchCheck(
 	ctx context.Context,
 	requests []security.CheckRequest,
 ) ([]security.CheckResult, error) {
-	cfg := k.config
-
-	if !cfg.AuthorizationServiceCanRead() {
+	if !k.config.AuthorizationServiceCanRead() {
 		results := make([]security.CheckResult, len(requests))
 		for i := range results {
 			results[i] = security.CheckResult{
@@ -162,8 +137,7 @@ func (k *ketoAdapter) BatchCheck(
 		return results, nil
 	}
 
-	// Keto doesn't have a native batch check API, so we do individual checks
-	// This could be optimized with goroutines for parallel execution
+	// Use individual checks since BatchCheck may not be available in all Keto versions
 	results := make([]security.CheckResult, len(requests))
 	for i, req := range requests {
 		result, err := k.Check(ctx, req)
@@ -187,13 +161,9 @@ func (k *ketoAdapter) WriteTuple(ctx context.Context, tuple security.RelationTup
 	return k.WriteTuples(ctx, []security.RelationTuple{tuple})
 }
 
-// WriteTuples creates multiple relationship tuples.
-// Keto's PUT endpoint accepts a single tuple per request, so each tuple
-// is written individually.
+// WriteTuples creates multiple relationship tuples in a single transaction.
 func (k *ketoAdapter) WriteTuples(ctx context.Context, tuples []security.RelationTuple) error {
-	cfg := k.config
-
-	if !cfg.AuthorizationServiceCanWrite() {
+	if !k.config.AuthorizationServiceCanWrite() {
 		return nil
 	}
 
@@ -201,28 +171,19 @@ func (k *ketoAdapter) WriteTuples(ctx context.Context, tuples []security.Relatio
 		return nil
 	}
 
-	for _, t := range tuples {
-		kt := k.toKetoTuple(t)
-
-		resp, err := k.httpClient.Invoke(
-			ctx,
-			http.MethodPut,
-			cfg.GetAuthorizationServiceWriteURI()+"/admin/relation-tuples",
-			kt,
-			nil,
-		)
-		if err != nil {
-			return NewAuthzServiceError("write_tuples", err)
+	deltas := make([]*rts.RelationTupleDelta, len(tuples))
+	for i, t := range tuples {
+		deltas[i] = &rts.RelationTupleDelta{
+			Action:        rts.RelationTupleDelta_ACTION_INSERT,
+			RelationTuple: toKetoTuple(t),
 		}
+	}
 
-		if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK &&
-			resp.StatusCode != http.StatusNoContent {
-			respBody, _ := resp.ToContent(ctx)
-			return NewAuthzServiceError("write_tuples",
-				fmt.Errorf("unexpected status %d: %s", resp.StatusCode, string(respBody)))
-		}
-
-		util.CloseAndLogOnError(ctx, resp)
+	_, err := k.writeClient.TransactRelationTuples(ctx, &rts.TransactRelationTuplesRequest{
+		RelationTupleDeltas: deltas,
+	})
+	if err != nil {
+		return NewAuthzServiceError("write_tuples", err)
 	}
 
 	return nil
@@ -233,11 +194,9 @@ func (k *ketoAdapter) DeleteTuple(ctx context.Context, tuple security.RelationTu
 	return k.DeleteTuples(ctx, []security.RelationTuple{tuple})
 }
 
-// DeleteTuples removes multiple relationship tuples atomically.
+// DeleteTuples removes multiple relationship tuples in a single transaction.
 func (k *ketoAdapter) DeleteTuples(ctx context.Context, tuples []security.RelationTuple) error {
-	cfg := k.config
-
-	if !cfg.AuthorizationServiceCanWrite() {
+	if !k.config.AuthorizationServiceCanWrite() {
 		return nil
 	}
 
@@ -245,40 +204,19 @@ func (k *ketoAdapter) DeleteTuples(ctx context.Context, tuples []security.Relati
 		return nil
 	}
 
-	// Keto uses query parameters for delete
-	for _, tuple := range tuples {
-		u, err := url.Parse(cfg.GetAuthorizationServiceWriteURI() + "/admin/relation-tuples")
-		if err != nil {
-			return NewAuthzServiceError("delete_tuples", err)
+	deltas := make([]*rts.RelationTupleDelta, len(tuples))
+	for i, t := range tuples {
+		deltas[i] = &rts.RelationTupleDelta{
+			Action:        rts.RelationTupleDelta_ACTION_DELETE,
+			RelationTuple: toKetoTuple(t),
 		}
+	}
 
-		q := u.Query()
-		q.Set("namespace", tuple.Object.Namespace)
-		q.Set("object", tuple.Object.ID)
-		q.Set("relation", tuple.Relation)
-
-		if tuple.Subject.Relation != "" {
-			q.Set("subject_set.namespace", tuple.Subject.Namespace)
-			q.Set("subject_set.object", tuple.Subject.ID)
-			q.Set("subject_set.relation", tuple.Subject.Relation)
-		} else {
-			q.Set("subject_id", tuple.Subject.ID)
-		}
-		u.RawQuery = q.Encode()
-
-		resp, err := k.httpClient.Invoke(ctx, http.MethodDelete, u.String(), nil, nil)
-		if err != nil {
-			return NewAuthzServiceError("delete_tuples", err)
-		}
-
-		util.CloseAndLogOnError(ctx, resp)
-
-		// 404 is acceptable - tuple might not exist
-		if resp.StatusCode != http.StatusNoContent && resp.StatusCode != http.StatusOK &&
-			resp.StatusCode != http.StatusNotFound {
-			return NewAuthzServiceError("delete_tuples",
-				fmt.Errorf("unexpected status %d", resp.StatusCode))
-		}
+	_, err := k.writeClient.TransactRelationTuples(ctx, &rts.TransactRelationTuplesRequest{
+		RelationTupleDeltas: deltas,
+	})
+	if err != nil {
+		return NewAuthzServiceError("delete_tuples", err)
 	}
 
 	return nil
@@ -286,42 +224,23 @@ func (k *ketoAdapter) DeleteTuples(ctx context.Context, tuples []security.Relati
 
 // ListRelations returns all relations for an object.
 func (k *ketoAdapter) ListRelations(ctx context.Context, object security.ObjectRef) ([]security.RelationTuple, error) {
-	cfg := k.config
-
-	if !cfg.AuthorizationServiceCanRead() {
+	if !k.config.AuthorizationServiceCanRead() {
 		return []security.RelationTuple{}, nil
 	}
 
-	u, err := url.Parse(cfg.GetAuthorizationServiceReadURI() + "/relation-tuples")
+	resp, err := k.readClient.ListRelationTuples(ctx, &rts.ListRelationTuplesRequest{
+		RelationQuery: &rts.RelationQuery{
+			Namespace: &object.Namespace,
+			Object:    &object.ID,
+		},
+	})
 	if err != nil {
 		return nil, NewAuthzServiceError("list_relations", err)
 	}
 
-	q := u.Query()
-	q.Set("namespace", object.Namespace)
-	q.Set("object", object.ID)
-	u.RawQuery = q.Encode()
-
-	resp, err := k.httpClient.Invoke(ctx, http.MethodGet, u.String(), nil, nil)
-	if err != nil {
-		return nil, NewAuthzServiceError("list_relations", err)
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := resp.ToContent(ctx)
-		return nil, NewAuthzServiceError("list_relations",
-			fmt.Errorf("unexpected status %d: %s", resp.StatusCode, string(body)))
-	}
-
-	var listResp ketoListResponse
-	err = resp.Decode(ctx, &listResp)
-	if err != nil {
-		return nil, NewAuthzServiceError("list_relations", err)
-	}
-
-	tuples := make([]security.RelationTuple, len(listResp.RelationTuples))
-	for i, kt := range listResp.RelationTuples {
-		tuples[i] = k.fromKetoTuple(kt)
+	tuples := make([]security.RelationTuple, len(resp.RelationTuples))
+	for i, kt := range resp.RelationTuples {
+		tuples[i] = fromKetoTuple(kt)
 	}
 
 	return tuples, nil
@@ -333,50 +252,27 @@ func (k *ketoAdapter) ListSubjectRelations(
 	subject security.SubjectRef,
 	namespace string,
 ) ([]security.RelationTuple, error) {
-	cfg := k.config
-
-	if !cfg.AuthorizationServiceCanRead() {
+	if !k.config.AuthorizationServiceCanRead() {
 		return []security.RelationTuple{}, nil
 	}
 
-	u, err := url.Parse(cfg.GetAuthorizationServiceReadURI() + "/relation-tuples")
-	if err != nil {
-		return nil, NewAuthzServiceError("list_subject_relations", err)
+	query := &rts.RelationQuery{
+		Subject: toKetoSubject(subject),
 	}
-
-	q := u.Query()
 	if namespace != "" {
-		q.Set("namespace", namespace)
+		query.Namespace = &namespace
 	}
-	if subject.Relation != "" {
-		q.Set("subject_set.namespace", subject.Namespace)
-		q.Set("subject_set.object", subject.ID)
-		q.Set("subject_set.relation", subject.Relation)
-	} else {
-		q.Set("subject_id", subject.ID)
-	}
-	u.RawQuery = q.Encode()
 
-	resp, err := k.httpClient.Invoke(ctx, http.MethodGet, u.String(), nil, nil)
+	resp, err := k.readClient.ListRelationTuples(ctx, &rts.ListRelationTuplesRequest{
+		RelationQuery: query,
+	})
 	if err != nil {
 		return nil, NewAuthzServiceError("list_subject_relations", err)
 	}
 
-	if resp.StatusCode != http.StatusOK {
-		body, _ := resp.ToContent(ctx)
-		return nil, NewAuthzServiceError("list_subject_relations",
-			fmt.Errorf("unexpected status %d: %s", resp.StatusCode, string(body)))
-	}
-
-	var listResp ketoListResponse
-	err = resp.Decode(ctx, &listResp)
-	if err != nil {
-		return nil, NewAuthzServiceError("list_subject_relations", err)
-	}
-
-	tuples := make([]security.RelationTuple, len(listResp.RelationTuples))
-	for i, kt := range listResp.RelationTuples {
-		tuples[i] = k.fromKetoTuple(kt)
+	tuples := make([]security.RelationTuple, len(resp.RelationTuples))
+	for i, kt := range resp.RelationTuples {
+		tuples[i] = fromKetoTuple(kt)
 	}
 
 	return tuples, nil
@@ -388,84 +284,72 @@ func (k *ketoAdapter) Expand(
 	object security.ObjectRef,
 	relation string,
 ) ([]security.SubjectRef, error) {
-	cfg := k.config
-
-	if !cfg.AuthorizationServiceCanRead() {
+	if !k.config.AuthorizationServiceCanRead() {
 		return []security.SubjectRef{}, nil
 	}
 
-	u, err := url.Parse(cfg.GetAuthorizationServiceReadURI() + "/relation-tuples/expand")
+	resp, err := k.expandClient.Expand(ctx, &rts.ExpandRequest{
+		Subject:  rts.NewSubjectSet(object.Namespace, object.ID, relation),
+		MaxDepth: 3,
+	})
 	if err != nil {
 		return nil, NewAuthzServiceError("expand", err)
 	}
 
-	q := u.Query()
-	q.Set("namespace", object.Namespace)
-	q.Set("object", object.ID)
-	q.Set("relation", relation)
-	q.Set("max-depth", "3")
-	u.RawQuery = q.Encode()
-
-	resp, err := k.httpClient.Invoke(ctx, http.MethodGet, u.String(), nil, nil)
-	if err != nil {
-		return nil, NewAuthzServiceError("expand", err)
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := resp.ToContent(ctx)
-		return nil, NewAuthzServiceError("expand",
-			fmt.Errorf("unexpected status %d: %s", resp.StatusCode, string(body)))
-	}
-
-	var expandResp ketoExpandResponse
-	err = resp.Decode(ctx, &expandResp)
-	if err != nil {
-		return nil, NewAuthzServiceError("expand", err)
-	}
-
-	subjects := make([]security.SubjectRef, 0, len(expandResp.SubjectIDs)+len(expandResp.SubjectSets))
-
-	for _, id := range expandResp.SubjectIDs {
-		subjects = append(subjects, security.SubjectRef{
-			Namespace: security.NamespaceProfile,
-			ID:        id,
-		})
-	}
-
-	for _, ss := range expandResp.SubjectSets {
-		subjects = append(subjects, security.SubjectRef{
-			Namespace: ss.Namespace,
-			ID:        ss.Object,
-			Relation:  ss.Relation,
-		})
-	}
-
+	subjects := collectSubjects(resp.Tree)
 	return subjects, nil
 }
 
-// Helper methods
+// collectSubjects recursively walks a SubjectTree and returns a flat list of SubjectRef.
+func collectSubjects(tree *rts.SubjectTree) []security.SubjectRef {
+	if tree == nil {
+		return nil
+	}
 
-func (k *ketoAdapter) toKetoTuple(t security.RelationTuple) *ketoRelationTuple {
-	kt := &ketoRelationTuple{
+	var subjects []security.SubjectRef
+
+	if tree.Tuple != nil && tree.Tuple.Subject != nil {
+		switch s := tree.Tuple.Subject.Ref.(type) {
+		case *rts.Subject_Id:
+			subjects = append(subjects, security.SubjectRef{
+				Namespace: security.NamespaceProfile,
+				ID:        s.Id,
+			})
+		case *rts.Subject_Set:
+			subjects = append(subjects, security.SubjectRef{
+				Namespace: s.Set.Namespace,
+				ID:        s.Set.Object,
+				Relation:  s.Set.Relation,
+			})
+		}
+	}
+
+	for _, child := range tree.Children {
+		subjects = append(subjects, collectSubjects(child)...)
+	}
+
+	return subjects
+}
+
+// Helper functions
+
+func toKetoSubject(s security.SubjectRef) *rts.Subject {
+	if s.Relation != "" {
+		return rts.NewSubjectSet(s.Namespace, s.ID, s.Relation)
+	}
+	return rts.NewSubjectID(s.ID)
+}
+
+func toKetoTuple(t security.RelationTuple) *rts.RelationTuple {
+	return &rts.RelationTuple{
 		Namespace: t.Object.Namespace,
 		Object:    t.Object.ID,
 		Relation:  t.Relation,
+		Subject:   toKetoSubject(t.Subject),
 	}
-
-	if t.Subject.Relation != "" {
-		kt.Subject = &ketoSubjectSet{
-			Namespace: t.Subject.Namespace,
-			Object:    t.Subject.ID,
-			Relation:  t.Subject.Relation,
-		}
-	} else {
-		kt.SubjectID = t.Subject.ID
-	}
-
-	return kt
 }
 
-func (k *ketoAdapter) fromKetoTuple(kt *ketoRelationTuple) security.RelationTuple {
+func fromKetoTuple(kt *rts.RelationTuple) security.RelationTuple {
 	t := security.RelationTuple{
 		Object: security.ObjectRef{
 			Namespace: kt.Namespace,
@@ -475,15 +359,18 @@ func (k *ketoAdapter) fromKetoTuple(kt *ketoRelationTuple) security.RelationTupl
 	}
 
 	if kt.Subject != nil {
-		t.Subject = security.SubjectRef{
-			Namespace: kt.Subject.Namespace,
-			ID:        kt.Subject.Object,
-			Relation:  kt.Subject.Relation,
-		}
-	} else {
-		t.Subject = security.SubjectRef{
-			Namespace: security.NamespaceProfile,
-			ID:        kt.SubjectID,
+		switch s := kt.Subject.Ref.(type) {
+		case *rts.Subject_Id:
+			t.Subject = security.SubjectRef{
+				Namespace: security.NamespaceProfile,
+				ID:        s.Id,
+			}
+		case *rts.Subject_Set:
+			t.Subject = security.SubjectRef{
+				Namespace: s.Set.Namespace,
+				ID:        s.Set.Object,
+				Relation:  s.Set.Relation,
+			}
 		}
 	}
 

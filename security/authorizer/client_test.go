@@ -9,7 +9,6 @@ import (
 
 	"github.com/stretchr/testify/suite"
 
-	"github.com/pitabwire/frame/client"
 	"github.com/pitabwire/frame/config"
 	"github.com/pitabwire/frame/frametests/definition"
 	"github.com/pitabwire/frame/frametests/deps/testoryketo"
@@ -86,15 +85,15 @@ func (s *AuthorizerTestSuite) SetupSuite() {
 	s.Require().NotNil(ketoDep, "keto dependency should be available")
 
 	// Write API: default port (4467/tcp, first in port list)
-	s.writeURI = string(ketoDep.GetDS(ctx))
+	// Extract host:port for gRPC (strip http:// scheme)
+	writeURL, err := url.Parse(string(ketoDep.GetDS(ctx)))
+	s.Require().NoError(err)
+	s.writeURI = writeURL.Host
 
 	// Read API: port 4466/tcp (second in port list)
 	readPort, err := ketoDep.PortMapping(ctx, "4466/tcp")
 	s.Require().NoError(err)
-
-	u, err := url.Parse(s.writeURI)
-	s.Require().NoError(err)
-	s.readURI = fmt.Sprintf("%s://%s:%s", u.Scheme, u.Hostname(), readPort)
+	s.readURI = fmt.Sprintf("%s:%s", writeURL.Hostname(), readPort)
 }
 
 func TestAuthorizerSuite(t *testing.T) {
@@ -110,14 +109,12 @@ func (s *AuthorizerTestSuite) newAdapter(auditLogger security.AuditLogger) secur
 		AuthorizationServiceReadURI:  s.readURI,
 		AuthorizationServiceWriteURI: s.writeURI,
 	}
-	mgr := client.NewManager(s.T().Context())
-	return authorizer.NewKetoAdapter(cfg, mgr, auditLogger)
+	return authorizer.NewKetoAdapter(cfg, auditLogger)
 }
 
 func (s *AuthorizerTestSuite) permissiveAdapter() security.Authorizer {
 	cfg := &config.ConfigurationDefault{}
-	mgr := client.NewManager(s.T().Context())
-	return authorizer.NewKetoAdapter(cfg, mgr, nil)
+	return authorizer.NewKetoAdapter(cfg, nil)
 }
 
 // ---------------------------------------------------------------------------
@@ -755,8 +752,7 @@ func (s *AuthorizerTestSuite) TestNewKetoAdapterNilAuditLogger() {
 	cfg := &config.ConfigurationDefault{
 		AuthorizationServiceReadURI: s.readURI,
 	}
-	mgr := client.NewManager(s.T().Context())
-	adapter := authorizer.NewKetoAdapter(cfg, mgr, nil)
+	adapter := authorizer.NewKetoAdapter(cfg, nil)
 	s.Require().NotNil(adapter)
 
 	// Should not panic — nil logger replaced by NoOp

@@ -3,7 +3,6 @@ package security
 import (
 	"context"
 
-	"github.com/pitabwire/frame/client"
 	"github.com/pitabwire/frame/config"
 )
 
@@ -46,7 +45,6 @@ type CheckResult struct {
 // AuthzOptions contains configuration for authorization.
 type AuthzOptions struct {
 	Cfg     config.ConfigurationAuthorization
-	Client  client.Manager
 	Auditor AuditLogger
 }
 
@@ -56,13 +54,6 @@ type AuthzOption func(ctx context.Context, opts *AuthzOptions)
 func WithAuthorizationConfig(cfg config.ConfigurationAuthorization) AuthzOption {
 	return func(_ context.Context, opts *AuthzOptions) {
 		opts.Cfg = cfg
-	}
-}
-
-// WithClient adds client for external calls to existing AuthzOptions.
-func WithClient(cli client.Manager) AuthzOption {
-	return func(_ context.Context, opts *AuthzOptions) {
-		opts.Client = cli
 	}
 }
 

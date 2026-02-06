@@ -35,7 +35,6 @@ func NewManager(_ context.Context, serviceName, serviceEnv string,
 		authenticator:   openid.NewJwtTokenAuthenticator(cfg),
 		authorizer: authorizer.NewKetoAdapter(
 			cfg,
-			invoker,
 			authorizer.NewAuditLogger(authorizer.AuditLoggerConfig{}),
 		),
 	}
@@ -60,6 +59,10 @@ func (s *managerImpl) Close() {
 	}
 
 	if c, ok := s.authenticator.(closer); ok {
+		c.Close()
+	}
+
+	if c, ok := s.authorizer.(closer); ok {
 		c.Close()
 	}
 }

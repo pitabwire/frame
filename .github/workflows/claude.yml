@@ -272,8 +272,9 @@ jobs:
             - Single line only
             - NO co-author attributions
 
-          # Enable progress tracking
-          track_progress: true
+          # Enable progress tracking (only for events that support it)
+          # track_progress is only supported for: pull_request, issues, issue_comment, pull_request_review_comment, pull_request_review
+          track_progress: ${{ github.event_name != 'schedule' && github.event_name != 'workflow_dispatch' }}
 
           # Claude CLI arguments with dynamic model selection
           claude_args: |

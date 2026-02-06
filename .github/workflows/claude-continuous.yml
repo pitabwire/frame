@@ -209,7 +209,8 @@ jobs:
 
             Now, begin working on this issue systematically.
 
-          track_progress: true
+          # track_progress not supported for schedule/workflow_dispatch events
+          track_progress: false
 
           claude_args: |
             --model "${{ steps.complexity.outputs.model }}"

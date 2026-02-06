@@ -156,6 +156,9 @@ func NewHTTPClient(ctx context.Context, opts ...HTTPOption) *http.Client {
 		base = otelhttp.NewTransport(base)
 	}
 
+	// Add circuit breaker + retry transport
+	base = newResilientTransport(base, cfg.retryPolicy)
+
 	// Optional: request/response logging
 	if cfg.traceRequests {
 		base = NewLoggingTransport(base,

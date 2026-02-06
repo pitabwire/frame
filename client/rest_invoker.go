@@ -17,6 +17,121 @@ import (
 	"github.com/sony/gobreaker/v2"
 )
 
+// resilientTransport is an http.RoundTripper that adds circuit breaker and
+// retry logic around an inner transport. Every request that flows through
+// this transport gets automatic per-host circuit breaking and retries on
+// transient failures (502, 503, 504, transport errors).
+type resilientTransport struct {
+	inner       http.RoundTripper
+	breakers    sync.Map // map[string]*gobreaker.CircuitBreaker[*http.Response]
+	retryPolicy *RetryPolicy
+}
+
+func newResilientTransport(inner http.RoundTripper, retry *RetryPolicy) *resilientTransport {
+	return &resilientTransport{
+		inner:       inner,
+		retryPolicy: retry,
+	}
+}
+
+func (rt *resilientTransport) breakerFor(key string) *gobreaker.CircuitBreaker[*http.Response] {
+	if cb, ok := rt.breakers.Load(key); ok {
+		//nolint:errcheck // only *gobreaker.CircuitBreaker[*http.Response] is stored
+		return cb.(*gobreaker.CircuitBreaker[*http.Response])
+	}
+
+	st := gobreaker.Settings{
+		Name:        "http:" + key,
+		MaxRequests: defaultCircuitBreakerMaxRequests,
+		Interval:    defaultCircuitBreakerInterval,
+		Timeout:     defaultCircuitBreakerTimeout,
+
+		ReadyToTrip: func(c gobreaker.Counts) bool {
+			if c.Requests < defaultCircuitBreakerThreshold {
+				return false
+			}
+			return float64(c.TotalFailures)/float64(c.Requests) >= defaultCircuitBreakerFailureRate
+		},
+	}
+
+	//nolint:bodyclose //this is done by consuming party to avoid buffering
+	cb := gobreaker.NewCircuitBreaker[*http.Response](st)
+
+	actual, _ := rt.breakers.LoadOrStore(key, cb)
+	//nolint:errcheck // only *gobreaker.CircuitBreaker[*http.Response] is stored
+	return actual.(*gobreaker.CircuitBreaker[*http.Response])
+}
+
+//nolint:gocognit // retry loop with circuit breaker is inherently complex
+func (rt *resilientTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	key := breakerKey(req)
+	cb := rt.breakerFor(key)
+	retry := rt.retryPolicy
+
+	resp, err := cb.Execute(func() (*http.Response, error) {
+		var lastResp *http.Response
+		var lastErr error
+
+		for attempt := 1; attempt <= retry.MaxAttempts; attempt++ {
+			// Reset the request body before each retry attempt.
+			if attempt > 1 {
+				if req.GetBody != nil {
+					bodyReader, bErr := req.GetBody()
+					if bErr != nil {
+						return lastResp, lastErr
+					}
+					req.Body = bodyReader
+				} else if req.Body != nil {
+					// Body is non-nil and non-resettable; cannot retry.
+					return lastResp, lastErr
+				}
+			}
+
+			resp, doErr := rt.inner.RoundTrip(req)
+			switch {
+			case doErr != nil:
+				// Always close body when RoundTrip returns both a response and an error.
+				if resp != nil && resp.Body != nil {
+					_ = resp.Body.Close()
+				}
+				lastErr = doErr
+				lastResp = nil
+			case isRetryableStatus(resp.StatusCode) && attempt < retry.MaxAttempts:
+				// Transient server error — close body and retry.
+				_ = resp.Body.Close()
+				lastErr = &serverError{statusCode: resp.StatusCode}
+				lastResp = nil
+			case resp.StatusCode >= http.StatusInternalServerError:
+				// Non-retryable 5xx or final attempt: signal CB failure.
+				return resp, &serverError{statusCode: resp.StatusCode}
+			default:
+				return resp, nil
+			}
+
+			// Respect context cancellation during backoff.
+			t := time.NewTimer(retry.Backoff(attempt))
+			select {
+			case <-req.Context().Done():
+				t.Stop()
+				return nil, req.Context().Err()
+			case <-t.C:
+			}
+		}
+
+		return lastResp, lastErr
+	})
+
+	// Unwrap serverError so callers can still read the response body.
+	// Only unwrap when resp is non-nil; a nil resp with a nil error would
+	// cause a panic in the caller.
+	var sErr *serverError
+	if resp != nil && errors.As(err, &sErr) {
+		return resp, nil
+	}
+
+	return resp, err
+}
+
 const (
 	defaultMaxResponseBodyLen        = 100 << 20 // 100MB default safety cap
 	defaultCircuitBreakerMaxRequests = 3
@@ -123,52 +238,18 @@ func (s *InvokeResponse) Decode(ctx context.Context, v any) error {
 }
 
 type invoker struct {
-	breakers    sync.Map // map[string]*gobreaker.CircuitBreaker[*http.Response]
-	client      *http.Client
-	maxBodyLen  int64
-	retryPolicy *RetryPolicy
+	client     *http.Client
+	maxBodyLen int64
 }
 
 // NewManager creates a new invoker with the provided options.
 func NewManager(ctx context.Context, opts ...HTTPOption) Manager {
 	httpClient := NewHTTPClient(ctx, opts...)
 
-	cfg := &httpConfig{}
-	cfg.process(opts...)
-
 	return &invoker{
-		client:      httpClient,
-		maxBodyLen:  defaultMaxResponseBodyLen,
-		retryPolicy: cfg.retryPolicy,
+		client:     httpClient,
+		maxBodyLen: defaultMaxResponseBodyLen,
 	}
-}
-
-func (s *invoker) breakerFor(key string) *gobreaker.CircuitBreaker[*http.Response] {
-	if cb, ok := s.breakers.Load(key); ok {
-		//nolint:errcheck // only *gobreaker.CircuitBreaker[*http.Response] is stored
-		return cb.(*gobreaker.CircuitBreaker[*http.Response])
-	}
-
-	st := gobreaker.Settings{
-		Name:        "http:" + key,
-		MaxRequests: defaultCircuitBreakerMaxRequests,
-		Interval:    defaultCircuitBreakerInterval,
-		Timeout:     defaultCircuitBreakerTimeout,
-
-		ReadyToTrip: func(c gobreaker.Counts) bool {
-			if c.Requests < defaultCircuitBreakerThreshold {
-				return false
-			}
-			return float64(c.TotalFailures)/float64(c.Requests) >= defaultCircuitBreakerFailureRate
-		},
-	}
-
-	//nolint:bodyclose //this is done by consuming party to avoid buffering
-	cb := gobreaker.NewCircuitBreaker[*http.Response](st)
-
-	actual, _ := s.breakers.LoadOrStore(key, cb)
-	//nolint:errcheck // only *gobreaker.CircuitBreaker[*http.Response] is stored
-	return actual.(*gobreaker.CircuitBreaker[*http.Response])
 }
 
 func breakerKey(req *http.Request) string {
@@ -191,79 +272,6 @@ func isRetryableStatus(code int) bool {
 	return code == http.StatusBadGateway ||
 		code == http.StatusServiceUnavailable ||
 		code == http.StatusGatewayTimeout
-}
-
-//nolint:gocognit // retry loop with circuit breaker is inherently complex
-func (s *invoker) execute(
-	ctx context.Context,
-	req *http.Request,
-	retry *RetryPolicy,
-) (*http.Response, error) {
-	key := breakerKey(req)
-	cb := s.breakerFor(key)
-
-	resp, err := cb.Execute(func() (*http.Response, error) {
-		var lastResp *http.Response
-		var lastErr error
-
-		for attempt := 1; attempt <= retry.MaxAttempts; attempt++ {
-			// Reset the request body before each retry attempt.
-			if attempt > 1 {
-				if req.GetBody != nil {
-					bodyReader, bErr := req.GetBody()
-					if bErr != nil {
-						return lastResp, lastErr
-					}
-					req.Body = bodyReader
-				} else if req.Body != nil {
-					// Body is non-nil and non-resettable; cannot retry.
-					return lastResp, lastErr
-				}
-			}
-
-			resp, doErr := s.client.Do(req)
-			switch {
-			case doErr != nil:
-				// Always close body when Do returns both a response and an error.
-				if resp != nil && resp.Body != nil {
-					_ = resp.Body.Close()
-				}
-				lastErr = doErr
-				lastResp = nil
-			case isRetryableStatus(resp.StatusCode) && attempt < retry.MaxAttempts:
-				// Transient server error — close body and retry.
-				_ = resp.Body.Close()
-				lastErr = &serverError{statusCode: resp.StatusCode}
-				lastResp = nil
-			case resp.StatusCode >= http.StatusInternalServerError:
-				// Non-retryable 5xx or final attempt: signal CB failure.
-				return resp, &serverError{statusCode: resp.StatusCode}
-			default:
-				return resp, nil
-			}
-
-			// Respect context cancellation during backoff.
-			t := time.NewTimer(retry.Backoff(attempt))
-			select {
-			case <-ctx.Done():
-				t.Stop()
-				return nil, ctx.Err()
-			case <-t.C:
-			}
-		}
-
-		return lastResp, lastErr
-	})
-
-	// Unwrap serverError so callers can still read the response body.
-	// Only unwrap when resp is non-nil; a nil resp with a nil error would
-	// cause a panic in the caller.
-	var sErr *serverError
-	if resp != nil && errors.As(err, &sErr) {
-		return resp, nil
-	}
-
-	return resp, err
 }
 
 // Invoke convenience method to call a http endpoint and utilize the raw results.
@@ -359,8 +367,12 @@ func (s *invoker) InvokeStream(
 	}
 
 	//nolint:bodyclose //InvokeResponse allows autoclosing after using ToFunctions
-	resp, err := s.execute(ctx, req, s.retryPolicy)
+	resp, err := s.client.Do(req)
 	if err != nil {
+		// client.Do may return (resp, err) on redirect errors; close body to avoid leak.
+		if resp != nil && resp.Body != nil {
+			_ = resp.Body.Close()
+		}
 		if cancel != nil {
 			cancel()
 		}

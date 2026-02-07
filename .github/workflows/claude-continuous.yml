@@ -228,7 +228,6 @@ jobs:
           claude_args: |
             --model "${{ steps.complexity.outputs.model }}"
             --max-turns ${{ steps.complexity.outputs.model == 'claude-opus-4-6' && '150' || '100' }}
-            --allowedTools "Bash(git:*),Bash(gh issue:*),Bash(gh pr:*),Bash(gh repo:*),Bash(gh api:*),Bash(npm:*),Bash(npx:*),Bash(flutter:*),Bash(dart:*),Bash(pytest:*),Bash(go:*),Edit,Write,Read,Glob,Grep,LS,WebSearch,WebFetch,Task"
             --timeout ${{ steps.complexity.outputs.model == 'claude-opus-4-6' && '2700000' || '1800000' }}
 
       - name: Check completion status

@@ -289,7 +289,6 @@ jobs:
           claude_args: |
             --model "${{ needs.determine-model.outputs.model }}"
             --max-turns ${{ needs.determine-model.outputs.model == 'claude-opus-4-6' && '150' || '100' }}
-            --allowedTools "Bash(git:*),Bash(gh issue:*),Bash(gh pr:*),Bash(gh repo:*),Bash(gh api:*),Bash(npm:*),Bash(npx:*),Bash(flutter:*),Bash(dart:*),Bash(pytest:*),Bash(go test:*),Edit,Write,Read,Glob,Grep,LS,WebSearch,WebFetch,Task"
             --timeout ${{ needs.determine-model.outputs.model == 'claude-opus-4-6' && '2700000' || '1800000' }}
 
       # Clean up the comment - remove malformed artifacts and add helpful context

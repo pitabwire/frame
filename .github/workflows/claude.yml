@@ -196,6 +196,15 @@ jobs:
             echo "skip=false" >> $GITHUB_OUTPUT
           fi
 
+      - name: Pre-install Claude Code (latest version)
+        if: |
+          (github.event_name != 'schedule') ||
+          (steps.check-complete.outputs.skip != 'true' && steps.find-issues.outputs.issue_number != '')
+        run: |
+          echo "📦 Installing Claude Code latest version to avoid v2.1.31 bugs..."
+          curl -fsSL https://install.claude.ai | sh
+          claude --version
+
       - name: Run Claude Code
         id: claude
         if: |

@@ -137,6 +137,13 @@ jobs:
 
           echo "model=$MODEL" >> $GITHUB_OUTPUT
 
+      - name: Pre-install Claude Code (latest version)
+        if: steps.check-pr.outputs.skip != 'true'
+        run: |
+          echo "📦 Installing Claude Code latest version to avoid v2.1.31 bugs..."
+          curl -fsSL https://install.claude.ai | sh
+          claude --version
+
       - name: Work on issue with Claude
         id: claude
         if: steps.check-pr.outputs.skip != 'true'

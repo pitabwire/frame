@@ -202,7 +202,7 @@ jobs:
           (steps.check-complete.outputs.skip != 'true' && steps.find-issues.outputs.issue_number != '')
         run: |
           echo "📦 Installing Claude Code latest version to avoid v2.1.31 bugs..."
-          curl -fsSL https://install.claude.ai | sh
+          npm install -g @anthropic-ai/claude-code
           claude --version
 
       - name: Run Claude Code

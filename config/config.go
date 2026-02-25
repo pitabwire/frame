@@ -103,6 +103,9 @@ type ConfigurationDefault struct {
 	ServiceIDValue    string `envDefault:""         env:"FRAME_SERVICE_ID"    yaml:"service_id"`
 	ServiceGroupValue string `envDefault:""         env:"FRAME_SERVICE_GROUP" yaml:"service_group"`
 
+	DebugEndpointsEnabledValue  bool   `envDefault:"false" env:"FRAME_DEBUG_ENDPOINTS" yaml:"frame_debug_endpoints"`
+	DebugEndpointsBasePathValue string `envDefault:"/debug/frame" env:"FRAME_DEBUG_ENDPOINTS_BASEPATH" yaml:"frame_debug_endpoints_basepath"`
+
 	ServerPort     string `envDefault:":7000"  env:"PORT"      yaml:"server_port"`
 	HTTPServerPort string `envDefault:":8080"  env:"HTTP_PORT" yaml:"http_server_port"`
 	GrpcServerPort string `envDefault:":50051" env:"GRPC_PORT" yaml:"grpc_server_port"`
@@ -196,6 +199,24 @@ func (c *ConfigurationDefault) ServiceID() string {
 
 func (c *ConfigurationDefault) ServiceGroup() string {
 	return c.ServiceGroupValue
+}
+
+type ConfigurationDebug interface {
+	DebugEndpointsEnabled() bool
+	DebugEndpointsBasePath() string
+}
+
+var _ ConfigurationDebug = new(ConfigurationDefault)
+
+func (c *ConfigurationDefault) DebugEndpointsEnabled() bool {
+	return c.DebugEndpointsEnabledValue
+}
+
+func (c *ConfigurationDefault) DebugEndpointsBasePath() string {
+	if strings.TrimSpace(c.DebugEndpointsBasePathValue) == "" {
+		return "/debug/frame"
+	}
+	return c.DebugEndpointsBasePathValue
 }
 
 type ConfigurationLogLevel interface {

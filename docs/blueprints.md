@@ -1,37 +1,80 @@
-# Frame Blueprints (Extensible, Additive)
+# Frame Blueprints
 
-Frame Blueprints are a **compile-time contract** for describing services in a machine-friendly way. A blueprint is additive by default: **adding entries extends the system and never invalidates existing definitions**.
+Frame Blueprints are machine-friendly YAML/JSON definitions that generate complete services. They are **additive by default**: new entries extend the system without invalidating existing definitions.
 
-## Core Principles
+## Goals
+
+- Deterministic generation
+- Canonical bootstrap pattern
+- Minimal inputs with strong defaults
+- Safe extension for AI and humans
+
+## Blueprint Format (v0.1)
+
+```yaml
+schema_version: 0.1
+runtime_mode: polylith
+service:
+  name: users
+  module: github.com/acme/users
+  service_id: users
+  service_group: profile
+  port: ":8080"
+http:
+  - route: /users
+    method: GET
+    handler: GetUsers
+plugins:
+  - telemetry
+  - logger
+datastore:
+  migrate: true
+  primary_url_env: DATABASE_URL
+queues:
+  - publisher: user-events
+    url: mem://events
+  - subscriber: user-events
+    url: mem://events
+    handler: HandleUserEvent
+```
+
+## Runtime Mode in Blueprints
+
+- `runtime_mode`: `monolith` or `polylith`
+- `service.service_id`: required for polylith
+- `service.service_group`: optional
+
+Monolith example (multiple services in one binary):
+
+```yaml
+schema_version: 0.1
+runtime_mode: monolith
+services:
+  - name: devices
+    port: ":8081"
+    http:
+      - route: /devices
+        method: GET
+        handler: GetDevices
+  - name: geolocation
+    port: ":8082"
+    http:
+      - route: /geo
+        method: GET
+        handler: GetGeo
+```
+
+## Additive Extension Rules
 
 - **Additive merge**: New entries are added; existing entries are preserved.
-- **Stable identifiers**: Items are keyed by stable names (routes, queues, plugins).
-- **Explicit overrides only**: Updates to existing items require explicit `override: true`.
+- **Explicit overrides only**: Updates to existing items require `override: true`.
 - **No implicit deletes**: Removing items requires `remove: true`.
 
 These rules keep blueprints safe for AI agents and humans: extension is the default behavior, not replacement.
 
-## Blueprint Format (YAML)
+### Extension Example
 
-```yaml
-service: users
-http:
-  - name: list-users
-    method: GET
-    route: /users
-    handler: GetUsers
-plugins:
-  - name: logging
-  - name: telemetry
-queues:
-  - name: user-events
-    publisher: user-events
-    topic: mem://events
-```
-
-## Extension Example
-
-### Base
+Base:
 
 ```yaml
 service: users
@@ -42,7 +85,7 @@ http:
     handler: GetUsers
 ```
 
-### Extension (add new route)
+Extension:
 
 ```yaml
 http:
@@ -52,7 +95,7 @@ http:
     handler: CreateUser
 ```
 
-### Result (merged)
+Merged result:
 
 ```yaml
 http:
@@ -66,9 +109,7 @@ http:
     handler: CreateUser
 ```
 
-## Override and Remove Semantics
-
-If you need to modify or remove a definition, it must be explicit:
+### Override and Remove
 
 ```yaml
 http:
@@ -80,14 +121,3 @@ http:
   - name: create-user
     remove: true
 ```
-
-## Merge Rules (Deterministic)
-
-- Lists are merged by `name`.
-- Maps are merged by key.
-- Scalars are replaced **only** when `override: true` is set.
-- `remove: true` deletes an item if it exists; otherwise it is ignored.
-
-## Why This Matters
-
-AI agents should be able to **extend** a service safely without breaking existing behavior. These rules make blueprint changes monotonic and safe by default.

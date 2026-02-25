@@ -1,0 +1,14 @@
+schema_version: 0.1
+runtime_mode: polylith
+service:
+  name: users
+  port: ":8080"
+http:
+  - route: /users
+    method: GET
+    handler: GetUsers
+plugins:
+  - logger
+queues:
+  - publisher: user-events
+    url: mem://events

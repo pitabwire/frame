@@ -102,6 +102,9 @@ type Service struct {
 
 	openapiRegistry *openapi.Registry
 	openapiBasePath string
+	debugEnabled      bool
+	debugBasePath     string
+	registeredPlugins []string
 
 	startOnce            sync.Once
 	startupOnce          sync.Once
@@ -481,6 +484,7 @@ func (s *Service) createAndConfigureMux(ctx context.Context) *http.ServeMux {
 
 	mux := http.NewServeMux()
 
+	s.registerDebugEndpoints(mux)
 	mux.HandleFunc(s.healthCheckPath, s.HandleHealth)
 	s.registerOpenAPIRoutes(mux)
 	mux.Handle("/", applicationHandler)

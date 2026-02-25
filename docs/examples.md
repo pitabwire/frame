@@ -21,3 +21,14 @@ These examples are small, compilable, and use the canonical Frame bootstrap patt
 
 - Path: `examples/datastore-basic`
 - Run: `go run ./examples/datastore-basic`
+
+## Blueprints
+
+- `blueprints/polylith.yaml`
+- `blueprints/monolith.yaml`
+
+Use with:
+
+```bash
+go run ./cmd/frame build blueprints/polylith.yaml
+```

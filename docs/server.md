@@ -9,12 +9,12 @@ http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
     w.Write([]byte("ok"))
 })
 
-_, svc := frame.NewService(
+ctx, svc := frame.NewService(
     frame.WithName("api"),
     frame.WithHTTPHandler(http.DefaultServeMux),
 )
 
-_ = svc.Run(context.Background(), ":8080")
+_ = svc.Run(ctx, ":8080")
 ```
 
 ### Middleware
@@ -27,10 +27,12 @@ logging := func(next http.Handler) http.Handler {
     })
 }
 
-_, svc := frame.NewService(
+ctx, svc := frame.NewService(
     frame.WithHTTPHandler(http.DefaultServeMux),
     frame.WithHTTPMiddleware(logging),
 )
+
+_ = svc.Run(ctx, ":8080")
 ```
 
 ### Health Checks
@@ -43,13 +45,13 @@ _, svc := frame.NewService(
 ```go
 grpcServer := grpc.NewServer()
 
-_, svc := frame.NewService(
+ctx, svc := frame.NewService(
     frame.WithHTTPHandler(http.DefaultServeMux),
     frame.WithGRPCServer(grpcServer),
     frame.WithGRPCPort(":50051"),
 )
 
-_ = svc.Run(context.Background(), ":8080")
+_ = svc.Run(ctx, ":8080")
 ```
 
 Optional:

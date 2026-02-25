@@ -1,0 +1,22 @@
+name: "Docs request"
+description: "Ask for documentation improvements"
+title: "[Docs]: "
+labels: ["documentation"]
+body:
+  - type: textarea
+    id: gap
+    attributes:
+      label: Documentation Gap
+      description: What is missing or unclear?
+    validations:
+      required: true
+  - type: textarea
+    id: suggestion
+    attributes:
+      label: Suggested Content
+      description: What should be added?
+  - type: textarea
+    id: context
+    attributes:
+      label: Use Case
+      description: How do you plan to use this?

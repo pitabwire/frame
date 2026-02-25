@@ -4,13 +4,13 @@ A fast, extensible Golang framework with a clean plugin-based architecture.
 
 Frame is a production-focused framework for building HTTP and gRPC services with strong runtime management, modular components, and convention-driven ergonomics. Frame integrates Go Cloud for pluggable infrastructure, provides first-class support for queues, caching, datastore, telemetry, security, localization, and worker pools, and keeps the core service lifecycle explicit and testable.
 
-## Quick Start (5 lines)
+## Quick Start (Canonical Pattern)
 
 ```go
 package main
 
 import (
-    "context"
+    "log"
     "net/http"
 
     "github.com/pitabwire/frame"
@@ -21,11 +21,14 @@ func main() {
         w.Write([]byte("Hello from Frame"))
     })
 
-    _, svc := frame.NewService(
+    ctx, svc := frame.NewService(
         frame.WithName("hello"),
         frame.WithHTTPHandler(http.DefaultServeMux),
     )
-    _ = svc.Run(context.Background(), ":8080")
+
+    if err := svc.Run(ctx, ":8080"); err != nil {
+        log.Fatal(err)
+    }
 }
 ```
 
@@ -35,6 +38,9 @@ Start here:
 - `docs/getting-started.md`
 - `docs/architecture.md`
 - `docs/service.md`
+- `docs/plugins-options.md`
+- `docs/ai-assistants.md`
+- `docs/examples.md`
 
 Core runtime and server:
 - `docs/server.md`

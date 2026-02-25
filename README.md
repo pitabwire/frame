@@ -1,68 +1,86 @@
-# frame        [![Build Status](https://github.com/pitabwire/frame/actions/workflows/run_tests.yml/badge.svg?branch=main)](https://github.com/pitabwire/frame/actions/workflows/run_tests.yml)   [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/pitabwire/frame)
+# Frame
 
-A simple frame for quickly setting up api servers based on [gocloud](https://github.com/google/go-cloud) framework.
+[![Build Status](https://github.com/pitabwire/frame/actions/workflows/run_tests.yml/badge.svg?branch=main)](https://github.com/pitabwire/frame/actions/workflows/run_tests.yml)
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/pitabwire/frame)
 
-Features include:
+A fast, extensible Golang framework with a clean plugin-based architecture.
 
-- An http server
-- A grpc server
-- Database setup using [Gorm](https://github.com/go-gorm/gorm) with migrations and multitenancy support
-- Easy queue publish and subscription support
-- Localization
-- Authentication adaptor for oauth2 and jwt access
-- Authorization adaptor
+Frame helps you spin up HTTP and gRPC services with minimal boilerplate while keeping strong runtime management, observability, and portable infrastructure via Go Cloud.
 
-The goal of this project is to simplify starting up servers with minimal boiler plate code.
-All components are very pluggable with only the necessary configured items loading at runtime 
-thanks to the power of go-cloud under the hood.
+## Features
 
-# Getting started:
+- HTTP and gRPC servers with built-in lifecycle management
+- Datastore setup using GORM with migrations and multi-tenancy
+- Queue publish/subscribe (Go Cloud drivers: `mem://`, `nats://`, etc.)
+- Cache manager with multiple backends
+- OpenTelemetry tracing, metrics, and logs
+- OAuth2/JWT authentication and authorization adapters
+- Worker pool for background tasks
+- Localization utilities
 
+## Install
+
+```bash
+go get -u github.com/pitabwire/frame
 ```
-    go get -u github.com/pitabwire/frame
-```
 
-# Example
+## Minimal Example
 
-````go 
+```go
+package main
+
 import (
-	"context"
-	"fmt"
-	"github.com/gorilla/mux"
-	"github.com/pitabwire/frame"
-	"log"
-	"net/http"
+    "context"
+    "net/http"
+
+    "github.com/pitabwire/frame"
 )
 
-func handler(w http.ResponseWriter, r *http.Request) {
-	fmt.Fprintf(w, "Frame says yelloo!")
-}
-
-
 func main() {
+    http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+        w.Write([]byte("Frame says hello"))
+    })
 
-	serviceName := "service_authentication"
-	ctx := context.Background()
+    _, svc := frame.NewService(
+        frame.WithName("hello"),
+        frame.WithHTTPHandler(http.DefaultServeMux),
+    )
 
-	router := mux.NewRouter().StrictSlash(true)
-	router.HandleFunc("/", handler)
-
-	server := frame.HttpHandler(router)
-	service := frame.NewService(frame.WithName(serviceName,server))
-	err := service.Run(ctx, ":7654")
-	if err != nil {
-		log.Fatal("main -- Could not run Server : %v", err)
-	}
-
+    _ = svc.Run(context.Background(), ":8080")
 }
-````
+```
 
-Detailed guides can be found in `docs/index.md` (and on https://pitabwire.github.io/frame/).\n+\n+## Docs site (MkDocs)\n+\n+```bash\n+pip install mkdocs mkdocs-material\n+mkdocs serve\n+```\n*** End Patch"}**
+## Documentation
 
+- Start here: `docs/index.md`
+- Live site: https://pitabwire.github.io/frame/
 
-## development
-To run tests start the docker compose file in ./tests
-then run : 
-````
-    go test -json -cover ./...
-````
+## Docs Site (MkDocs)
+
+```bash
+pip install mkdocs mkdocs-material
+mkdocs serve
+```
+
+## Development
+
+To run tests, start the Docker Compose file in `./tests`, then run:
+
+```bash
+go test -json -cover ./...
+```
+
+## Contributing
+
+If Frame helped you, please consider starring the repo and sharing it.
+
+We’re actively looking for contributions that make Frame easier to use and more productive for Go teams. Examples:
+
+- Improve onboarding guides or add real-world examples
+- Add new Go Cloud drivers (queue, cache, datastore)
+- Add middleware, interceptors, or CLI tooling
+- Expand testing utilities or reference architectures
+
+AI-assisted contributions are welcome. If you use AI tools, please verify behavior locally and include tests where relevant.
+
+Open an issue or PR with your idea — even small improvements make a big difference.

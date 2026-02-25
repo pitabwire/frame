@@ -8,13 +8,13 @@ This guide shows the minimal setup and then builds toward a real service that us
 go get -u github.com/pitabwire/frame
 ```
 
-## Minimal HTTP Service
+## Minimal HTTP Service (Canonical Pattern)
 
 ```go
 package main
 
 import (
-    "context"
+    "log"
     "net/http"
 
     "github.com/pitabwire/frame"
@@ -25,12 +25,14 @@ func main() {
         w.Write([]byte("Frame says hello"))
     })
 
-    _, svc := frame.NewService(
+    ctx, svc := frame.NewService(
         frame.WithName("hello"),
         frame.WithHTTPHandler(http.DefaultServeMux),
     )
 
-    _ = svc.Run(context.Background(), ":8080")
+    if err := svc.Run(ctx, ":8080"); err != nil {
+        log.Fatal(err)
+    }
 }
 ```
 
@@ -40,7 +42,7 @@ func main() {
 package main
 
 import (
-    "context"
+    "log"
     "net/http"
 
     "github.com/pitabwire/frame"
@@ -54,14 +56,16 @@ func main() {
         w.Write([]byte("HTTP ok"))
     })
 
-    _, svc := frame.NewService(
+    ctx, svc := frame.NewService(
         frame.WithName("hello"),
         frame.WithHTTPHandler(http.DefaultServeMux),
         frame.WithGRPCServer(grpcServer),
         frame.WithGRPCPort(":50051"),
     )
 
-    _ = svc.Run(context.Background(), ":8080")
+    if err := svc.Run(ctx, ":8080"); err != nil {
+        log.Fatal(err)
+    }
 }
 ```
 
@@ -79,3 +83,4 @@ func main() {
 - `docs/service.md`
 - `docs/configuration.md`
 - `docs/server.md`
+- `docs/plugins-options.md`

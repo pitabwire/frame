@@ -12,6 +12,15 @@ Frame is a fast, extensible Go framework built around a minimal core `Service` a
 Frame bootstraps a `Service` that owns shared runtime state and managers. Options configure the service and register startup hooks. The service then starts HTTP/gRPC servers, background workers, and pluggable components.
 
 ```
+ctx, svc := frame.NewService(
+  frame.WithName("my-service"),
+  frame.WithHTTPHandler(handler),
+  // other options...
+)
+_ = svc.Run(ctx, ":8080")
+```
+
+```
 Service
   -> Config (env, YAML, or custom)
   -> Telemetry (OTel)

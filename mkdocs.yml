@@ -44,6 +44,9 @@ nav:
       - Architecture: architecture.md
       - Getting Started: getting-started.md
       - Service Lifecycle: service.md
+      - Plugins & Options: plugins-options.md
+      - AI Assistants: ai-assistants.md
+      - Examples: examples.md
   - Runtime:
       - Server: server.md
       - Configuration: configuration.md

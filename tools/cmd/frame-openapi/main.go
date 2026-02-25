@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"flag"
 	"fmt"
@@ -8,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 type config struct {
@@ -94,11 +96,17 @@ plugins:
 		return fmt.Errorf("close buf template: %w", closeErr)
 	}
 
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
+	defer cancel()
+
 	// #nosec G204,G702 -- command is user-configured and expected in tooling.
-	cmd := exec.Command(bufBinary, "generate", "--template", tpl.Name())
+	cmd := exec.CommandContext(ctx, bufBinary, "generate", "--template", tpl.Name())
 	cmd.Dir = protoDir
 	out, err := cmd.CombinedOutput()
 	if err != nil {
+		if ctx.Err() != nil {
+			return fmt.Errorf("buf generate timed out: %w", ctx.Err())
+		}
 		return fmt.Errorf("buf generate failed: %w\n%s", err, strings.TrimSpace(string(out)))
 	}
 

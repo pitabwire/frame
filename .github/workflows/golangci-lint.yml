@@ -7,186 +7,34 @@ on:
       - develop
       - main
   pull_request:
-
-permissions:
-  contents: write
-  pull-requests: write
-  checks: write
-
 jobs:
   golangci:
     name: lint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6.0.2
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v9
         with:
-          fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
+          # Optional: version of golangci-lint to use in form of v1.2 or v1.2.3 or `latest` to use the latest version
+          version: latest
+          args: --timeout=5m
+          skip-cache: false
 
-      - uses: actions/setup-go@v5
-        with:
-          go-version: '1.25.6'
+          # Optional: working directory, useful for monorepos
+          # working-directory: somedir
 
-      - name: Install golangci-lint v2 from source
-        run: go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest
+          # Optional: golangci-lint command line arguments.
+          # args: --issues-exit-code=0
 
-      - name: Run golangci-lint
-        id: lint
-        continue-on-error: true
-        run: |
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            golangci-lint run --timeout=5m --new-from-rev=${{ github.event.pull_request.base.sha }} 2>&1 | tee /tmp/lint-output.txt
-          else
-            golangci-lint run --timeout=5m 2>&1 | tee /tmp/lint-output.txt
-          fi
+          # Optional: show only new issues if it's a pull request. The default value is `false`.
+          # only-new-issues: true
 
-          # Capture exit code
-          EXIT_CODE=${PIPESTATUS[0]}
-          echo "exit_code=$EXIT_CODE" >> $GITHUB_OUTPUT
+          # Optional: if set to true then the action will use pre-installed Go.
+          # skip-go-installation: true
 
-          if [ $EXIT_CODE -ne 0 ]; then
-            echo "lint_failed=true" >> $GITHUB_OUTPUT
-            echo "⚠️ Lint issues detected"
-          else
-            echo "lint_failed=false" >> $GITHUB_OUTPUT
-            echo "✅ No lint issues"
-          fi
+          # Optional: if set to true then the action don't cache or restore ~/go/pkg.
+          # skip-pkg-cache: true
 
-          exit $EXIT_CODE
-
-      - name: Auto-fix lint issues with Claude
-        if: failure() && steps.lint.outputs.lint_failed == 'true'
-        uses: anthropics/claude-code-action@v1
-        with:
-          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-
-          prompt: |
-            # Auto-Fix Go Lint Issues
-
-            The golangci-lint check failed with the following output:
-
-            ```
-            $(cat /tmp/lint-output.txt 2>/dev/null || echo "Lint output not available")
-            ```
-
-            ## Your Task
-
-            Fix ALL lint issues automatically:
-
-            1. **Analyze** each lint error/warning carefully
-            2. **Fix** the issues using appropriate tools:
-               - Run `gofmt -w .` for formatting
-               - Run `goimports -w .` for import organization
-               - Fix golangci-lint warnings manually if needed
-            3. **Verify** by running golangci-lint again
-            4. **Commit** ONLY if all fixes are successful
-
-            ## Guidelines
-
-            ### Auto-fixable Issues
-            - Formatting (indentation, spacing)
-            - Import organization (unused, order)
-            - Simple code style (ineffassign, errcheck for obvious cases)
-            - Naming conventions
-            - Unused variables/functions (if clearly dead code)
-
-            ### Do NOT Fix
-            - Logic errors requiring judgment
-            - Performance issues needing profiling
-            - Complex refactoring
-            - Security issues needing review
-
-            ## Commit Message
-
-            If you make fixes, use this format:
-            ```
-            Fix golangci-lint issues
-
-            Auto-fixed by Claude:
-            - Formatting with gofmt
-            - Imports with goimports
-            - [List other specific fixes]
-            ```
-
-            ## Verification
-
-            After fixing, run:
-            ```bash
-            golangci-lint run --timeout=5m
-            ```
-
-            Only commit if this passes or shows significant improvement.
-
-            Now proceed to fix the lint issues.
-
-          track_progress: false
-
-          claude_args: |
-            --model "claude-sonnet-4-5"
-            --max-turns 30
-            --timeout 600000
-            --allowedTools "Bash(git:*),Bash(go:*),Bash(gofmt:*),Bash(goimports:*),Bash(golangci-lint:*),Edit,Write,Read,Glob,Grep"
-
-      - name: Push lint fixes
-        if: failure() && steps.lint.outputs.lint_failed == 'true'
-        run: |
-          # Configure git
-          git config user.name "claude-lint-fixer[bot]"
-          git config user.email "claude-lint-fixer[bot]@users.noreply.github.com"
-
-          # Check if there are changes
-          if ! git diff --quiet; then
-            echo "📝 Committing lint fixes..."
-
-            # Stage all changes
-            git add -A
-
-            # Check if there are staged changes
-            if ! git diff --cached --quiet; then
-              # Commit
-              git commit -m "Fix golangci-lint issues
-
-Auto-fixed by Claude Sonnet" || echo "Commit failed, may already be committed"
-
-              # Push
-              if git push; then
-                echo "✅ Successfully pushed lint fixes"
-              else
-                echo "⚠️ Failed to push fixes (branch may be protected)"
-              fi
-            else
-              echo "ℹ️ No changes to commit"
-            fi
-          else
-            echo "ℹ️ No fixes were made"
-          fi
-
-      - name: Re-run lint after fixes
-        if: failure() && steps.lint.outputs.lint_failed == 'true'
-        run: |
-          echo "🔄 Re-running lint to verify fixes..."
-
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            golangci-lint run --timeout=5m --new-from-rev=${{ github.event.pull_request.base.sha }}
-          else
-            golangci-lint run --timeout=5m
-          fi
-
-          if [ $? -eq 0 ]; then
-            echo "✅ All lint issues fixed!"
-          else
-            echo "⚠️ Some lint issues remain and require manual review"
-            exit 1
-          fi
-
-      - name: Comment on PR
-        if: failure() && github.event_name == 'pull_request'
-        uses: actions/github-script@v8
-        with:
-          script: |
-            await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-              body: '🤖 **Claude Lint Fixer** attempted to fix lint issues.\n\nPlease check the latest commit and re-run checks if fixes were pushed.'
-            });
+          # Optional: if set to true then the action don't cache or restore ~/.cache/go-build.
+          # skip-build-cache: true

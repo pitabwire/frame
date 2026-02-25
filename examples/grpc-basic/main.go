@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"html"
 	"log"
 	"net/http"
 
@@ -15,8 +14,9 @@ func main() {
 	grpcServer := grpc.NewServer()
 
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		log.Printf("request: %s %s", r.Method, r.URL.Path)
 		w.Header().Set("Content-Type", "text/plain")
-		_, _ = fmt.Fprintf(w, "http ok — %s %s", r.Method, html.EscapeString(r.URL.Path))
+		_, _ = fmt.Fprintln(w, "http ok")
 	})
 
 	ctx, svc := frame.NewService(

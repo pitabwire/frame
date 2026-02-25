@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"html"
 	"log"
 	"net/http"
 
@@ -11,8 +10,9 @@ import (
 
 func main() {
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		log.Printf("request: %s %s", r.Method, r.URL.Path)
 		w.Header().Set("Content-Type", "text/plain")
-		_, _ = fmt.Fprintf(w, "hello from frame — %s %s", r.Method, html.EscapeString(r.URL.Path))
+		_, _ = fmt.Fprintln(w, "hello from frame")
 	})
 
 	ctx, svc := frame.NewService(

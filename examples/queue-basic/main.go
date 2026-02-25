@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"html"
 	"log"
 	"net/http"
 
@@ -20,8 +19,9 @@ func (h handler) Handle(ctx context.Context, metadata map[string]string, message
 
 func main() {
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		log.Printf("request: %s %s", r.Method, r.URL.Path)
 		w.Header().Set("Content-Type", "text/plain")
-		_, _ = fmt.Fprintf(w, "queue ok — %s %s", r.Method, html.EscapeString(r.URL.Path))
+		_, _ = fmt.Fprintln(w, "queue ok")
 	})
 
 	ctx, svc := frame.NewService(

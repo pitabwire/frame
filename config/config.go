@@ -99,6 +99,10 @@ type ConfigurationDefault struct {
 	ServiceVersion     string `envDefault:""     env:"SERVICE_VERSION"      yaml:"service_version"`
 	RunServiceSecurely bool   `envDefault:"true" env:"RUN_SERVICE_SECURELY" yaml:"run_service_securely"`
 
+	RuntimeModeValue  string `envDefault:"polylith" env:"FRAME_RUNTIME_MODE"  yaml:"runtime_mode"`
+	ServiceIDValue    string `envDefault:""         env:"FRAME_SERVICE_ID"    yaml:"service_id"`
+	ServiceGroupValue string `envDefault:""         env:"FRAME_SERVICE_GROUP" yaml:"service_group"`
+
 	ServerPort     string `envDefault:":7000"  env:"PORT"      yaml:"server_port"`
 	HTTPServerPort string `envDefault:":8080"  env:"HTTP_PORT" yaml:"http_server_port"`
 	GrpcServerPort string `envDefault:":50051" env:"GRPC_PORT" yaml:"grpc_server_port"`
@@ -172,6 +176,26 @@ var _ ConfigurationSecurity = new(ConfigurationDefault)
 
 func (c *ConfigurationDefault) IsRunSecurely() bool {
 	return c.RunServiceSecurely
+}
+
+type ConfigurationRuntime interface {
+	RuntimeMode() string
+	ServiceID() string
+	ServiceGroup() string
+}
+
+var _ ConfigurationRuntime = new(ConfigurationDefault)
+
+func (c *ConfigurationDefault) RuntimeMode() string {
+	return c.RuntimeModeValue
+}
+
+func (c *ConfigurationDefault) ServiceID() string {
+	return c.ServiceIDValue
+}
+
+func (c *ConfigurationDefault) ServiceGroup() string {
+	return c.ServiceGroupValue
 }
 
 type ConfigurationLogLevel interface {
@@ -647,7 +671,7 @@ func (oid *OIDCMap) loadOIDC(ctx context.Context, url string) error {
 	}
 	hreq.Header.Set("Accept", "application/jrd+json,application/json;q=0.9")
 
-	//nolint:bodyclose // closed by util.CloseAndLogOnError()
+	//nolint:bodyclose // closed by util.CloseAndLogOnError below
 	hresp, err := http.DefaultClient.Do(hreq)
 	if err != nil {
 		return err
@@ -686,7 +710,7 @@ func (oid *OIDCMap) loadJWKData(ctx context.Context, url string) (string, error)
 	}
 	hreq.Header.Set("Accept", "application/jrd+json,application/json;q=0.9")
 
-	//nolint:bodyclose // closed by util.CloseAndLogOnError()
+	//nolint:bodyclose // closed by util.CloseAndLogOnError below
 	hresp, err := http.DefaultClient.Do(hreq)
 	if err != nil {
 		return "", err

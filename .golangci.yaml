@@ -279,6 +279,14 @@ linters:
       # Default: 30 (but we recommend 10-20)
       min-complexity: 20
 
+    gosec:
+      # G704: All flagged http.Client.Do calls use trusted, pre-configured endpoints
+      # (OIDC discovery, JWKS, internal API), not user-controlled URLs.
+      # G117: Test container credential fields are not real secrets.
+      excludes:
+        - G704
+        - G117
+
     gocritic:
       # Settings passed to gocritic.
       # The settings key is the name of a supported gocritic checker.

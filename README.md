@@ -57,7 +57,7 @@ func main() {
 }
 ````
 
-Detailed guides can be found [here](https://pitabwire.github.io/frame/) 
+Detailed guides can be found in `docs/index.md` (and on https://pitabwire.github.io/frame/).\n+\n+## Docs site (MkDocs)\n+\n+```bash\n+pip install mkdocs mkdocs-material\n+mkdocs serve\n+```\n*** End Patch"}**
 
 
 ## development

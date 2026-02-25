@@ -1,0 +1,28 @@
+:root {
+  --md-text-font: "IBM Plex Sans", system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  --md-code-font: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+}
+
+.md-typeset h1 {
+  letter-spacing: -0.02em;
+}
+
+.md-typeset h2 {
+  margin-top: 1.6em;
+}
+
+.md-typeset code {
+  font-size: 0.9em;
+}
+
+.md-typeset table {
+  font-size: 0.95em;
+}
+
+.md-header {
+  box-shadow: none;
+}
+
+.md-footer {
+  display: none;
+}

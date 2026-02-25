@@ -1,0 +1,69 @@
+site_name: Frame
+site_description: "A fast, extensible Golang framework with a clean plugin-based architecture"
+site_url: "https://pitabwire.github.io/frame/"
+repo_name: pitabwire/frame
+repo_url: "https://github.com/pitabwire/frame"
+edit_uri: "edit/main/docs/"
+
+theme:
+  name: material
+  language: en
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - content.code.copy
+    - content.tabs.link
+  palette:
+    - scheme: default
+      primary: deep orange
+      accent: teal
+  font:
+    text: "IBM Plex Sans"
+    code: "IBM Plex Mono"
+
+markdown_extensions:
+  - admonition
+  - codehilite
+  - toc:
+      permalink: true
+  - attr_list
+  - md_in_html
+
+plugins:
+  - search
+
+extra_css:
+  - assets/styles.css
+
+nav:
+  - Overview:
+      - Home: index.md
+      - Architecture: architecture.md
+      - Getting Started: getting-started.md
+      - Service Lifecycle: service.md
+  - Runtime:
+      - Server: server.md
+      - Configuration: configuration.md
+      - Logging: logging.md
+      - Telemetry: telemetry.md
+      - Profiler: profiler.md
+      - TLS: tls.md
+  - Data & Infra:
+      - Datastore: datastore.md
+      - Cache: cache.md
+      - Queue: queue.md
+      - Events: events.md
+      - Worker Pool: workerpool.md
+      - Rate Limiter: ratelimiter.md
+      - HTTP Client: client.md
+  - Security:
+      - Authentication: security-authentication.md
+      - Authorization: security-authorization.md
+      - Interceptors: security-interceptors.md
+  - Localization & Utilities:
+      - Localization: localization.md
+      - Data Utilities: data-utilities.md
+      - Testing: testing.md

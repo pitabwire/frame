@@ -140,7 +140,7 @@ func (m *manager) Shutdown(_ context.Context) error {
 }
 
 func (m *manager) startRetryWorkers() {
-	for i := 0; i < retrySchedulerWorkerCount; i++ {
+	for range retrySchedulerWorkerCount {
 		m.retryWG.Add(1)
 		go func() {
 			defer m.retryWG.Done()

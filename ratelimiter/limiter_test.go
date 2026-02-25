@@ -19,7 +19,7 @@ func TestDefaultWindowConfig(t *testing.T) {
 	cfg := ratelimiter.DefaultWindowConfig()
 	require.NotNil(t, cfg)
 	assert.Greater(t, cfg.WindowDuration, time.Duration(0))
-	assert.Greater(t, cfg.MaxPerWindow, 0)
+	assert.Positive(t, cfg.MaxPerWindow)
 	assert.NotEmpty(t, cfg.KeyPrefix)
 }
 

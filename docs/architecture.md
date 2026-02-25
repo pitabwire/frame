@@ -1,107 +1,90 @@
-## Frame Architecture Overview
+# Frame Architecture Overview
 
-Frame is a Go-based framework built on top of [go-cloud](https://github.com/google/go-cloud) that provides a cloud-agnostic way to build modern API servers. This document outlines the core architecture and design principles of the framework.
+Frame is a fast, extensible Go framework built around a minimal core `Service` and a set of modular managers (datastore, queue, cache, events, telemetry, security, worker pool). The design emphasizes:
 
-### Core Design Principles
+- Modular components that can be added or omitted per service.
+- Convention-driven ergonomics (sensible defaults, minimal boilerplate).
+- First-class plugin system via Go Cloud URL-based drivers.
+- Strong runtime management with deterministic startup/shutdown.
 
-1. **Modularity**: Each component is independent and can be used in isolation
-2. **Cloud Agnosticism**: Built on go-cloud to prevent vendor lock-in
-3. **Minimal Boilerplate**: Simplified setup and configuration
-4. **Runtime Efficiency**: Only initialized components are loaded
-5. **Extensibility**: Easy to extend and customize components
+## Mental Model
 
-### Key Components
+Frame bootstraps a `Service` that owns shared runtime state and managers. Options configure the service and register startup hooks. The service then starts HTTP/gRPC servers, background workers, and pluggable components.
 
-#### 1. Service Layer (`service.go`)
-- Central orchestrator for all framework components
-- Manages component lifecycle and dependencies
-- Handles graceful startup and shutdown
-- Configurable through options pattern
+```
+Service
+  -> Config (env, YAML, or custom)
+  -> Telemetry (OTel)
+  -> Logger (slog + telemetry handler)
+  -> HTTP client (resilient transport)
+  -> Worker pool
+  -> Queue manager (pubsub)
+  -> Events manager (internal event bus)
+  -> Datastore manager (GORM + pool)
+  -> Cache manager
+  -> Security manager (authn/authz)
+  -> Localization manager
+```
 
-#### 2. Server Components
-- **HTTP Server**
-  - Built on gorilla/mux
-  - Configurable middleware support
-  - Health check endpoints
-  - Request logging
-  
-- **gRPC Server**
-  - Native gRPC support
-  - Bi-directional streaming
-  - Protocol buffer integration
+## Runtime Lifecycle
 
-#### 3. Data Layer
-- **Database Management** (`datastore.go`)
-  - GORM integration for ORM capabilities
-  - Multi-tenancy support
-  - Read/Write separation
-  - Migration management
-  
-- **Queue System** (`queue.go`)
-  - Asynchronous message processing
-  - Multiple queue backend support (memory, NATS, GCP PubSub)
-  - Publisher/Subscriber pattern
-  - Message handling with retries
+```
+NewService
+  -> load configuration
+  -> apply options (WithTelemetry, WithLogger, WithHTTPClient, custom)
+  -> create managers (security, worker pool, queue, events)
+  -> register startup hooks (publishers, subscribers, prestart)
+  -> return service context
 
-#### 4. Security Components
-- **Authentication** (`authentication.go`)
-  - OAuth2 support
-  - JWT token handling
-  - Flexible auth provider integration
-  
-- **Authorization** (`authorization.go`)
-  - Role-based access control
-  - Permission management
-  - Policy enforcement
+Run
+  -> validate startup errors
+  -> initialize queue manager
+  -> start background consumer (if configured)
+  -> start HTTP/gRPC server(s)
+  -> start profiler (if enabled)
+  -> execute startup hooks
+  -> block until shutdown or error
 
-#### 5. Support Features
-- **Configuration** (`config.go`)
-  - Environment-based configuration
-  - Secret management
-  - Dynamic configuration updates
+Stop
+  -> stop profiler
+  -> cancel service context
+  -> run cleanup hooks
+```
 
-- **Logging** (`logger.go`)
-  - Structured logging
-  - Log level management
-  - Context-aware logging
+## Extension Points (Plugin Architecture)
 
-- **Tracing** (`tracing.go`)
-  - Distributed tracing support
-  - OpenTelemetry integration
-  - Performance monitoring
+Frame uses Go Cloud to allow infrastructure to be configured by URL. Drivers are registered via blank imports and selected by URL scheme. This applies to:
 
-### Component Interaction Flow
+- Pub/Sub (queue): `mem://`, `nats://`, etc.
+- Cache: Redis, Valkey, JetStream KV, in-memory.
+- Datastore: connection pools with GORM.
 
-1. Service initialization starts with `NewService(frame.WithName())`
-2. Components are registered through options
-3. Service manages component lifecycle:
-   - Initialization order
-   - Dependency injection
-   - Graceful shutdown
-4. Request flow:
-   - HTTP/gRPC request received
-   - Authentication/Authorization
-   - Request processing
-   - Response handling
+In practice, plugin extension looks like:
 
-### Best Practices
+- Import driver packages in your main package.
+- Provide a URL or DSN in config.
+- Frame managers resolve the correct driver at runtime.
 
-1. **Component Initialization**
-   - Initialize only required components
-   - Use appropriate options for customization
-   - Handle errors during initialization
+## Key Packages
 
-2. **Error Handling**
-   - Use context for cancellation
-   - Implement proper error wrapping
-   - Provide meaningful error messages
+- `frame`: core service, options, server lifecycle.
+- `config`: configuration interfaces and env parsing.
+- `datastore`: GORM pool + migrations.
+- `queue`: Go Cloud pub/sub wrappers.
+- `events`: event registry and event bus.
+- `cache`: raw and typed cache, multi-backend.
+- `telemetry`: OpenTelemetry setup.
+- `security`: authentication, authorization, interceptors.
+- `workerpool`: job execution and retry scheduler.
+- `client`: resilient HTTP client with circuit breakers and retries.
 
-3. **Configuration**
-   - Use environment variables for configuration
-   - Implement proper validation
-   - Follow secure practices for sensitive data
+## When to Extend vs When to Replace
 
-4. **Testing**
-   - Write unit tests for components
-   - Use integration tests for component interaction
-   - Implement proper mocking
+Extend Frame when:
+- You want standardized runtime, observability, and infrastructure wiring.
+- You need a service that can be ported across cloud providers.
+- You want consistent middleware, security, and lifecycle control.
+
+Replace or bypass Frame when:
+- The runtime lifecycle conflicts with your requirements.
+- You need a custom server loop or non-HTTP primary entrypoint.

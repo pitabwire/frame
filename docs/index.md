@@ -1,80 +1,76 @@
-## Frame
+# Frame Documentation
 
-A simple frame for quickly setting up api servers based on [go-cloud](https://github.com/google/go-cloud) framework
+A fast, extensible Golang framework with a clean plugin-based architecture.
 
-### Overview
+Frame is a production-focused framework for building HTTP and gRPC services with strong runtime management, modular components, and convention-driven ergonomics. Frame integrates Go Cloud for pluggable infrastructure, provides first-class support for queues, caching, datastore, telemetry, security, localization, and worker pools, and keeps the core service lifecycle explicit and testable.
 
-Frame lets you do anything you want to do your way. It organizes and simplifies access to the things 
-you utilize within your setup. Only what is initialized at startup is what frame will instantiate at runtime.
-Under the hood, frame utilizes [go-cloud](https://github.com/google/go-cloud) to be cloud native without a lot of worries on being locked in.
-
-### Documentation
-
-#### Core Documentation
-- [Architecture Overview](architecture.md) - Core design principles, components, and best practices
-- [Quick Start Guide](components/index.md) - Get started with Frame quickly
-
-#### Component Documentation
-- [Server Components](components/server_detailed.md)
-  - HTTP Server Implementation
-  - gRPC Server Implementation
-  - Middleware Support
-  - Configuration Examples
-
-- [Datastore](components/datastore_detailed.md)
-  - Database Integration with GORM
-  - Multi-tenancy Support
-  - Migration Management
-  - Performance Optimization
-
-- [Queue System](components/queue_detailed.md)
-  - Message Queue Implementation
-  - Multiple Backend Support
-  - Publisher/Subscriber Patterns
-  - Monitoring and Metrics
-
-#### Security
-- [Authentication & Authorization](security/authentication_authorization.md)
-  - OAuth2 and JWT Support
-  - Role-Based Access Control
-  - Security Best Practices
-  - Token Management
-
-### Quick start
-```
-go get -u github.com/pitabwire/frame
-```
-
-### Quick Start Example
-
-The simplest possible Frame server in 5 lines:
+## Quick Start (5 lines)
 
 ```go
 package main
-import ("github.com/pitabwire/frame"; "net/http"; "context")
+
+import (
+    "context"
+    "net/http"
+
+    "github.com/pitabwire/frame"
+)
+
 func main() {
-    http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("Hello!")) })
-    frame.NewService(frame.WithName("hello-service", frame.HttpHandler(http.DefaultServeMux))).Run(context.Background(), ":8080")
+    http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+        w.Write([]byte("Hello from Frame"))
+    })
+
+    _, svc := frame.NewService(
+        frame.WithName("hello"),
+        frame.WithHTTPHandler(http.DefaultServeMux),
+    )
+    _ = svc.Run(context.Background(), ":8080")
 }
 ```
 
-Try it:
-```bash
-curl http://localhost:8080/
-```
+## Documentation Map
 
-For more comprehensive examples and detailed documentation of Frame's features, check the sections below.
+Start here:
+- `docs/getting-started.md`
+- `docs/architecture.md`
+- `docs/service.md`
 
-### Contribution
+Core runtime and server:
+- `docs/server.md`
+- `docs/configuration.md`
+- `docs/logging.md`
+- `docs/telemetry.md`
+- `docs/profiler.md`
+- `docs/tls.md`
 
-Join us in delivering a better frame! by:
+Data and infrastructure:
+- `docs/datastore.md`
+- `docs/cache.md`
+- `docs/queue.md`
+- `docs/events.md`
+- `docs/workerpool.md`
+- `docs/ratelimiter.md`
+- `docs/client.md`
 
-Spreading the word
-   - Simply tell people who might be interested about it
-   - Help others solve blockers on Stack Overflow and Github Issues
-   - Write missing tutorials and suggesting improvements
-   - Promote frame on GitHub by Starring and Watching the repository
+Security and identity:
+- `docs/security-authentication.md`
+- `docs/security-authorization.md`
+- `docs/security-interceptors.md`
 
-Program
-   - Create a pull request on Github to fix issues, new features
-   - Create issues on Github whenever something is broken or needs to be improved on
+Localization and utilities:
+- `docs/localization.md`
+- `docs/data-utilities.md`
+- `docs/testing.md`
+
+## What Makes Frame Different
+
+- Modular, convention-driven components with a small core.
+- Go Cloud integration for multi-provider portability.
+- Pluggable runtime with explicit startup and shutdown hooks.
+- Strong defaults for telemetry, logging, and resilience.
+- Designed for production-grade services in Go.
+
+## Versioning
+
+Frame exposes build metadata at runtime via `frame.Service.Run`, including repository, version, commit, and build date (see `version/version.go`).

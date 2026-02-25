@@ -1,28 +1,44 @@
 <svg
   xmlns="http://www.w3.org/2000/svg"
-  width="360"
-  height="100"
-  viewBox="0 0 360 100"
+  width="185"
+  height="60"
+  viewBox="0 0 185 60"
 >
-  <!-- Icon group -->
-  <g transform="translate(0, 15)">
-    <path d="M20 10 v50 h14" fill="none" stroke="#ffffff" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
-    <path d="M120 10 v50 h-14" fill="none" stroke="#ffffff" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- Left rounded bracket -->
+  <path
+    d="M30 18
+       Q24 18 24 24
+       V36
+       Q24 42 30 42"
+    fill="none"
+    stroke="#4FD1C5"
+    stroke-width="7"
+    stroke-linecap="round"
+  />
 
-    <circle cx="60" cy="35" r="12" fill="#ffffff"/>
-    <line x1="72" y1="35" x2="95" y2="42" stroke="#b0c4de" stroke-width="7" stroke-linecap="round"/>
-    <circle cx="95" cy="52" r="7" fill="#b0c4de"/>
-    <circle cx="108" cy="35" r="12" fill="#5ECF5E"/>
-  </g>
+  <!-- Dot -->
+  <circle cx="48" cy="30" r="7" fill="#4FD1C5" />
 
-  <!-- Rounded small-cap "f" -->
+  <!-- Right rounded bracket -->
+  <path
+    d="M66 18
+       Q72 18 72 24
+       V36
+       Q72 42 66 42"
+    fill="none"
+    stroke="#4FD1C5"
+    stroke-width="7"
+    stroke-linecap="round"
+  />
+
+  <!-- Wordmark -->
   <text
-    x="145"
-    y="70"
-    font-family="Nunito, Quicksand, 'SF Pro Rounded', 'Comfortaa', sans-serif"
+    x="84"
+    y="40"
+    font-family="Nunito, Quicksand, 'SF Pro Rounded', sans-serif"
+    font-size="34"
     font-weight="700"
-    font-size="54"
-    fill="#ffffff"
+    fill="#4FD1C5"
   >
     frame
   </text>

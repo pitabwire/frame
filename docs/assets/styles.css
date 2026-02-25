@@ -16,6 +16,15 @@
   height: 1.8rem;
 }
 
+/* Sidebar logo: show blue version in light mode, teal in dark mode */
+.md-nav--primary .md-nav__title .md-logo img {
+  content: url("logo.svg");
+}
+
+[data-md-color-scheme="slate"] .md-nav--primary .md-nav__title .md-logo img {
+  content: url("logo-white.svg");
+}
+
 /* Always show tabs, even on smaller screens */
 @media screen and (max-width: 76.234375em) {
   .md-header__button.md-logo {

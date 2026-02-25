@@ -1,4 +1,4 @@
-package config
+package config //nolint:testpackage // tests access unexported ctxKeyConfiguration and OIDCMap
 
 import (
 	"context"
@@ -85,7 +85,7 @@ func (s *ConfigSuite) TestCoreGettersAndBooleans() {
 	s.True(cfg.ProfilerEnabled())
 	s.Equal(":7001", cfg.ProfilerPort())
 	s.True(cfg.DisableOpenTelemetry())
-	s.Equal(0.42, cfg.SamplingRatio())
+	s.InEpsilon(0.42, cfg.SamplingRatio(), 1e-9)
 	s.Equal(3, cfg.GetCPUFactor())
 	s.Equal(64, cfg.GetCapacity())
 	s.Equal(8, cfg.GetCount())
@@ -177,11 +177,11 @@ func (s *ConfigSuite) TestDatabaseAndEventConfig() {
 	}
 
 	origArgs := os.Args
-	s.T().Cleanup(func() { os.Args = origArgs })
+	s.T().Cleanup(func() { os.Args = origArgs }) //nolint:reassign // intentional: restore os.Args after test
 
-	os.Args = []string{"bin", "start"}
+	os.Args = []string{"bin", "start"} //nolint:reassign // intentional: test CLI arg parsing
 	s.False(cfg.DoDatabaseMigrate())
-	os.Args = []string{"bin", "migrate"}
+	os.Args = []string{"bin", "migrate"} //nolint:reassign // intentional: test CLI arg parsing
 	s.True(cfg.DoDatabaseMigrate())
 
 	s.Equal([]string{"postgres://primary"}, cfg.GetDatabasePrimaryHostURL())
@@ -268,22 +268,22 @@ func (s *ConfigSuite) TestOIDCMapTypeGuardsAndLoadErrors() {
 		},
 	}
 
-	s.Equal("", cfg.GetOauth2WellKnownJwk())
-	s.Equal("", cfg.GetOauth2Issuer())
-	s.Equal("", cfg.GetOauth2AuthorizationEndpoint())
-	s.Equal("", cfg.GetOauth2RegistrationEndpoint())
-	s.Equal("", cfg.GetOauth2TokenEndpoint())
-	s.Equal("", cfg.GetOauth2UserInfoEndpoint())
-	s.Equal("", cfg.GetOauth2RevocationEndpoint())
-	s.Equal("", cfg.GetOauth2EndSessionEndpoint())
+	s.Empty(cfg.GetOauth2WellKnownJwk())
+	s.Empty(cfg.GetOauth2Issuer())
+	s.Empty(cfg.GetOauth2AuthorizationEndpoint())
+	s.Empty(cfg.GetOauth2RegistrationEndpoint())
+	s.Empty(cfg.GetOauth2TokenEndpoint())
+	s.Empty(cfg.GetOauth2UserInfoEndpoint())
+	s.Empty(cfg.GetOauth2RevocationEndpoint())
+	s.Empty(cfg.GetOauth2EndSessionEndpoint())
 
 	oidcSrv := newTestOIDCServer(s.T(), true, false)
 	cfg.Oauth2ServiceURI = oidcSrv.discoveryURLRoot()
-	s.Error(cfg.LoadOauth2Config(context.Background()))
+	s.Require().Error(cfg.LoadOauth2Config(context.Background()))
 
 	oidcSrv = newTestOIDCServer(s.T(), false, true)
 	cfg.Oauth2ServiceURI = oidcSrv.discoveryURLRoot()
-	s.Error(cfg.LoadOauth2Config(context.Background()))
+	s.Require().Error(cfg.LoadOauth2Config(context.Background()))
 }
 
 func (s *ConfigSuite) TestLoadWithOIDC() {
@@ -312,7 +312,7 @@ func (s *ConfigSuite) TestOIDCMapDirectLoaders() {
 	ctx := context.Background()
 	oid := OIDCMap{}
 
-	s.Error(oid.loadOIDC(ctx, "://bad-url"))
+	s.Require().Error(oid.loadOIDC(ctx, "://bad-url"))
 	_, err := oid.loadJWKData(ctx, "://bad-url")
-	s.Error(err)
+	s.Require().Error(err)
 }

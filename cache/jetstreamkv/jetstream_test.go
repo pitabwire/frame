@@ -1,4 +1,4 @@
-package jetstreamkv
+package jetstreamkv //nolint:testpackage // tests access unexported internals
 
 import (
 	"context"
@@ -44,7 +44,7 @@ func (s *JetstreamSuite) TestNewAndOperationsTable() {
 	ctx := context.Background()
 
 	_, err := New(cache.WithDSN("://bad-dsn"))
-	s.Error(err)
+	s.Require().Error(err)
 
 	raw, err := New(cache.WithDSN(s.dsn), cache.WithName("cache_a"), cache.WithMaxAge(time.Minute))
 	s.Require().NoError(err)
@@ -129,7 +129,7 @@ func (s *JetstreamSuite) TestNewAndOperationsTable() {
 
 	for _, tc := range testCases {
 		s.Run(tc.name, func() {
-			s.NoError(tc.run())
+			s.Require().NoError(tc.run())
 		})
 	}
 }

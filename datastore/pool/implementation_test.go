@@ -1,4 +1,4 @@
-package pool
+package pool //nolint:testpackage // tests access unexported isRelationAlreadyExistsErr
 
 import (
 	"context"

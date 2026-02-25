@@ -1,4 +1,4 @@
-package migration
+package migration //nolint:testpackage // tests access package internals
 
 import (
 	"context"

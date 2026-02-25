@@ -1,4 +1,4 @@
-package config
+package config //nolint:testpackage // test helper for internal tests
 
 import (
 	"encoding/json"

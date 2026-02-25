@@ -1,4 +1,4 @@
-package manager
+package manager //nolint:testpackage // tests access unexported manager type
 
 import (
 	"context"

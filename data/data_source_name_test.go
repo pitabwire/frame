@@ -1,4 +1,4 @@
-package data
+package data //nolint:testpackage // tests access unexported urlParts helper
 
 import (
 	"fmt"
@@ -109,7 +109,7 @@ func (s *DSNSuite) TestMutationHelpers() {
 	s.Equal("https://user:pass@example.com:8443/pre-/base?p=1", dsn.PrefixPath("/pre-").String())
 	s.Equal("https://user:pass@example.com:8443?p=1", dsn.DelPath().String())
 	s.Equal("2", dsn.ExtendQuery("p", "2").GetQuery("p"))
-	s.Equal("", dsn.RemoveQuery("p").GetQuery("p"))
+	s.Empty(dsn.RemoveQuery("p").GetQuery("p"))
 	s.Equal(dsn.String(), dsn.RemoveQuery("missing").String())
 
 	pathSet, err := dsn.WithPath("/x")
@@ -154,22 +154,22 @@ func (s *DSNSuite) TestErrorBranchesOnInvalidURI() {
 	s.Equal(bad.String(), bad.DelPath().String())
 	s.Equal(bad.String(), bad.ExtendQuery("a", "b").String())
 	s.Equal(bad.String(), bad.RemoveQuery("a").String())
-	s.Equal("", bad.GetQuery("a"))
+	s.Empty(bad.GetQuery("a"))
 
 	_, err := bad.WithPath("/x")
-	s.Error(err)
+	s.Require().Error(err)
 	_, err = bad.WithPathSuffix("x")
-	s.Error(err)
+	s.Require().Error(err)
 	_, err = bad.WithQuery("a=1")
-	s.Error(err)
+	s.Require().Error(err)
 	_, err = bad.WithUser("u")
-	s.Error(err)
+	s.Require().Error(err)
 	_, err = bad.WithPassword("p")
-	s.Error(err)
+	s.Require().Error(err)
 	_, err = bad.WithUserAndPassword("u", "p")
-	s.Error(err)
+	s.Require().Error(err)
 	_, err = bad.ChangePort("1")
-	s.Error(err)
+	s.Require().Error(err)
 }
 
 func mustURI(d DSN) *urlParts {

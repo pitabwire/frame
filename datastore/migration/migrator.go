@@ -178,21 +178,21 @@ func (m *datastoreMigrator) ApplyNewMigrations(ctx context.Context) error {
 	for _, migration := range unAppliedMigrations {
 		err = db.Transaction(func(tx *gorm.DB) error {
 			var lockRow Migration
-			err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			lockErr := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
 				First(&lockRow, "id = ?", migration.ID).Error
-			if err != nil {
-				if data.ErrorIsNoRows(err) {
+			if lockErr != nil {
+				if data.ErrorIsNoRows(lockErr) {
 					return nil
 				}
-				return err
+				return lockErr
 			}
 
 			if lockRow.AppliedAt.Valid {
 				return nil
 			}
 
-			if err := tx.Exec(lockRow.Patch).Error; err != nil {
-				return err
+			if execErr := tx.Exec(lockRow.Patch).Error; execErr != nil {
+				return execErr
 			}
 
 			return tx.Exec(

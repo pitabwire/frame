@@ -170,33 +170,7 @@ func NewServiceWithContext(ctx context.Context, opts ...Option) (context.Context
 		}
 	}
 
-	wkpCfg, ok := svc.Config().(config.ConfigurationWorkerPool)
-	if !ok {
-		wkpCfg = &cfg
-	}
-	svc.workerPoolManager, err = workerpool.NewManager(ctx, wkpCfg, svc.sendStopError)
-	if err != nil {
-		svc.AddStartupError(err)
-	}
-	svc.AddCleanupMethod(func(cleanupCtx context.Context) {
-		if svc.workerPoolManager != nil {
-			_ = svc.workerPoolManager.Shutdown(cleanupCtx)
-		}
-	})
-
-	svc.queueManager = queue.NewQueueManager(ctx, svc.workerPoolManager)
-	svc.AddCleanupMethod(func(cleanupCtx context.Context) {
-		if svc.queueManager != nil {
-			_ = svc.queueManager.Close(cleanupCtx)
-		}
-	})
-
-	// Setup events queue first (before startup methods)
-	// This registers the internal events publisher/subscriber
-	err = svc.setupEventsQueue(ctx)
-	if err != nil {
-		svc.AddStartupError(fmt.Errorf("could not setup application events: %w", err))
-	}
+	svc.initWorkersAndQueues(ctx, &cfg)
 
 	// Execute pre-start methods now that queue manager is initialized
 	// This ensures queue registrations from options are applied
@@ -665,7 +639,36 @@ func (s *Service) Stop(ctx context.Context) {
 	if s.cleanup != nil {
 		s.cleanup(ctx)
 	}
+}
 
+// initWorkersAndQueues sets up the worker pool manager, queue manager, and events queue.
+func (s *Service) initWorkersAndQueues(ctx context.Context, cfg *config.ConfigurationDefault) {
+	wkpCfg, ok := s.Config().(config.ConfigurationWorkerPool)
+	if !ok {
+		wkpCfg = cfg
+	}
+	var err error
+	s.workerPoolManager, err = workerpool.NewManager(ctx, wkpCfg, s.sendStopError)
+	if err != nil {
+		s.AddStartupError(err)
+	}
+	s.AddCleanupMethod(func(cleanupCtx context.Context) {
+		if s.workerPoolManager != nil {
+			_ = s.workerPoolManager.Shutdown(cleanupCtx)
+		}
+	})
+
+	s.queueManager = queue.NewQueueManager(ctx, s.workerPoolManager)
+	s.AddCleanupMethod(func(cleanupCtx context.Context) {
+		if s.queueManager != nil {
+			_ = s.queueManager.Close(cleanupCtx)
+		}
+	})
+
+	err = s.setupEventsQueue(ctx)
+	if err != nil {
+		s.AddStartupError(fmt.Errorf("could not setup application events: %w", err))
+	}
 }
 
 func (s *Service) sendStopError(ctx context.Context, err error) {

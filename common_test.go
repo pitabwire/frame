@@ -1,4 +1,4 @@
-package frame
+package frame //nolint:testpackage // tests access package internals
 
 import (
 	"database/sql"
@@ -7,11 +7,10 @@ import (
 	"testing"
 
 	"connectrpc.com/connect"
+	"github.com/stretchr/testify/suite"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"gorm.io/gorm"
-
-	"github.com/stretchr/testify/suite"
 )
 
 type ErrorSuite struct {

@@ -1,4 +1,4 @@
-package redis
+package redis //nolint:testpackage // tests access package internals
 
 import (
 	"context"
@@ -43,7 +43,7 @@ func (s *RedisSuite) TestNewAndOperationsTable() {
 	ctx := context.Background()
 
 	_, err := New(cache.WithDSN("://bad-dsn"))
-	s.Error(err)
+	s.Require().Error(err)
 
 	raw, err := New(cache.WithDSN(s.dsn), cache.WithMaxAge(2*time.Second))
 	s.Require().NoError(err)
@@ -122,7 +122,7 @@ func (s *RedisSuite) TestNewAndOperationsTable() {
 
 	for _, tc := range testCases {
 		s.Run(tc.name, func() {
-			s.NoError(tc.run())
+			s.Require().NoError(tc.run())
 			s.True(raw.SupportsPerKeyTTL())
 		})
 	}

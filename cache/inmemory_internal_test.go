@@ -26,11 +26,11 @@ func (s *InMemoryInternalSuite) TestExpireSupportsAndCleanup() {
 
 	s.True(mem.SupportsPerKeyTTL())
 
-	s.NoError(mem.Set(ctx, "expire_key", []byte("value"), 0))
-	s.NoError(mem.Expire(ctx, "expire_key", 50*time.Millisecond))
+	s.Require().NoError(mem.Set(ctx, "expire_key", []byte("value"), 0))
+	s.Require().NoError(mem.Expire(ctx, "expire_key", 50*time.Millisecond))
 	time.Sleep(80 * time.Millisecond)
 	_, found, err := mem.Get(ctx, "expire_key")
-	s.NoError(err)
+	s.Require().NoError(err)
 	s.False(found)
 
 	// Explicitly exercise cleanup path.
@@ -41,6 +41,6 @@ func (s *InMemoryInternalSuite) TestExpireSupportsAndCleanup() {
 	mem.entryCount.Store(1)
 	mem.cleanup()
 	exists, err := mem.Exists(ctx, "stale")
-	s.NoError(err)
+	s.Require().NoError(err)
 	s.False(exists)
 }

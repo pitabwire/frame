@@ -15,6 +15,8 @@ import (
 	"github.com/pitabwire/frame/security"
 )
 
+const defaultExpandMaxDepth = 3
+
 // ketoAdapter implements the security.Authorizer interface using Ory Keto gRPC.
 type ketoAdapter struct {
 	readConn     *grpc.ClientConn
@@ -103,11 +105,11 @@ func (k *ketoAdapter) Check(ctx context.Context, req security.CheckRequest) (sec
 	}
 
 	result := security.CheckResult{
-		Allowed:   resp.Allowed,
+		Allowed:   resp.GetAllowed(),
 		CheckedAt: time.Now().Unix(),
 	}
 
-	if !resp.Allowed {
+	if !resp.GetAllowed() {
 		result.Reason = "no matching relation found"
 	}
 
@@ -238,8 +240,8 @@ func (k *ketoAdapter) ListRelations(ctx context.Context, object security.ObjectR
 		return nil, NewAuthzServiceError("list_relations", err)
 	}
 
-	tuples := make([]security.RelationTuple, len(resp.RelationTuples))
-	for i, kt := range resp.RelationTuples {
+	tuples := make([]security.RelationTuple, len(resp.GetRelationTuples()))
+	for i, kt := range resp.GetRelationTuples() {
 		tuples[i] = fromKetoTuple(kt)
 	}
 
@@ -270,8 +272,8 @@ func (k *ketoAdapter) ListSubjectRelations(
 		return nil, NewAuthzServiceError("list_subject_relations", err)
 	}
 
-	tuples := make([]security.RelationTuple, len(resp.RelationTuples))
-	for i, kt := range resp.RelationTuples {
+	tuples := make([]security.RelationTuple, len(resp.GetRelationTuples()))
+	for i, kt := range resp.GetRelationTuples() {
 		tuples[i] = fromKetoTuple(kt)
 	}
 
@@ -290,13 +292,13 @@ func (k *ketoAdapter) Expand(
 
 	resp, err := k.expandClient.Expand(ctx, &rts.ExpandRequest{
 		Subject:  rts.NewSubjectSet(object.Namespace, object.ID, relation),
-		MaxDepth: 3,
+		MaxDepth: defaultExpandMaxDepth,
 	})
 	if err != nil {
 		return nil, NewAuthzServiceError("expand", err)
 	}
 
-	subjects := collectSubjects(resp.Tree)
+	subjects := collectSubjects(resp.GetTree())
 	return subjects, nil
 }
 
@@ -308,8 +310,8 @@ func collectSubjects(tree *rts.SubjectTree) []security.SubjectRef {
 
 	var subjects []security.SubjectRef
 
-	if tree.Tuple != nil && tree.Tuple.Subject != nil {
-		switch s := tree.Tuple.Subject.Ref.(type) {
+	if tree.GetTuple() != nil && tree.GetTuple().GetSubject() != nil {
+		switch s := tree.GetTuple().GetSubject().GetRef().(type) {
 		case *rts.Subject_Id:
 			subjects = append(subjects, security.SubjectRef{
 				Namespace: security.NamespaceProfile,
@@ -317,14 +319,14 @@ func collectSubjects(tree *rts.SubjectTree) []security.SubjectRef {
 			})
 		case *rts.Subject_Set:
 			subjects = append(subjects, security.SubjectRef{
-				Namespace: s.Set.Namespace,
-				ID:        s.Set.Object,
-				Relation:  s.Set.Relation,
+				Namespace: s.Set.GetNamespace(),
+				ID:        s.Set.GetObject(),
+				Relation:  s.Set.GetRelation(),
 			})
 		}
 	}
 
-	for _, child := range tree.Children {
+	for _, child := range tree.GetChildren() {
 		subjects = append(subjects, collectSubjects(child)...)
 	}
 
@@ -352,14 +354,14 @@ func toKetoTuple(t security.RelationTuple) *rts.RelationTuple {
 func fromKetoTuple(kt *rts.RelationTuple) security.RelationTuple {
 	t := security.RelationTuple{
 		Object: security.ObjectRef{
-			Namespace: kt.Namespace,
-			ID:        kt.Object,
+			Namespace: kt.GetNamespace(),
+			ID:        kt.GetObject(),
 		},
-		Relation: kt.Relation,
+		Relation: kt.GetRelation(),
 	}
 
-	if kt.Subject != nil {
-		switch s := kt.Subject.Ref.(type) {
+	if kt.GetSubject() != nil {
+		switch s := kt.GetSubject().GetRef().(type) {
 		case *rts.Subject_Id:
 			t.Subject = security.SubjectRef{
 				Namespace: security.NamespaceProfile,
@@ -367,9 +369,9 @@ func fromKetoTuple(kt *rts.RelationTuple) security.RelationTuple {
 			}
 		case *rts.Subject_Set:
 			t.Subject = security.SubjectRef{
-				Namespace: s.Set.Namespace,
-				ID:        s.Set.Object,
-				Relation:  s.Set.Relation,
+				Namespace: s.Set.GetNamespace(),
+				ID:        s.Set.GetObject(),
+				Relation:  s.Set.GetRelation(),
 			}
 		}
 	}

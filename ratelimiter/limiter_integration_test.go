@@ -2,13 +2,10 @@ package ratelimiter_test
 
 import (
 	"context"
-	"errors"
 	"testing"
 	"time"
 
 	"github.com/pitabwire/util"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
 	"github.com/pitabwire/frame/cache"
@@ -42,7 +39,7 @@ func (s *RateLimiterIntegrationSuite) SetupSuite() {
 		}
 	}
 
-	require.NotEmpty(s.T(), s.natsDSN.String())
+	s.Require().NotEmpty(s.natsDSN.String())
 }
 
 func TestRateLimiterIntegrationSuite(t *testing.T) {
@@ -80,7 +77,7 @@ func (s *RateLimiterIntegrationSuite) TestWindowLimiterBackendSupportTable() {
 	for _, tc := range testCases {
 		s.Run(tc.name, func() {
 			raw, err := tc.build()
-			require.NoError(s.T(), err)
+			s.Require().NoError(err)
 			defer raw.Close()
 
 			_, gotErr := ratelimiter.NewWindowLimiter(raw, &ratelimiter.WindowConfig{
@@ -91,12 +88,12 @@ func (s *RateLimiterIntegrationSuite) TestWindowLimiterBackendSupportTable() {
 			})
 
 			if tc.wantErr == nil {
-				assert.NoError(s.T(), gotErr)
+				s.Require().NoError(gotErr)
 				return
 			}
 
-			assert.Error(s.T(), gotErr)
-			assert.True(s.T(), errors.Is(gotErr, tc.wantErr), gotErr)
+			s.Require().Error(gotErr)
+			s.Require().ErrorIs(gotErr, tc.wantErr, gotErr.Error())
 
 			// Keep backend active long enough to verify interface behavior in live run.
 			_, _ = raw.Exists(ctx, "nonexistent")

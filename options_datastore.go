@@ -66,55 +66,56 @@ func WithDatastoreConnectionWithOptions(name string, opts ...pool.Option) Option
 	}
 }
 
+// datastoreOptsFromConfig reads datastore-related configuration from the service
+// and returns enriched pool options and whether migration should run.
+func datastoreOptsFromConfig(s *Service, opts []pool.Option) ([]pool.Option, bool) {
+	var connectionSlice []pool.Connection
+	doMigrate := false
+
+	traceCfg, ok := s.Config().(config.ConfigurationDatabaseTracing)
+	if ok {
+		opts = append(opts, pool.WithTraceConfig(traceCfg))
+	}
+
+	cfg, ok := s.Config().(config.ConfigurationDatabase)
+	if ok {
+		for _, primaryDBURL := range cfg.GetDatabasePrimaryHostURL() {
+			connectionSlice = append(connectionSlice, pool.Connection{DSN: primaryDBURL, ReadOnly: false})
+		}
+		for _, replicaDBURL := range cfg.GetDatabaseReplicaHostURL() {
+			connectionSlice = append(connectionSlice, pool.Connection{DSN: replicaDBURL, ReadOnly: true})
+		}
+		if cfg.GetMaxOpenConnections() > 0 {
+			opts = append(opts, pool.WithMaxOpen(cfg.GetMaxOpenConnections()))
+		}
+		if cfg.GetMaxIdleConnections() > 0 {
+			opts = append(opts, pool.WithMaxIdle(cfg.GetMaxIdleConnections()))
+		}
+		if cfg.GetMaxConnectionLifeTimeInSeconds() > 0 {
+			opts = append(opts, pool.WithMaxLifetime(cfg.GetMaxConnectionLifeTimeInSeconds()))
+		}
+		doMigrate = cfg.DoDatabaseMigrate()
+	}
+
+	opts = append(opts, pool.WithConnections(connectionSlice))
+	return opts, doMigrate
+}
+
 func WithDatastore(opts ...pool.Option) Option {
 	return func(ctx context.Context, s *Service) {
-		var connectionSlice []pool.Connection
-		doMigrate := false
-
-		traceCfg, ok := s.Config().(config.ConfigurationDatabaseTracing)
-		if ok {
-			opts = append(opts, pool.WithTraceConfig(traceCfg))
-		}
-
-		cfg, ok := s.Config().(config.ConfigurationDatabase)
-		if ok {
-			// Add connections from config if available
-			for _, primaryDBURL := range cfg.GetDatabasePrimaryHostURL() {
-				connectionSlice = append(connectionSlice, pool.Connection{DSN: primaryDBURL, ReadOnly: false})
-			}
-
-			for _, replicaDBURL := range cfg.GetDatabaseReplicaHostURL() {
-				connectionSlice = append(connectionSlice, pool.Connection{DSN: replicaDBURL, ReadOnly: true})
-			}
-
-			// Apply operational pool tuning from configuration.
-			if cfg.GetMaxOpenConnections() > 0 {
-				opts = append(opts, pool.WithMaxOpen(cfg.GetMaxOpenConnections()))
-			}
-			if cfg.GetMaxIdleConnections() > 0 {
-				opts = append(opts, pool.WithMaxIdle(cfg.GetMaxIdleConnections()))
-			}
-			if cfg.GetMaxConnectionLifeTimeInSeconds() > 0 {
-				opts = append(opts, pool.WithMaxLifetime(cfg.GetMaxConnectionLifeTimeInSeconds()))
-			}
-
-			doMigrate = cfg.DoDatabaseMigrate()
-		}
-
-		// Add connections from config (if any exist)
-		opts = append(opts, pool.WithConnections(connectionSlice))
+		enrichedOpts, doMigrate := datastoreOptsFromConfig(s, opts)
 
 		// Create the manager if it doesn't exist
 		dbManager := WithDatastoreManager()
 		dbManager(ctx, s)
 
-		dbConnectionOpts := WithDatastoreConnectionWithOptions(datastore.DefaultPoolName, opts...)
+		dbConnectionOpts := WithDatastoreConnectionWithOptions(datastore.DefaultPoolName, enrichedOpts...)
 		dbConnectionOpts(ctx, s)
 
 		if doMigrate {
 			// minor feature to automatically make a pool that can be used for db migrations
-			opts = append(opts, pool.WithPreparedStatements(false))
-			migrationOpts := WithDatastoreConnectionWithOptions(datastore.DefaultMigrationPoolName, opts...)
+			enrichedOpts = append(enrichedOpts, pool.WithPreparedStatements(false))
+			migrationOpts := WithDatastoreConnectionWithOptions(datastore.DefaultMigrationPoolName, enrichedOpts...)
 			migrationOpts(ctx, s)
 		}
 	}

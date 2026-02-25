@@ -10,8 +10,11 @@ import (
 )
 
 const (
-	defaultWindowPrefix = "ratelimit"
-	windowTLLOffset     = time.Second
+	defaultWindowPrefix  = "ratelimit"
+	windowTLLOffset      = time.Second
+	defaultMaxPerWindow  = 600
+	bucketKeyEstOverhead = 24
+	decimalBase          = 10
 )
 
 var ErrCacheDoesNotSupportPerKeyTTL = errors.New("cache backend does not support per-key TTL")
@@ -28,7 +31,7 @@ type WindowConfig struct {
 func DefaultWindowConfig() *WindowConfig {
 	return &WindowConfig{
 		WindowDuration: time.Minute,
-		MaxPerWindow:   600,
+		MaxPerWindow:   defaultMaxPerWindow,
 		KeyPrefix:      defaultWindowPrefix,
 		FailOpen:       false,
 	}
@@ -81,12 +84,12 @@ func (wl *WindowLimiter) bucketKey(key string, now time.Time) string {
 	bucket := now.Unix() / windowSeconds
 
 	// Single allocation for final string.
-	buf := make([]byte, 0, len(wl.config.KeyPrefix)+len(key)+24)
+	buf := make([]byte, 0, len(wl.config.KeyPrefix)+len(key)+bucketKeyEstOverhead)
 	buf = append(buf, wl.config.KeyPrefix...)
 	buf = append(buf, ':')
 	buf = append(buf, key...)
 	buf = append(buf, ':')
-	buf = strconv.AppendInt(buf, bucket, 10)
+	buf = strconv.AppendInt(buf, bucket, decimalBase)
 	return string(buf)
 }
 
@@ -100,7 +103,7 @@ func normalizeWindowConfig(cfg *WindowConfig) WindowConfig {
 		result.WindowDuration = time.Minute
 	}
 	if result.MaxPerWindow <= 0 {
-		result.MaxPerWindow = 600
+		result.MaxPerWindow = defaultMaxPerWindow
 	}
 	if result.KeyPrefix == "" {
 		result.KeyPrefix = defaultWindowPrefix

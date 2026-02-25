@@ -1,4 +1,4 @@
-package client
+package client //nolint:testpackage // tests access unexported newTeeReadCloser
 
 import (
 	"bytes"
@@ -55,7 +55,12 @@ func (s *LoggingTransportSuite) TestNewLoggingTransportAndRoundTrip() {
 		WithTransportMaxBodySize(10),
 	)
 
-	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, "http://example.com", io.NopCloser(strings.NewReader("request body payload")))
+	req, err := http.NewRequestWithContext(
+		context.Background(),
+		http.MethodPost,
+		"http://example.com",
+		io.NopCloser(strings.NewReader("request body payload")),
+	)
 	s.Require().NoError(err)
 	resp, err := rt.RoundTrip(req)
 	s.Require().NoError(err)
@@ -76,7 +81,7 @@ func (s *LoggingTransportSuite) TestRoundTripErrorAndWrapClient() {
 	s.Require().NoError(err)
 	resp, err := rt.RoundTrip(req)
 	s.Nil(resp)
-	s.Error(err)
+	s.Require().Error(err)
 
 	wrapped := WrapClient(nil, WithTransportLogRequests(true))
 	s.NotNil(wrapped)

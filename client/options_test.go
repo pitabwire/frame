@@ -1,4 +1,4 @@
-package client
+package client //nolint:testpackage // tests access unexported httpConfig
 
 import (
 	"context"

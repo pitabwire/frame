@@ -168,7 +168,9 @@ func (s *pool) Migrate(ctx context.Context, migrationsDirPath string, migrations
 
 	unlock, lockErr := acquireMigrationLock(ctx, db)
 	if lockErr != nil {
-		util.Log(ctx).WithError(lockErr).Warn("MigrateDatastore -- couldn't acquire advisory lock, continuing without lock")
+		util.Log(ctx).
+			WithError(lockErr).
+			Warn("MigrateDatastore -- couldn't acquire advisory lock, continuing without lock")
 	}
 	if unlock != nil {
 		defer unlock()
@@ -223,7 +225,7 @@ func ensureMigrationTable(_ context.Context, migrator gorm.Migrator) error {
 
 func acquireMigrationLock(ctx context.Context, db *gorm.DB) (func(), error) {
 	if db == nil || db.Dialector.Name() != "postgres" {
-		return nil, nil
+		return nil, nil //nolint:nilnil // intentional: nil unlock func signals no lock was acquired
 	}
 
 	ticker := time.NewTicker(migrationLockRetryInterval)

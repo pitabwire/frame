@@ -17,6 +17,7 @@ import (
 const (
 	defaultIPPrefix   = "ratelimit:ip"
 	defaultUserPrefix = "ratelimit:user"
+	unknownIdentifier = "unknown"
 )
 
 // IPRateLimiter applies cache-backed per-IP window limits.
@@ -132,12 +133,12 @@ func (rl *UserRateLimiter) Close() error {
 // GetIP extracts caller IP from request headers/remote address.
 func GetIP(r *http.Request) string {
 	if r == nil {
-		return "unknown"
+		return unknownIdentifier
 	}
 
 	ip := util.GetIP(r)
 	if ip == "" {
-		return "unknown"
+		return unknownIdentifier
 	}
 	return ip
 }

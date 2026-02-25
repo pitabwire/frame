@@ -1,4 +1,4 @@
-package data
+package data //nolint:testpackage // consistent with other test files in package
 
 import (
 	"errors"
@@ -7,9 +7,8 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/jackc/pgx/v5/pgconn"
-	"gorm.io/gorm"
-
 	"github.com/stretchr/testify/suite"
+	"gorm.io/gorm"
 )
 
 type DataErrorsSuite struct {
@@ -35,7 +34,11 @@ func (s *DataErrorsSuite) TestErrorConvertToAPITable() {
 		{name: "nil", err: nil, want: connect.CodeUnknown},
 		{name: "gorm not found", err: gorm.ErrRecordNotFound, want: connect.CodeNotFound},
 		{name: "wrapped gorm", err: fmt.Errorf("wrapped: %w", gorm.ErrRecordNotFound), want: connect.CodeNotFound},
-		{name: "duplicate", err: errors.New("duplicate key value violates unique constraint"), want: connect.CodeAlreadyExists},
+		{
+			name: "duplicate",
+			err:  errors.New("duplicate key value violates unique constraint"),
+			want: connect.CodeAlreadyExists,
+		},
 		{name: "foreign key", err: errors.New("violates foreign key"), want: connect.CodeInvalidArgument},
 		{name: "check constraint", err: errors.New("violates check constraint"), want: connect.CodeInvalidArgument},
 		{name: "not null", err: errors.New("violates not-null constraint"), want: connect.CodeInvalidArgument},

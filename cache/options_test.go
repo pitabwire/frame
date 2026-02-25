@@ -1,4 +1,4 @@
-package cache
+package cache //nolint:testpackage // tests access unexported Options struct
 
 import (
 	"testing"

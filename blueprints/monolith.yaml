@@ -1,15 +1,12 @@
 schema_version: 0.1
 runtime_mode: monolith
-services:
-  - name: devices
-    port: ":8081"
-    http:
-      - route: /devices
-        method: GET
-        handler: GetDevices
-  - name: geolocation
-    port: ":8082"
-    http:
-      - route: /geo
-        method: GET
-        handler: GetGeo
+service:
+  name: profile-monolith
+  port: ":8080"
+http:
+  - route: /devices
+    method: GET
+    handler: GetDevices
+  - route: /geo
+    method: GET
+    handler: GetGeo

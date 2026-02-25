@@ -26,6 +26,7 @@ These examples are small, compilable, and use the canonical Frame bootstrap patt
 
 - `blueprints/polylith.yaml`
 - `blueprints/monolith.yaml`
+- `blueprints/monolith.yaml` builds one mux + one `frame.Service` with multiple routes.
 
 Use with:
 

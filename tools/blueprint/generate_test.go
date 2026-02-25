@@ -70,7 +70,18 @@ func TestGenerateMonolith(t *testing.T) {
 	}
 
 	mainPath := filepath.Join(dir, "cmd", "main.go")
-	if _, err := os.Stat(mainPath); err != nil {
+	data, err := os.ReadFile(mainPath)
+	if err != nil {
 		t.Fatalf("main.go not found: %v", err)
+	}
+	content := string(data)
+	if strings.Count(content, "frame.NewService(") != 1 {
+		t.Fatalf("expected exactly one service initialization in monolith main")
+	}
+	if !strings.Contains(content, "mux := http.NewServeMux()") {
+		t.Fatalf("expected monolith main to use a single mux")
+	}
+	if strings.Contains(content, "sync.WaitGroup") {
+		t.Fatalf("monolith main should not start multiple service runners")
 	}
 }

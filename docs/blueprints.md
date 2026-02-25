@@ -44,25 +44,29 @@ queues:
 - `service.service_id`: required for polylith
 - `service.service_group`: optional
 
-Monolith example (multiple services in one binary):
+Monolith example (single mux + single runtime service):
 
 ```yaml
 schema_version: 0.1
 runtime_mode: monolith
-services:
-  - name: devices
-    port: ":8081"
-    http:
-      - route: /devices
-        method: GET
-        handler: GetDevices
-  - name: geolocation
-    port: ":8082"
-    http:
-      - route: /geo
-        method: GET
-        handler: GetGeo
+service:
+  name: profile-monolith
+  port: ":8080"
+http:
+  - route: /devices
+    method: GET
+    handler: GetDevices
+  - route: /geo
+    method: GET
+    handler: GetGeo
 ```
+
+Monolith generation contract:
+
+- Exactly one `http.ServeMux`
+- Exactly one `frame.NewService(...)`
+- Exactly one `svc.Run(ctx, port)`
+- Multiple routes are composed into the single mux
 
 ## Additive Extension Rules
 
@@ -122,6 +126,18 @@ By default, `frame build` writes into `./_generated`. For AI workflows, use `--o
 ```bash
 go run ./cmd/frame build blueprints/polylith.yaml --out ./_generated
 ```
+
+Build monolith blueprint:
+
+```bash
+go run ./cmd/frame build blueprints/monolith.yaml --out ./_generated
+```
+
+Generated files (monolith):
+
+- `cmd/main.go`
+- `pkg/services/<name>/routes.go`
+- `pkg/queues/<name>/queues.go` (when queues are defined)
 
 
 ## Blueprint Schema

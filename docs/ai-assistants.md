@@ -46,6 +46,11 @@ For monorepos, prefer:
   /openapi
 ```
 
+Monolith rule for AI generators:
+
+- Monolith must produce one `http.ServeMux`, one `frame.NewService(...)`, and one `svc.Run(...)`.
+- Multiple routes belong to the single mux; do not spawn multiple Frame services for monolith.
+
 ## How to Ask AI for Frame Code
 
 Use these prompt patterns:

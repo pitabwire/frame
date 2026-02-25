@@ -48,7 +48,7 @@ Both modes share the same shared packages and conventions. The only difference i
 
 ## Monolith Mode
 
-A single entrypoint composes multiple modules into one binary:
+A single entrypoint composes multiple modules into one binary and runs one Frame service with one mux:
 
 ```text
 /cmd/monolith/main.go
@@ -56,7 +56,7 @@ A single entrypoint composes multiple modules into one binary:
 /apps/billing/service
 ```
 
-All services are wired together in one process. This is ideal for:
+All routes are wired into the same mux in one process. This is ideal for:
 
 - fast local development
 - smaller deployments

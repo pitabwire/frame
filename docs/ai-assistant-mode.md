@@ -33,7 +33,7 @@ Frame supports two deployment modes configurable via **env** and **YAML**.
 
 ### Monolith Mode
 
-Single binary running **multiple services** (multiple handlers, queues, plugins) as one process.
+Single binary with **one `frame.Service` and one `http.ServeMux`** handling multiple routes.
 
 ### Polylith Mode
 

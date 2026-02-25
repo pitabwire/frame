@@ -35,7 +35,7 @@ func (bp *Blueprint) Generate(opts GenerateOptions) error {
 		return generatePolylith(outDir, modulePath, services[0])
 	}
 
-	return generateMonolith(outDir, modulePath, services)
+	return generateMonolith(outDir, modulePath, bp, services)
 }
 
 func generatePolylith(outDir, modulePath string, svc ServiceSpec) error {
@@ -99,7 +99,7 @@ func generatePolylith(outDir, modulePath string, svc ServiceSpec) error {
 	return nil
 }
 
-func generateMonolith(outDir, modulePath string, services []ServiceSpec) error {
+func generateMonolith(outDir, modulePath string, bp *Blueprint, services []ServiceSpec) error {
 	sortServices(services)
 
 	cmdDir := filepath.Join(outDir, "cmd")
@@ -155,7 +155,7 @@ func generateMonolith(outDir, modulePath string, services []ServiceSpec) error {
 
 	if err := writeFile(
 		filepath.Join(cmdDir, "main.go"),
-		renderMainMonolith(services, servicePkgs, queuePkgs),
+		renderMainMonolith(resolveMonolithSpec(bp, services), services, servicePkgs, queuePkgs),
 	); err != nil {
 		return err
 	}
@@ -264,10 +264,10 @@ func renderMainPolylith(svc ServiceSpec, handlersPath, queuesPath string) string
 	return b.String()
 }
 
-func renderMainMonolith(services []ServiceSpec, servicePkgs []string, queuePkgs []string) string {
+func renderMainMonolith(monolith ServiceSpec, services []ServiceSpec, servicePkgs []string, queuePkgs []string) string {
 	var b strings.Builder
 	b.WriteString("package main\n\n")
-	b.WriteString("import (\n\t\"log\"\n\t\"net/http\"\n\t\"sync\"\n\n\t\"github.com/pitabwire/frame\"\n")
+	b.WriteString("import (\n\t\"log\"\n\t\"net/http\"\n\n\t\"github.com/pitabwire/frame\"\n")
 
 	for i, pkg := range servicePkgs {
 		fmt.Fprintf(&b, "\t%[1]s %q\n", serviceAlias(services[i].Name), pkg)
@@ -281,39 +281,90 @@ func renderMainMonolith(services []ServiceSpec, servicePkgs []string, queuePkgs 
 	b.WriteString(")\n\n")
 
 	b.WriteString("func main() {\n")
-	b.WriteString("\tvar wg sync.WaitGroup\n")
-	fmt.Fprintf(&b, "\terrCh := make(chan error, %d)\n\n", len(services))
-
+	b.WriteString("\tmux := http.NewServeMux()\n")
 	for _, svc := range services {
 		alias := serviceAlias(svc.Name)
-		b.WriteString("\t{\n")
-		b.WriteString("\t\tmu := http.NewServeMux()\n")
-		fmt.Fprintf(&b, "\t\t%s.RegisterRoutes(mu)\n", alias)
-		b.WriteString("\t\tctx, s := frame.NewService(\n")
-		fmt.Fprintf(&b, "\t\t\tframe.WithName(%q),\n", svc.Name)
-		b.WriteString("\t\t\tframe.WithHTTPHandler(mu),\n")
-		for _, opt := range resolvePlugins(svc) {
-			fmt.Fprintf(&b, "\t\t\t%s,\n", opt)
-		}
-		for _, opt := range queueOptsLines(renderQueueOptions(svc)) {
-			opt = strings.ReplaceAll(opt, "queues.", queueAlias(svc.Name)+".")
-			fmt.Fprintf(&b, "\t\t\t%s,\n", opt)
-		}
-		b.WriteString("\t\t)\n")
-		b.WriteString("\t\tport := \"")
-		b.WriteString(defaultPort(svc.Port))
-		b.WriteString("\"\n")
-		b.WriteString("\t\twg.Add(1)\n")
-		b.WriteString("\t\tgo func() {\n\t\t\tdefer wg.Done()\n")
-		b.WriteString("\t\t\tif err := s.Run(ctx, port); err != nil {\n\t\t\t\terrCh <- err\n\t\t\t}\n\t\t}()\n")
-		b.WriteString("\t}\n\n")
+		fmt.Fprintf(&b, "\t%s.RegisterRoutes(mux)\n", alias)
 	}
-
-	b.WriteString("\tgo func() {\n\t\twg.Wait()\n\t\tclose(errCh)\n\t}()\n\n")
-	b.WriteString("\tif err, ok := <-errCh; ok && err != nil {\n\t\tlog.Fatal(err)\n\t}\n")
+	b.WriteString("\n")
+	b.WriteString("\tctx, svc := frame.NewService(\n")
+	fmt.Fprintf(&b, "\t\tframe.WithName(%q),\n", defaultMonolithName(monolith.Name))
+	b.WriteString("\t\tframe.WithHTTPHandler(mux),\n")
+	for _, opt := range resolveMonolithPlugins(services) {
+		fmt.Fprintf(&b, "\t\t%s,\n", opt)
+	}
+	for _, opt := range resolveMonolithQueueOptions(services) {
+		fmt.Fprintf(&b, "\t\t%s,\n", opt)
+	}
+	b.WriteString("\t)\n\n")
+	fmt.Fprintf(&b, "\tif err := svc.Run(ctx, %q); err != nil {\n", defaultPort(monolith.Port))
+	b.WriteString("\t\tlog.Fatal(err)\n\t}\n")
 	b.WriteString("}\n")
 
 	return b.String()
+}
+
+func resolveMonolithSpec(bp *Blueprint, services []ServiceSpec) ServiceSpec {
+	spec := ServiceSpec{
+		Name: "monolith",
+		Port: ":8080",
+	}
+	if bp != nil && bp.Service != nil {
+		if strings.TrimSpace(bp.Service.Name) != "" {
+			spec.Name = strings.TrimSpace(bp.Service.Name)
+		}
+		if strings.TrimSpace(bp.Service.Port) != "" {
+			spec.Port = strings.TrimSpace(bp.Service.Port)
+		}
+		return spec
+	}
+	if len(services) == 1 {
+		if strings.TrimSpace(services[0].Name) != "" {
+			spec.Name = strings.TrimSpace(services[0].Name)
+		}
+		if strings.TrimSpace(services[0].Port) != "" {
+			spec.Port = strings.TrimSpace(services[0].Port)
+		}
+	}
+	return spec
+}
+
+func resolveMonolithPlugins(services []ServiceSpec) []string {
+	seen := make(map[string]struct{})
+	var out []string
+	for _, svc := range services {
+		for _, opt := range resolvePlugins(svc) {
+			if _, ok := seen[opt]; ok {
+				continue
+			}
+			seen[opt] = struct{}{}
+			out = append(out, opt)
+		}
+	}
+	return out
+}
+
+func resolveMonolithQueueOptions(services []ServiceSpec) []string {
+	seen := make(map[string]struct{})
+	var out []string
+	for _, svc := range services {
+		for _, opt := range queueOptsLines(renderQueueOptions(svc)) {
+			qualified := strings.ReplaceAll(opt, "queues.", queueAlias(svc.Name)+".")
+			if _, ok := seen[qualified]; ok {
+				continue
+			}
+			seen[qualified] = struct{}{}
+			out = append(out, qualified)
+		}
+	}
+	return out
+}
+
+func defaultMonolithName(name string) string {
+	if strings.TrimSpace(name) == "" {
+		return "monolith"
+	}
+	return name
 }
 
 func resolvePlugins(svc ServiceSpec) []string {

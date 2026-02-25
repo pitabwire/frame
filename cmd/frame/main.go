@@ -356,26 +356,16 @@ func requireServiceTarget(bp *blueprint.Blueprint, name string) error {
 }
 
 func applyMonolithService(bp *blueprint.Blueprint, name, port, module string) {
-	if bp.Services == nil {
-		bp.Services = []blueprint.ServiceSpec{}
+	if bp.Service == nil {
+		bp.Service = &blueprint.ServiceSpec{}
 	}
-	found := false
-	for i := range bp.Services {
-		if bp.Services[i].Name == name {
-			bp.Services[i].Port = port
-			if module != "" {
-				bp.Services[i].Module = module
-			}
-			found = true
-			break
-		}
+	bp.Service.Name = name
+	bp.Service.Port = port
+	if module != "" {
+		bp.Service.Module = module
 	}
-	if !found {
-		bp.Services = append(bp.Services, blueprint.ServiceSpec{Name: name, Port: port, Module: module})
-	}
-	if bp.Service != nil {
-		bp.Service = nil
-	}
+	// Monolith has one runtime service; legacy per-service entries are ignored.
+	bp.Services = nil
 }
 
 func applyPolylithService(bp *blueprint.Blueprint, name, port, module string) {

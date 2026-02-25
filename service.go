@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"os/signal"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -24,6 +25,7 @@ import (
 	"github.com/pitabwire/frame/datastore"
 	"github.com/pitabwire/frame/events"
 	"github.com/pitabwire/frame/localization"
+	"github.com/pitabwire/frame/openapi"
 	"github.com/pitabwire/frame/profiler"
 	"github.com/pitabwire/frame/queue"
 	"github.com/pitabwire/frame/security"
@@ -47,6 +49,8 @@ const (
 	defaultHTTPWriteTimeoutSeconds = 10
 	defaultHTTPTimeoutSeconds      = 30
 	defaultHTTPIdleTimeoutSeconds  = 90
+
+	defaultOpenAPIBasePath = "/debug/frame/openapi"
 )
 
 // Service framework struct to hold together all application components
@@ -96,6 +100,9 @@ type Service struct {
 
 	profilerServer *profiler.Server
 
+	openapiRegistry *openapi.Registry
+	openapiBasePath string
+
 	startOnce            sync.Once
 	startupOnce          sync.Once
 	startupCompleted     bool
@@ -132,11 +139,12 @@ func NewServiceWithContext(ctx context.Context, opts ...Option) (context.Context
 	cfg, _ := config.FromEnv[config.ConfigurationDefault]()
 
 	svc := &Service{
-		name:           cfg.Name(),
-		cancelFunc:     signalCancelFunc, // Store its cancel function
-		errorChannel:   make(chan error, 1),
-		configuration:  &cfg,
-		profilerServer: profiler.NewServer(),
+		name:            cfg.Name(),
+		cancelFunc:      signalCancelFunc, // Store its cancel function
+		errorChannel:    make(chan error, 1),
+		configuration:   &cfg,
+		profilerServer:  profiler.NewServer(),
+		openapiBasePath: defaultOpenAPIBasePath,
 	}
 
 	opts = append(
@@ -474,8 +482,41 @@ func (s *Service) createAndConfigureMux(ctx context.Context) *http.ServeMux {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc(s.healthCheckPath, s.HandleHealth)
+	s.registerOpenAPIRoutes(mux)
 	mux.Handle("/", applicationHandler)
 	return mux
+}
+
+func (s *Service) registerOpenAPIRoutes(mux *http.ServeMux) {
+	if s.openapiRegistry == nil {
+		return
+	}
+	if len(s.openapiRegistry.List()) == 0 {
+		return
+	}
+	base := s.openapiBasePath
+	if base == "" {
+		base = defaultOpenAPIBasePath
+	}
+	handler := s.openAPIHandler(base)
+	mux.Handle(base, handler)
+	mux.Handle(base+"/", handler)
+}
+
+func (s *Service) openAPIHandler(base string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == base || r.URL.Path == base+"/" {
+			openapi.ServeIndex(s.openapiRegistry)(w, r)
+			return
+		}
+		if strings.HasPrefix(r.URL.Path, base+"/") {
+			req := r.Clone(r.Context())
+			req.URL.Path = strings.TrimPrefix(r.URL.Path, base+"/")
+			openapi.ServeSpec(s.openapiRegistry)(w, req)
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}
 }
 
 func (s *Service) initializeServerDrivers(ctx context.Context, httpPort string) {

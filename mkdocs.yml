@@ -64,13 +64,16 @@ nav:
       - Home: index.md
       - Architecture: architecture.md
       - Getting Started: getting-started.md
+      - Monorepo: monorepo.md
       - Service Lifecycle: service.md
       - Plugins & Options: plugins-options.md
       - AI Assistants: ai-assistants.md
+      - Blueprints: blueprints.md
       - Examples: examples.md
   - Runtime:
       - Server: server.md
       - Configuration: configuration.md
+      - OpenAPI: openapi.md
       - Logging: logging.md
       - Telemetry: telemetry.md
       - Profiler: profiler.md

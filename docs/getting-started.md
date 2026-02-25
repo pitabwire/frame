@@ -8,6 +8,26 @@ This guide shows the minimal setup and then builds toward a real service that us
 go get -u github.com/pitabwire/frame
 ```
 
+## Default Repo Shape (Monorepo)
+
+Frame defaults to a monorepo layout that supports **monolith** and **polylith** builds without restructuring:
+
+```text
+/cmd
+  /monolith
+  /users
+  /billing
+/apps
+  /users
+  /billing
+/pkg
+  /plugins
+  /openapi
+/configs
+```
+
+See `docs/monorepo.md` for the full structure.
+
 ## Minimal HTTP Service (Canonical Pattern)
 
 ```go

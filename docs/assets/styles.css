@@ -1,8 +1,46 @@
+/* Frame primary color */
 :root {
+  --md-primary-fg-color: #0A65C0;
   --md-text-font: "IBM Plex Sans", system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
   --md-code-font: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
 }
 
+/* Hide title in favor of logo */
+.md-header__topic {
+  display: none;
+}
+
+/* Increase size of logo */
+.md-header__button.md-logo img,
+.md-header__button.md-logo svg {
+  height: 1.8rem;
+}
+
+/* Always show tabs, even on smaller screens */
+@media screen and (max-width: 76.234375em) {
+  .md-header__button.md-logo {
+    display: block;
+  }
+
+  .md-tabs {
+    display: block;
+  }
+}
+
+/* Rounded search box + results */
+.md-search__form {
+  border-radius: .5rem;
+}
+
+[data-md-toggle=search]:checked~.md-header .md-search__form {
+  border-radius: .5rem .5rem 0 0;
+}
+
+[dir=ltr] .md-search__output {
+  border-radius: 0 0 .5rem .5rem;
+}
+
+/* Typography */
 .md-typeset h1 {
   letter-spacing: -0.02em;
 }
@@ -15,14 +53,12 @@
   font-size: 0.9em;
 }
 
+/* Make tables use the maximum available size */
+.md-typeset__table {
+  min-width: 100%;
+  width: 100%;
+}
+
 .md-typeset table {
   font-size: 0.95em;
-}
-
-.md-header {
-  box-shadow: none;
-}
-
-.md-footer {
-  display: none;
 }

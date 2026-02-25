@@ -1,0 +1,29 @@
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="360"
+  height="100"
+  viewBox="0 0 360 100"
+>
+  <!-- Icon group -->
+  <g transform="translate(0, 15)">
+    <path d="M20 10 v50 h14" fill="none" stroke="#0A5DBA" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M120 10 v50 h-14" fill="none" stroke="#0A5DBA" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+
+    <circle cx="60" cy="35" r="12" fill="#0A65C0"/>
+    <line x1="72" y1="35" x2="95" y2="42" stroke="#2A4A66" stroke-width="7" stroke-linecap="round"/>
+    <circle cx="95" cy="52" r="7" fill="#2A4A66"/>
+    <circle cx="108" cy="35" r="12" fill="#5ECF5E"/>
+  </g>
+
+  <!-- Rounded small-cap "f" -->
+  <text
+    x="145"
+    y="70"
+    font-family="Nunito, Quicksand, 'SF Pro Rounded', 'Comfortaa', sans-serif"
+    font-weight="700"
+    font-size="54"
+    fill="#0A65C0"
+  >
+    frame
+  </text>
+</svg>

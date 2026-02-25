@@ -69,7 +69,6 @@ A plugin is a `frame.Option` helper that configures a `Service` and registers st
 When working with Frame Blueprints, always **extend** by default:
 
 - Add new items without removing or replacing existing ones.
-- Use `override: true` to modify existing definitions.
-- Use `remove: true` to delete definitions.
+- Blueprint merges are additive; duplicates are ignored (base wins).
 
 This preserves system stability while allowing incremental expansion.

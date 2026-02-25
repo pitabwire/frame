@@ -239,6 +239,7 @@ func mergeList[T any](
 	key keyFunc[T],
 	replace replaceFunc[T],
 ) []T {
+	_ = replace
 	index := make(map[string]int, len(base))
 	out := make([]T, 0, len(base)+len(overlay))
 	for _, item := range base {
@@ -256,7 +257,7 @@ func mergeList[T any](
 			continue
 		}
 		if idx, ok := index[k]; ok {
-			out[idx] = replace(out[idx], item)
+			_ = idx
 			continue
 		}
 		index[k] = len(out)

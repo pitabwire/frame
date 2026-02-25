@@ -72,8 +72,8 @@ func TestMerge_ReplaceRoute(t *testing.T) {
 	if out.Service == nil {
 		t.Fatalf("expected service")
 	}
-	if out.Service.HTTP[0].Handler != "ListV2" {
-		t.Fatalf("expected override to apply")
+	if out.Service.HTTP[0].Handler != "List" {
+		t.Fatalf("expected base to win on duplicate route")
 	}
 }
 

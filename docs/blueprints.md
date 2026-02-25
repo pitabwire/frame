@@ -67,8 +67,8 @@ services:
 ## Additive Extension Rules
 
 - **Additive merge**: New entries are added; existing entries are preserved.
-- **Explicit overrides only**: Updates to existing items require `override: true`.
-- **No implicit deletes**: Removing items requires `remove: true`.
+- **Base wins on duplicates**: If a route/queue/plugin key already exists, the original entry remains.
+- **No deletes**: Blueprint merges never remove existing entries.
 
 These rules keep blueprints safe for AI agents and humans: extension is the default behavior, not replacement.
 
@@ -109,7 +109,7 @@ http:
     handler: CreateUser
 ```
 
-If a route uses the same `name` (or the same `method` + `route`), the overlay replaces the base route.
+If a route uses the same `name` (or the same `method` + `route`), the base entry remains and the overlay is ignored.
 
 - Same blueprint inputs produce identical output.
 - Canonical bootstrap pattern is enforced.

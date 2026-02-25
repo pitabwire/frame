@@ -196,21 +196,13 @@ func cmdGenerateService(args []string) error {
 		bp.Service = &blueprint.ServiceSpec{}
 	}
 	bp.SchemaVersion = schemaVersion
-	bp.RuntimeMode = strings.ToLower(*mode)
-	if strings.ToLower(*mode) == "monolith" {
-		if bp.Services == nil {
-			bp.Services = []blueprint.ServiceSpec{}
-		}
-		bp.Services = append(bp.Services, blueprint.ServiceSpec{Name: name, Port: *port, Module: *module})
-		if bp.Service != nil {
-			bp.Service = nil
-		}
-	} else {
-		bp.Service.Name = name
-		bp.Service.Port = *port
-		if *module != "" {
-			bp.Service.Module = *module
-		}
+	modeValue := strings.ToLower(*mode)
+	bp.RuntimeMode = modeValue
+	switch modeValue {
+	case "monolith":
+		applyMonolithService(bp, name, *port, *module)
+	default:
+		applyPolylithService(bp, name, *port, *module)
 	}
 
 	return blueprint.WriteFile(*bpFile, bp)
@@ -238,6 +230,9 @@ func cmdGenerateHTTP(args []string) error {
 		return err
 	}
 	bp.SchemaVersion = schemaVersion
+	if reqErr := requireServiceTarget(bp, *service); reqErr != nil {
+		return reqErr
+	}
 	serviceSpec := selectService(bp, *service)
 	serviceSpec.HTTP = append(serviceSpec.HTTP, blueprint.HTTPRoute{Route: route, Method: method, Handler: *handler})
 
@@ -279,6 +274,9 @@ func cmdGenerateQueuePublisher(args []string) error {
 		return err
 	}
 	bp.SchemaVersion = schemaVersion
+	if reqErr := requireServiceTarget(bp, *service); reqErr != nil {
+		return reqErr
+	}
 	serviceSpec := selectService(bp, *service)
 	serviceSpec.Queues = append(serviceSpec.Queues, blueprint.QueueSpec{Publisher: ref, URL: url})
 
@@ -304,6 +302,9 @@ func cmdGenerateQueueSubscriber(args []string) error {
 		return err
 	}
 	bp.SchemaVersion = schemaVersion
+	if reqErr := requireServiceTarget(bp, *service); reqErr != nil {
+		return reqErr
+	}
 	serviceSpec := selectService(bp, *service)
 	serviceSpec.Queues = append(serviceSpec.Queues, blueprint.QueueSpec{Subscriber: ref, URL: url, Handler: handler})
 
@@ -342,6 +343,50 @@ func selectService(bp *blueprint.Blueprint, name string) *blueprint.ServiceSpec 
 		bp.Service.Name = name
 	}
 	return bp.Service
+}
+
+func requireServiceTarget(bp *blueprint.Blueprint, name string) error {
+	if bp == nil {
+		return errors.New("blueprint is nil")
+	}
+	if len(bp.Services) > 1 && strings.TrimSpace(name) == "" {
+		return errors.New("multiple services defined; use --service to select one")
+	}
+	return nil
+}
+
+func applyMonolithService(bp *blueprint.Blueprint, name, port, module string) {
+	if bp.Services == nil {
+		bp.Services = []blueprint.ServiceSpec{}
+	}
+	found := false
+	for i := range bp.Services {
+		if bp.Services[i].Name == name {
+			bp.Services[i].Port = port
+			if module != "" {
+				bp.Services[i].Module = module
+			}
+			found = true
+			break
+		}
+	}
+	if !found {
+		bp.Services = append(bp.Services, blueprint.ServiceSpec{Name: name, Port: port, Module: module})
+	}
+	if bp.Service != nil {
+		bp.Service = nil
+	}
+}
+
+func applyPolylithService(bp *blueprint.Blueprint, name, port, module string) {
+	if bp.Service == nil {
+		bp.Service = &blueprint.ServiceSpec{}
+	}
+	bp.Service.Name = name
+	bp.Service.Port = port
+	if module != "" {
+		bp.Service.Module = module
+	}
 }
 
 func defaultHandlerName(route, method string) string {

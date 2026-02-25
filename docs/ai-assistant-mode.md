@@ -81,18 +81,18 @@ frame build blueprint.yaml
 
 - Always use the canonical bootstrap pattern.
 - Options are plugins; plugins are `WithXxx` functions returning `frame.Option`.
-- Handlers live in `/internal/handlers`.
-- Plugins live in `/internal/plugins`.
+- Handlers live in `/pkg/handlers`.
+- Plugins live in `/pkg/plugins`.
 - Avoid globals; use context + service managers.
 
 
 ## Route Introspection
 
-`/debug/frame/routes` only reports routes if you use a route registry:
+`/debug/frame/routes` only reports routes if you use a route registry. Use `HandleRoute` to capture method + handler names:
 
 ```go
 rr := frame.NewRouteRegistry()
-rr.HandleFunc("/users", usersHandler)
+rr.HandleRoute("GET", "/users", "usersHandler", usersHandler)
 
 ctx, svc := frame.NewService(
     frame.WithHTTPHandler(rr),

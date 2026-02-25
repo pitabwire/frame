@@ -282,7 +282,7 @@ func renderMainMonolith(services []ServiceSpec, servicePkgs []string, queuePkgs 
 
 	b.WriteString("func main() {\n")
 	b.WriteString("\tvar wg sync.WaitGroup\n")
-	b.WriteString("\terrCh := make(chan error, 1)\n\n")
+	fmt.Fprintf(&b, "\terrCh := make(chan error, %d)\n\n", len(services))
 
 	for _, svc := range services {
 		alias := serviceAlias(svc.Name)

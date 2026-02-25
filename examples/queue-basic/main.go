@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"net/http"
 
@@ -10,14 +11,16 @@ import (
 
 type handler struct{}
 
-func (h handler) Handle(_ context.Context, _ map[string]string, message []byte) error {
-	log.Printf("received message: %s", string(message))
+func (h handler) Handle(ctx context.Context, metadata map[string]string, message []byte) error {
+	log.Printf("[%v] received message: %s (metadata keys: %d)",
+		ctx.Err(), string(message), len(metadata))
 	return nil
 }
 
 func main() {
-	http.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = w.Write([]byte("queue ok"))
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/plain")
+		_, _ = fmt.Fprintf(w, "queue ok — %s %s", r.Method, r.URL.Path)
 	})
 
 	ctx, svc := frame.NewService(

@@ -67,6 +67,9 @@ Enabled via `WithDebugEndpoints()` or `FRAME_DEBUG_ENDPOINTS=true`.
 
 All responses must be deterministic and safe to parse by agents.
 
+Security note:
+- Keep debug endpoints disabled in production unless explicitly protected.
+
 ## CLI (v0.1)
 
 ```

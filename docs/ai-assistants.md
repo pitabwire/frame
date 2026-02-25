@@ -35,12 +35,11 @@ For monorepos, prefer:
 
 ```text
 /cmd
-  /monolith
-  /users
-  /billing
+  /users/main.go
+  /billing/main.go
 /apps
-  /users
-  /billing
+  /users/cmd/main.go
+  /billing/cmd/main.go
 /pkg
   /plugins
   /openapi

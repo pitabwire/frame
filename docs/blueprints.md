@@ -81,7 +81,8 @@ These rules keep blueprints safe for AI agents and humans: extension is the defa
 Base:
 
 ```yaml
-service: users
+service:
+  name: users
 http:
   - name: list-users
     method: GET

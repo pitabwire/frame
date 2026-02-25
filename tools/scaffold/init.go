@@ -27,9 +27,7 @@ func InitRepo(cfg InitConfig) error {
 	}
 
 	services := parseServices(cfg.Services)
-	if len(services) > 0 && strings.TrimSpace(cfg.Module) == "" {
-		return errors.New("module is required when services are provided")
-	}
+	module := resolveModule(root, cfg.Module, len(services) > 0)
 
 	repoDirs := []string{
 		"apps",
@@ -47,19 +45,19 @@ func InitRepo(cfg InitConfig) error {
 		return dockerErr
 	}
 
-	if cfg.Module != "" {
-		if modErr := writeGoMod(root, cfg.Module); modErr != nil {
+	if module != "" {
+		if modErr := writeGoMod(root, module); modErr != nil {
 			return modErr
 		}
 	}
 
 	for _, svc := range services {
-		if svcErr := writeServiceLayout(root, svc, cfg.Module); svcErr != nil {
+		if svcErr := writeServiceLayout(root, svc, module); svcErr != nil {
 			return svcErr
 		}
 	}
 
-	if entryErr := writeMonolithEntry(root, services, cfg.Module); entryErr != nil {
+	if entryErr := writeRepoEntrypoints(root, services, module); entryErr != nil {
 		return entryErr
 	}
 
@@ -95,7 +93,42 @@ func writeRepoDockerfile(root string) error {
 	if exists(path) {
 		return nil
 	}
-	content := "FROM golang:1.22-alpine\nWORKDIR /app\nCOPY . .\nRUN go build -o /app/monolith ./cmd/monolith\nCMD [\"/app/monolith\"]\n"
+	content := `ARG TARGETOS=linux
+ARG TARGETARCH=amd64
+
+# ---------- Builder ----------
+FROM golang:1.26 AS builder
+WORKDIR /app
+
+ARG APP=users
+ARG REPOSITORY
+ARG VERSION=dev
+ARG REVISION=none
+ARG BUILDTIME
+
+COPY go.mod go.sum ./
+RUN go mod download
+
+COPY ./cmd ./cmd
+COPY ./apps ./apps
+COPY ./pkg ./pkg
+
+RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
+	go build -trimpath \
+	-ldflags="-s -w \
+	-X github.com/pitabwire/frame/version.Repository=${REPOSITORY} \
+	-X github.com/pitabwire/frame/version.Version=${VERSION} \
+	-X github.com/pitabwire/frame/version.Commit=${REVISION} \
+	-X github.com/pitabwire/frame/version.Date=${BUILDTIME}" \
+	-o /app/binary ./cmd/${APP}/main.go
+
+# ---------- Final ----------
+FROM cgr.dev/chainguard/static:latest
+USER 65532:65532
+WORKDIR /
+COPY --from=builder /app/binary /service
+ENTRYPOINT ["/service"]
+`
 	// #nosec G306 -- generated files should be readable by the developer.
 	return os.WriteFile(path, []byte(content), 0o644)
 }
@@ -113,7 +146,7 @@ func writeGoMod(root, module string) error {
 func writeServiceLayout(root, name, module string) error {
 	base := filepath.Join(root, "apps", name)
 	paths := []string{
-		filepath.Join(base, "cmd", name),
+		filepath.Join(base, "cmd"),
 		filepath.Join(base, "service"),
 		filepath.Join(base, "queues"),
 		filepath.Join(base, "config"),
@@ -126,7 +159,7 @@ func writeServiceLayout(root, name, module string) error {
 		}
 	}
 
-	mainPath := filepath.Join(base, "cmd", name, "main.go")
+	mainPath := filepath.Join(base, "cmd", "main.go")
 	if !exists(mainPath) {
 		content := fmt.Sprintf(`package main
 
@@ -155,14 +188,42 @@ func main() {
 		}
 	}
 
-	dockerPath := filepath.Join(base, "cmd", name, "Dockerfile")
+	dockerPath := filepath.Join(base, "Dockerfile")
 	if !exists(dockerPath) {
-		content := fmt.Sprintf(`FROM golang:1.22-alpine
+		content := fmt.Sprintf(`ARG TARGETOS=linux
+ARG TARGETARCH=amd64
+
+# ---------- Builder ----------
+FROM golang:1.26 AS builder
 WORKDIR /app
-COPY . .
-RUN go build -o /app/%s ./apps/%s/cmd/%s
-CMD ["/app/%s"]
-`, name, name, name, name)
+
+ARG REPOSITORY
+ARG VERSION=dev
+ARG REVISION=none
+ARG BUILDTIME
+
+COPY go.mod go.sum ./
+RUN go mod download
+
+COPY ./apps/%s ./apps/%s
+COPY ./pkg ./pkg
+
+RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
+	go build -trimpath \
+	-ldflags="-s -w \
+	-X github.com/pitabwire/frame/version.Repository=${REPOSITORY} \
+	-X github.com/pitabwire/frame/version.Version=${VERSION} \
+	-X github.com/pitabwire/frame/version.Commit=${REVISION} \
+	-X github.com/pitabwire/frame/version.Date=${BUILDTIME}" \
+	-o /app/binary ./apps/%s/cmd/main.go
+
+# ---------- Final ----------
+FROM cgr.dev/chainguard/static:latest
+USER 65532:65532
+WORKDIR /
+COPY --from=builder /app/binary /service
+ENTRYPOINT ["/service"]
+`, name, name, name)
 		// #nosec G306 -- generated files should be readable by the developer.
 		if writeErr := os.WriteFile(dockerPath, []byte(content), 0o644); writeErr != nil {
 			return fmt.Errorf("write %s: %w", dockerPath, writeErr)
@@ -200,60 +261,79 @@ func RegisterRoutes(mux *http.ServeMux) {
 	return os.WriteFile(routesPath, []byte(content), 0o644)
 }
 
-func writeMonolithEntry(root string, services []string, module string) error {
-	path := filepath.Join(root, "cmd", "monolith", "main.go")
-	if exists(path) {
-		return nil
-	}
-	if err := ensureDir(filepath.Join(root, "cmd", "monolith")); err != nil {
-		return err
-	}
-
-	imports := []string{"\"log\"", "\"net/http\"", "\"github.com/pitabwire/frame\""}
+func writeRepoEntrypoints(root string, services []string, module string) error {
 	for _, svc := range services {
-		alias := sanitizeImportAlias(svc)
-		imports = append(imports, fmt.Sprintf("%s \"%s/apps/%s/service\"", alias, module, svc))
-	}
-
-	var builders strings.Builder
-	builders.WriteString("package main\n\nimport (\n")
-	for _, imp := range imports {
-		builders.WriteString("\t" + imp + "\n")
-	}
-	builders.WriteString(")\n\nfunc main() {\n\tmux := http.NewServeMux()\n")
-	for _, svc := range services {
-		fmt.Fprintf(&builders, "\t%s.RegisterRoutes(mux)\n", sanitizeImportAlias(svc))
-	}
-	builders.WriteString("\tctx, svc := frame.NewService(\n")
-	builders.WriteString("\t\tframe.WithName(\"monolith\"),\n")
-	builders.WriteString("\t\tframe.WithHTTPHandler(mux),\n")
-	builders.WriteString("\t)\n")
-	builders.WriteString("\tif err := svc.Run(ctx, \":8080\"); err != nil {\n")
-	builders.WriteString("\t\tlog.Fatal(err)\n")
-	builders.WriteString("\t}\n")
-	builders.WriteString("}\n")
-
-	// #nosec G306 -- generated files should be readable by the developer.
-	return os.WriteFile(path, []byte(builders.String()), 0o644)
-}
-
-func sanitizeImportAlias(name string) string {
-	if name == "" {
-		return "svc"
-	}
-	var out strings.Builder
-	for _, r := range name {
-		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') {
-			out.WriteRune(r)
+		path := filepath.Join(root, "cmd", svc, "main.go")
+		if exists(path) {
 			continue
 		}
-		out.WriteRune('_')
+		if err := ensureDir(filepath.Join(root, "cmd", svc)); err != nil {
+			return err
+		}
+
+		content := fmt.Sprintf(`package main
+
+import (
+	"log"
+	"net/http"
+
+	"github.com/pitabwire/frame"
+	"%s/apps/%s/service"
+)
+
+func main() {
+	mux := http.NewServeMux()
+	service.RegisterRoutes(mux)
+
+	ctx, svc := frame.NewService(
+		frame.WithName("%s"),
+		frame.WithHTTPHandler(mux),
+	)
+	if err := svc.Run(ctx, ":8080"); err != nil {
+		log.Fatal(err)
 	}
-	alias := out.String()
-	if alias[0] >= '0' && alias[0] <= '9' {
-		return "svc_" + alias
+}
+`, module, svc, svc)
+
+		// #nosec G306 -- generated files should be readable by the developer.
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+			return fmt.Errorf("write %s: %w", path, err)
+		}
 	}
-	return alias
+	return nil
+}
+
+func resolveModule(root, moduleFlag string, needModule bool) string {
+	module := strings.TrimSpace(moduleFlag)
+	if module != "" {
+		return module
+	}
+
+	if existing, err := moduleFromGoMod(root); err == nil && existing != "" {
+		return existing
+	}
+
+	if !needModule {
+		return ""
+	}
+
+	// fallback to keep scaffolding usable even before module is initialized.
+	return "example.com/project"
+}
+
+func moduleFromGoMod(root string) (string, error) {
+	data, err := os.ReadFile(filepath.Join(root, "go.mod"))
+	if err != nil {
+		return "", err
+	}
+	lines := strings.Split(string(data), "\n")
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "module ") {
+			return strings.TrimSpace(strings.TrimPrefix(line, "module ")), nil
+		}
+	}
+	return "", errors.New("module path not found in go.mod")
 }
 
 func exists(path string) bool {

@@ -1,101 +1,72 @@
 # Monorepo by Default: Monolith or Polylith
 
-Frame assumes a **monorepo-first** layout that can run as:
+Frame uses a **monorepo-first** layout. You can run the same codebase as:
 
-- **Monolith**: one binary, one service
-- **Polylith**: multiple independent binaries from one repo
+- **Monolith**: one Frame service, one mux, many routes.
+- **Polylith**: many independent binaries, each service deployed separately.
 
-Both modes share the same shared packages and conventions. The only difference is **how many entrypoints you build**.
-
-## Canonical Layout (Monorepo)
+## Canonical Layout
 
 ```text
 /README.md
 /go.mod
 /cmd
-  /monolith
-    main.go
-  /users
-    main.go
-  /billing
-    main.go
+  /users/main.go
+  /billing/main.go
 /apps
   /users
-    /cmd
-      /users
-        main.go
-      /users/Dockerfile
-    /service
+    /cmd/main.go
+    /service/routes.go
+    /queues
     /config
     /migrations
     /tests
+    /Dockerfile
   /billing
-    /cmd
-      /billing
-        main.go
-      /billing/Dockerfile
-    /service
+    /cmd/main.go
+    /service/routes.go
+    /queues
     /config
     /migrations
     /tests
+    /Dockerfile
 /pkg
-  /shared
   /plugins
   /openapi
+  /shared
 /configs
 /Dockerfile
 ```
 
-## Monolith Mode
+## Monolith Mode (Single Service)
 
-A single entrypoint composes multiple modules into one binary and runs one Frame service with one mux:
+Monolith means **one `frame.Service` + one `http.ServeMux`**. Multiple app routes are mounted into that one mux.
 
-```text
-/cmd/monolith/main.go
-/apps/users/service
-/apps/billing/service
+Example shape:
+
+```go
+mux := http.NewServeMux()
+users.RegisterRoutes(mux)
+billing.RegisterRoutes(mux)
+
+ctx, svc := frame.NewService(
+    frame.WithName("monolith"),
+    frame.WithHTTPHandler(mux),
+)
+
+if err := svc.Run(ctx, ":8080"); err != nil { ... }
 ```
 
-All routes are wired into the same mux in one process. This is ideal for:
+## Polylith Mode (Independent Binaries)
 
-- fast local development
-- smaller deployments
-- shared runtime state
+Each app has its own binary entrypoint and Dockerfile:
 
-## Polylith Mode (Composable)
+- `apps/<service>/cmd/main.go`
+- `apps/<service>/Dockerfile`
 
-Each service has its **own entrypoint** under `/apps/<service>/cmd/<service>`, and a Dockerfile next to it. Shared libraries live in `/pkg`:
-
-```text
-/apps/users/cmd/users/main.go
-/apps/users/cmd/users/Dockerfile
-/apps/billing/cmd/billing/main.go
-/apps/billing/cmd/billing/Dockerfile
-/pkg/...
-```
-
-Each binary is independent, but uses the same `/apps` and `/pkg` packages. This matches the structure used in `service-profile`.
-
-## How to Switch Modes
-
-You do **not** need to restructure anything. You only:
-
-- add or remove `apps/<service>/cmd/<service>/main.go` entrypoints
-- build different binaries or Docker images
-
-This makes the repo **composable** by default.
-
-## Recommended Conventions
-
-- `/apps/<service>` is the source of truth for a service
-- `/apps/<service>/cmd/<service>` is the polylith entrypoint
-- `/cmd/<service>` is the monorepo-level entrypoint (optional)
-- `/pkg` is shared infrastructure and cross-cutting plugins
-- `/configs` holds environment or YAML configs for all services
+The repo-level `cmd/<service>/main.go` gives a consistent top-level build/run entrypoint.
 
 ## One-Command Scaffold
-
-Frame includes a scaffold tool that creates the monorepo layout with per-service entrypoints and Dockerfiles.
 
 ```bash
 go run github.com/pitabwire/frame/cmd/frame@latest init \
@@ -104,66 +75,54 @@ go run github.com/pitabwire/frame/cmd/frame@latest init \
   -module your/module
 ```
 
-This generates:
+`-module` is optional. If omitted, Frame tries `go.mod`, then falls back to `example.com/project`.
 
-- `/apps/<service>/cmd/<service>/main.go`
-- `/apps/<service>/cmd/<service>/Dockerfile`
-- `/cmd/monolith/main.go`
-- `/Dockerfile`
-- `/pkg` and `/configs` folders
+Generated artifacts:
 
-## Example: Polylith Entry Point
+- `apps/<service>/cmd/main.go`
+- `apps/<service>/service/routes.go`
+- `apps/<service>/Dockerfile`
+- `cmd/<service>/main.go`
+- `Dockerfile`
+- `pkg` and `configs`
 
-```go
-package main
+## Build Patterns
 
-import (
-	"context"
-	"log"
+Polylith binary:
 
-	"github.com/pitabwire/frame"
-	"your/module/apps/users/service"
-)
-
-func main() {
-	ctx, svc := frame.NewService(
-		frame.WithName("users"),
-		frame.WithHTTPHandler(service.Router()),
-	)
-
-	if err := svc.Run(ctx, ":8080"); err != nil {
-		log.Fatal(err)
-	}
-}
+```bash
+go build ./apps/users/cmd
 ```
 
-## Example: Monolith Entry Point
+Monorepo-level binary for one app:
 
-```go
-package main
+```bash
+go build ./cmd/users
+```
 
-import (
-	"context"
-	"log"
-	"net/http"
+Single-binary monolith is generated from blueprints in monolith mode (`frame build`), producing `cmd/main.go` that composes all routes into one mux.
 
-	"github.com/pitabwire/frame"
-	"your/module/apps/users/service"
-	"your/module/apps/billing/service"
-)
+## Docker Build Patterns
 
-func main() {
-	mux := http.NewServeMux()
-	service.RegisterRoutes(mux)
-	billing.RegisterRoutes(mux)
+Monorepo-level Dockerfile (`/Dockerfile`) uses a multi-stage builder and copies:
 
-	ctx, svc := frame.NewService(
-		frame.WithName("monolith"),
-		frame.WithHTTPHandler(mux),
-	)
+- `/apps`
+- `/pkg`
+- `/cmd`
 
-	if err := svc.Run(ctx, ":8080"); err != nil {
-		log.Fatal(err)
-	}
-}
+Build an app via top-level cmd entrypoint:
+
+```bash
+docker build -t users-service --build-arg APP=users .
+```
+
+Per-service Dockerfile (`/apps/<service>/Dockerfile`) copies:
+
+- `/apps/<service>`
+- `/pkg`
+
+Build a single polylith app:
+
+```bash
+docker build -t users-service -f apps/users/Dockerfile .
 ```

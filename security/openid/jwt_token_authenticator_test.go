@@ -143,8 +143,8 @@ func (s *JwtAuthenticatorTestSuite) createRSAJWK() JWK {
 	}
 }
 func (s *JwtAuthenticatorTestSuite) createECJWK() JWK {
-	xBytes := s.ecKey.PublicKey.X.Bytes()
-	yBytes := s.ecKey.PublicKey.Y.Bytes()
+	xBytes := s.ecKey.PublicKey.X.Bytes() //nolint:staticcheck // test fixture uses deprecated fields for JWKS test data
+	yBytes := s.ecKey.PublicKey.Y.Bytes() //nolint:staticcheck // test fixture uses deprecated fields for JWKS test data
 
 	return JWK{
 		Kty: "EC",

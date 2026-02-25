@@ -388,12 +388,26 @@ func (s *CacheTestSuite) TestGenericCache() {
 	s.True(found)
 	s.Equal(user.Name, cachedUser.Name)
 
+	exists, err := userCache.Exists(ctx, "123")
+	s.Require().NoError(err)
+	s.True(exists)
+
+	s.Require().NoError(userCache.Flush(ctx))
+	exists, err = userCache.Exists(ctx, "123")
+	s.Require().NoError(err)
+	s.False(exists)
+
 	// Delete
 	err = userCache.Delete(ctx, "123")
 	s.Require().NoError(err)
 
 	_, found, _ = userCache.Get(ctx, "123")
 	s.False(found)
+
+	// Exercise GenericCache.Close via typed wrapper instance.
+	localRaw := cache.NewInMemoryCache()
+	typedCache := cache.NewGenericCache[string, User](localRaw, nil)
+	s.NoError(typedCache.Close())
 }
 
 // Test Cache manager.

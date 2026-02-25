@@ -3,7 +3,7 @@ package blueprint_test
 import (
 	"testing"
 
-	"github.com/pitabwire/frame/blueprint"
+	"github.com/pitabwire/frame/tools/blueprint"
 )
 
 func TestBlueprintValidateRequiresSchema(t *testing.T) {

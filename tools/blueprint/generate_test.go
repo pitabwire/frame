@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/pitabwire/frame/blueprint"
+	"github.com/pitabwire/frame/tools/blueprint"
 )
 
 func TestGeneratePolylith(t *testing.T) {

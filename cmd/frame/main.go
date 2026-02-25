@@ -7,7 +7,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/pitabwire/frame/blueprint"
+	"github.com/pitabwire/frame/tools/blueprint"
 	"github.com/pitabwire/frame/tools/openapi"
 	"github.com/pitabwire/frame/tools/scaffold"
 )

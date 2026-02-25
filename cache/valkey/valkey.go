@@ -110,6 +110,10 @@ func (vc *Cache) Expire(ctx context.Context, key string, ttl time.Duration) erro
 	return vc.client.Do(ctx, cmd).Error()
 }
 
+func (vc *Cache) SupportsPerKeyTTL() bool {
+	return true
+}
+
 // Delete removes an item from the cache.
 func (vc *Cache) Delete(ctx context.Context, key string) error {
 	cmd := vc.client.B().Del().Key(key).Build()

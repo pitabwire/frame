@@ -180,7 +180,18 @@ func (gd *grpcDriver) ListenAndServeTLS(addr, certFile, certKeyFile string, h ht
 
 func (gd *grpcDriver) Shutdown(ctx context.Context) error {
 	if gd.grpcServer != nil {
-		gd.grpcServer.Stop()
+		done := make(chan struct{})
+		go func() {
+			gd.grpcServer.GracefulStop()
+			close(done)
+		}()
+
+		select {
+		case <-done:
+		case <-ctx.Done():
+			gd.grpcServer.Stop()
+			<-done
+		}
 	}
 
 	if gd.internalHTTPDriver != nil {

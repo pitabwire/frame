@@ -2,6 +2,7 @@ package ratelimiter
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -12,6 +13,8 @@ const (
 	defaultWindowPrefix = "ratelimit"
 	windowTLLOffset     = time.Second
 )
+
+var ErrCacheDoesNotSupportPerKeyTTL = errors.New("cache backend does not support per-key TTL")
 
 // WindowConfig defines fixed-window counter limiter settings backed by cache.
 type WindowConfig struct {
@@ -38,9 +41,17 @@ type WindowLimiter struct {
 }
 
 // NewWindowLimiter creates a cache-backed window limiter.
-func NewWindowLimiter(raw cache.RawCache, cfg *WindowConfig) *WindowLimiter {
+func NewWindowLimiter(raw cache.RawCache, cfg *WindowConfig) (*WindowLimiter, error) {
+	if raw == nil {
+		return nil, errors.New("cache backend is required")
+	}
+
+	if !raw.SupportsPerKeyTTL() {
+		return nil, ErrCacheDoesNotSupportPerKeyTTL
+	}
+
 	config := normalizeWindowConfig(cfg)
-	return &WindowLimiter{cache: raw, config: config}
+	return &WindowLimiter{cache: raw, config: config}, nil
 }
 
 // Allow checks whether key is still within configured window limit.

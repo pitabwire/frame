@@ -6,6 +6,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/pitabwire/util"
@@ -16,6 +17,7 @@ import (
 )
 
 const migrationAdvisoryLockID int64 = 82548391244719
+const migrationLockRetryInterval = 200 * time.Millisecond
 
 type pool struct {
 	readIdx     uint64       // atomic counter for round-robin
@@ -224,14 +226,32 @@ func acquireMigrationLock(ctx context.Context, db *gorm.DB) (func(), error) {
 		return nil, nil
 	}
 
-	err := db.WithContext(ctx).Exec("SELECT pg_advisory_lock(?)", migrationAdvisoryLockID).Error
-	if err != nil {
-		return nil, err
-	}
+	ticker := time.NewTicker(migrationLockRetryInterval)
+	defer ticker.Stop()
 
-	return func() {
-		_ = db.WithContext(context.Background()).Exec("SELECT pg_advisory_unlock(?)", migrationAdvisoryLockID).Error
-	}, nil
+	for {
+		var acquired bool
+		err := db.WithContext(ctx).
+			Raw("SELECT pg_try_advisory_lock(?)", migrationAdvisoryLockID).
+			Scan(&acquired).Error
+		if err != nil {
+			return nil, err
+		}
+
+		if acquired {
+			return func() {
+				unlockCtx, cancel := context.WithTimeout(context.Background(), time.Second)
+				defer cancel()
+				_ = db.WithContext(unlockCtx).Exec("SELECT pg_advisory_unlock(?)", migrationAdvisoryLockID).Error
+			}, nil
+		}
+
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-ticker.C:
+		}
+	}
 }
 
 func isRelationAlreadyExistsErr(err error) bool {

@@ -34,7 +34,8 @@ func TestIPRateLimiterAllow(t *testing.T) {
 		FailOpen:       false,
 	}
 
-	limiter := ratelimiter.NewIPRateLimiter(raw, cfg)
+	limiter, err := ratelimiter.NewIPRateLimiter(raw, cfg)
+	require.NoError(t, err)
 	t.Cleanup(func() { _ = limiter.Close() })
 
 	ctx := context.Background()
@@ -54,7 +55,8 @@ func TestRateLimitMiddleware(t *testing.T) {
 		FailOpen:       false,
 	}
 
-	limiter := ratelimiter.NewIPRateLimiter(raw, cfg)
+	limiter, err := ratelimiter.NewIPRateLimiter(raw, cfg)
+	require.NoError(t, err)
 	t.Cleanup(func() { _ = limiter.Close() })
 
 	mw := ratelimiter.RateLimitMiddleware(limiter)
@@ -85,8 +87,10 @@ func TestUserRateLimitMiddlewarePrefersUser(t *testing.T) {
 		FailOpen:       false,
 	}
 
-	userLimiter := ratelimiter.NewUserRateLimiter(raw, cfg)
-	ipLimiter := ratelimiter.NewIPRateLimiter(raw, cfg)
+	userLimiter, err := ratelimiter.NewUserRateLimiter(raw, cfg)
+	require.NoError(t, err)
+	ipLimiter, err := ratelimiter.NewIPRateLimiter(raw, cfg)
+	require.NoError(t, err)
 	t.Cleanup(func() { _ = userLimiter.Close() })
 	t.Cleanup(func() { _ = ipLimiter.Close() })
 
@@ -116,12 +120,13 @@ func TestWindowLimiterAllow(t *testing.T) {
 	raw := cache.NewInMemoryCache()
 	t.Cleanup(func() { _ = raw.Close() })
 
-	wl := ratelimiter.NewWindowLimiter(raw, &ratelimiter.WindowConfig{
+	wl, err := ratelimiter.NewWindowLimiter(raw, &ratelimiter.WindowConfig{
 		WindowDuration: time.Minute,
 		MaxPerWindow:   2,
 		KeyPrefix:      "test",
 		FailOpen:       false,
 	})
+	require.NoError(t, err)
 
 	ctx := context.Background()
 	assert.True(t, wl.Allow(ctx, "tenant-1"))

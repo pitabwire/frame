@@ -1,12 +1,12 @@
 package telemetry
 
 import (
-	"fmt"
 	"strings"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/metric/noop"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 )
 
@@ -136,9 +136,13 @@ func LatencyMeasure(pkg string) metric.Float64Histogram {
 	)
 
 	if err != nil {
-		// The only possible errors are from invalid key or value names, and those are programming
-		// errors that will be found during testing.
-		panic(fmt.Sprintf("fullName=%q, provider=%q: %v", pkg, pkgMeter, err))
+		fallbackMeter := noop.NewMeterProvider().Meter(pkg)
+		fallback, _ := fallbackMeter.Float64Histogram(
+			pkg+"/latency",
+			metric.WithDescription("Latency distribution of method calls"),
+			metric.WithUnit(unitMilliseconds),
+		)
+		return fallback
 	}
 
 	return m
@@ -159,9 +163,13 @@ func DimensionlessMeasure(pkg string, meterName string, description string) metr
 	)
 
 	if err != nil {
-		// The only possible errors are from invalid key or value names,
-		// and those are programming errors that will be found during testing.
-		panic(fmt.Sprintf("fullName=%q, provider=%q: %v", pkg, pkgMeter, err))
+		fallbackMeter := noop.NewMeterProvider().Meter(pkg)
+		fallback, _ := fallbackMeter.Int64Counter(
+			pkg+meterName,
+			metric.WithDescription(description),
+			metric.WithUnit(unitDimensionless),
+		)
+		return fallback
 	}
 	return m
 }
@@ -176,9 +184,13 @@ func BytesMeasure(pkg string, meterName string, description string) metric.Int64
 	m, err := pkgMeter.Int64Counter(pkg+meterName, metric.WithDescription(description), metric.WithUnit(unitBytes))
 
 	if err != nil {
-		// The only possible errors are from invalid key or value names, and those are programming
-		// errors that will be found during testing.
-		panic(fmt.Sprintf("fullName=%q, provider=%q: %v", pkg, pkgMeter, err))
+		fallbackMeter := noop.NewMeterProvider().Meter(pkg)
+		fallback, _ := fallbackMeter.Int64Counter(
+			pkg+meterName,
+			metric.WithDescription(description),
+			metric.WithUnit(unitBytes),
+		)
+		return fallback
 	}
 	return m
 }

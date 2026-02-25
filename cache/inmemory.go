@@ -139,6 +139,10 @@ func (c *InMemoryCache) Expire(_ context.Context, key string, ttl time.Duration)
 	}
 }
 
+func (c *InMemoryCache) SupportsPerKeyTTL() bool {
+	return true
+}
+
 // Delete removes an item from the cache.
 func (c *InMemoryCache) Delete(_ context.Context, key string) error {
 	c.deleteKey(key)

@@ -143,10 +143,13 @@ func (ghs *grpcHealthServer) Watch(
 	stream grpc_health_v1.Health_WatchServer,
 ) error {
 	var lastSentStatus grpc_health_v1.HealthCheckResponse_ServingStatus = -1
+	ticker := time.NewTicker(healthWatchIntervalSeconds * time.Second)
+	defer ticker.Stop()
+
 	for {
 		select {
 		// Status updated. Sends the up-to-date status to the client.
-		case <-time.After(healthWatchIntervalSeconds * time.Second):
+		case <-ticker.C:
 
 			servingStatus := grpc_health_v1.HealthCheckResponse_SERVING
 			for _, c := range ghs.service.healthCheckers {

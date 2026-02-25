@@ -80,6 +80,10 @@ func (rc *Cache) Expire(ctx context.Context, key string, ttl time.Duration) erro
 	return rc.client.Expire(ctx, key, ttl).Err()
 }
 
+func (rc *Cache) SupportsPerKeyTTL() bool {
+	return true
+}
+
 // Delete removes an item from the cache.
 func (rc *Cache) Delete(ctx context.Context, key string) error {
 	return rc.client.Del(ctx, key).Err()

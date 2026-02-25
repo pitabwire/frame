@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/pitabwire/util"
@@ -15,6 +16,8 @@ const (
 	jobRetryBackoffBaseDelay    = 100 * time.Millisecond
 	jobRetryBackoffMaxDelay     = 30 * time.Second
 	jobRetryBackoffMaxRunNumber = 10
+	retrySchedulerWorkerCount   = 4
+	retrySchedulerQueueSize     = 4096
 )
 
 func shouldCloseJob(executionErr error) bool {
@@ -55,33 +58,25 @@ func handleResubmitError[T any](
 	job.Close()
 }
 
-func scheduleRetryResubmission[T any](
-	ctx context.Context,
-	s Manager,
-	job Job[T],
-	delay time.Duration,
-	log *util.LogEntry,
-	executionErr error,
-) {
-	go func() {
-		timer := time.NewTimer(delay)
-		defer timer.Stop()
+type retryTask struct {
+	ctx    context.Context
+	delay  time.Duration
+	submit func() error
+	fail   func(error)
+}
 
-		select {
-		case <-ctx.Done():
-			job.Close()
-			return
-		case <-timer.C:
-		}
-
-		resubmitErr := SubmitJob(ctx, s, job)
-		handleResubmitError(ctx, job, log, executionErr, resubmitErr)
-	}()
+type retryScheduler interface {
+	scheduleRetry(task retryTask)
 }
 
 type manager struct {
 	pool    WorkerPool
 	stopErr func(ctx context.Context, err error)
+
+	retryQueue chan retryTask
+	retryStop  chan struct{}
+	retryOnce  sync.Once
+	retryWG    sync.WaitGroup
 }
 
 func NewManager(
@@ -103,30 +98,85 @@ func NewManager(
 		return nil, fmt.Errorf("could not create a default worker pool: %w", err)
 	}
 
-	return &manager{
-		pool:    pool,
-		stopErr: stopOnErr,
-	}, nil
+	m := &manager{
+		pool:       pool,
+		stopErr:    stopOnErr,
+		retryQueue: make(chan retryTask, retrySchedulerQueueSize),
+		retryStop:  make(chan struct{}),
+	}
+
+	m.startRetryWorkers()
+	return m, nil
 }
 
-func (m manager) GetPool() (WorkerPool, error) {
+func (m *manager) GetPool() (WorkerPool, error) {
 	if m.pool == nil {
 		return nil, errors.New("worker pool is not configured")
 	}
 	return m.pool, nil
 }
 
-func (m manager) StopError(ctx context.Context, err error) {
+func (m *manager) StopError(ctx context.Context, err error) {
 	m.stopErr(ctx, err)
 }
 
-func (m manager) Shutdown(_ context.Context) error {
+func (m *manager) Shutdown(_ context.Context) error {
+	m.retryOnce.Do(func() {
+		close(m.retryStop)
+	})
+	m.retryWG.Wait()
+
 	if m.pool == nil {
 		return nil
 	}
 
 	m.pool.Shutdown()
 	return nil
+}
+
+func (m *manager) startRetryWorkers() {
+	for i := 0; i < retrySchedulerWorkerCount; i++ {
+		m.retryWG.Add(1)
+		go func() {
+			defer m.retryWG.Done()
+			for {
+				select {
+				case <-m.retryStop:
+					return
+				case task := <-m.retryQueue:
+					timer := time.NewTimer(task.delay)
+					select {
+					case <-m.retryStop:
+						timer.Stop()
+						return
+					case <-task.ctx.Done():
+						timer.Stop()
+						continue
+					case <-timer.C:
+					}
+					if err := task.submit(); err != nil && task.fail != nil {
+						task.fail(err)
+					}
+				}
+			}
+		}()
+	}
+}
+
+func (m *manager) scheduleRetry(task retryTask) {
+	select {
+	case <-m.retryStop:
+		if task.fail != nil {
+			task.fail(errors.New("retry scheduler stopped"))
+		}
+	case <-task.ctx.Done():
+		return
+	case m.retryQueue <- task:
+	default:
+		if task.fail != nil {
+			task.fail(errors.New("retry scheduler queue is full"))
+		}
+	}
 }
 
 // SubmitJob used to submit jobs to our worker pool for processing.
@@ -184,6 +234,32 @@ func createJobExecutionTask[T any](ctx context.Context, s Manager, job Job[T]) f
 		log.Warn("Job failed, attempting to retry it")
 
 		delay := jobRetryBackoffDelay(job.Runs())
-		scheduleRetryResubmission(ctx, s, job, delay, log, executionErr)
+		task := retryTask{
+			ctx:   ctx,
+			delay: delay,
+			submit: func() error {
+				return SubmitJob(ctx, s, job)
+			},
+			fail: func(resubmitErr error) {
+				handleResubmitError(ctx, job, log, executionErr, resubmitErr)
+			},
+		}
+
+		if scheduler, ok := s.(retryScheduler); ok {
+			scheduler.scheduleRetry(task)
+			return
+		}
+
+		go func() {
+			timer := time.NewTimer(delay)
+			defer timer.Stop()
+			select {
+			case <-ctx.Done():
+				job.Close()
+			case <-timer.C:
+				resubmitErr := SubmitJob(ctx, s, job)
+				handleResubmitError(ctx, job, log, executionErr, resubmitErr)
+			}
+		}()
 	}
 }

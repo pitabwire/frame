@@ -387,7 +387,7 @@ func (s *Service) AddCleanupMethod(f func(ctx context.Context)) {
 // The arguments are implementations of the checker interface and should work with just about
 // any system that is given to them.
 func (s *Service) AddHealthCheck(checker Checker) {
-	if s.healthCheckers != nil {
+	if s.healthCheckers == nil {
 		s.healthCheckers = []Checker{}
 	}
 	s.healthCheckers = append(s.healthCheckers, checker)
@@ -666,17 +666,6 @@ func (s *Service) Stop(ctx context.Context) {
 		s.cleanup(ctx)
 	}
 
-	// Close the internal error channel to signal Run to exit if it's blocked on it.
-	s.errorChannelMutex.Lock()
-	select {
-	case _, ok := <-s.errorChannel:
-		if !ok {
-			return
-		}
-	default:
-	}
-	close(s.errorChannel)
-	defer s.errorChannelMutex.Unlock()
 }
 
 func (s *Service) sendStopError(ctx context.Context, err error) {
@@ -686,10 +675,22 @@ func (s *Service) sendStopError(ctx context.Context, err error) {
 	select {
 	case <-ctx.Done():
 		return
-	case <-s.errorChannel:
-		// channel is already closed hence avoid
-		return
 	default:
-		s.errorChannel <- err
+	}
+
+	// Preserve first non-nil error if one is already pending.
+	if err != nil {
+		select {
+		case pending := <-s.errorChannel:
+			if pending != nil {
+				err = pending
+			}
+		default:
+		}
+	}
+
+	select {
+	case s.errorChannel <- err:
+	default:
 	}
 }

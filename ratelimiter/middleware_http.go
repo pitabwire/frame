@@ -29,7 +29,7 @@ type IPRateLimiter struct {
 
 // NewIPRateLimiter creates a new cache-backed IP rate limiter.
 // If raw is nil, an in-memory frame cache is created.
-func NewIPRateLimiter(raw cache.RawCache, config *WindowConfig) *IPRateLimiter {
+func NewIPRateLimiter(raw cache.RawCache, config *WindowConfig) (*IPRateLimiter, error) {
 	backend := raw
 	owns := false
 	if backend == nil {
@@ -42,12 +42,20 @@ func NewIPRateLimiter(raw cache.RawCache, config *WindowConfig) *IPRateLimiter {
 		cfg.KeyPrefix = defaultIPPrefix
 	}
 
+	limiter, err := NewWindowLimiter(backend, &cfg)
+	if err != nil {
+		if owns {
+			_ = backend.Close()
+		}
+		return nil, err
+	}
+
 	return &IPRateLimiter{
-		limiter:  NewWindowLimiter(backend, &cfg),
+		limiter:  limiter,
 		config:   cfg,
 		backend:  backend,
 		ownsBack: owns,
-	}
+	}, nil
 }
 
 // Allow checks whether a request from the given IP should be allowed.
@@ -76,7 +84,7 @@ type UserRateLimiter struct {
 
 // NewUserRateLimiter creates a new cache-backed user rate limiter.
 // If raw is nil, an in-memory frame cache is created.
-func NewUserRateLimiter(raw cache.RawCache, config *WindowConfig) *UserRateLimiter {
+func NewUserRateLimiter(raw cache.RawCache, config *WindowConfig) (*UserRateLimiter, error) {
 	backend := raw
 	owns := false
 	if backend == nil {
@@ -89,12 +97,20 @@ func NewUserRateLimiter(raw cache.RawCache, config *WindowConfig) *UserRateLimit
 		cfg.KeyPrefix = defaultUserPrefix
 	}
 
+	limiter, err := NewWindowLimiter(backend, &cfg)
+	if err != nil {
+		if owns {
+			_ = backend.Close()
+		}
+		return nil, err
+	}
+
 	return &UserRateLimiter{
-		limiter:  NewWindowLimiter(backend, &cfg),
+		limiter:  limiter,
 		config:   cfg,
 		backend:  backend,
 		ownsBack: owns,
-	}
+	}, nil
 }
 
 // Allow checks whether a request from the given user should be allowed.

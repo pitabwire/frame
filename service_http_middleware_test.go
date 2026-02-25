@@ -94,7 +94,8 @@ func TestWithHTTPMiddlewareRateLimiter(t *testing.T) {
 		MaxPerWindow:   1,
 		FailOpen:       false,
 	}
-	ipLimiter := ratelimiter.NewIPRateLimiter(backend, cfg)
+	ipLimiter, err := ratelimiter.NewIPRateLimiter(backend, cfg)
+	require.NoError(t, err)
 	defer func() { _ = ipLimiter.Close() }()
 
 	hOpt, tsGetter := frametests.WithHTTPTestDriver()
@@ -108,7 +109,7 @@ func TestWithHTTPMiddlewareRateLimiter(t *testing.T) {
 	)
 	defer svc.Stop(ctx)
 
-	err := svc.Run(ctx, "")
+	err = svc.Run(ctx, "")
 	require.NoError(t, err)
 
 	ts := tsGetter()

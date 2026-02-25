@@ -109,6 +109,10 @@ func (vc *Cache) Expire(_ context.Context, _ string, _ time.Duration) error {
 	return nil
 }
 
+func (vc *Cache) SupportsPerKeyTTL() bool {
+	return false
+}
+
 // Delete removes an item from the cache.
 func (vc *Cache) Delete(_ context.Context, key string) error {
 	return vc.client.Delete(key)

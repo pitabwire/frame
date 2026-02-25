@@ -2,10 +2,10 @@ package ratelimiter
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"math"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/pitabwire/util"
@@ -171,7 +171,7 @@ func RateLimitMiddleware(limiter *IPRateLimiter) func(http.Handler) http.Handler
 				return
 			}
 
-			w.Header().Set("X-RateLimit-Limit", fmt.Sprintf("%d", limiter.config.MaxPerWindow))
+			w.Header().Set("X-RateLimit-Limit", strconv.Itoa(limiter.config.MaxPerWindow))
 			next.ServeHTTP(w, r)
 		})
 	}
@@ -193,7 +193,7 @@ func UserRateLimitMiddleware(userLimiter *UserRateLimiter, ipLimiter *IPRateLimi
 					rateLimitedResponse(w, userLimiter.config, "user")
 					return
 				}
-				w.Header().Set("X-RateLimit-Limit", fmt.Sprintf("%d", userLimiter.config.MaxPerWindow))
+				w.Header().Set("X-RateLimit-Limit", strconv.Itoa(userLimiter.config.MaxPerWindow))
 				next.ServeHTTP(w, r)
 				return
 			}
@@ -210,7 +210,7 @@ func UserRateLimitMiddleware(userLimiter *UserRateLimiter, ipLimiter *IPRateLimi
 				return
 			}
 
-			w.Header().Set("X-RateLimit-Limit", fmt.Sprintf("%d", ipLimiter.config.MaxPerWindow))
+			w.Header().Set("X-RateLimit-Limit", strconv.Itoa(ipLimiter.config.MaxPerWindow))
 			next.ServeHTTP(w, r)
 		})
 	}
@@ -222,14 +222,14 @@ func rateLimitedResponse(w http.ResponseWriter, cfg WindowConfig, scope string) 
 		retryAfter = int(time.Minute.Seconds())
 	}
 
-	w.Header().Set("X-RateLimit-Limit", fmt.Sprintf("%d", cfg.MaxPerWindow))
+	w.Header().Set("X-RateLimit-Limit", strconv.Itoa(cfg.MaxPerWindow))
 	w.Header().Set("X-RateLimit-Remaining", "0")
 	w.Header().Set("X-RateLimit-Scope", scope)
-	w.Header().Set("Retry-After", fmt.Sprintf("%d", retryAfter))
+	w.Header().Set("Retry-After", strconv.Itoa(retryAfter))
 	w.WriteHeader(http.StatusTooManyRequests)
 	writeIgnoreErr(w, `{"error": "rate limit exceeded", "code": "rate_limit_exceeded"}`)
 }
 
 func writeIgnoreErr(w io.Writer, data string) {
-	_, _ = fmt.Fprint(w, data)
+	_, _ = io.WriteString(w, data)
 }

@@ -3,7 +3,7 @@ package ratelimiter
 import (
 	"context"
 	"errors"
-	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/pitabwire/frame/cache"
@@ -30,7 +30,7 @@ func DefaultWindowConfig() *WindowConfig {
 		WindowDuration: time.Minute,
 		MaxPerWindow:   600,
 		KeyPrefix:      defaultWindowPrefix,
-		FailOpen:       true,
+		FailOpen:       false,
 	}
 }
 
@@ -79,7 +79,15 @@ func (wl *WindowLimiter) bucketKey(key string, now time.Time) string {
 		windowSeconds = 60
 	}
 	bucket := now.Unix() / windowSeconds
-	return fmt.Sprintf("%s:%s:%d", wl.config.KeyPrefix, key, bucket)
+
+	// Single allocation for final string.
+	buf := make([]byte, 0, len(wl.config.KeyPrefix)+len(key)+24)
+	buf = append(buf, wl.config.KeyPrefix...)
+	buf = append(buf, ':')
+	buf = append(buf, key...)
+	buf = append(buf, ':')
+	buf = strconv.AppendInt(buf, bucket, 10)
+	return string(buf)
 }
 
 func normalizeWindowConfig(cfg *WindowConfig) WindowConfig {

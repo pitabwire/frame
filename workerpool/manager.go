@@ -20,6 +20,11 @@ const (
 	retrySchedulerQueueSize     = 4096
 )
 
+var (
+	errRetrySchedulerStopped   = errors.New("retry scheduler stopped")
+	errRetrySchedulerQueueFull = errors.New("retry scheduler queue is full")
+)
+
 func shouldCloseJob(executionErr error) bool {
 	return executionErr == nil || errors.Is(executionErr, context.Canceled) ||
 		errors.Is(executionErr, ErrWorkerPoolResultChannelIsClosed)
@@ -167,14 +172,14 @@ func (m *manager) scheduleRetry(task retryTask) {
 	select {
 	case <-m.retryStop:
 		if task.fail != nil {
-			task.fail(errors.New("retry scheduler stopped"))
+			task.fail(errRetrySchedulerStopped)
 		}
 	case <-task.ctx.Done():
 		return
 	case m.retryQueue <- task:
 	default:
 		if task.fail != nil {
-			task.fail(errors.New("retry scheduler queue is full"))
+			task.fail(errRetrySchedulerQueueFull)
 		}
 	}
 }

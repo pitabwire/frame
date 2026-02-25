@@ -282,9 +282,11 @@ linters:
     gosec:
       # G704: All flagged http.Client.Do calls use trusted, pre-configured endpoints
       # (OIDC discovery, JWKS, internal API), not user-controlled URLs.
+      # G706: Log injection taint analysis flags standard request logging patterns.
       # G117: Test container credential fields are not real secrets.
       excludes:
         - G704
+        - G706
         - G117
 
     gocritic:

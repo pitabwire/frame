@@ -2,7 +2,9 @@ package authorizer
 
 import (
 	"context"
-	"math/rand/v2"
+	"crypto/rand"
+	"encoding/binary"
+	"math"
 
 	"github.com/pitabwire/util"
 
@@ -46,9 +48,15 @@ func (a *auditLogger) LogDecision(
 		return nil
 	}
 
-	// Sample rate check
-	if a.sampleRate < 1.0 && rand.Float64() > a.sampleRate { //nolint:gosec // sample rate doesn't need crypto rand
-		return nil
+	// Sample rate check using crypto/rand
+	if a.sampleRate < 1.0 {
+		var b [8]byte
+		if _, err := rand.Read(b[:]); err == nil {
+			f := float64(binary.BigEndian.Uint64(b[:])) / float64(math.MaxUint64)
+			if f > a.sampleRate {
+				return nil
+			}
+		}
 	}
 
 	fields := map[string]any{

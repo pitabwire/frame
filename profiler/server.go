@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
-	_ "net/http/pprof" //nolint:gosec // This is a controlled profiling endpoint
+	_ "net/http/pprof" // registers /debug/pprof/* handlers on DefaultServeMux
 	"time"
 
 	"github.com/pitabwire/util"

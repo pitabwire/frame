@@ -30,7 +30,11 @@ func (s *pool) createConnection(ctx context.Context, dsn string, poolOpts *Optio
 
 	// Configure pgxpool settings from Options
 	if poolOpts.MaxOpen > 0 {
-		cfg.MaxConns = int32(min(poolOpts.MaxOpen, math.MaxInt32)) //nolint:gosec // G115: bounded by min()
+		maxConns := poolOpts.MaxOpen
+		if maxConns > math.MaxInt32 {
+			maxConns = math.MaxInt32
+		}
+		cfg.MaxConns = int32(maxConns)
 	}
 	if poolOpts.MaxLifetime > 0 {
 		cfg.MaxConnLifetime = poolOpts.MaxLifetime

@@ -129,7 +129,8 @@ func (s *pool) selectOne(pool []*gorm.DB, idx *uint64) *gorm.DB {
 		return nil
 	}
 	pos := atomic.AddUint64(idx, 1)
-	return pool[int(pos-1)%len(pool)] //nolint:gosec // G115: index is result of (val % len), always < len and fits in int.
+	i := (pos - 1) % uint64(len(pool))
+	return pool[i]
 }
 
 func (s *pool) CanMigrate() bool {

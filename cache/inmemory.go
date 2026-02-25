@@ -3,6 +3,7 @@ package cache
 import (
 	"context"
 	"encoding/binary"
+	"math"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -189,9 +190,24 @@ func (c *InMemoryCache) Close() error {
 
 const int64Size = 8
 
+// readItemCounter reads and returns the counter value from a cache item,
+// deleting expired items and returning 0 for them.
+func (c *InMemoryCache) readItemCounter(key string, item *inMemoryCacheItem) int64 {
+	if item.isExpired() {
+		c.deleteKey(key)
+		return 0
+	}
+	if len(item.value) < int64Size {
+		return 0
+	}
+	uintVal := binary.BigEndian.Uint64(item.value)
+	if uintVal > math.MaxInt64 {
+		uintVal = math.MaxInt64
+	}
+	return int64(uintVal)
+}
+
 // Increment atomically increments a counter.
-//
-//nolint:gocognit // Complex due to atomic CAS retry loop
 func (c *InMemoryCache) Increment(_ context.Context, key string, delta int64) (int64, error) {
 	for {
 		value, ok := c.items.Load(key)
@@ -199,21 +215,19 @@ func (c *InMemoryCache) Increment(_ context.Context, key string, delta int64) (i
 		var item *inMemoryCacheItem
 
 		if ok {
-			if cachedItem, typeOK := value.(*inMemoryCacheItem); typeOK {
-				item = cachedItem
-				if item.isExpired() {
-					c.deleteKey(key)
-					currentVal = 0
-				} else if len(item.value) >= int64Size {
-					uintVal := binary.BigEndian.Uint64(item.value)
-					currentVal = int64(uintVal) //nolint:gosec // Safe conversion for counter values
-				}
-			}
+			item, _ = value.(*inMemoryCacheItem)
+		}
+
+		if item != nil {
+			currentVal = c.readItemCounter(key, item)
 		}
 
 		newVal := currentVal + delta
 		newBytes := make([]byte, int64Size)
-		binary.BigEndian.PutUint64(newBytes, uint64(newVal)) //nolint:gosec // Safe conversion for counter values
+		if newVal < 0 {
+			newVal = 0
+		}
+		binary.BigEndian.PutUint64(newBytes, uint64(newVal))
 
 		newItem := &inMemoryCacheItem{
 			value: newBytes,

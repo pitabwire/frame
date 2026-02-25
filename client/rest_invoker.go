@@ -467,7 +467,7 @@ func (s *invoker) InvokeStream(
 
 	enableBodyRewind(req, body)
 
-	resp, err := s.client.Do(req) //nolint:gosec // G704: URL validated by util.ValidateHTTPURL above
+	resp, err := s.client.Do(req)
 	if err != nil {
 		// client.Do may return (resp, err) on redirect errors; close body to avoid leak.
 		if resp != nil && resp.Body != nil {

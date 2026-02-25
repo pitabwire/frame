@@ -33,6 +33,7 @@ func ServeSpec(reg *Registry) http.HandlerFunc {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
+		// #nosec G705 -- serving trusted embedded OpenAPI specs.
 		if _, err := w.Write(spec.Content); err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 		}

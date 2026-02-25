@@ -94,7 +94,7 @@ plugins:
 		return fmt.Errorf("close buf template: %w", closeErr)
 	}
 
-	// #nosec G204 -- command is user-configured and expected in tooling.
+	// #nosec G204,G702 -- command is user-configured and expected in tooling.
 	cmd := exec.Command(bufBinary, "generate", "--template", tpl.Name())
 	cmd.Dir = protoDir
 	out, err := cmd.CombinedOutput()

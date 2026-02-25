@@ -42,29 +42,29 @@ func run(cfg config) error {
 		"configs",
 	}
 	for _, dir := range repoDirs {
-		if err := ensureDir(filepath.Join(root, dir)); err != nil {
-			return err
+		if dirErr := ensureDir(filepath.Join(root, dir)); dirErr != nil {
+			return dirErr
 		}
 	}
 
-	if err := writeRepoDockerfile(root); err != nil {
-		return err
+	if dockerErr := writeRepoDockerfile(root); dockerErr != nil {
+		return dockerErr
 	}
 
 	if cfg.Module != "" {
-		if err := writeGoMod(root, cfg.Module); err != nil {
-			return err
+		if modErr := writeGoMod(root, cfg.Module); modErr != nil {
+			return modErr
 		}
 	}
 
 	for _, svc := range services {
-		if err := writeServiceLayout(root, svc); err != nil {
-			return err
+		if svcErr := writeServiceLayout(root, svc); svcErr != nil {
+			return svcErr
 		}
 	}
 
-	if err := writeMonolithEntry(root, services); err != nil {
-		return err
+	if entryErr := writeMonolithEntry(root, services); entryErr != nil {
+		return entryErr
 	}
 
 	return nil
@@ -87,8 +87,9 @@ func parseServices(raw string) []string {
 }
 
 func ensureDir(path string) error {
-	if err := os.MkdirAll(path, 0o755); err != nil {
-		return fmt.Errorf("create dir %s: %w", path, err)
+	// #nosec G301 -- scaffold output should be readable by the developer.
+	if mkErr := os.MkdirAll(path, 0o755); mkErr != nil {
+		return fmt.Errorf("create dir %s: %w", path, mkErr)
 	}
 	return nil
 }
@@ -99,6 +100,7 @@ func writeRepoDockerfile(root string) error {
 		return nil
 	}
 	content := "FROM golang:1.22-alpine\nWORKDIR /app\nCOPY . .\nRUN go build -o /app/monolith ./cmd/monolith\nCMD [\"/app/monolith\"]\n"
+	// #nosec G306 -- generated files should be readable by the developer.
 	return os.WriteFile(path, []byte(content), 0o644)
 }
 
@@ -108,6 +110,7 @@ func writeGoMod(root, module string) error {
 		return nil
 	}
 	content := fmt.Sprintf("module %s\n\ngo 1.22\n", module)
+	// #nosec G306 -- generated files should be readable by the developer.
 	return os.WriteFile(path, []byte(content), 0o644)
 }
 
@@ -121,24 +124,47 @@ func writeServiceLayout(root, name string) error {
 		filepath.Join(base, "tests"),
 	}
 	for _, p := range paths {
-		if err := ensureDir(p); err != nil {
-			return err
+		if dirErr := ensureDir(p); dirErr != nil {
+			return dirErr
 		}
 	}
 
 	mainPath := filepath.Join(base, "cmd", name, "main.go")
 	if !exists(mainPath) {
-		content := fmt.Sprintf("package main\n\nimport (\n\t\"log\"\n\n\t\"github.com/pitabwire/frame\"\n)\n\nfunc main() {\n\tctx, svc := frame.NewService(\n\t\tframe.WithName(\"%s\"),\n\t)\n\tif err := svc.Run(ctx, \":8080\"); err != nil {\n\t\tlog.Fatal(err)\n\t}\n}\n", name)
-		if err := os.WriteFile(mainPath, []byte(content), 0o644); err != nil {
-			return fmt.Errorf("write %s: %w", mainPath, err)
+		content := fmt.Sprintf(`package main
+
+import (
+	"log"
+
+	"github.com/pitabwire/frame"
+)
+
+func main() {
+	ctx, svc := frame.NewService(
+		frame.WithName("%s"),
+	)
+	if err := svc.Run(ctx, ":8080"); err != nil {
+		log.Fatal(err)
+	}
+}
+`, name)
+		// #nosec G306 -- generated files should be readable by the developer.
+		if writeErr := os.WriteFile(mainPath, []byte(content), 0o644); writeErr != nil {
+			return fmt.Errorf("write %s: %w", mainPath, writeErr)
 		}
 	}
 
 	dockerPath := filepath.Join(base, "cmd", name, "Dockerfile")
 	if !exists(dockerPath) {
-		content := fmt.Sprintf("FROM golang:1.22-alpine\nWORKDIR /app\nCOPY . .\nRUN go build -o /app/%s ./apps/%s/cmd/%s\nCMD [\"/app/%s\"]\n", name, name, name, name)
-		if err := os.WriteFile(dockerPath, []byte(content), 0o644); err != nil {
-			return fmt.Errorf("write %s: %w", dockerPath, err)
+		content := fmt.Sprintf(`FROM golang:1.22-alpine
+WORKDIR /app
+COPY . .
+RUN go build -o /app/%s ./apps/%s/cmd/%s
+CMD ["/app/%s"]
+`, name, name, name, name)
+		// #nosec G306 -- generated files should be readable by the developer.
+		if writeErr := os.WriteFile(dockerPath, []byte(content), 0o644); writeErr != nil {
+			return fmt.Errorf("write %s: %w", dockerPath, writeErr)
 		}
 	}
 
@@ -166,10 +192,18 @@ func writeMonolithEntry(root string, services []string) error {
 	}
 	builders.WriteString(")\n\nfunc main() {\n\tmux := http.NewServeMux()\n")
 	for _, svc := range services {
-		builders.WriteString(fmt.Sprintf("\t%s.RegisterRoutes(mux)\n", svc))
+		fmt.Fprintf(&builders, "\t%s.RegisterRoutes(mux)\n", svc)
 	}
-	builders.WriteString("\tctx, svc := frame.NewService(\n\t\tframe.WithName(\"monolith\"),\n\t\tframe.WithHTTPHandler(mux),\n\t)\n\tif err := svc.Run(ctx, \":8080\"); err != nil {\n\t\tlog.Fatal(err)\n\t}\n}\n")
+	builders.WriteString("\tctx, svc := frame.NewService(\n")
+	builders.WriteString("\t\tframe.WithName(\"monolith\"),\n")
+	builders.WriteString("\t\tframe.WithHTTPHandler(mux),\n")
+	builders.WriteString("\t)\n")
+	builders.WriteString("\tif err := svc.Run(ctx, \":8080\"); err != nil {\n")
+	builders.WriteString("\t\tlog.Fatal(err)\n")
+	builders.WriteString("\t}\n")
+	builders.WriteString("}\n")
 
+	// #nosec G306 -- generated files should be readable by the developer.
 	return os.WriteFile(path, []byte(builders.String()), 0o644)
 }
 

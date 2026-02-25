@@ -12,7 +12,7 @@ func ServeIndex(reg *Registry) http.HandlerFunc {
 		index := make([]map[string]string, 0, len(items))
 		for _, s := range items {
 			index = append(index, map[string]string{
-				"name": s.Name,
+				"name":     s.Name,
 				"filename": s.Filename,
 			})
 		}
@@ -33,7 +33,9 @@ func ServeSpec(reg *Registry) http.HandlerFunc {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		w.Write(spec.Content)
+		if _, err := w.Write(spec.Content); err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+		}
 	}
 }
 

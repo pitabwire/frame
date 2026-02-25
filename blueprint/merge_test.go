@@ -1,19 +1,27 @@
-package blueprint
+package blueprint_test
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/pitabwire/frame/blueprint"
+)
 
 func TestMerge_Additive(t *testing.T) {
-	base := Blueprint{
+	base := blueprint.Blueprint{
 		Service: "users",
-		HTTP:    []HTTPRoute{{Name: "list", Method: "GET", Route: "/users", Handler: "List"}},
-		Plugins: []Plugin{{Name: "logging"}},
+		HTTP: []blueprint.HTTPRoute{
+			{Name: "list", Method: "GET", Route: "/users", Handler: "List"},
+		},
+		Plugins: []blueprint.Plugin{{Name: "logging"}},
 	}
-	overlay := Blueprint{
-		HTTP:    []HTTPRoute{{Name: "create", Method: "POST", Route: "/users", Handler: "Create"}},
-		Plugins: []Plugin{{Name: "metrics"}},
+	overlay := blueprint.Blueprint{
+		HTTP: []blueprint.HTTPRoute{
+			{Name: "create", Method: "POST", Route: "/users", Handler: "Create"},
+		},
+		Plugins: []blueprint.Plugin{{Name: "metrics"}},
 	}
 
-	out, err := Merge(base, overlay)
+	out, err := blueprint.Merge(base, overlay)
 	if err != nil {
 		t.Fatalf("merge: %v", err)
 	}
@@ -27,10 +35,18 @@ func TestMerge_Additive(t *testing.T) {
 }
 
 func TestMerge_Override(t *testing.T) {
-	base := Blueprint{HTTP: []HTTPRoute{{Name: "list", Method: "GET", Route: "/users", Handler: "List"}}}
-	overlay := Blueprint{HTTP: []HTTPRoute{{Name: "list", Method: "GET", Route: "/users", Handler: "ListV2", Override: true}}}
+	base := blueprint.Blueprint{
+		HTTP: []blueprint.HTTPRoute{
+			{Name: "list", Method: "GET", Route: "/users", Handler: "List"},
+		},
+	}
+	overlay := blueprint.Blueprint{
+		HTTP: []blueprint.HTTPRoute{
+			{Name: "list", Method: "GET", Route: "/users", Handler: "ListV2", Override: true},
+		},
+	}
 
-	out, err := Merge(base, overlay)
+	out, err := blueprint.Merge(base, overlay)
 	if err != nil {
 		t.Fatalf("merge: %v", err)
 	}
@@ -41,10 +57,18 @@ func TestMerge_Override(t *testing.T) {
 }
 
 func TestMerge_Remove(t *testing.T) {
-	base := Blueprint{HTTP: []HTTPRoute{{Name: "list", Method: "GET", Route: "/users", Handler: "List"}}}
-	overlay := Blueprint{HTTP: []HTTPRoute{{Name: "list", Remove: true}}}
+	base := blueprint.Blueprint{
+		HTTP: []blueprint.HTTPRoute{
+			{Name: "list", Method: "GET", Route: "/users", Handler: "List"},
+		},
+	}
+	overlay := blueprint.Blueprint{
+		HTTP: []blueprint.HTTPRoute{
+			{Name: "list", Remove: true},
+		},
+	}
 
-	out, err := Merge(base, overlay)
+	out, err := blueprint.Merge(base, overlay)
 	if err != nil {
 		t.Fatalf("merge: %v", err)
 	}
@@ -55,10 +79,10 @@ func TestMerge_Remove(t *testing.T) {
 }
 
 func TestMerge_ServiceMismatch(t *testing.T) {
-	base := Blueprint{Service: "users"}
-	overlay := Blueprint{Service: "billing"}
+	base := blueprint.Blueprint{Service: "users"}
+	overlay := blueprint.Blueprint{Service: "billing"}
 
-	_, err := Merge(base, overlay)
+	_, err := blueprint.Merge(base, overlay)
 	if err == nil {
 		t.Fatalf("expected mismatch error")
 	}

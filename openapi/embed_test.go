@@ -1,8 +1,10 @@
-package openapi
+package openapi_test
 
 import (
 	"testing"
 	"testing/fstest"
+
+	"github.com/pitabwire/frame/openapi"
 )
 
 func TestRegisterFromFS(t *testing.T) {
@@ -11,8 +13,8 @@ func TestRegisterFromFS(t *testing.T) {
 		"specs/ignore.txt": {Data: []byte("noop")},
 	}
 
-	reg := NewRegistry()
-	if err := RegisterFromFS(reg, fsys, "specs"); err != nil {
+	reg := openapi.NewRegistry()
+	if err := openapi.RegisterFromFS(reg, fsys, "specs"); err != nil {
 		t.Fatalf("register from fs: %v", err)
 	}
 

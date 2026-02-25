@@ -21,27 +21,36 @@ func Merge(base, overlay Blueprint) (Blueprint, error) {
 }
 
 func mergeHTTP(base, overlay []HTTPRoute) []HTTPRoute {
-	return mergeList(base, overlay, func(item HTTPRoute) string { return item.Name }, func(dst, src HTTPRoute) HTTPRoute { return src }, func(item HTTPRoute) bool {
-		return item.Override
-	}, func(item HTTPRoute) bool {
-		return item.Remove
-	})
+	return mergeList(
+		base,
+		overlay,
+		func(item HTTPRoute) string { return item.Name },
+		func(_ HTTPRoute, src HTTPRoute) HTTPRoute { return src },
+		func(item HTTPRoute) bool { return item.Override },
+		func(item HTTPRoute) bool { return item.Remove },
+	)
 }
 
 func mergePlugins(base, overlay []Plugin) []Plugin {
-	return mergeList(base, overlay, func(item Plugin) string { return item.Name }, func(dst, src Plugin) Plugin { return src }, func(item Plugin) bool {
-		return item.Override
-	}, func(item Plugin) bool {
-		return item.Remove
-	})
+	return mergeList(
+		base,
+		overlay,
+		func(item Plugin) string { return item.Name },
+		func(_ Plugin, src Plugin) Plugin { return src },
+		func(item Plugin) bool { return item.Override },
+		func(item Plugin) bool { return item.Remove },
+	)
 }
 
 func mergeQueues(base, overlay []Queue) []Queue {
-	return mergeList(base, overlay, func(item Queue) string { return item.Name }, func(dst, src Queue) Queue { return src }, func(item Queue) bool {
-		return item.Override
-	}, func(item Queue) bool {
-		return item.Remove
-	})
+	return mergeList(
+		base,
+		overlay,
+		func(item Queue) string { return item.Name },
+		func(_ Queue, src Queue) Queue { return src },
+		func(item Queue) bool { return item.Override },
+		func(item Queue) bool { return item.Remove },
+	)
 }
 
 type keyFunc[T any] func(T) string
@@ -49,14 +58,13 @@ type replaceFunc[T any] func(dst, src T) T
 
 type flagFunc[T any] func(T) bool
 
-type mergeConfig[T any] struct {
-	key      keyFunc[T]
-	replace  replaceFunc[T]
-	override flagFunc[T]
-	remove   flagFunc[T]
-}
-
-func mergeList[T any](base, overlay []T, key keyFunc[T], replace replaceFunc[T], override flagFunc[T], remove flagFunc[T]) []T {
+func mergeList[T any](
+	base, overlay []T,
+	key keyFunc[T],
+	replace replaceFunc[T],
+	override flagFunc[T],
+	remove flagFunc[T],
+) []T {
 	index := make(map[string]int, len(base))
 	out := make([]T, 0, len(base)+len(overlay))
 	for i, item := range base {

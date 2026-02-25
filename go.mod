@@ -19,7 +19,7 @@ require (
 	github.com/ory/keto/proto v0.13.0-alpha.0
 	github.com/panjf2000/ants/v2 v2.11.5
 	github.com/pitabwire/natspubsub v0.7.12
-	github.com/pitabwire/util v0.4.0
+	github.com/pitabwire/util v0.5.0
 	github.com/redis/go-redis/v9 v9.18.0
 	github.com/rs/xid v1.6.0
 	github.com/sony/gobreaker/v2 v2.4.0

@@ -33,7 +33,7 @@ func NewWithOpts(cluster string, containerOpts ...definition.ContainerOption) de
 	opts := definition.ContainerOpts{
 		ImageName:      NatsImage,
 		UserName:       NatsUser,
-		Password:       NatsPass,
+		Credential:     NatsPass,
 		Ports:          []string{"4222/tcp", "6222/tcp", "8222/tcp"},
 		NetworkAliases: []string{"nats", "queue-nats"},
 	}
@@ -50,7 +50,7 @@ func (d *dependancy) Setup(ctx context.Context, ntwk *testcontainers.DockerNetwo
 
 		testcontainers.WithCmdArgs("--js", "-DVV"),
 		tcNats.WithUsername(d.Opts().UserName),
-		tcNats.WithPassword(d.Opts().Password),
+		tcNats.WithPassword(d.Opts().Credential),
 		testcontainers.WithWaitStrategy(
 			wait.ForLog("Server is ready")),
 	}...)
@@ -69,7 +69,7 @@ func (d *dependancy) GetDS(ctx context.Context) data.DSN {
 	ds := d.DefaultImpl.GetDS(ctx)
 
 	ds, _ = ds.WithUser(d.Opts().UserName)
-	ds, _ = ds.WithPassword(d.Opts().Password)
+	ds, _ = ds.WithPassword(d.Opts().Credential)
 	return ds
 }
 
@@ -77,6 +77,6 @@ func (d *dependancy) GetInternalDS(ctx context.Context) data.DSN {
 	ds := d.DefaultImpl.GetInternalDS(ctx)
 
 	ds, _ = ds.WithUser(d.Opts().UserName)
-	ds, _ = ds.WithPassword(d.Opts().Password)
+	ds, _ = ds.WithPassword(d.Opts().Credential)
 	return ds
 }

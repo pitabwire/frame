@@ -52,7 +52,7 @@ func NewWithOpts(dbName string, containerOpts ...definition.ContainerOption) def
 	opts := definition.ContainerOpts{
 		ImageName:      PostgresqlDBImage,
 		UserName:       DBUser,
-		Password:       DBPassword,
+		Credential:     DBPassword,
 		Ports:          []string{"5432/tcp"},
 		NetworkAliases: []string{"postgres", "db-postgres"},
 	}
@@ -70,7 +70,7 @@ func (d *postgreSQLDependancy) Setup(ctx context.Context, ntwk *testcontainers.D
 
 		tcPostgres.WithDatabase(d.dbname),
 		tcPostgres.WithUsername(d.Opts().UserName),
-		tcPostgres.WithPassword(d.Opts().Password),
+		tcPostgres.WithPassword(d.Opts().Credential),
 		testcontainers.WithWaitStrategy(
 			wait.ForLog("database system is ready to accept connections").
 				WithOccurrence(OccurrenceValue).
@@ -91,7 +91,7 @@ func (d *postgreSQLDependancy) GetDS(ctx context.Context) data.DSN {
 	ds := d.DefaultImpl.GetDS(ctx)
 
 	return data.DSN(
-		fmt.Sprintf("postgres://%s:%s@%s/%s", d.Opts().UserName, d.Opts().Password, ds.String(), d.dbname),
+		fmt.Sprintf("postgres://%s:%s@%s/%s", d.Opts().UserName, d.Opts().Credential, ds.String(), d.dbname),
 	)
 }
 
@@ -99,7 +99,7 @@ func (d *postgreSQLDependancy) GetInternalDS(ctx context.Context) data.DSN {
 	ds := d.DefaultImpl.GetInternalDS(ctx)
 
 	return data.DSN(
-		fmt.Sprintf("postgres://%s:%s@%s/%s", d.Opts().UserName, d.Opts().Password, ds.String(), d.dbname),
+		fmt.Sprintf("postgres://%s:%s@%s/%s", d.Opts().UserName, d.Opts().Credential, ds.String(), d.dbname),
 	)
 }
 

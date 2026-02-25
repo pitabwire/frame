@@ -34,7 +34,7 @@ func NewWithOpts(cluster string, containerOpts ...definition.ContainerOption) de
 	opts := definition.ContainerOpts{
 		ImageName:      ValKeyImage,
 		UserName:       ValKeyUser,
-		Password:       ValKeyPass,
+		Credential:     ValKeyPass,
 		Ports:          []string{"6379/tcp"},
 		NetworkAliases: []string{"valkey", "cache-valkey"},
 	}

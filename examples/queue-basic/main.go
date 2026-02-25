@@ -3,8 +3,9 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
 	"net/http"
+
+	"github.com/pitabwire/util"
 
 	"github.com/pitabwire/frame"
 )
@@ -12,14 +13,13 @@ import (
 type handler struct{}
 
 func (h handler) Handle(ctx context.Context, metadata map[string]string, message []byte) error {
-	log.Printf("[%v] received message: %s (metadata keys: %d)",
-		ctx.Err(), string(message), len(metadata))
+	util.Log(ctx).WithField("metadata_keys", len(metadata)).Info(string(message))
 	return nil
 }
 
 func main() {
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		log.Printf("request: %s %s", r.Method, r.URL.Path)
+		util.Log(r.Context()).Info("request received")
 		w.Header().Set("Content-Type", "text/plain")
 		_, _ = fmt.Fprintln(w, "queue ok")
 	})
@@ -37,6 +37,6 @@ func main() {
 	})
 
 	if err := svc.Run(ctx, ":8080"); err != nil {
-		log.Fatal(err)
+		util.Log(ctx).WithError(err).Fatal("service stopped")
 	}
 }

@@ -665,7 +665,11 @@ func (c *ConfigurationDefault) SetTLSCertAndKeyPath(certificatePath, certificate
 type OIDCMap map[string]any
 
 func (oid *OIDCMap) loadOIDC(ctx context.Context, url string) error {
-	hreq, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	u, err := util.ValidateHTTPURL(url)
+	if err != nil {
+		return err
+	}
+	hreq, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
 	if err != nil {
 		return err
 	}
@@ -704,7 +708,11 @@ type JSONWebKeys struct {
 }
 
 func (oid *OIDCMap) loadJWKData(ctx context.Context, url string) (string, error) {
-	hreq, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	u, err := util.ValidateHTTPURL(url)
+	if err != nil {
+		return "", err
+	}
+	hreq, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
 	if err != nil {
 		return "", err
 	}

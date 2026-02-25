@@ -12,9 +12,9 @@ import (
 const HostNetworkingMode = "host"
 
 type ContainerOpts struct {
-	ImageName string
-	UserName  string
-	Password  string
+	ImageName  string
+	UserName   string
+	Credential string
 
 	Ports []string
 
@@ -120,10 +120,10 @@ func WithUserName(userName string) ContainerOption {
 	}
 }
 
-// WithPassword allows to set the password to use for testing.
-func WithPassword(password string) ContainerOption {
+// WithCredential allows to set the credential to use for testing.
+func WithCredential(credential string) ContainerOption {
 	return func(original *ContainerOpts) {
-		original.Password = password
+		original.Credential = credential
 	}
 }
 

@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/pitabwire/util"
 
 	"github.com/pitabwire/frame/config"
 	"github.com/pitabwire/frame/security"
@@ -240,7 +241,12 @@ func (a *TokenAuthenticator) GetKey(token *jwt.Token) (any, error) {
 // ------------------------------
 
 func (a *TokenAuthenticator) Refresh() error {
-	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, a.jwksURL, nil)
+	u, err := util.ValidateHTTPURL(a.jwksURL)
+	if err != nil {
+		a.setErr(err)
+		return err
+	}
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, u.String(), nil)
 	if err != nil {
 		return err
 	}

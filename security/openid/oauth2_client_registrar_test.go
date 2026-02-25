@@ -23,12 +23,12 @@ type JwtTestSuite struct {
 
 func initJwtResources(_ context.Context) []definition.TestResource {
 	pg := testpostgres.NewWithOpts("frame_test_service",
-		definition.WithUserName("ant"), definition.WithPassword("s3cr3t"),
+		definition.WithUserName("ant"), definition.WithCredential("s3cr3t"),
 		definition.WithEnableLogging(false), definition.WithUseHostMode(false))
 
 	queue := testnats.NewWithOpts("partition",
 		definition.WithUserName("ant"),
-		definition.WithPassword("s3cr3t"),
+		definition.WithCredential("s3cr3t"),
 		definition.WithEnableLogging(false))
 
 	hydra := testoryhydra.NewWithOpts(

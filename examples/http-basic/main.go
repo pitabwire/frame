@@ -2,15 +2,16 @@ package main
 
 import (
 	"fmt"
-	"log"
 	"net/http"
+
+	"github.com/pitabwire/util"
 
 	"github.com/pitabwire/frame"
 )
 
 func main() {
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		log.Printf("request: %s %s", r.Method, r.URL.Path)
+		util.Log(r.Context()).Info("request received")
 		w.Header().Set("Content-Type", "text/plain")
 		_, _ = fmt.Fprintln(w, "hello from frame")
 	})
@@ -21,6 +22,6 @@ func main() {
 	)
 
 	if err := svc.Run(ctx, ":8080"); err != nil {
-		log.Fatal(err)
+		util.Log(ctx).WithError(err).Fatal("service stopped")
 	}
 }

@@ -55,7 +55,7 @@ type AuthorizerTestSuite struct {
 func initAuthorizerResources(_ context.Context) []definition.TestResource {
 	pg := testpostgres.NewWithOpts("authorizer_test",
 		definition.WithUserName("ant"),
-		definition.WithPassword("s3cr3t"),
+		definition.WithCredential("s3cr3t"),
 		definition.WithEnableLogging(false),
 		definition.WithUseHostMode(false),
 	)

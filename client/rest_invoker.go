@@ -441,6 +441,11 @@ func (s *invoker) InvokeStream(
 	headers http.Header,
 	opts ...HTTPOption,
 ) (*InvokeResponse, error) {
+	u, err := util.ValidateHTTPURL(endpointURL)
+	if err != nil {
+		return nil, err
+	}
+
 	httpCfg := &httpConfig{}
 	for _, opt := range opts {
 		opt(httpCfg)
@@ -451,7 +456,7 @@ func (s *invoker) InvokeStream(
 		ctx, cancel = context.WithTimeout(ctx, httpCfg.timeout)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, method, endpointURL, body)
+	req, err := http.NewRequestWithContext(ctx, method, u.String(), body)
 	if err != nil {
 		if cancel != nil {
 			cancel()
@@ -460,19 +465,7 @@ func (s *invoker) InvokeStream(
 	}
 	req.Header = headers
 
-	// Enable body rewind for retries when the body supports seeking and
-	// the stdlib hasn't already set GetBody (it handles *bytes.Reader,
-	// *bytes.Buffer, and *strings.Reader automatically).
-	if body != nil && req.GetBody == nil {
-		if seeker, ok := body.(io.ReadSeeker); ok {
-			req.GetBody = func() (io.ReadCloser, error) {
-				if _, sErr := seeker.Seek(0, io.SeekStart); sErr != nil {
-					return nil, sErr
-				}
-				return io.NopCloser(seeker), nil
-			}
-		}
-	}
+	enableBodyRewind(req, body)
 
 	resp, err := s.client.Do(req)
 	if err != nil {
@@ -499,4 +492,23 @@ func (s *invoker) InvokeStream(
 		Headers:    resp.Header,
 		Body:       respBody,
 	}, nil
+}
+
+// enableBodyRewind sets GetBody on req so the HTTP client can replay the body
+// during redirects or retries. It only applies when the body supports seeking
+// and the stdlib hasn't already set GetBody.
+func enableBodyRewind(req *http.Request, body io.Reader) {
+	if body == nil || req.GetBody != nil {
+		return
+	}
+	seeker, ok := body.(io.ReadSeeker)
+	if !ok {
+		return
+	}
+	req.GetBody = func() (io.ReadCloser, error) {
+		if _, err := seeker.Seek(0, io.SeekStart); err != nil {
+			return nil, err
+		}
+		return io.NopCloser(seeker), nil
+	}
 }

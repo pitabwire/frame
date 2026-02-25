@@ -1,10 +1,12 @@
 package main
 
 import (
+	"context"
 	"fmt"
-	"log"
 	"net/http"
 	"os"
+
+	"github.com/pitabwire/util"
 
 	"github.com/pitabwire/frame"
 	"github.com/pitabwire/frame/datastore"
@@ -12,13 +14,13 @@ import (
 
 func main() {
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		log.Printf("request: %s %s", r.Method, r.URL.Path)
+		util.Log(r.Context()).Info("request received")
 		w.Header().Set("Content-Type", "text/plain")
 		_, _ = fmt.Fprintln(w, "datastore ok")
 	})
 
 	if os.Getenv("DATABASE_URL") == "" {
-		log.Println("DATABASE_URL is not set; skipping datastore initialization")
+		util.Log(context.Background()).Warn("DATABASE_URL is not set; skipping datastore initialization")
 		return
 	}
 
@@ -37,6 +39,6 @@ func main() {
 	}
 
 	if err := svc.Run(ctx, ":8080"); err != nil {
-		log.Fatal(err)
+		util.Log(ctx).WithError(err).Fatal("service stopped")
 	}
 }

@@ -61,6 +61,7 @@ type Service struct {
 
 	handler    http.Handler
 	cancelFunc context.CancelFunc
+	httpMW     []func(http.Handler) http.Handler
 
 	errorChannelMutex sync.Mutex
 	errorChannel      chan error
@@ -476,6 +477,15 @@ func (s *Service) createAndConfigureMux(ctx context.Context) *http.ServeMux {
 	applicationHandler := s.handler
 	if applicationHandler == nil {
 		applicationHandler = http.DefaultServeMux
+	}
+
+	if len(s.httpMW) > 0 {
+		for i := len(s.httpMW) - 1; i >= 0; i-- {
+			if s.httpMW[i] == nil {
+				continue
+			}
+			applicationHandler = s.httpMW[i](applicationHandler)
+		}
 	}
 
 	cfg, ok := s.Config().(config.ConfigurationTraceRequests)

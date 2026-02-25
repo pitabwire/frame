@@ -224,6 +224,18 @@ func WithHTTPHandler(h http.Handler) Option {
 	}
 }
 
+// WithHTTPMiddleware registers one or more HTTP middlewares.
+// Middlewares wrap the application handler in the order supplied.
+func WithHTTPMiddleware(middleware ...func(http.Handler) http.Handler) Option {
+	return func(_ context.Context, c *Service) {
+		if len(middleware) == 0 {
+			return
+		}
+
+		c.httpMW = append(c.httpMW, middleware...)
+	}
+}
+
 // WithDriver setsup a driver, mostly useful when writing tests against the frame service.
 func WithDriver(driver ServerDriver) Option {
 	return func(_ context.Context, c *Service) {

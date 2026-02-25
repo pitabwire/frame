@@ -16,6 +16,8 @@ func (s *Service) HTTPClientManager() client.Manager {
 // This allows customizing the HTTP client's behavior such as timeout, transport, etc.
 func WithHTTPClient(opts ...client.HTTPOption) Option {
 	return func(ctx context.Context, s *Service) {
+		s.registerPlugin("http_client")
+
 		cfg, ok := s.Config().(config.ConfigurationTraceRequests)
 		if ok && cfg.TraceReq() {
 			opts = append(opts, client.WithHTTPTraceRequests(), client.WithHTTPTraceRequestHeaders())

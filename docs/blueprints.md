@@ -128,7 +128,7 @@ http:
 
 ## Output Directory
 
-By default, `frame build` writes into the current directory. For AI workflows, use `--out` to isolate generated code:
+By default, `frame build` writes into `./_generated`. For AI workflows, use `--out` to isolate generated code:
 
 ```bash
 go run ./cmd/frame build blueprints/polylith.yaml --out ./_generated

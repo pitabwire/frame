@@ -232,6 +232,18 @@ func ToContext(ctx context.Context, service *Service) context.Context {
 }
 
 // FromContext obtains a service instance being propagated through the context.
+func (s *Service) registerPlugin(name string) {
+	if name == "" {
+		return
+	}
+	for _, existing := range s.registeredPlugins {
+		if existing == name {
+			return
+		}
+	}
+	s.registeredPlugins = append(s.registeredPlugins, name)
+}
+
 func FromContext(ctx context.Context) *Service {
 	service, ok := ctx.Value(ctxKeyService).(*Service)
 	if !ok {

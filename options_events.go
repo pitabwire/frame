@@ -11,6 +11,8 @@ import (
 // WithRegisterEvents registers events for the service. All events are unique and shouldn't share a name otherwise the last one registered will take precedence.
 func WithRegisterEvents(evt ...events.EventI) Option {
 	return func(_ context.Context, s *Service) {
+		s.registerPlugin("events")
+
 		// Events manager is initialized in setupEventsQueue after options are applied
 		// so defer event registration to pre-start phase
 		s.AddPreStartMethod(func(_ context.Context, svc *Service) {

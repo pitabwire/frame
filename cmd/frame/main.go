@@ -49,7 +49,7 @@ func usage() {
 
 func cmdBuild(args []string) error {
 	fs := flag.NewFlagSet("build", flag.ContinueOnError)
-	outDir := fs.String("out", ".", "output directory")
+	outDir := fs.String("out", "_generated", "output directory")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}

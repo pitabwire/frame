@@ -12,6 +12,8 @@ import (
 // WithTelemetry adds required telemetry config options to the service.
 func WithTelemetry(opts ...telemetry.Option) Option {
 	return func(ctx context.Context, s *Service) {
+		s.registerPlugin("telemetry")
+
 		cfg, ok := s.Config().(config.ConfigurationTelemetry)
 		if !ok {
 			util.Log(ctx).Error("configuration object not of type : ConfigurationTelemetry")

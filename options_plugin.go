@@ -6,7 +6,7 @@ import "context"
 func WithPlugin(name string, opt Option) Option {
 	return func(ctx context.Context, s *Service) {
 		if name != "" {
-			s.registeredPlugins = append(s.registeredPlugins, name)
+			s.registerPlugin(name)
 		}
 		if opt != nil {
 			opt(ctx, s)

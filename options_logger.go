@@ -12,6 +12,8 @@ import (
 // WithLogger Option that helps with initialization of our internal dbLogger.
 func WithLogger(opts ...util.Option) Option {
 	return func(ctx context.Context, s *Service) {
+		s.registerPlugin("logger")
+
 		var configOpts []util.Option
 
 		// Add telemetry log handler if available

@@ -8,6 +8,8 @@ import (
 
 func WithRegisterServerOauth2Client() Option {
 	return func(_ context.Context, svc *Service) {
+		svc.registerPlugin("security")
+
 		svc.registerOauth2Cli = true
 	}
 }

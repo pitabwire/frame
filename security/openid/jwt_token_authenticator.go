@@ -251,7 +251,7 @@ func (a *TokenAuthenticator) Refresh() error {
 		return err
 	}
 
-	resp, err := a.client.Do(req)
+	resp, err := a.client.Do(req) //nolint:gosec // G704: URL validated by util.ValidateHTTPURL above
 	if err != nil {
 		a.setErr(err)
 		return err

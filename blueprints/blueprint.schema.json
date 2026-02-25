@@ -36,6 +36,7 @@
     "http": {
       "type": "object",
       "properties": {
+        "name": {"type": "string"},
         "route": {"type": "string"},
         "method": {"type": "string"},
         "handler": {"type": "string"},

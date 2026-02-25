@@ -100,8 +100,8 @@ type Service struct {
 
 	profilerServer *profiler.Server
 
-	openapiRegistry *openapi.Registry
-	openapiBasePath string
+	openapiRegistry   *openapi.Registry
+	openapiBasePath   string
 	debugEnabled      bool
 	debugBasePath     string
 	registeredPlugins []string

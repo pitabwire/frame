@@ -1,34 +1,26 @@
-package main
+package scaffold
 
 import (
 	"errors"
-	"flag"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 )
 
-type config struct {
+type InitConfig struct {
 	Root     string
 	Services string
 	Module   string
 }
 
-func main() {
-	cfg := config{}
-	flag.StringVar(&cfg.Root, "root", ".", "Repository root")
-	flag.StringVar(&cfg.Services, "services", "", "Comma-separated service names")
-	flag.StringVar(&cfg.Module, "module", "", "Go module path (optional)")
-	flag.Parse()
-
-	if err := run(cfg); err != nil {
-		fmt.Fprintln(os.Stderr, err.Error())
-		os.Exit(1)
+func DefaultInitConfig() InitConfig {
+	return InitConfig{
+		Root: ".",
 	}
 }
 
-func run(cfg config) error {
+func InitRepo(cfg InitConfig) error {
 	root, err := filepath.Abs(cfg.Root)
 	if err != nil {
 		return fmt.Errorf("resolve root: %w", err)
@@ -122,7 +114,7 @@ func writeServiceLayout(root, name string) error {
 	base := filepath.Join(root, "apps", name)
 	paths := []string{
 		filepath.Join(base, "cmd", name),
-		filepath.Join(base, "service"),
+		filepath.Join(base, "pkg"),
 		filepath.Join(base, "config"),
 		filepath.Join(base, "migrations"),
 		filepath.Join(base, "tests"),
@@ -187,7 +179,7 @@ func writeMonolithEntry(root string, services []string, module string) error {
 	imports := []string{"\"log\"", "\"net/http\"", "\"github.com/pitabwire/frame\""}
 	for _, svc := range services {
 		alias := sanitizeImportAlias(svc)
-		imports = append(imports, fmt.Sprintf("%s \"%s/apps/%s/service\"", alias, module, svc))
+		imports = append(imports, fmt.Sprintf("%s \"%s/apps/%s/pkg\"", alias, module, svc))
 	}
 
 	var builders strings.Builder

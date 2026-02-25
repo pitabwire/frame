@@ -8,6 +8,8 @@ import (
 	"strings"
 
 	"github.com/pitabwire/frame/blueprint"
+	"github.com/pitabwire/frame/tools/openapi"
+	"github.com/pitabwire/frame/tools/scaffold"
 )
 
 const (
@@ -35,6 +37,10 @@ func main() {
 		exitOnErr(cmdValidate(os.Args[2:]))
 	case "explain":
 		exitOnErr(cmdExplain(os.Args[2:]))
+	case "openapi":
+		exitOnErr(cmdOpenAPI(os.Args[2:]))
+	case "init":
+		exitOnErr(cmdInit(os.Args[2:]))
 	case "g":
 		exitOnErr(cmdGenerate(os.Args[2:]))
 	case "help", "-h", "--help":
@@ -54,6 +60,8 @@ func usage() {
 	fmt.Fprintln(os.Stdout, "  build <blueprint> [--out DIR]")
 	fmt.Fprintln(os.Stdout, "  validate <blueprint>")
 	fmt.Fprintln(os.Stdout, "  explain <blueprint>")
+	fmt.Fprintln(os.Stdout, "  openapi [--proto-dir DIR] [--out DIR] [--embed-dir DIR] [--package NAME]")
+	fmt.Fprintln(os.Stdout, "  init [--root DIR] [--module MOD] [--services svc1,svc2]")
 	fmt.Fprintln(
 		os.Stdout,
 		"  g service <name> [--blueprint FILE] [--module MOD] [--mode monolith|polylith] [--port :8080]",
@@ -118,6 +126,32 @@ func cmdExplain(args []string) error {
 	}
 	_, _ = fmt.Fprint(os.Stdout, out)
 	return nil
+}
+
+func cmdOpenAPI(args []string) error {
+	fs := flag.NewFlagSet("openapi", flag.ContinueOnError)
+	cfg := openapi.DefaultConfig()
+	fs.StringVar(&cfg.ProtoDir, "proto-dir", cfg.ProtoDir, "Path to proto root (buf workspace or module)")
+	fs.StringVar(&cfg.OutDir, "out", cfg.OutDir, "Output directory for OpenAPI JSON")
+	fs.StringVar(&cfg.EmbedDir, "embed-dir", cfg.EmbedDir, "Directory for generated embed.go")
+	fs.StringVar(&cfg.Package, "package", cfg.Package, "Go package name for embed.go")
+	fs.StringVar(&cfg.BufBinary, "buf", cfg.BufBinary, "Buf binary to execute")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	return openapi.Run(cfg)
+}
+
+func cmdInit(args []string) error {
+	fs := flag.NewFlagSet("init", flag.ContinueOnError)
+	cfg := scaffold.DefaultInitConfig()
+	fs.StringVar(&cfg.Root, "root", cfg.Root, "Repository root")
+	fs.StringVar(&cfg.Services, "services", "", "Comma-separated service names")
+	fs.StringVar(&cfg.Module, "module", "", "Go module path (optional)")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	return scaffold.InitRepo(cfg)
 }
 
 func cmdGenerate(args []string) error {

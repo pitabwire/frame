@@ -109,18 +109,7 @@ http:
     handler: CreateUser
 ```
 
-### Override and Remove
-
-```yaml
-http:
-  - name: list-users
-    method: GET
-    route: /users
-    handler: GetUsersV2
-    override: true
-  - name: create-user
-    remove: true
-```
+If a route uses the same `name` (or the same `method` + `route`), the overlay replaces the base route.
 
 - Same blueprint inputs produce identical output.
 - Canonical bootstrap pattern is enforced.

@@ -53,7 +53,7 @@ Use these prompt patterns:
 - “Generate a new HTTP service using Frame, using the canonical `ctx, svc := frame.NewService(...)` bootstrap pattern.”
 - “Create a new Frame plugin as a `WithXxx` option that registers a queue subscriber.”
 - “Add a datastore setup using `WithDatastore` and a migration step.”
-- “Generate OpenAPI specs with `frame-openapi` and register `openapi.Option()`.”
+- “Generate OpenAPI specs with `frame openapi` and register `openapi.Option()`.”
 
 ## Frame Plugin Mental Model
 

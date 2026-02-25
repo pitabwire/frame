@@ -36,6 +36,7 @@ type ServiceSpec struct {
 }
 
 type HTTPRoute struct {
+	Name     string `json:"name"     yaml:"name"`
 	Route    string `json:"route"    yaml:"route"`
 	Method   string `json:"method"   yaml:"method"`
 	Handler  string `json:"handler"  yaml:"handler"`

@@ -34,6 +34,9 @@ func run(cfg config) error {
 	}
 
 	services := parseServices(cfg.Services)
+	if len(services) > 0 && strings.TrimSpace(cfg.Module) == "" {
+		return fmt.Errorf("module is required when services are provided")
+	}
 
 	repoDirs := []string{
 		"apps",
@@ -63,7 +66,7 @@ func run(cfg config) error {
 		}
 	}
 
-	if entryErr := writeMonolithEntry(root, services); entryErr != nil {
+	if entryErr := writeMonolithEntry(root, services, cfg.Module); entryErr != nil {
 		return entryErr
 	}
 
@@ -171,7 +174,7 @@ CMD ["/app/%s"]
 	return nil
 }
 
-func writeMonolithEntry(root string, services []string) error {
+func writeMonolithEntry(root string, services []string, module string) error {
 	path := filepath.Join(root, "cmd", "monolith", "main.go")
 	if exists(path) {
 		return nil
@@ -182,7 +185,8 @@ func writeMonolithEntry(root string, services []string) error {
 
 	imports := []string{"\"log\"", "\"net/http\"", "\"github.com/pitabwire/frame\""}
 	for _, svc := range services {
-		imports = append(imports, fmt.Sprintf("\"%s/apps/%s/service\"", "your/module", svc))
+		alias := sanitizeImportAlias(svc)
+		imports = append(imports, fmt.Sprintf("%s \"%s/apps/%s/service\"", alias, module, svc))
 	}
 
 	var builders strings.Builder
@@ -192,7 +196,7 @@ func writeMonolithEntry(root string, services []string) error {
 	}
 	builders.WriteString(")\n\nfunc main() {\n\tmux := http.NewServeMux()\n")
 	for _, svc := range services {
-		fmt.Fprintf(&builders, "\t%s.RegisterRoutes(mux)\n", svc)
+		fmt.Fprintf(&builders, "\t%s.RegisterRoutes(mux)\n", sanitizeImportAlias(svc))
 	}
 	builders.WriteString("\tctx, svc := frame.NewService(\n")
 	builders.WriteString("\t\tframe.WithName(\"monolith\"),\n")
@@ -205,6 +209,25 @@ func writeMonolithEntry(root string, services []string) error {
 
 	// #nosec G306 -- generated files should be readable by the developer.
 	return os.WriteFile(path, []byte(builders.String()), 0o644)
+}
+
+func sanitizeImportAlias(name string) string {
+	if name == "" {
+		return "svc"
+	}
+	var out strings.Builder
+	for _, r := range name {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') {
+			out.WriteRune(r)
+			continue
+		}
+		out.WriteRune('_')
+	}
+	alias := out.String()
+	if alias[0] >= '0' && alias[0] <= '9' {
+		return "svc_" + alias
+	}
+	return alias
 }
 
 func exists(path string) bool {

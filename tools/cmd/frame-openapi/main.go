@@ -158,8 +158,5 @@ func relPath(base, target string) (string, bool) {
 	if err != nil {
 		return "", false
 	}
-	if strings.HasPrefix(rel, "..") {
-		return "", false
-	}
 	return rel, true
 }

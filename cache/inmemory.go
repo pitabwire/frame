@@ -106,6 +106,39 @@ func (c *InMemoryCache) Set(_ context.Context, key string, value []byte, ttl tim
 	return nil
 }
 
+// Expire updates the TTL of an existing key.
+func (c *InMemoryCache) Expire(_ context.Context, key string, ttl time.Duration) error {
+	if ttl <= 0 {
+		return nil
+	}
+
+	for {
+		value, ok := c.items.Load(key)
+		if !ok {
+			return nil
+		}
+
+		item, typeOK := value.(*inMemoryCacheItem)
+		if !typeOK {
+			return nil
+		}
+
+		if item.isExpired() {
+			c.deleteKey(key)
+			return nil
+		}
+
+		newItem := &inMemoryCacheItem{
+			value:      item.value,
+			expiration: time.Now().Add(ttl),
+		}
+
+		if c.items.CompareAndSwap(key, value, newItem) {
+			return nil
+		}
+	}
+}
+
 // Delete removes an item from the cache.
 func (c *InMemoryCache) Delete(_ context.Context, key string) error {
 	c.deleteKey(key)

@@ -95,6 +95,21 @@ func (vc *Cache) Set(ctx context.Context, key string, value []byte, ttl time.Dur
 	return vc.client.Do(ctx, cmd).Error()
 }
 
+// Expire updates the TTL of an existing key.
+func (vc *Cache) Expire(ctx context.Context, key string, ttl time.Duration) error {
+	if ttl <= 0 {
+		return nil
+	}
+
+	seconds := int64(ttl.Seconds())
+	if seconds == 0 {
+		seconds = 1
+	}
+
+	cmd := vc.client.B().Expire().Key(key).Seconds(seconds).Build()
+	return vc.client.Do(ctx, cmd).Error()
+}
+
 // Delete removes an item from the cache.
 func (vc *Cache) Delete(ctx context.Context, key string) error {
 	cmd := vc.client.B().Del().Key(key).Build()

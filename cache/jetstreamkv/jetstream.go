@@ -103,6 +103,12 @@ func (vc *Cache) Set(_ context.Context, key string, value []byte, _ time.Duratio
 	return nil
 }
 
+// Expire updates the TTL of an existing key.
+// JetStream KV TTL is configured at bucket level, so per-key TTL changes are not supported.
+func (vc *Cache) Expire(_ context.Context, _ string, _ time.Duration) error {
+	return nil
+}
+
 // Delete removes an item from the cache.
 func (vc *Cache) Delete(_ context.Context, key string) error {
 	return vc.client.Delete(key)

@@ -72,6 +72,14 @@ func (rc *Cache) Set(ctx context.Context, key string, value []byte, ttl time.Dur
 	return rc.client.Set(ctx, key, value, ttl).Err()
 }
 
+// Expire updates the TTL of an existing key.
+func (rc *Cache) Expire(ctx context.Context, key string, ttl time.Duration) error {
+	if ttl <= 0 {
+		return nil
+	}
+	return rc.client.Expire(ctx, key, ttl).Err()
+}
+
 // Delete removes an item from the cache.
 func (rc *Cache) Delete(ctx context.Context, key string) error {
 	return rc.client.Del(ctx, key).Err()

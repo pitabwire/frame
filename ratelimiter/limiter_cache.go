@@ -2,7 +2,6 @@ package ratelimiter
 
 import (
 	"context"
-	"encoding/binary"
 	"fmt"
 	"time"
 
@@ -57,9 +56,7 @@ func (wl *WindowLimiter) Allow(ctx context.Context, key string) bool {
 	}
 
 	if count == 1 {
-		ttlValue := make([]byte, 8)
-		binary.BigEndian.PutUint64(ttlValue, uint64(1))
-		_ = wl.cache.Set(ctx, bucketKey, ttlValue, wl.config.WindowDuration+windowTLLOffset)
+		_ = wl.cache.Expire(ctx, bucketKey, wl.config.WindowDuration+windowTLLOffset)
 	}
 
 	return count <= int64(wl.config.MaxPerWindow)

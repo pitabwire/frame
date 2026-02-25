@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/pitabwire/frame"
+	"github.com/pitabwire/frame/cache"
 	"github.com/pitabwire/frame/frametests"
 	"github.com/pitabwire/frame/ratelimiter"
 )
@@ -85,14 +86,15 @@ func TestWithHTTPMiddlewareCanShortCircuit(t *testing.T) {
 }
 
 func TestWithHTTPMiddlewareRateLimiter(t *testing.T) {
-	cfg := &ratelimiter.RateLimiterConfig{
-		RequestsPerSecond: 100,
-		BurstSize:         1,
-		CleanupInterval:   time.Minute,
-		EntryTTL:          time.Minute,
-		MaxEntries:        100,
+	backend := cache.NewInMemoryCache()
+	defer func() { _ = backend.Close() }()
+
+	cfg := &ratelimiter.WindowConfig{
+		WindowDuration: time.Minute,
+		MaxPerWindow:   1,
+		FailOpen:       false,
 	}
-	ipLimiter := ratelimiter.NewIPRateLimiter(cfg)
+	ipLimiter := ratelimiter.NewIPRateLimiter(backend, cfg)
 	defer func() { _ = ipLimiter.Close() }()
 
 	hOpt, tsGetter := frametests.WithHTTPTestDriver()

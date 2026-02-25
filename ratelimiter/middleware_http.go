@@ -4,73 +4,113 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
+	"time"
 
 	"github.com/pitabwire/util"
 
+	"github.com/pitabwire/frame/cache"
 	"github.com/pitabwire/frame/security"
 )
 
-// IPRateLimiter applies keyed limits by client IP.
+const (
+	defaultIPPrefix   = "ratelimit:ip"
+	defaultUserPrefix = "ratelimit:user"
+)
+
+// IPRateLimiter applies cache-backed per-IP window limits.
 type IPRateLimiter struct {
-	limiter *KeyedLimiter
-	config  RateLimiterConfig
+	limiter  *WindowLimiter
+	config   WindowConfig
+	backend  cache.RawCache
+	ownsBack bool
 }
 
-// NewIPRateLimiter creates a new IP-based rate limiter.
-func NewIPRateLimiter(config *RateLimiterConfig) *IPRateLimiter {
-	cfg := normalizeConfig(config)
+// NewIPRateLimiter creates a new cache-backed IP rate limiter.
+// If raw is nil, an in-memory frame cache is created.
+func NewIPRateLimiter(raw cache.RawCache, config *WindowConfig) *IPRateLimiter {
+	backend := raw
+	owns := false
+	if backend == nil {
+		backend = cache.NewInMemoryCache()
+		owns = true
+	}
+
+	cfg := normalizeWindowConfig(config)
+	if cfg.KeyPrefix == defaultWindowPrefix {
+		cfg.KeyPrefix = defaultIPPrefix
+	}
+
 	return &IPRateLimiter{
-		limiter: NewKeyedLimiter(&cfg),
-		config:  cfg,
+		limiter:  NewWindowLimiter(backend, &cfg),
+		config:   cfg,
+		backend:  backend,
+		ownsBack: owns,
 	}
 }
 
 // Allow checks whether a request from the given IP should be allowed.
-func (rl *IPRateLimiter) Allow(ip string) bool {
+func (rl *IPRateLimiter) Allow(ctx context.Context, ip string) bool {
 	if rl == nil || rl.limiter == nil {
 		return true
 	}
-	return rl.limiter.Allow(ip)
+	return rl.limiter.Allow(ctx, ip)
 }
 
-// Close stops internal background cleanup.
+// Close releases owned resources.
 func (rl *IPRateLimiter) Close() error {
-	if rl == nil || rl.limiter == nil {
+	if rl == nil || !rl.ownsBack || rl.backend == nil {
 		return nil
 	}
-	return rl.limiter.Close()
+	return rl.backend.Close()
 }
 
-// UserRateLimiter applies keyed limits by authenticated user identity.
+// UserRateLimiter applies cache-backed per-user window limits.
 type UserRateLimiter struct {
-	limiter *KeyedLimiter
-	config  RateLimiterConfig
+	limiter  *WindowLimiter
+	config   WindowConfig
+	backend  cache.RawCache
+	ownsBack bool
 }
 
-// NewUserRateLimiter creates a new user-based rate limiter.
-func NewUserRateLimiter(config *RateLimiterConfig) *UserRateLimiter {
-	cfg := normalizeConfig(config)
+// NewUserRateLimiter creates a new cache-backed user rate limiter.
+// If raw is nil, an in-memory frame cache is created.
+func NewUserRateLimiter(raw cache.RawCache, config *WindowConfig) *UserRateLimiter {
+	backend := raw
+	owns := false
+	if backend == nil {
+		backend = cache.NewInMemoryCache()
+		owns = true
+	}
+
+	cfg := normalizeWindowConfig(config)
+	if cfg.KeyPrefix == defaultWindowPrefix {
+		cfg.KeyPrefix = defaultUserPrefix
+	}
+
 	return &UserRateLimiter{
-		limiter: NewKeyedLimiter(&cfg),
-		config:  cfg,
+		limiter:  NewWindowLimiter(backend, &cfg),
+		config:   cfg,
+		backend:  backend,
+		ownsBack: owns,
 	}
 }
 
 // Allow checks whether a request from the given user should be allowed.
-func (rl *UserRateLimiter) Allow(userID string) bool {
+func (rl *UserRateLimiter) Allow(ctx context.Context, userID string) bool {
 	if rl == nil || rl.limiter == nil {
 		return true
 	}
-	return rl.limiter.Allow(userID)
+	return rl.limiter.Allow(ctx, userID)
 }
 
-// Close stops internal background cleanup.
+// Close releases owned resources.
 func (rl *UserRateLimiter) Close() error {
-	if rl == nil || rl.limiter == nil {
+	if rl == nil || !rl.ownsBack || rl.backend == nil {
 		return nil
 	}
-	return rl.limiter.Close()
+	return rl.backend.Close()
 }
 
 // GetIP extracts caller IP from request headers/remote address.
@@ -100,7 +140,7 @@ func GetUserID(ctx context.Context) string {
 	return claims.GetAccessID()
 }
 
-// RateLimitMiddleware applies IP-based rate limiting.
+// RateLimitMiddleware applies cache-backed IP rate limiting.
 func RateLimitMiddleware(limiter *IPRateLimiter) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -110,12 +150,12 @@ func RateLimitMiddleware(limiter *IPRateLimiter) func(http.Handler) http.Handler
 			}
 
 			ip := GetIP(r)
-			if !limiter.Allow(ip) {
-				rateLimitedResponse(w, limiter.config.RequestsPerSecond, "ip")
+			if !limiter.Allow(r.Context(), ip) {
+				rateLimitedResponse(w, limiter.config, "ip")
 				return
 			}
 
-			w.Header().Set("X-RateLimit-Limit", fmt.Sprintf("%d", limiter.config.RequestsPerSecond))
+			w.Header().Set("X-RateLimit-Limit", fmt.Sprintf("%d", limiter.config.MaxPerWindow))
 			next.ServeHTTP(w, r)
 		})
 	}
@@ -133,11 +173,11 @@ func UserRateLimitMiddleware(userLimiter *UserRateLimiter, ipLimiter *IPRateLimi
 			userID := GetUserID(r.Context())
 			if userID != "" && userLimiter != nil {
 				w.Header().Set("X-RateLimit-Scope", "user")
-				if !userLimiter.Allow(userID) {
-					rateLimitedResponse(w, userLimiter.config.RequestsPerSecond, "user")
+				if !userLimiter.Allow(r.Context(), userID) {
+					rateLimitedResponse(w, userLimiter.config, "user")
 					return
 				}
-				w.Header().Set("X-RateLimit-Limit", fmt.Sprintf("%d", userLimiter.config.RequestsPerSecond))
+				w.Header().Set("X-RateLimit-Limit", fmt.Sprintf("%d", userLimiter.config.MaxPerWindow))
 				next.ServeHTTP(w, r)
 				return
 			}
@@ -149,22 +189,27 @@ func UserRateLimitMiddleware(userLimiter *UserRateLimiter, ipLimiter *IPRateLimi
 
 			w.Header().Set("X-RateLimit-Scope", "ip")
 			ip := GetIP(r)
-			if !ipLimiter.Allow(ip) {
-				rateLimitedResponse(w, ipLimiter.config.RequestsPerSecond, "ip")
+			if !ipLimiter.Allow(r.Context(), ip) {
+				rateLimitedResponse(w, ipLimiter.config, "ip")
 				return
 			}
 
-			w.Header().Set("X-RateLimit-Limit", fmt.Sprintf("%d", ipLimiter.config.RequestsPerSecond))
+			w.Header().Set("X-RateLimit-Limit", fmt.Sprintf("%d", ipLimiter.config.MaxPerWindow))
 			next.ServeHTTP(w, r)
 		})
 	}
 }
 
-func rateLimitedResponse(w http.ResponseWriter, limit int, scope string) {
-	w.Header().Set("X-RateLimit-Limit", fmt.Sprintf("%d", limit))
+func rateLimitedResponse(w http.ResponseWriter, cfg WindowConfig, scope string) {
+	retryAfter := int(math.Ceil(cfg.WindowDuration.Seconds()))
+	if retryAfter <= 0 {
+		retryAfter = int(time.Minute.Seconds())
+	}
+
+	w.Header().Set("X-RateLimit-Limit", fmt.Sprintf("%d", cfg.MaxPerWindow))
 	w.Header().Set("X-RateLimit-Remaining", "0")
 	w.Header().Set("X-RateLimit-Scope", scope)
-	w.Header().Set("Retry-After", "1")
+	w.Header().Set("Retry-After", fmt.Sprintf("%d", retryAfter))
 	w.WriteHeader(http.StatusTooManyRequests)
 	writeIgnoreErr(w, `{"error": "rate limit exceeded", "code": "rate_limit_exceeded"}`)
 }

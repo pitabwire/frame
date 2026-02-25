@@ -1,28 +1,29 @@
 package main
 
 import (
-    "log"
-    "net/http"
+	"log"
+	"net/http"
 
-    "github.com/pitabwire/frame"
-    "google.golang.org/grpc"
+	"google.golang.org/grpc"
+
+	"github.com/pitabwire/frame"
 )
 
 func main() {
-    grpcServer := grpc.NewServer()
+	grpcServer := grpc.NewServer()
 
-    http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-        w.Write([]byte("http ok"))
-    })
+	http.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("http ok"))
+	})
 
-    ctx, svc := frame.NewService(
-        frame.WithName("grpc-basic"),
-        frame.WithHTTPHandler(http.DefaultServeMux),
-        frame.WithGRPCServer(grpcServer),
-        frame.WithGRPCPort(":50051"),
-    )
+	ctx, svc := frame.NewService(
+		frame.WithName("grpc-basic"),
+		frame.WithHTTPHandler(http.DefaultServeMux),
+		frame.WithGRPCServer(grpcServer),
+		frame.WithGRPCPort(":50051"),
+	)
 
-    if err := svc.Run(ctx, ":8080"); err != nil {
-        log.Fatal(err)
-    }
+	if err := svc.Run(ctx, ":8080"); err != nil {
+		log.Fatal(err)
+	}
 }

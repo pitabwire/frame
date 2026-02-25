@@ -1,8 +1,8 @@
 # Frame Documentation
 
-A fast, extensible Golang framework with a clean plugin-based architecture.
+A Go framework for building vendor-agnostic cloud-native services with HTTP, gRPC, and Connect RPC.
 
-Frame is a production-focused framework for building HTTP and gRPC services with strong runtime management, modular components, and convention-driven ergonomics. Frame integrates Go Cloud for pluggable infrastructure, provides first-class support for queues, caching, datastore, telemetry, security, localization, and worker pools, and keeps the core service lifecycle explicit and testable.
+Frame is a production-focused framework for building cloud-native services that stay vendor-agnostic. It supports HTTP, gRPC, and Connect RPC out of the box, with strong runtime management, modular components, and convention-driven ergonomics. Frame integrates Go Cloud for pluggable infrastructure, provides first-class support for queues, caching, datastore, telemetry, security, localization, and worker pools, and keeps the core service lifecycle explicit and testable.
 
 ## Quick Start (Canonical Pattern)
 
@@ -71,8 +71,9 @@ Localization and utilities:
 
 ## What Makes Frame Different
 
+- **Cloud-native and vendor-agnostic** — Go Cloud integration means no lock-in to a single provider.
+- **HTTP, gRPC, and Connect RPC** — first-class support for all three protocols in a single service.
 - Modular, convention-driven components with a small core.
-- Go Cloud integration for multi-provider portability.
 - Pluggable runtime with explicit startup and shutdown hooks.
 - Strong defaults for telemetry, logging, and resilience.
 - Designed for production-grade services in Go.

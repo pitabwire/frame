@@ -1,5 +1,5 @@
 site_name: Frame
-site_description: "A fast, extensible Golang framework with a clean plugin-based architecture"
+site_description: "A Go framework for building vendor-agnostic cloud-native services with HTTP, gRPC, and Connect RPC"
 site_url: "https://pitabwire.github.io/frame/"
 repo_name: pitabwire/frame
 repo_url: "https://github.com/pitabwire/frame"

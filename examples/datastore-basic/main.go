@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"html"
 	"log"
 	"net/http"
 	"os"
@@ -13,7 +14,7 @@ import (
 func main() {
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/plain")
-		_, _ = fmt.Fprintf(w, "datastore ok — %s %s", r.Method, r.URL.Path)
+		_, _ = fmt.Fprintf(w, "datastore ok — %s %s", r.Method, html.EscapeString(r.URL.Path))
 	})
 
 	if os.Getenv("DATABASE_URL") == "" {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"math"
 	"net/url"
 	"strings"
 
@@ -29,7 +30,7 @@ func (s *pool) createConnection(ctx context.Context, dsn string, poolOpts *Optio
 
 	// Configure pgxpool settings from Options
 	if poolOpts.MaxOpen > 0 {
-		cfg.MaxConns = int32(poolOpts.MaxOpen)
+		cfg.MaxConns = int32(min(poolOpts.MaxOpen, math.MaxInt32)) //nolint:gosec // G115: bounded by min()
 	}
 	if poolOpts.MaxLifetime > 0 {
 		cfg.MaxConnLifetime = poolOpts.MaxLifetime

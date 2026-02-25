@@ -647,7 +647,7 @@ func (oid *OIDCMap) loadOIDC(ctx context.Context, url string) error {
 	}
 	hreq.Header.Set("Accept", "application/jrd+json,application/json;q=0.9")
 
-	//nolint:bodyclose //this is done by util.CloseAndLogOnError()
+	//nolint:bodyclose // closed by util.CloseAndLogOnError()
 	hresp, err := http.DefaultClient.Do(hreq)
 	if err != nil {
 		return err
@@ -686,7 +686,7 @@ func (oid *OIDCMap) loadJWKData(ctx context.Context, url string) (string, error)
 	}
 	hreq.Header.Set("Accept", "application/jrd+json,application/json;q=0.9")
 
-	//nolint:bodyclose //this is done by util.CloseAndLogOnError()
+	//nolint:bodyclose // closed by util.CloseAndLogOnError()
 	hresp, err := http.DefaultClient.Do(hreq)
 	if err != nil {
 		return "", err

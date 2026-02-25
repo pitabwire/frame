@@ -20,6 +20,8 @@ type config struct {
 	BufBinary string
 }
 
+const openAPITimeout = 15 * time.Minute
+
 func main() {
 	cfg := config{}
 	flag.StringVar(&cfg.ProtoDir, "proto-dir", "proto", "Path to proto root (buf workspace or module)")
@@ -96,7 +98,7 @@ plugins:
 		return fmt.Errorf("close buf template: %w", closeErr)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), openAPITimeout)
 	defer cancel()
 
 	// #nosec G204,G702 -- command is user-configured and expected in tooling.

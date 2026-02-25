@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -35,7 +36,7 @@ func run(cfg config) error {
 
 	services := parseServices(cfg.Services)
 	if len(services) > 0 && strings.TrimSpace(cfg.Module) == "" {
-		return fmt.Errorf("module is required when services are provided")
+		return errors.New("module is required when services are provided")
 	}
 
 	repoDirs := []string{

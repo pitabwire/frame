@@ -18,8 +18,10 @@ jobs:
         with:
           # Optional: version of golangci-lint to use in form of v1.2 or v1.2.3 or `latest` to use the latest version
           version: latest
-          args: --timeout=5m
-          skip-cache: false
+          args: --timeout=5m --cache-dir=/tmp/golangci-lint
+          skip-cache: true
+          skip-pkg-cache: true
+          skip-build-cache: true
 
           # Optional: working directory, useful for monorepos
           # working-directory: somedir

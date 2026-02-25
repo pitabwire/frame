@@ -133,3 +133,8 @@ By default, `frame build` writes into `./_generated`. For AI workflows, use `--o
 ```bash
 go run ./cmd/frame build blueprints/polylith.yaml --out ./_generated
 ```
+
+
+## Blueprint Schema
+
+A JSON schema is provided at `blueprints/blueprint.schema.json` for tooling and AI validation.

@@ -100,6 +100,8 @@ func generateMonolith(outDir, modulePath string, services []ServiceSpec) error {
 	}
 
 	servicePkgs := make([]string, 0, len(services))
+	queuePkgs := make([]string, 0, len(services))
+
 	for _, svc := range services {
 		serviceDir := filepath.Join(outDir, "internal", "services", svc.Name)
 		queuesDir := filepath.Join(outDir, "internal", "queues", svc.Name)
@@ -116,6 +118,8 @@ func generateMonolith(outDir, modulePath string, services []ServiceSpec) error {
 		}
 
 		pkgPath := fmt.Sprintf("%s/internal/services/%s", module, svc.Name)
+		queuePkg := fmt.Sprintf("%s/internal/queues/%s", module, svc.Name)
+
 		if err := writeFile(filepath.Join(serviceDir, "routes.go"), renderHandlers(svc, servicePackageName(svc.Name))); err != nil {
 			return err
 		}
@@ -123,9 +127,10 @@ func generateMonolith(outDir, modulePath string, services []ServiceSpec) error {
 			return err
 		}
 		servicePkgs = append(servicePkgs, pkgPath)
+		queuePkgs = append(queuePkgs, queuePkg)
 	}
 
-	if err := writeFile(filepath.Join(cmdDir, "main.go"), renderMainMonolith(services, servicePkgs)); err != nil {
+	if err := writeFile(filepath.Join(cmdDir, "main.go"), renderMainMonolith(services, servicePkgs, queuePkgs)); err != nil {
 		return err
 	}
 
@@ -227,13 +232,19 @@ func renderMainPolylith(svc ServiceSpec, handlersPath, queuesPath string) string
 	return b.String()
 }
 
-func renderMainMonolith(services []ServiceSpec, servicePkgs []string) string {
+func renderMainMonolith(services []ServiceSpec, servicePkgs []string, queuePkgs []string) string {
 	var b strings.Builder
 	b.WriteString("package main\n\n")
 	b.WriteString("import (\n\t\"log\"\n\t\"net/http\"\n\t\"sync\"\n\n\t\"github.com/pitabwire/frame\"\n")
 
 	for i, pkg := range servicePkgs {
 		b.WriteString(fmt.Sprintf("\t%[1]s \"%[2]s\"\n", serviceAlias(services[i].Name), pkg))
+	}
+	for i, pkg := range queuePkgs {
+		if len(services[i].Queues) == 0 {
+			continue
+		}
+		b.WriteString(fmt.Sprintf("\t%[1]s \"%[2]s\"\n", queueAlias(services[i].Name), pkg))
 	}
 	b.WriteString(")\n\n")
 
@@ -249,6 +260,13 @@ func renderMainMonolith(services []ServiceSpec, servicePkgs []string) string {
 		b.WriteString("\t\tctx, s := frame.NewService(\n")
 		b.WriteString(fmt.Sprintf("\t\t\tframe.WithName(\"%s\"),\n", svc.Name))
 		b.WriteString("\t\t\tframe.WithHTTPHandler(mu),\n")
+		for _, opt := range resolvePlugins(svc) {
+			b.WriteString(fmt.Sprintf("\t\t\t%s,\n", opt))
+		}
+		for _, opt := range queueOptsLines(renderQueueOptions(svc, "")) {
+			opt = strings.ReplaceAll(opt, "queues.", queueAlias(svc.Name)+".")
+			b.WriteString(fmt.Sprintf("\t\t\t%s,\n", opt))
+		}
 		b.WriteString("\t\t)\n")
 		b.WriteString("\t\tport := \"")
 		b.WriteString(defaultPort(svc.Port))
@@ -386,4 +404,8 @@ func sortServices(services []ServiceSpec) {
 	sort.SliceStable(services, func(i, j int) bool {
 		return services[i].Name < services[j].Name
 	})
+}
+
+func queueAlias(name string) string {
+	return "queues_" + sanitizeIdent(name)
 }

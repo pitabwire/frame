@@ -71,9 +71,9 @@ All responses must be deterministic and safe to parse by agents.
 
 ```
 frame g service <name>
-frame g http <route> <method>
-frame g queue publisher <ref> <url>
-frame g queue subscriber <ref> <url> <handler>
+frame g http <route> <method> [--service NAME]
+frame g queue publisher <ref> <url> [--service NAME]
+frame g queue subscriber <ref> <url> <handler> [--service NAME]
 frame build blueprint.yaml
 ```
 

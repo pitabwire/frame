@@ -42,9 +42,9 @@ func usage() {
 	fmt.Println("  validate <blueprint>")
 	fmt.Println("  explain <blueprint>")
 	fmt.Println("  g service <name> [--blueprint FILE] [--module MOD] [--mode monolith|polylith] [--port :8080]")
-	fmt.Println("  g http <route> <method> [--handler NAME] [--blueprint FILE]")
-	fmt.Println("  g queue publisher <ref> <url> [--blueprint FILE]")
-	fmt.Println("  g queue subscriber <ref> <url> <handler> [--blueprint FILE]")
+	fmt.Println("  g http <route> <method> [--handler NAME] [--service NAME] [--blueprint FILE]")
+	fmt.Println("  g queue publisher <ref> <url> [--service NAME] [--blueprint FILE]")
+	fmt.Println("  g queue subscriber <ref> <url> <handler> [--service NAME] [--blueprint FILE]")
 }
 
 func cmdBuild(args []string) error {
@@ -147,10 +147,20 @@ func cmdGenerateService(args []string) error {
 	}
 	bp.SchemaVersion = "0.1"
 	bp.RuntimeMode = strings.ToLower(*mode)
-	bp.Service.Name = name
-	bp.Service.Port = *port
-	if *module != "" {
-		bp.Service.Module = *module
+	if strings.ToLower(*mode) == "monolith" {
+		if bp.Services == nil {
+			bp.Services = []blueprint.ServiceSpec{}
+		}
+		bp.Services = append(bp.Services, blueprint.ServiceSpec{Name: name, Port: *port, Module: *module})
+		if bp.Service != nil {
+			bp.Service = nil
+		}
+	} else {
+		bp.Service.Name = name
+		bp.Service.Port = *port
+		if *module != "" {
+			bp.Service.Module = *module
+		}
 	}
 
 	return blueprint.WriteFile(*bpFile, bp)
@@ -159,6 +169,7 @@ func cmdGenerateService(args []string) error {
 func cmdGenerateHTTP(args []string) error {
 	fs := flag.NewFlagSet("http", flag.ContinueOnError)
 	bpFile := fs.String("blueprint", "blueprint.yaml", "blueprint file")
+	service := fs.String("service", "", "target service (for monolith)")
 	handler := fs.String("handler", "", "handler name")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -176,11 +187,9 @@ func cmdGenerateHTTP(args []string) error {
 	if err != nil {
 		return err
 	}
-	if bp.Service == nil {
-		bp.Service = &blueprint.ServiceSpec{Name: "service"}
-	}
 	bp.SchemaVersion = "0.1"
-	bp.Service.HTTP = append(bp.Service.HTTP, blueprint.HTTPRoute{Route: route, Method: method, Handler: *handler})
+	serviceSpec := selectService(bp, *service)
+	serviceSpec.HTTP = append(serviceSpec.HTTP, blueprint.HTTPRoute{Route: route, Method: method, Handler: *handler})
 
 	return blueprint.WriteFile(*bpFile, bp)
 }
@@ -205,6 +214,7 @@ func cmdGenerateQueue(args []string) error {
 func cmdGenerateQueuePublisher(args []string) error {
 	fs := flag.NewFlagSet("queue-publisher", flag.ContinueOnError)
 	bpFile := fs.String("blueprint", "blueprint.yaml", "blueprint file")
+	service := fs.String("service", "", "target service (for monolith)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -218,11 +228,9 @@ func cmdGenerateQueuePublisher(args []string) error {
 	if err != nil {
 		return err
 	}
-	if bp.Service == nil {
-		bp.Service = &blueprint.ServiceSpec{Name: "service"}
-	}
 	bp.SchemaVersion = "0.1"
-	bp.Service.Queues = append(bp.Service.Queues, blueprint.QueueSpec{Publisher: ref, URL: url})
+	serviceSpec := selectService(bp, *service)
+	serviceSpec.Queues = append(serviceSpec.Queues, blueprint.QueueSpec{Publisher: ref, URL: url})
 
 	return blueprint.WriteFile(*bpFile, bp)
 }
@@ -230,6 +238,7 @@ func cmdGenerateQueuePublisher(args []string) error {
 func cmdGenerateQueueSubscriber(args []string) error {
 	fs := flag.NewFlagSet("queue-subscriber", flag.ContinueOnError)
 	bpFile := fs.String("blueprint", "blueprint.yaml", "blueprint file")
+	service := fs.String("service", "", "target service (for monolith)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -244,11 +253,9 @@ func cmdGenerateQueueSubscriber(args []string) error {
 	if err != nil {
 		return err
 	}
-	if bp.Service == nil {
-		bp.Service = &blueprint.ServiceSpec{Name: "service"}
-	}
 	bp.SchemaVersion = "0.1"
-	bp.Service.Queues = append(bp.Service.Queues, blueprint.QueueSpec{Subscriber: ref, URL: url, Handler: handler})
+	serviceSpec := selectService(bp, *service)
+	serviceSpec.Queues = append(serviceSpec.Queues, blueprint.QueueSpec{Subscriber: ref, URL: url, Handler: handler})
 
 	return blueprint.WriteFile(*bpFile, bp)
 }
@@ -260,6 +267,31 @@ func loadOrCreateBlueprint(path string) (*blueprint.Blueprint, error) {
 
 	bp := &blueprint.Blueprint{SchemaVersion: "0.1"}
 	return bp, nil
+}
+
+func selectService(bp *blueprint.Blueprint, name string) *blueprint.ServiceSpec {
+	if bp == nil {
+		return nil
+	}
+	if len(bp.Services) > 0 {
+		for i := range bp.Services {
+			if name == "" || bp.Services[i].Name == name {
+				return &bp.Services[i]
+			}
+		}
+		if name != "" {
+			bp.Services = append(bp.Services, blueprint.ServiceSpec{Name: name})
+			return &bp.Services[len(bp.Services)-1]
+		}
+		return &bp.Services[0]
+	}
+	if bp.Service == nil {
+		bp.Service = &blueprint.ServiceSpec{Name: name}
+	}
+	if name != "" {
+		bp.Service.Name = name
+	}
+	return bp.Service
 }
 
 func defaultHandlerName(route, method string) string {

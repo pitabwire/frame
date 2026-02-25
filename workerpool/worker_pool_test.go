@@ -33,6 +33,7 @@ type testManager struct {
 
 func (m *testManager) GetPool() (workerpool.WorkerPool, error) { return m.pool, nil }
 func (m *testManager) StopError(_ context.Context, _ error)    {}
+func (m *testManager) Shutdown(_ context.Context) error        { return nil }
 
 // TestWorkerPoolSuite runs the worker pool test suite.
 func TestWorkerPoolSuite(t *testing.T) {

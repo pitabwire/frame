@@ -68,12 +68,23 @@ func (l *dbLogger) Error(ctx context.Context, msg string, data ...any) {
 // Trace print sql message.
 func (l *dbLogger) Trace(ctx context.Context, begin time.Time, fc func() (string, int64), err error) {
 	elapsed := time.Since(begin)
+	baseLog := l.baseLogger.WithContext(ctx)
+
+	queryIsSlow := elapsed > l.slowThreshold && l.slowThreshold != 0
+	queryErrored := err != nil && !data.ErrorIsNoRows(err)
+	shouldLog := queryErrored ||
+		baseLog.Enabled(ctx, slog.LevelDebug) ||
+		(baseLog.Enabled(ctx, slog.LevelInfo) && l.logQueries) ||
+		(baseLog.Enabled(ctx, slog.LevelWarn) && queryIsSlow)
+
+	if !shouldLog {
+		return
+	}
 
 	sql, rows := fc()
-
 	rowsAffected := strconv.FormatInt(rows, 10)
 
-	log := l.baseLogger.WithContext(ctx).
+	log := baseLog.
 		With(
 			tint.Attr(tintAttrCodeDuration, slog.Any("duration", elapsed.String())),
 			tint.Attr(tintAttrCodeRows, slog.Any("rows", rowsAffected)),
@@ -81,13 +92,11 @@ func (l *dbLogger) Trace(ctx context.Context, begin time.Time, fc func() (string
 		)
 	defer log.Release()
 
-	queryIsSlow := false
-	if elapsed > l.slowThreshold && l.slowThreshold != 0 {
+	if queryIsSlow {
 		log = log.WithField("SLOW Query", fmt.Sprintf(" >= %v", l.slowThreshold))
-		queryIsSlow = true
 	}
 
-	if err != nil && !data.ErrorIsNoRows(err) {
+	if queryErrored {
 		log.WithError(err).Error(" Error running query ")
 		return
 	}

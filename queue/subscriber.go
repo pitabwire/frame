@@ -203,8 +203,13 @@ func (s *subscriber) Stop(ctx context.Context) error {
 	if s.subscription != nil {
 		err := s.subscription.Shutdown(sctx)
 		if err != nil {
+			if isSubscriptionAlreadyShutdownErr(err) {
+				s.subscription = nil
+				return nil
+			}
 			return err
 		}
+		s.subscription = nil
 	}
 
 	return nil
@@ -367,4 +372,12 @@ func newSubscriber(
 		},
 		workManager: workPool,
 	}
+}
+
+func isSubscriptionAlreadyShutdownErr(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	return strings.Contains(strings.ToLower(err.Error()), "subscription has been shutdown")
 }

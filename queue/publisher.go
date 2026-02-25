@@ -2,7 +2,9 @@ package queue
 
 import (
 	"context"
+	"errors"
 	"maps"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -57,6 +59,9 @@ func (p *publisher) Publish(ctx context.Context, payload any, headers ...map[str
 	}
 
 	topic := p.topic
+	if topic == nil {
+		return errors.New("publisher is not initialized")
+	}
 
 	return topic.Send(ctx, &pubsub.Message{
 		Body:     message,
@@ -103,14 +108,41 @@ func (p *publisher) Stop(ctx context.Context) error {
 
 	p.isInit.Store(false)
 
+	if p.topic == nil {
+		return nil
+	}
+
+	// mem:// driver is process-local and shared by URL. Shutting it down here can poison
+	// subsequent in-process users of the same topic URL (common in tests).
+	if strings.HasPrefix(strings.ToLower(p.url), "mem://") {
+		p.topic = nil
+		return nil
+	}
+
 	err := p.topic.Shutdown(sctx)
 	if err != nil {
+		if isTopicAlreadyShutdownErr(err) {
+			p.topic = nil
+			return nil
+		}
 		return err
 	}
 
+	p.topic = nil
 	return nil
 }
 
 func (p *publisher) As(i any) bool {
+	if p.topic == nil {
+		return false
+	}
 	return p.topic.As(i)
+}
+
+func isTopicAlreadyShutdownErr(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	return strings.Contains(strings.ToLower(err.Error()), "topic has been shutdown")
 }

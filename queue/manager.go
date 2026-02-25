@@ -249,3 +249,47 @@ func (s *queueManager) Init(ctx context.Context) error {
 	util.Log(ctx).Info("Pub/Sub system initialized successfully.")
 	return nil
 }
+
+func (s *queueManager) Close(ctx context.Context) error {
+	if s == nil {
+		return nil
+	}
+
+	var closeErr error
+
+	s.publishQueueMap.Range(func(key, value any) bool {
+		pub, ok := value.(*publisher)
+		if !ok {
+			s.publishQueueMap.Delete(key)
+			return true
+		}
+
+		if err := pub.Stop(ctx); err != nil && closeErr == nil {
+			closeErr = err
+		}
+
+		s.publishQueueMap.Delete(key)
+		return true
+	})
+
+	s.subscriptionQueueMap.Range(func(key, value any) bool {
+		sub, ok := value.(*subscriber)
+		if !ok {
+			s.subscriptionQueueMap.Delete(key)
+			return true
+		}
+
+		if err := sub.Stop(ctx); err != nil && closeErr == nil {
+			closeErr = err
+		}
+
+		s.subscriptionQueueMap.Delete(key)
+		return true
+	})
+
+	s.initMutex.Lock()
+	s.initialized = false
+	s.initMutex.Unlock()
+
+	return closeErr
+}

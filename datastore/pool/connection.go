@@ -31,10 +31,6 @@ func (s *pool) createConnection(ctx context.Context, dsn string, poolOpts *Optio
 	if poolOpts.MaxOpen > 0 {
 		cfg.MaxConns = int32(poolOpts.MaxOpen)
 	}
-	// Note: We intentionally don't set MinConns from MaxIdle here because:
-	// 1. sql.DB will have MaxIdleConns set to 0 (required by GetPoolConnector)
-	// 2. pgxpool will manage its own connection lifecycle
-	// 3. Setting MinConns would keep connections open that sql.DB won't use
 	if poolOpts.MaxLifetime > 0 {
 		cfg.MaxConnLifetime = poolOpts.MaxLifetime
 		cfg.MaxConnIdleTime = poolOpts.MaxLifetime / idleTimeToMaxLifeTimeDivisor // Set idle time to half of max lifetime

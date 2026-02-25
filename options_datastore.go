@@ -69,6 +69,7 @@ func WithDatastoreConnectionWithOptions(name string, opts ...pool.Option) Option
 func WithDatastore(opts ...pool.Option) Option {
 	return func(ctx context.Context, s *Service) {
 		var connectionSlice []pool.Connection
+		doMigrate := false
 
 		traceCfg, ok := s.Config().(config.ConfigurationDatabaseTracing)
 		if ok {
@@ -85,6 +86,19 @@ func WithDatastore(opts ...pool.Option) Option {
 			for _, replicaDBURL := range cfg.GetDatabaseReplicaHostURL() {
 				connectionSlice = append(connectionSlice, pool.Connection{DSN: replicaDBURL, ReadOnly: true})
 			}
+
+			// Apply operational pool tuning from configuration.
+			if cfg.GetMaxOpenConnections() > 0 {
+				opts = append(opts, pool.WithMaxOpen(cfg.GetMaxOpenConnections()))
+			}
+			if cfg.GetMaxIdleConnections() > 0 {
+				opts = append(opts, pool.WithMaxIdle(cfg.GetMaxIdleConnections()))
+			}
+			if cfg.GetMaxConnectionLifeTimeInSeconds() > 0 {
+				opts = append(opts, pool.WithMaxLifetime(cfg.GetMaxConnectionLifeTimeInSeconds()))
+			}
+
+			doMigrate = cfg.DoDatabaseMigrate()
 		}
 
 		// Add connections from config (if any exist)
@@ -97,7 +111,7 @@ func WithDatastore(opts ...pool.Option) Option {
 		dbConnectionOpts := WithDatastoreConnectionWithOptions(datastore.DefaultPoolName, opts...)
 		dbConnectionOpts(ctx, s)
 
-		if cfg.DoDatabaseMigrate() {
+		if doMigrate {
 			// minor feature to automatically make a pool that can be used for db migrations
 			opts = append(opts, pool.WithPreparedStatements(false))
 			migrationOpts := WithDatastoreConnectionWithOptions(datastore.DefaultMigrationPoolName, opts...)

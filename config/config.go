@@ -92,7 +92,7 @@ type ConfigurationDefault struct {
 	ProfilerPortAddr string `envDefault:":6060" env:"PROFILER_PORT"   yaml:"profiler_port"`
 
 	OpenTelemetryDisable    bool    `envDefault:"false" env:"OPENTELEMETRY_DISABLE"        yaml:"opentelemetry_disable"`
-	OpenTelemetryTraceRatio float64 `envDefault:"1"     env:"OPENTELEMETRY_TRACE_ID_RATIO" yaml:"opentelemetry_trace_id_ratio"`
+	OpenTelemetryTraceRatio float64 `envDefault:"0.1"   env:"OPENTELEMETRY_TRACE_ID_RATIO" yaml:"opentelemetry_trace_id_ratio"`
 
 	ServiceName        string `envDefault:""     env:"SERVICE_NAME"         yaml:"service_name"`
 	ServiceEnvironment string `envDefault:""     env:"SERVICE_ENVIRONMENT"  yaml:"service_environment"`

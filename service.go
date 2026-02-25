@@ -177,8 +177,18 @@ func NewServiceWithContext(ctx context.Context, opts ...Option) (context.Context
 	if err != nil {
 		svc.AddStartupError(err)
 	}
+	svc.AddCleanupMethod(func(cleanupCtx context.Context) {
+		if svc.workerPoolManager != nil {
+			_ = svc.workerPoolManager.Shutdown(cleanupCtx)
+		}
+	})
 
 	svc.queueManager = queue.NewQueueManager(ctx, svc.workerPoolManager)
+	svc.AddCleanupMethod(func(cleanupCtx context.Context) {
+		if svc.queueManager != nil {
+			_ = svc.queueManager.Close(cleanupCtx)
+		}
+	})
 
 	// Setup events queue first (before startup methods)
 	// This registers the internal events publisher/subscriber

@@ -15,6 +15,8 @@ import (
 	"github.com/pitabwire/frame/datastore/scopes"
 )
 
+const migrationAdvisoryLockID int64 = 82548391244719
+
 type pool struct {
 	readIdx     uint64       // atomic counter for round-robin
 	writeIdx    uint64       // atomic counter for round-robin
@@ -161,15 +163,20 @@ func (s *pool) Migrate(ctx context.Context, migrationsDirPath string, migrations
 	}
 
 	migrtor := db.Migrator()
-	// Ensure migration metadata table exists. Handle concurrent startup races gracefully.
-	err := migrtor.AutoMigrate(&migration.Migration{})
-	if err != nil {
-		if !isRelationAlreadyExistsErr(err) {
-			util.Log(ctx).WithError(err).Error("MigrateDatastore -- couldn't create migration table")
-			return err
-		}
 
-		util.Log(ctx).WithError(err).Warn("MigrateDatastore -- migration table already created concurrently")
+	unlock, lockErr := acquireMigrationLock(ctx, db)
+	if lockErr != nil {
+		util.Log(ctx).WithError(lockErr).Warn("MigrateDatastore -- couldn't acquire advisory lock, continuing without lock")
+	}
+	if unlock != nil {
+		defer unlock()
+	}
+
+	// Ensure migration metadata table exists. Handle concurrent startup races gracefully.
+	err := ensureMigrationTable(ctx, migrtor)
+	if err != nil {
+		util.Log(ctx).WithError(err).Error("MigrateDatastore -- couldn't create migration table")
+		return err
 	}
 
 	if len(migrations) > 0 {
@@ -197,6 +204,34 @@ func (s *pool) Migrate(ctx context.Context, migrationsDirPath string, migrations
 		return err
 	}
 	return nil
+}
+
+func ensureMigrationTable(_ context.Context, migrator gorm.Migrator) error {
+	if migrator.HasTable(&migration.Migration{}) {
+		return nil
+	}
+
+	err := migrator.CreateTable(&migration.Migration{})
+	if err != nil && !isRelationAlreadyExistsErr(err) {
+		return err
+	}
+
+	return nil
+}
+
+func acquireMigrationLock(ctx context.Context, db *gorm.DB) (func(), error) {
+	if db == nil || db.Dialector.Name() != "postgres" {
+		return nil, nil
+	}
+
+	err := db.WithContext(ctx).Exec("SELECT pg_advisory_lock(?)", migrationAdvisoryLockID).Error
+	if err != nil {
+		return nil, err
+	}
+
+	return func() {
+		_ = db.WithContext(context.Background()).Exec("SELECT pg_advisory_unlock(?)", migrationAdvisoryLockID).Error
+	}, nil
 }
 
 func isRelationAlreadyExistsErr(err error) bool {

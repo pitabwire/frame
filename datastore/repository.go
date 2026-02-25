@@ -388,8 +388,16 @@ func SearchFunc[T any](
 
 	paginator := query.Pagination
 
+	limit := paginator.BatchSize
+	if limit <= 0 {
+		limit = paginator.Limit
+	}
+	if limit <= 0 {
+		limit = 50
+	}
+
 	db := dbConnection.
-		Limit(paginator.Limit).
+		Limit(limit).
 		Offset(paginator.Offset)
 
 	if query.OrderBy != "" {

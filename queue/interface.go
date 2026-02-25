@@ -31,6 +31,7 @@ type Manager interface {
 
 	Publish(ctx context.Context, reference string, payload any, headers ...map[string]string) error
 	Init(ctx context.Context) error
+	Close(ctx context.Context) error
 }
 
 type Publisher interface {

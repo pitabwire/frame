@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/binary"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -25,17 +26,22 @@ func (i *inMemoryCacheItem) isExpired() bool {
 type InMemoryCache struct {
 	items      sync.Map // map[string]*inMemoryCacheItem
 	cleanupMu  sync.Mutex
+	evictMu    sync.Mutex
 	stopClean  chan struct{}
 	cleanupInt time.Duration
+	maxEntries int
+	entryCount atomic.Int64
 }
 
 const defaultCleanupInterval = 5 * time.Minute
+const defaultInMemoryCacheMaxEntries = 100000
 
 // NewInMemoryCache creates a new in-memory cache.
 func NewInMemoryCache() RawCache {
 	cache := &InMemoryCache{
 		stopClean:  make(chan struct{}),
 		cleanupInt: defaultCleanupInterval,
+		maxEntries: defaultInMemoryCacheMaxEntries,
 	}
 
 	// Start cleanup goroutine
@@ -64,7 +70,7 @@ func (c *InMemoryCache) cleanup() {
 	c.items.Range(func(key, value interface{}) bool {
 		item, ok := value.(*inMemoryCacheItem)
 		if ok && item.isExpired() {
-			c.items.Delete(key)
+			c.deleteKey(key)
 		}
 		return true
 	})
@@ -79,7 +85,7 @@ func (c *InMemoryCache) Get(_ context.Context, key string) ([]byte, bool, error)
 
 	item, ok := value.(*inMemoryCacheItem)
 	if !ok || item.isExpired() {
-		c.items.Delete(key)
+		c.deleteKey(key)
 		return nil, false, nil
 	}
 
@@ -96,13 +102,13 @@ func (c *InMemoryCache) Set(_ context.Context, key string, value []byte, ttl tim
 		item.expiration = time.Now().Add(ttl)
 	}
 
-	c.items.Store(key, item)
+	c.storeItem(key, item)
 	return nil
 }
 
 // Delete removes an item from the cache.
 func (c *InMemoryCache) Delete(_ context.Context, key string) error {
-	c.items.Delete(key)
+	c.deleteKey(key)
 	return nil
 }
 
@@ -114,7 +120,7 @@ func (c *InMemoryCache) Exists(_ context.Context, key string) (bool, error) {
 	}
 
 	if cachedItem, itemOK := value.(*inMemoryCacheItem); itemOK && cachedItem.isExpired() {
-		c.items.Delete(key)
+		c.deleteKey(key)
 		return false, nil
 	}
 
@@ -124,6 +130,7 @@ func (c *InMemoryCache) Exists(_ context.Context, key string) (bool, error) {
 // Flush clears all items from the cache.
 func (c *InMemoryCache) Flush(_ context.Context) error {
 	c.items = sync.Map{}
+	c.entryCount.Store(0)
 	return nil
 }
 
@@ -158,7 +165,7 @@ func (c *InMemoryCache) Increment(_ context.Context, key string, delta int64) (i
 			if cachedItem, typeOK := value.(*inMemoryCacheItem); typeOK {
 				item = cachedItem
 				if item.isExpired() {
-					c.items.Delete(key)
+					c.deleteKey(key)
 					currentVal = 0
 				} else if len(item.value) >= int64Size {
 					uintVal := binary.BigEndian.Uint64(item.value)
@@ -186,6 +193,8 @@ func (c *InMemoryCache) Increment(_ context.Context, key string, delta int64) (i
 			}
 		} else {
 			if _, loaded := c.items.LoadOrStore(key, newItem); !loaded {
+				c.entryCount.Add(1)
+				c.evictIfNeeded()
 				return newVal, nil
 			}
 		}
@@ -196,4 +205,51 @@ func (c *InMemoryCache) Increment(_ context.Context, key string, delta int64) (i
 // Decrement atomically decrements a counter.
 func (c *InMemoryCache) Decrement(ctx context.Context, key string, delta int64) (int64, error) {
 	return c.Increment(ctx, key, -delta)
+}
+
+func (c *InMemoryCache) storeItem(key string, item *inMemoryCacheItem) {
+	if _, loaded := c.items.Load(key); !loaded {
+		c.entryCount.Add(1)
+	}
+
+	c.items.Store(key, item)
+	c.evictIfNeeded()
+}
+
+func (c *InMemoryCache) deleteKey(key interface{}) {
+	if _, loaded := c.items.LoadAndDelete(key); loaded {
+		c.entryCount.Add(-1)
+	}
+}
+
+func (c *InMemoryCache) evictIfNeeded() {
+	if c.maxEntries <= 0 || c.entryCount.Load() <= int64(c.maxEntries) {
+		return
+	}
+
+	c.evictMu.Lock()
+	defer c.evictMu.Unlock()
+
+	for c.entryCount.Load() > int64(c.maxEntries) {
+		var victim any
+		c.items.Range(func(key, value interface{}) bool {
+			item, ok := value.(*inMemoryCacheItem)
+			if ok && item.isExpired() {
+				victim = key
+				return false
+			}
+
+			if victim == nil {
+				victim = key
+			}
+
+			return victim == nil
+		})
+
+		if victim == nil {
+			return
+		}
+
+		c.deleteKey(victim)
+	}
 }

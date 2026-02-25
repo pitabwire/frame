@@ -38,6 +38,7 @@ type Job[T any] interface {
 type Manager interface {
 	GetPool() (WorkerPool, error)
 	StopError(context.Context, error)
+	Shutdown(context.Context) error
 }
 
 // WorkerPool defines the common methods for worker pool operations.

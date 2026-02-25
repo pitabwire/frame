@@ -120,6 +120,15 @@ func (m manager) StopError(ctx context.Context, err error) {
 	m.stopErr(ctx, err)
 }
 
+func (m manager) Shutdown(_ context.Context) error {
+	if m.pool == nil {
+		return nil
+	}
+
+	m.pool.Shutdown()
+	return nil
+}
+
 // SubmitJob used to submit jobs to our worker pool for processing.
 // Once a job is submitted the end user does not need to do any further tasks
 // One can ideally also wait for the results of their processing for their specific job

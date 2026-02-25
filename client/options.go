@@ -165,7 +165,7 @@ func NewHTTPClient(ctx context.Context, opts ...HTTPOption) *http.Client {
 			WithTransportLogRequests(true),
 			WithTransportLogResponses(true),
 			WithTransportLogHeaders(cfg.traceRequestHeaders),
-			WithTransportLogBody(true))
+			WithTransportLogBody(false))
 	}
 
 	client := &http.Client{

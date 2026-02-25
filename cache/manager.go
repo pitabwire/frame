@@ -17,6 +17,12 @@ func NewManager() Manager {
 
 // AddCache adds a raw cache with the given name.
 func (cm *manager) AddCache(name string, cache RawCache) {
+	if oldCache, loaded := cm.caches.Load(name); loaded {
+		if oldRaw, ok := oldCache.(RawCache); ok && oldRaw != nil {
+			_ = oldRaw.Close()
+		}
+	}
+
 	cm.caches.Store(name, cache)
 }
 

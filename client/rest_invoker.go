@@ -2,6 +2,7 @@ package client
 
 import (
 	"bytes"
+	"container/list"
 	"context"
 	"encoding/json"
 	"errors"
@@ -25,17 +26,39 @@ type resilientTransport struct {
 	inner       http.RoundTripper
 	breakers    sync.Map // map[string]*gobreaker.CircuitBreaker[*http.Response]
 	retryPolicy *RetryPolicy
+
+	breakerMu    sync.Mutex
+	breakerOrder *list.List
+	breakerIndex map[string]*list.Element
+	maxBreakers  int
+	breakerTTL   time.Duration
 }
 
 func newResilientTransport(inner http.RoundTripper, retry *RetryPolicy) *resilientTransport {
 	return &resilientTransport{
-		inner:       inner,
-		retryPolicy: retry,
+		inner:        inner,
+		retryPolicy:  retry,
+		breakerOrder: list.New(),
+		breakerIndex: map[string]*list.Element{},
+		maxBreakers:  defaultCircuitBreakerMaxEntries,
+		breakerTTL:   defaultCircuitBreakerIdleTTL,
 	}
 }
 
 func (rt *resilientTransport) breakerFor(key string) *gobreaker.CircuitBreaker[*http.Response] {
 	if cb, ok := rt.breakers.Load(key); ok {
+		rt.touchBreaker(key)
+		//nolint:errcheck // only *gobreaker.CircuitBreaker[*http.Response] is stored
+		return cb.(*gobreaker.CircuitBreaker[*http.Response])
+	}
+
+	rt.breakerMu.Lock()
+	defer rt.breakerMu.Unlock()
+
+	rt.ensureBreakerStateLocked()
+
+	if cb, ok := rt.breakers.Load(key); ok {
+		rt.touchBreakerLocked(key, time.Now())
 		//nolint:errcheck // only *gobreaker.CircuitBreaker[*http.Response] is stored
 		return cb.(*gobreaker.CircuitBreaker[*http.Response])
 	}
@@ -57,9 +80,11 @@ func (rt *resilientTransport) breakerFor(key string) *gobreaker.CircuitBreaker[*
 	//nolint:bodyclose //this is done by consuming party to avoid buffering
 	cb := gobreaker.NewCircuitBreaker[*http.Response](st)
 
-	actual, _ := rt.breakers.LoadOrStore(key, cb)
-	//nolint:errcheck // only *gobreaker.CircuitBreaker[*http.Response] is stored
-	return actual.(*gobreaker.CircuitBreaker[*http.Response])
+	rt.breakers.Store(key, cb)
+	rt.touchBreakerLocked(key, time.Now())
+	rt.evictBreakersLocked()
+
+	return cb
 }
 
 //nolint:gocognit // retry loop with circuit breaker is inherently complex
@@ -139,6 +164,8 @@ const (
 	defaultCircuitBreakerTimeout     = 45 * time.Second
 	defaultCircuitBreakerThreshold   = 20
 	defaultCircuitBreakerFailureRate = 0.5
+	defaultCircuitBreakerMaxEntries  = 1024
+	defaultCircuitBreakerIdleTTL     = 15 * time.Minute
 )
 
 var ErrResponseTooLarge = errors.New("response body truncated, it exceeds configured limit")
@@ -151,6 +178,87 @@ type serverError struct {
 
 func (e *serverError) Error() string {
 	return fmt.Sprintf("server error: HTTP %d", e.statusCode)
+}
+
+type breakerMeta struct {
+	key      string
+	lastUsed time.Time
+}
+
+func (rt *resilientTransport) touchBreaker(key string) {
+	rt.breakerMu.Lock()
+	defer rt.breakerMu.Unlock()
+
+	rt.ensureBreakerStateLocked()
+	rt.touchBreakerLocked(key, time.Now())
+	rt.evictBreakersLocked()
+}
+
+func (rt *resilientTransport) touchBreakerLocked(key string, now time.Time) {
+	if elem, ok := rt.breakerIndex[key]; ok {
+		meta, _ := elem.Value.(*breakerMeta)
+		if meta == nil {
+			meta = &breakerMeta{key: key}
+			elem.Value = meta
+		}
+		meta.lastUsed = now
+		rt.breakerOrder.MoveToFront(elem)
+		return
+	}
+
+	meta := &breakerMeta{
+		key:      key,
+		lastUsed: now,
+	}
+	rt.breakerIndex[key] = rt.breakerOrder.PushFront(meta)
+}
+
+func (rt *resilientTransport) evictBreakersLocked() {
+	if rt.breakerOrder == nil || len(rt.breakerIndex) == 0 {
+		return
+	}
+
+	now := time.Now()
+
+	// Remove stale entries first.
+	if rt.breakerTTL > 0 {
+		for elem := rt.breakerOrder.Back(); elem != nil; {
+			prev := elem.Prev()
+			meta, _ := elem.Value.(*breakerMeta)
+			if meta == nil || now.Sub(meta.lastUsed) > rt.breakerTTL {
+				rt.removeBreakerLocked(elem)
+			}
+			elem = prev
+		}
+	}
+
+	// Enforce hard bound.
+	for rt.maxBreakers > 0 && len(rt.breakerIndex) > rt.maxBreakers {
+		elem := rt.breakerOrder.Back()
+		if elem == nil {
+			break
+		}
+		rt.removeBreakerLocked(elem)
+	}
+}
+
+func (rt *resilientTransport) removeBreakerLocked(elem *list.Element) {
+	meta, _ := elem.Value.(*breakerMeta)
+	if meta != nil {
+		delete(rt.breakerIndex, meta.key)
+		rt.breakers.Delete(meta.key)
+	}
+
+	rt.breakerOrder.Remove(elem)
+}
+
+func (rt *resilientTransport) ensureBreakerStateLocked() {
+	if rt.breakerOrder == nil {
+		rt.breakerOrder = list.New()
+	}
+	if rt.breakerIndex == nil {
+		rt.breakerIndex = map[string]*list.Element{}
+	}
 }
 
 type Manager interface {

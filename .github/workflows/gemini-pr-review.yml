@@ -154,6 +154,7 @@ jobs:
       - name: 'Run Gemini PR Review'
         uses: 'google-github-actions/run-gemini-cli@v0'
         id: 'gemini_pr_review'
+        continue-on-error: true
         env:
           GITHUB_TOKEN: '${{ steps.generate_token.outputs.token || secrets.GITHUB_TOKEN }}'
           PR_NUMBER: '${{ steps.get_pr.outputs.pr_number || steps.get_pr_comment.outputs.pr_number }}'

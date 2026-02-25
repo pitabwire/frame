@@ -50,8 +50,13 @@ func (bp *Blueprint) Validate() error {
 			if strings.TrimSpace(q.Publisher) == "" && strings.TrimSpace(q.Subscriber) == "" {
 				return fmt.Errorf("service[%d].queues[%d] must have publisher or subscriber", i, j)
 			}
-			if strings.TrimSpace(q.Subscriber) != "" && strings.TrimSpace(q.Handler) == "" {
-				return fmt.Errorf("service[%d].queues[%d].handler is required for subscriber", i, j)
+			if strings.TrimSpace(q.Subscriber) != "" {
+				if strings.TrimSpace(q.Handler) == "" {
+					return fmt.Errorf("service[%d].queues[%d].handler is required for subscriber", i, j)
+				}
+				if !handlerNameRe.MatchString(q.Handler) {
+					return fmt.Errorf("service[%d].queues[%d].handler is not a valid identifier", i, j)
+				}
 			}
 		}
 	}

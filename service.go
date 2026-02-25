@@ -105,6 +105,7 @@ type Service struct {
 	debugEnabled      bool
 	debugBasePath     string
 	registeredPlugins []string
+	routeLister RouteLister
 
 	startOnce            sync.Once
 	startupOnce          sync.Once
@@ -148,6 +149,13 @@ func NewServiceWithContext(ctx context.Context, opts ...Option) (context.Context
 		configuration:   &cfg,
 		profilerServer:  profiler.NewServer(),
 		openapiBasePath: defaultOpenAPIBasePath,
+	}
+
+	if dbgCfg, ok := any(&cfg).(config.ConfigurationDebug); ok {
+		if dbgCfg.DebugEndpointsEnabled() {
+			svc.debugEnabled = true
+			svc.debugBasePath = dbgCfg.DebugEndpointsBasePath()
+		}
 	}
 
 	opts = append(

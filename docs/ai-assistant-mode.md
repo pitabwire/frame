@@ -84,3 +84,17 @@ frame build blueprint.yaml
 - Handlers live in `/internal/handlers`.
 - Plugins live in `/internal/plugins`.
 - Avoid globals; use context + service managers.
+
+
+## Route Introspection
+
+`/debug/frame/routes` only reports routes if you use a route registry:
+
+```go
+rr := frame.NewRouteRegistry()
+rr.HandleFunc("/users", usersHandler)
+
+ctx, svc := frame.NewService(
+    frame.WithHTTPHandler(rr),
+)
+```

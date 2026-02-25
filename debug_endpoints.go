@@ -85,8 +85,8 @@ func (s *Service) debugPlugins(w http.ResponseWriter, _ *http.Request) {
 
 func (s *Service) debugRoutes(w http.ResponseWriter, _ *http.Request) {
 	var routes []RouteInfo
-	if rl, ok := s.handler.(RouteLister); ok {
-		routes = rl.Routes()
+	if s.routeLister != nil {
+		routes = s.routeLister.Routes()
 	}
 	resp := map[string]any{
 		"routes": routes,

@@ -121,3 +121,15 @@ http:
   - name: create-user
     remove: true
 ```
+
+- Same blueprint inputs produce identical output.
+- Canonical bootstrap pattern is enforced.
+- Options are grouped in one block.
+
+## Output Directory
+
+By default, `frame build` writes into the current directory. For AI workflows, use `--out` to isolate generated code:
+
+```bash
+go run ./cmd/frame build blueprints/polylith.yaml --out ./_generated
+```

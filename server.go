@@ -232,6 +232,9 @@ func WithGRPCPort(port string) Option {
 func WithHTTPHandler(h http.Handler) Option {
 	return func(_ context.Context, c *Service) {
 		c.handler = h
+		if rl, ok := h.(RouteLister); ok {
+			c.routeLister = rl
+		}
 	}
 }
 

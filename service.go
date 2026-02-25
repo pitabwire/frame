@@ -219,9 +219,6 @@ func NewServiceWithContext(ctx context.Context, opts ...Option) (context.Context
 	// Put the raw logger into context, not the context-aware one
 	ctx = util.ContextWithLogger(ctx, svc.logger)
 
-	svc.logger.WithField("log", svc.logger).
-		Info("Confirming service log")
-
 	return ctx, svc
 }
 

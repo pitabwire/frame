@@ -13,6 +13,7 @@ import (
 
 	"github.com/pitabwire/util"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 
 	"github.com/pitabwire/frame/data"
 )
@@ -108,6 +109,10 @@ func (m *datastoreMigrator) SaveMigrationString(
 	migrationPatch string,
 	revertPatch string,
 ) error {
+	if m.DB(ctx) == nil {
+		return errors.New("save migration: no database configured")
+	}
+
 	// If a file name exists, save with the name it has
 	_, err := os.Stat(filename)
 	if errors.Is(err, os.ErrNotExist) {
@@ -119,7 +124,7 @@ func (m *datastoreMigrator) SaveMigrationString(
 	err = m.DB(ctx).Model(&migration).First(&migration, "name = ?", filename).Error
 	if err != nil {
 		if !data.ErrorIsNoRows(err) {
-			return err
+			return fmt.Errorf("save migration lookup failed: %w", err)
 		}
 
 		migration = Migration{
@@ -129,22 +134,25 @@ func (m *datastoreMigrator) SaveMigrationString(
 		}
 		err = m.DB(ctx).Create(&migration).Error
 		if err != nil {
-			return err
+			return fmt.Errorf("save migration insert failed: %w", err)
 		}
-
 		return nil
 	}
 
 	if !migration.AppliedAt.Valid && migration.Patch != migrationPatch {
-		err = m.DB(ctx).Model(&migration).Update("patch", migrationPatch).Error
+		err = m.DB(ctx).Model(&migration).
+			Where("applied_at IS NULL").
+			Update("patch", migrationPatch).Error
 		if err != nil {
-			return err
+			return fmt.Errorf("save migration patch update failed: %w", err)
 		}
 	}
 	if !migration.AppliedAt.Valid && revertPatch != "" && migration.RevertPatch != revertPatch {
-		err = m.DB(ctx).Model(&migration).Update("revert_patch", revertPatch).Error
+		err = m.DB(ctx).Model(&migration).
+			Where("applied_at IS NULL").
+			Update("revert_patch", revertPatch).Error
 		if err != nil {
-			return err
+			return fmt.Errorf("save migration revert patch update failed: %w", err)
 		}
 	}
 
@@ -152,8 +160,13 @@ func (m *datastoreMigrator) SaveMigrationString(
 }
 
 func (m *datastoreMigrator) ApplyNewMigrations(ctx context.Context) error {
+	db := m.DB(ctx)
+	if db == nil {
+		return errors.New("apply migrations: no database configured")
+	}
+
 	var unAppliedMigrations []*Migration
-	err := m.DB(ctx).Where("applied_at IS NULL").Find(&unAppliedMigrations).Error
+	err := db.Where("applied_at IS NULL").Order("name ASC").Find(&unAppliedMigrations).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			m.logger.Info("ApplyNewMigrations -- No migrations found to be applied ")
@@ -163,12 +176,31 @@ func (m *datastoreMigrator) ApplyNewMigrations(ctx context.Context) error {
 	}
 
 	for _, migration := range unAppliedMigrations {
-		err = m.DB(ctx).Exec(migration.Patch).Error
-		if err != nil {
-			return err
-		}
+		err = db.Transaction(func(tx *gorm.DB) error {
+			var lockRow Migration
+			err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+				First(&lockRow, "id = ?", migration.ID).Error
+			if err != nil {
+				if data.ErrorIsNoRows(err) {
+					return nil
+				}
+				return err
+			}
 
-		err = m.DB(ctx).Model(migration).Update("applied_at", time.Now()).Error
+			if lockRow.AppliedAt.Valid {
+				return nil
+			}
+
+			if err := tx.Exec(lockRow.Patch).Error; err != nil {
+				return err
+			}
+
+			return tx.Exec(
+				"UPDATE migrations SET applied_at = ? WHERE id = ? AND applied_at IS NULL",
+				time.Now().UTC(),
+				lockRow.ID,
+			).Error
+		})
 		if err != nil {
 			return err
 		}

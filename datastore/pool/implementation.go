@@ -2,9 +2,12 @@ package pool
 
 import (
 	"context"
+	"errors"
+	"strings"
 	"sync"
 	"sync/atomic"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/pitabwire/util"
 	"gorm.io/gorm"
 
@@ -69,13 +72,18 @@ func (s *pool) AddConnection(ctx context.Context, opts ...Option) error {
 }
 
 func (s *pool) Close(_ context.Context) {
-	for _, db := range s.allReadDBs {
+	s.mu.RLock()
+	readDBs := append([]*gorm.DB(nil), s.allReadDBs...)
+	writeDBs := append([]*gorm.DB(nil), s.allWriteDBs...)
+	s.mu.RUnlock()
+
+	for _, db := range readDBs {
 		sqlDB, err := db.DB()
 		if err == nil {
 			_ = sqlDB.Close()
 		}
 	}
-	for _, db := range s.allWriteDBs {
+	for _, db := range writeDBs {
 		sqlDB, err := db.DB()
 		if err == nil {
 			_ = sqlDB.Close()
@@ -86,29 +94,27 @@ func (s *pool) Close(_ context.Context) {
 // DB Returns a random item from the slice, or an error if the slice is empty.
 func (s *pool) DB(ctx context.Context, readOnly bool) *gorm.DB {
 	var idx *uint64
+	var selectedDB *gorm.DB
 
 	s.mu.RLock()
 	if readOnly {
 		idx = &s.readIdx
 		if len(s.allReadDBs) != 0 {
-			// This check ensures we are able to use the write db if no more read dbs exist
-			s.mu.RUnlock()
-			return s.selectOne(s.allReadDBs, idx).Session(&gorm.Session{NewDB: true, AllowGlobalUpdate: true}).
-				WithContext(ctx).
-				Scopes(scopes.TenancyPartition(ctx))
+			selectedDB = s.selectOne(s.allReadDBs, idx)
 		}
 	}
 
-	idx = &s.writeIdx
-
+	if selectedDB == nil {
+		idx = &s.writeIdx
+		selectedDB = s.selectOne(s.allWriteDBs, idx)
+	}
 	s.mu.RUnlock()
-	db := s.selectOne(s.allWriteDBs, idx)
 
-	if db == nil {
+	if selectedDB == nil {
 		return nil
 	}
 
-	return db.Session(&gorm.Session{NewDB: true, AllowGlobalUpdate: true}).
+	return selectedDB.Session(&gorm.Session{NewDB: true, AllowGlobalUpdate: true}).
 		WithContext(ctx).
 		Scopes(scopes.TenancyPartition(ctx))
 }
@@ -149,19 +155,26 @@ func (s *pool) Migrate(ctx context.Context, migrationsDirPath string, migrations
 		migrationsDirPath = "./migrations/0001"
 	}
 
-	migrtor := s.DB(ctx, false).Migrator()
-	// Ensure the migration schema exists
-	if !migrtor.HasTable(&migration.Migration{}) {
-		err := migrtor.CreateTable(&migration.Migration{})
-		if err != nil {
+	db := s.DB(ctx, false)
+	if db == nil {
+		return errors.New("migrate datastore: no writable database configured")
+	}
+
+	migrtor := db.Migrator()
+	// Ensure migration metadata table exists. Handle concurrent startup races gracefully.
+	err := migrtor.AutoMigrate(&migration.Migration{})
+	if err != nil {
+		if !isRelationAlreadyExistsErr(err) {
 			util.Log(ctx).WithError(err).Error("MigrateDatastore -- couldn't create migration table")
 			return err
 		}
+
+		util.Log(ctx).WithError(err).Warn("MigrateDatastore -- migration table already created concurrently")
 	}
 
 	if len(migrations) > 0 {
 		// Migrate the schema
-		err := migrtor.AutoMigrate(migrations...)
+		err = migrtor.AutoMigrate(migrations...)
 		if err != nil {
 			util.Log(ctx).WithError(err).Error("MigrateDatastore -- couldn't auto migrate")
 			return err
@@ -172,7 +185,7 @@ func (s *pool) Migrate(ctx context.Context, migrationsDirPath string, migrations
 		return s.DB(ctx, false)
 	})
 
-	err := migrationExecutor.ScanMigrationFiles(ctx, migrationsDirPath)
+	err = migrationExecutor.ScanMigrationFiles(ctx, migrationsDirPath)
 	if err != nil {
 		util.Log(ctx).WithError(err).Error("MigrateDatastore -- Error scanning for new migrations")
 		return err
@@ -184,4 +197,13 @@ func (s *pool) Migrate(ctx context.Context, migrationsDirPath string, migrations
 		return err
 	}
 	return nil
+}
+
+func isRelationAlreadyExistsErr(err error) bool {
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) {
+		return pgErr.Code == "42P07"
+	}
+
+	return err != nil && strings.Contains(strings.ToLower(err.Error()), "already exists")
 }

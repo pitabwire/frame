@@ -133,7 +133,6 @@ func writeServiceLayout(root, name, module string) error {
 import (
 	"log"
 	"net/http"
-
 	"github.com/pitabwire/frame"
 	"%s/apps/%s/service"
 )

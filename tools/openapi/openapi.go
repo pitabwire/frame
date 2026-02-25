@@ -131,7 +131,6 @@ func writeEmbedFile(embedDir, pkg, protoDir, outDir string) error {
 
 import (
 	"embed"
-
 	"github.com/pitabwire/frame"
 )
 

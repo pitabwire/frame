@@ -13,6 +13,8 @@ import (
 // This is the low-level function that should rarely be called directly - use WithDatastore instead.
 func WithDatastoreManager() Option {
 	return func(ctx context.Context, s *Service) {
+		s.registerPlugin("datastore")
+
 		if s.datastoreManager == nil {
 			var err error
 			s.datastoreManager, err = manager.NewManager(ctx)

@@ -100,8 +100,12 @@ type Service struct {
 
 	profilerServer *profiler.Server
 
-	openapiRegistry *openapi.Registry
-	openapiBasePath string
+	openapiRegistry   *openapi.Registry
+	openapiBasePath   string
+	debugEnabled      bool
+	debugBasePath     string
+	registeredPlugins []string
+	routeLister       RouteLister
 
 	startOnce            sync.Once
 	startupOnce          sync.Once
@@ -145,6 +149,13 @@ func NewServiceWithContext(ctx context.Context, opts ...Option) (context.Context
 		configuration:   &cfg,
 		profilerServer:  profiler.NewServer(),
 		openapiBasePath: defaultOpenAPIBasePath,
+	}
+
+	if dbgCfg, ok := any(&cfg).(config.ConfigurationDebug); ok {
+		if dbgCfg.DebugEndpointsEnabled() {
+			svc.debugEnabled = true
+			svc.debugBasePath = dbgCfg.DebugEndpointsBasePath()
+		}
 	}
 
 	opts = append(
@@ -221,6 +232,18 @@ func ToContext(ctx context.Context, service *Service) context.Context {
 }
 
 // FromContext obtains a service instance being propagated through the context.
+func (s *Service) registerPlugin(name string) {
+	if name == "" {
+		return
+	}
+	for _, existing := range s.registeredPlugins {
+		if existing == name {
+			return
+		}
+	}
+	s.registeredPlugins = append(s.registeredPlugins, name)
+}
+
 func FromContext(ctx context.Context) *Service {
 	service, ok := ctx.Value(ctxKeyService).(*Service)
 	if !ok {
@@ -481,6 +504,7 @@ func (s *Service) createAndConfigureMux(ctx context.Context) *http.ServeMux {
 
 	mux := http.NewServeMux()
 
+	s.registerDebugEndpoints(mux)
 	mux.HandleFunc(s.healthCheckPath, s.HandleHealth)
 	s.registerOpenAPIRoutes(mux)
 	mux.Handle("/", applicationHandler)

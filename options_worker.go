@@ -10,6 +10,8 @@ import (
 // WithBackgroundConsumer sets a background consumer function for the worker pool.
 func WithBackgroundConsumer(deque func(_ context.Context) error) Option {
 	return func(_ context.Context, s *Service) {
+		s.registerPlugin("workerpool")
+
 		s.backGroundClient = deque
 	}
 }

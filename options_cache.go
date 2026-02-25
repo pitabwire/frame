@@ -9,6 +9,8 @@ import (
 // WithCacheManager adds a cache manager to the service.
 func WithCacheManager() Option {
 	return func(_ context.Context, s *Service) {
+		s.registerPlugin("cache")
+
 		if s.cacheManager == nil {
 			s.cacheManager = cache.NewManager()
 

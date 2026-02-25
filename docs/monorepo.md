@@ -98,7 +98,7 @@ This makes the repo **composable** by default.
 Frame includes a scaffold tool that creates the monorepo layout with per-service entrypoints and Dockerfiles.
 
 ```bash
-go run github.com/pitabwire/frame/tools/cmd/frame-init@latest \
+go run github.com/pitabwire/frame/cmd/frame@latest init \
   -root . \
   -services users,billing \
   -module your/module

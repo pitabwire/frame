@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Frame Blueprint",
+  "type": "object",
+  "properties": {
+    "schema_version": {"type": "string"},
+    "runtime_mode": {"type": "string", "enum": ["monolith", "polylith"]},
+    "service": {"$ref": "#/definitions/service"},
+    "services": {
+      "type": "array",
+      "items": {"$ref": "#/definitions/service"}
+    },
+    "http": {"type": "array", "items": {"$ref": "#/definitions/http"}},
+    "plugins": {"type": "array", "items": {"type": "string"}},
+    "datastore": {"$ref": "#/definitions/datastore"},
+    "queues": {"type": "array", "items": {"$ref": "#/definitions/queue"}}
+  },
+  "required": ["schema_version"],
+  "definitions": {
+    "service": {
+      "type": "object",
+      "properties": {
+        "name": {"type": "string"},
+        "module": {"type": "string"},
+        "runtime_mode": {"type": "string", "enum": ["monolith", "polylith"]},
+        "service_id": {},
+        "service_group": {"type": "string"},
+        "port": {"type": "string"},
+        "http": {"type": "array", "items": {"$ref": "#/definitions/http"}},
+        "plugins": {"type": "array", "items": {"type": "string"}},
+        "datastore": {"$ref": "#/definitions/datastore"},
+        "queues": {"type": "array", "items": {"$ref": "#/definitions/queue"}}
+      },
+      "required": ["name"]
+    },
+    "http": {
+      "type": "object",
+      "properties": {
+        "name": {"type": "string"},
+        "route": {"type": "string"},
+        "method": {"type": "string"},
+        "handler": {"type": "string"},
+        "response": {"type": "string"}
+      },
+      "required": ["route", "method", "handler"]
+    },
+    "datastore": {
+      "type": "object",
+      "properties": {
+        "migrate": {"type": "boolean"},
+        "primary_url_env": {"type": "string"}
+      }
+    },
+    "queue": {
+      "type": "object",
+      "properties": {
+        "publisher": {"type": "string"},
+        "subscriber": {"type": "string"},
+        "url": {"type": "string"},
+        "handler": {"type": "string"}
+      },
+      "required": ["url"]
+    }
+  }
+}

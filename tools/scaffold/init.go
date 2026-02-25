@@ -1,34 +1,26 @@
-package main
+package scaffold
 
 import (
 	"errors"
-	"flag"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 )
 
-type config struct {
+type InitConfig struct {
 	Root     string
 	Services string
 	Module   string
 }
 
-func main() {
-	cfg := config{}
-	flag.StringVar(&cfg.Root, "root", ".", "Repository root")
-	flag.StringVar(&cfg.Services, "services", "", "Comma-separated service names")
-	flag.StringVar(&cfg.Module, "module", "", "Go module path (optional)")
-	flag.Parse()
-
-	if err := run(cfg); err != nil {
-		fmt.Fprintln(os.Stderr, err.Error())
-		os.Exit(1)
+func DefaultInitConfig() InitConfig {
+	return InitConfig{
+		Root: ".",
 	}
 }
 
-func run(cfg config) error {
+func InitRepo(cfg InitConfig) error {
 	root, err := filepath.Abs(cfg.Root)
 	if err != nil {
 		return fmt.Errorf("resolve root: %w", err)
@@ -62,7 +54,7 @@ func run(cfg config) error {
 	}
 
 	for _, svc := range services {
-		if svcErr := writeServiceLayout(root, svc); svcErr != nil {
+		if svcErr := writeServiceLayout(root, svc, cfg.Module); svcErr != nil {
 			return svcErr
 		}
 	}
@@ -118,11 +110,12 @@ func writeGoMod(root, module string) error {
 	return os.WriteFile(path, []byte(content), 0o644)
 }
 
-func writeServiceLayout(root, name string) error {
+func writeServiceLayout(root, name, module string) error {
 	base := filepath.Join(root, "apps", name)
 	paths := []string{
 		filepath.Join(base, "cmd", name),
 		filepath.Join(base, "service"),
+		filepath.Join(base, "queues"),
 		filepath.Join(base, "config"),
 		filepath.Join(base, "migrations"),
 		filepath.Join(base, "tests"),
@@ -139,19 +132,23 @@ func writeServiceLayout(root, name string) error {
 
 import (
 	"log"
-
+	"net/http"
 	"github.com/pitabwire/frame"
+	"%s/apps/%s/service"
 )
 
 func main() {
+	mux := http.NewServeMux()
+	service.RegisterRoutes(mux)
 	ctx, svc := frame.NewService(
 		frame.WithName("%s"),
+		frame.WithHTTPHandler(mux),
 	)
 	if err := svc.Run(ctx, ":8080"); err != nil {
 		log.Fatal(err)
 	}
 }
-`, name)
+`, module, name, name)
 		// #nosec G306 -- generated files should be readable by the developer.
 		if writeErr := os.WriteFile(mainPath, []byte(content), 0o644); writeErr != nil {
 			return fmt.Errorf("write %s: %w", mainPath, writeErr)
@@ -172,7 +169,35 @@ CMD ["/app/%s"]
 		}
 	}
 
+	if routeErr := writeServiceRoutes(root, name); routeErr != nil {
+		return routeErr
+	}
+
 	return nil
+}
+
+func writeServiceRoutes(root, name string) error {
+	serviceDir := filepath.Join(root, "apps", name, "service")
+	if err := ensureDir(serviceDir); err != nil {
+		return err
+	}
+
+	routesPath := filepath.Join(serviceDir, "routes.go")
+	if exists(routesPath) {
+		return nil
+	}
+
+	content := `package service
+
+import "net/http"
+
+// RegisterRoutes wires service HTTP endpoints.
+func RegisterRoutes(mux *http.ServeMux) {
+	_ = mux
+}
+`
+	// #nosec G306 -- generated files should be readable by the developer.
+	return os.WriteFile(routesPath, []byte(content), 0o644)
 }
 
 func writeMonolithEntry(root string, services []string, module string) error {

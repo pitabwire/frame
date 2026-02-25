@@ -31,6 +31,12 @@ func WithConfig(cfg any) Option {
 		WithLogger()(ctx, s)
 
 		WithHTTPClient()(ctx, s)
+
+		if dbgCfg, dbgOk := cfg.(config.ConfigurationDebug); dbgOk {
+			if dbgCfg.DebugEndpointsEnabled() {
+				WithDebugEndpointsAt(dbgCfg.DebugEndpointsBasePath())(ctx, s)
+			}
+		}
 	}
 }
 

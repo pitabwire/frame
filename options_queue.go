@@ -16,6 +16,8 @@ import (
 // WithRegisterPublisher Option to register publishing path referenced within the system.
 func WithRegisterPublisher(reference string, queueURL string) Option {
 	return func(_ context.Context, s *Service) {
+		s.registerPlugin("queue")
+
 		// Validate inputs and report via startup errors instead of panicking
 		if strings.TrimSpace(reference) == "" {
 			s.AddStartupError(errors.New("publisher reference cannot be empty"))

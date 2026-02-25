@@ -25,6 +25,8 @@ Frame reads configuration through narrow interfaces. Implement only what you nee
 
 - `ConfigurationService`
 - `ConfigurationSecurity`
+- `ConfigurationRuntime`
+- `ConfigurationDebug`
 - `ConfigurationLogLevel`
 - `ConfigurationTraceRequests`
 - `ConfigurationProfiler`
@@ -91,6 +93,16 @@ Frame reads configuration through narrow interfaces. Implement only what you nee
 | `WORKER_POOL_CAPACITY` | `100` | Queue capacity.
 | `WORKER_POOL_COUNT` | `100` | Worker pool size.
 | `WORKER_POOL_EXPIRY_DURATION` | `1s` | Worker idle expiry.
+
+### Runtime Mode
+
+| Env | Default | Description |
+| --- | --- | --- |
+| `FRAME_RUNTIME_MODE` | `polylith` | Runtime mode: `monolith` or `polylith`.
+| `FRAME_SERVICE_ID` | empty | Service identifier used in polylith mode.
+| `FRAME_SERVICE_GROUP` | empty | Optional grouping for related services.
+| `FRAME_DEBUG_ENDPOINTS` | `false` | Enable debug/AI introspection endpoints.
+| `FRAME_DEBUG_ENDPOINTS_BASEPATH` | `/debug/frame` | Base path for debug endpoints.
 
 ### TLS
 

@@ -23,3 +23,4 @@ tests_runner/*.srl
 bin/
 docs/venv/
 site/
+_generated/

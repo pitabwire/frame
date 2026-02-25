@@ -1,9 +1,8 @@
-package main
+package openapi
 
 import (
 	"context"
 	"errors"
-	"flag"
 	"fmt"
 	"os"
 	"os/exec"
@@ -12,7 +11,7 @@ import (
 	"time"
 )
 
-type config struct {
+type Config struct {
 	ProtoDir  string
 	OutDir    string
 	EmbedDir  string
@@ -20,24 +19,19 @@ type config struct {
 	BufBinary string
 }
 
-const openAPITimeout = 15 * time.Minute
+const Timeout = 15 * time.Minute
 
-func main() {
-	cfg := config{}
-	flag.StringVar(&cfg.ProtoDir, "proto-dir", "proto", "Path to proto root (buf workspace or module)")
-	flag.StringVar(&cfg.OutDir, "out", "pkg/openapi/specs", "Output directory for OpenAPI JSON")
-	flag.StringVar(&cfg.EmbedDir, "embed-dir", "pkg/openapi", "Directory for generated embed.go")
-	flag.StringVar(&cfg.Package, "package", "openapi", "Go package name for embed.go")
-	flag.StringVar(&cfg.BufBinary, "buf", "buf", "Buf binary to execute")
-	flag.Parse()
-
-	if err := run(cfg); err != nil {
-		fmt.Fprintln(os.Stderr, err.Error())
-		os.Exit(1)
+func DefaultConfig() Config {
+	return Config{
+		ProtoDir:  "proto",
+		OutDir:    "pkg/openapi/specs",
+		EmbedDir:  "pkg/openapi",
+		Package:   "openapi",
+		BufBinary: "buf",
 	}
 }
 
-func run(cfg config) error {
+func Run(cfg Config) error {
 	protoDir, err := filepath.Abs(cfg.ProtoDir)
 	if err != nil {
 		return fmt.Errorf("resolve proto-dir: %w", err)
@@ -98,7 +92,7 @@ plugins:
 		return fmt.Errorf("close buf template: %w", closeErr)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), openAPITimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), Timeout)
 	defer cancel()
 
 	// #nosec G204,G702 -- command is user-configured and expected in tooling.
@@ -125,7 +119,7 @@ func writeEmbedFile(embedDir, pkg, protoDir, outDir string) error {
 	goGenerate := ""
 	if protoOk && outOk {
 		goGenerate = fmt.Sprintf(
-			"//go:generate go run github.com/pitabwire/frame/tools/cmd/frame-openapi@latest -proto-dir %s -out %s -embed-dir . -package %s\n",
+			"//go:generate go run github.com/pitabwire/frame/cmd/frame@latest openapi --proto-dir %s --out %s --embed-dir . --package %s\n",
 			protoRel,
 			outRel,
 			pkg,
@@ -137,7 +131,6 @@ func writeEmbedFile(embedDir, pkg, protoDir, outDir string) error {
 
 import (
 	"embed"
-
 	"github.com/pitabwire/frame"
 )
 

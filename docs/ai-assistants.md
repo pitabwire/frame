@@ -53,7 +53,7 @@ Use these prompt patterns:
 - “Generate a new HTTP service using Frame, using the canonical `ctx, svc := frame.NewService(...)` bootstrap pattern.”
 - “Create a new Frame plugin as a `WithXxx` option that registers a queue subscriber.”
 - “Add a datastore setup using `WithDatastore` and a migration step.”
-- “Generate OpenAPI specs with `frame-openapi` and register `openapi.Option()`.”
+- “Generate OpenAPI specs with `frame openapi` and register `openapi.Option()`.”
 
 ## Frame Plugin Mental Model
 
@@ -69,7 +69,6 @@ A plugin is a `frame.Option` helper that configures a `Service` and registers st
 When working with Frame Blueprints, always **extend** by default:
 
 - Add new items without removing or replacing existing ones.
-- Use `override: true` to modify existing definitions.
-- Use `remove: true` to delete definitions.
+- Blueprint merges are additive; duplicates are ignored (base wins).
 
 This preserves system stability while allowing incremental expansion.

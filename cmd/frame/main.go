@@ -10,8 +10,20 @@ import (
 	"github.com/pitabwire/frame/blueprint"
 )
 
+const (
+	minArgsCommand     = 2
+	minArgsRouteMethod = 2
+	minArgsQueuePub    = 2
+	minArgsQueueSub    = 3
+	argRoute           = 0
+	argMethod          = 1
+	argHandler         = 2
+	schemaVersion      = "0.1"
+	defaultSubcommand  = 1
+)
+
 func main() {
-	if len(os.Args) < 2 {
+	if len(os.Args) < minArgsCommand {
 		usage()
 		os.Exit(1)
 	}
@@ -28,23 +40,27 @@ func main() {
 	case "help", "-h", "--help":
 		usage()
 	default:
-		fmt.Fprintln(os.Stderr, "unknown command:", os.Args[1])
+		// #nosec G705 -- CLI output is not rendered in an HTML context.
+		fmt.Fprintf(os.Stderr, "unknown command: %q\n", os.Args[1])
 		usage()
 		os.Exit(1)
 	}
 }
 
 func usage() {
-	fmt.Println("frame <command> [args]")
-	fmt.Println("")
-	fmt.Println("Commands:")
-	fmt.Println("  build <blueprint> [--out DIR]")
-	fmt.Println("  validate <blueprint>")
-	fmt.Println("  explain <blueprint>")
-	fmt.Println("  g service <name> [--blueprint FILE] [--module MOD] [--mode monolith|polylith] [--port :8080]")
-	fmt.Println("  g http <route> <method> [--handler NAME] [--service NAME] [--blueprint FILE]")
-	fmt.Println("  g queue publisher <ref> <url> [--service NAME] [--blueprint FILE]")
-	fmt.Println("  g queue subscriber <ref> <url> <handler> [--service NAME] [--blueprint FILE]")
+	fmt.Fprintln(os.Stdout, "frame <command> [args]")
+	fmt.Fprintln(os.Stdout, "")
+	fmt.Fprintln(os.Stdout, "Commands:")
+	fmt.Fprintln(os.Stdout, "  build <blueprint> [--out DIR]")
+	fmt.Fprintln(os.Stdout, "  validate <blueprint>")
+	fmt.Fprintln(os.Stdout, "  explain <blueprint>")
+	fmt.Fprintln(
+		os.Stdout,
+		"  g service <name> [--blueprint FILE] [--module MOD] [--mode monolith|polylith] [--port :8080]",
+	)
+	fmt.Fprintln(os.Stdout, "  g http <route> <method> [--handler NAME] [--service NAME] [--blueprint FILE]")
+	fmt.Fprintln(os.Stdout, "  g queue publisher <ref> <url> [--service NAME] [--blueprint FILE]")
+	fmt.Fprintln(os.Stdout, "  g queue subscriber <ref> <url> <handler> [--service NAME] [--blueprint FILE]")
 }
 
 func cmdBuild(args []string) error {
@@ -61,8 +77,8 @@ func cmdBuild(args []string) error {
 	if err != nil {
 		return err
 	}
-	if err := bp.Generate(blueprint.GenerateOptions{OutDir: *outDir}); err != nil {
-		return err
+	if genErr := bp.Generate(blueprint.GenerateOptions{OutDir: *outDir}); genErr != nil {
+		return genErr
 	}
 	return nil
 }
@@ -100,12 +116,12 @@ func cmdExplain(args []string) error {
 	if err != nil {
 		return err
 	}
-	fmt.Print(out)
+	_, _ = fmt.Fprint(os.Stdout, out)
 	return nil
 }
 
 func cmdGenerate(args []string) error {
-	if len(args) < 1 {
+	if len(args) < defaultSubcommand {
 		return errors.New("subcommand required")
 	}
 	cmd := args[0]
@@ -132,7 +148,7 @@ func cmdGenerateService(args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	if fs.NArg() < 1 {
+	if fs.NArg() < defaultSubcommand {
 		return errors.New("service name is required")
 	}
 	name := fs.Arg(0)
@@ -145,7 +161,7 @@ func cmdGenerateService(args []string) error {
 	if bp.Service == nil {
 		bp.Service = &blueprint.ServiceSpec{}
 	}
-	bp.SchemaVersion = "0.1"
+	bp.SchemaVersion = schemaVersion
 	bp.RuntimeMode = strings.ToLower(*mode)
 	if strings.ToLower(*mode) == "monolith" {
 		if bp.Services == nil {
@@ -174,11 +190,11 @@ func cmdGenerateHTTP(args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	if fs.NArg() < 2 {
+	if fs.NArg() < minArgsRouteMethod {
 		return errors.New("route and method are required")
 	}
-	route := fs.Arg(0)
-	method := fs.Arg(1)
+	route := fs.Arg(argRoute)
+	method := fs.Arg(argMethod)
 	if *handler == "" {
 		*handler = defaultHandlerName(route, method)
 	}
@@ -187,7 +203,7 @@ func cmdGenerateHTTP(args []string) error {
 	if err != nil {
 		return err
 	}
-	bp.SchemaVersion = "0.1"
+	bp.SchemaVersion = schemaVersion
 	serviceSpec := selectService(bp, *service)
 	serviceSpec.HTTP = append(serviceSpec.HTTP, blueprint.HTTPRoute{Route: route, Method: method, Handler: *handler})
 
@@ -195,7 +211,7 @@ func cmdGenerateHTTP(args []string) error {
 }
 
 func cmdGenerateQueue(args []string) error {
-	if len(args) < 1 {
+	if len(args) < defaultSubcommand {
 		return errors.New("queue subcommand required")
 	}
 	cmd := args[0]
@@ -218,17 +234,17 @@ func cmdGenerateQueuePublisher(args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	if fs.NArg() < 2 {
+	if fs.NArg() < minArgsQueuePub {
 		return errors.New("publisher ref and url are required")
 	}
-	ref := fs.Arg(0)
-	url := fs.Arg(1)
+	ref := fs.Arg(argRoute)
+	url := fs.Arg(argMethod)
 
 	bp, err := loadOrCreateBlueprint(*bpFile)
 	if err != nil {
 		return err
 	}
-	bp.SchemaVersion = "0.1"
+	bp.SchemaVersion = schemaVersion
 	serviceSpec := selectService(bp, *service)
 	serviceSpec.Queues = append(serviceSpec.Queues, blueprint.QueueSpec{Publisher: ref, URL: url})
 
@@ -242,18 +258,18 @@ func cmdGenerateQueueSubscriber(args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	if fs.NArg() < 3 {
+	if fs.NArg() < minArgsQueueSub {
 		return errors.New("subscriber ref, url, and handler are required")
 	}
-	ref := fs.Arg(0)
-	url := fs.Arg(1)
-	handler := fs.Arg(2)
+	ref := fs.Arg(argRoute)
+	url := fs.Arg(argMethod)
+	handler := fs.Arg(argHandler)
 
 	bp, err := loadOrCreateBlueprint(*bpFile)
 	if err != nil {
 		return err
 	}
-	bp.SchemaVersion = "0.1"
+	bp.SchemaVersion = schemaVersion
 	serviceSpec := selectService(bp, *service)
 	serviceSpec.Queues = append(serviceSpec.Queues, blueprint.QueueSpec{Subscriber: ref, URL: url, Handler: handler})
 
@@ -265,7 +281,7 @@ func loadOrCreateBlueprint(path string) (*blueprint.Blueprint, error) {
 		return blueprint.LoadFile(path)
 	}
 
-	bp := &blueprint.Blueprint{SchemaVersion: "0.1"}
+	bp := &blueprint.Blueprint{SchemaVersion: schemaVersion}
 	return bp, nil
 }
 

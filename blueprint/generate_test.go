@@ -1,10 +1,12 @@
-package blueprint
+package blueprint_test
 
 import (
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/pitabwire/frame/blueprint"
 )
 
 func TestGeneratePolylith(t *testing.T) {
@@ -13,18 +15,20 @@ func TestGeneratePolylith(t *testing.T) {
 		t.Fatalf("go.mod: %v", err)
 	}
 
-	bp := &Blueprint{
+	bp := &blueprint.Blueprint{
 		SchemaVersion: "0.1",
 		RuntimeMode:   "polylith",
-		Service: &ServiceSpec{
+		Service: &blueprint.ServiceSpec{
 			Name: "users",
 			Port: ":8080",
-			HTTP: []HTTPRoute{{Route: "/users", Method: "GET", Handler: "GetUsers"}},
-			Queues: []QueueSpec{{Publisher: "events", URL: "mem://events"}},
+			HTTP: []blueprint.HTTPRoute{
+				{Route: "/users", Method: "GET", Handler: "GetUsers"},
+			},
+			Queues: []blueprint.QueueSpec{{Publisher: "events", URL: "mem://events"}},
 		},
 	}
 
-	if err := bp.Generate(GenerateOptions{OutDir: dir}); err != nil {
+	if err := bp.Generate(blueprint.GenerateOptions{OutDir: dir}); err != nil {
 		t.Fatalf("generate: %v", err)
 	}
 
@@ -44,16 +48,24 @@ func TestGenerateMonolith(t *testing.T) {
 		t.Fatalf("go.mod: %v", err)
 	}
 
-	bp := &Blueprint{
+	bp := &blueprint.Blueprint{
 		SchemaVersion: "0.1",
 		RuntimeMode:   "monolith",
-		Services: []ServiceSpec{
-			{Name: "devices", Port: ":8081", HTTP: []HTTPRoute{{Route: "/devices", Method: "GET", Handler: "GetDevices"}}},
-			{Name: "geo", Port: ":8082", HTTP: []HTTPRoute{{Route: "/geo", Method: "GET", Handler: "GetGeo"}}},
+		Services: []blueprint.ServiceSpec{
+			{
+				Name: "devices",
+				Port: ":8081",
+				HTTP: []blueprint.HTTPRoute{{Route: "/devices", Method: "GET", Handler: "GetDevices"}},
+			},
+			{
+				Name: "geo",
+				Port: ":8082",
+				HTTP: []blueprint.HTTPRoute{{Route: "/geo", Method: "GET", Handler: "GetGeo"}},
+			},
 		},
 	}
 
-	if err := bp.Generate(GenerateOptions{OutDir: dir}); err != nil {
+	if err := bp.Generate(blueprint.GenerateOptions{OutDir: dir}); err != nil {
 		t.Fatalf("generate: %v", err)
 	}
 

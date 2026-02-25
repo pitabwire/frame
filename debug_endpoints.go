@@ -102,7 +102,7 @@ func (s *Service) debugQueues(w http.ResponseWriter, _ *http.Request) {
 		subs = qi.ListSubscribers()
 	}
 	resp := map[string]any{
-		"publishers": pubs,
+		"publishers":  pubs,
 		"subscribers": subs,
 	}
 	writeJSON(w, resp)

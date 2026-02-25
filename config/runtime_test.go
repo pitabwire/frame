@@ -1,12 +1,16 @@
-package config
+package config_test
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/pitabwire/frame/config"
+)
 
 func TestNormalizeRuntimeMode(t *testing.T) {
-	if got := NormalizeRuntimeMode(""); got != RuntimeModePolylith {
+	if got := config.NormalizeRuntimeMode(""); got != config.RuntimeModePolylith {
 		t.Fatalf("expected polylith, got %s", got)
 	}
-	if got := NormalizeRuntimeMode("MONOLITH"); got != RuntimeModeMonolith {
+	if got := config.NormalizeRuntimeMode("MONOLITH"); got != config.RuntimeModeMonolith {
 		t.Fatalf("expected monolith, got %s", got)
 	}
 }

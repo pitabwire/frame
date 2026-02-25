@@ -9,6 +9,9 @@ import (
 
 var handlerNameRe = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 
+// Validate checks blueprint invariants and required fields.
+//
+//nolint:gocognit // explicit validation paths are easier to audit.
 func (bp *Blueprint) Validate() error {
 	if bp == nil {
 		return errors.New("blueprint is nil")

@@ -105,7 +105,7 @@ type Service struct {
 	debugEnabled      bool
 	debugBasePath     string
 	registeredPlugins []string
-	routeLister RouteLister
+	routeLister       RouteLister
 
 	startOnce            sync.Once
 	startupOnce          sync.Once

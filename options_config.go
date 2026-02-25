@@ -32,7 +32,7 @@ func WithConfig(cfg any) Option {
 
 		WithHTTPClient()(ctx, s)
 
-		if dbgCfg, ok := cfg.(config.ConfigurationDebug); ok {
+		if dbgCfg, dbgOk := cfg.(config.ConfigurationDebug); dbgOk {
 			if dbgCfg.DebugEndpointsEnabled() {
 				WithDebugEndpointsAt(dbgCfg.DebugEndpointsBasePath())(ctx, s)
 			}

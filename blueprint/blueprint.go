@@ -12,46 +12,46 @@ import (
 
 type Blueprint struct {
 	SchemaVersion string        `json:"schema_version" yaml:"schema_version"`
-	RuntimeMode   string        `json:"runtime_mode" yaml:"runtime_mode"`
-	Service       *ServiceSpec  `json:"service" yaml:"service"`
-	Services      []ServiceSpec `json:"services" yaml:"services"`
+	RuntimeMode   string        `json:"runtime_mode"   yaml:"runtime_mode"`
+	Service       *ServiceSpec  `json:"service"        yaml:"service"`
+	Services      []ServiceSpec `json:"services"       yaml:"services"`
 
-	HTTP      []HTTPRoute    `json:"http" yaml:"http"`
-	Plugins   []string       `json:"plugins" yaml:"plugins"`
+	HTTP      []HTTPRoute    `json:"http"      yaml:"http"`
+	Plugins   []string       `json:"plugins"   yaml:"plugins"`
 	Datastore *DatastoreSpec `json:"datastore" yaml:"datastore"`
-	Queues    []QueueSpec    `json:"queues" yaml:"queues"`
+	Queues    []QueueSpec    `json:"queues"    yaml:"queues"`
 }
 
 type ServiceSpec struct {
-	Name         string         `json:"name" yaml:"name"`
-	Module       string         `json:"module" yaml:"module"`
-	RuntimeMode  string         `json:"runtime_mode" yaml:"runtime_mode"`
-	ServiceID    any            `json:"service_id" yaml:"service_id"`
+	Name         string         `json:"name"          yaml:"name"`
+	Module       string         `json:"module"        yaml:"module"`
+	RuntimeMode  string         `json:"runtime_mode"  yaml:"runtime_mode"`
+	ServiceID    any            `json:"service_id"    yaml:"service_id"`
 	ServiceGroup string         `json:"service_group" yaml:"service_group"`
-	Port         string         `json:"port" yaml:"port"`
-	HTTP         []HTTPRoute    `json:"http" yaml:"http"`
-	Plugins      []string       `json:"plugins" yaml:"plugins"`
-	Datastore    *DatastoreSpec `json:"datastore" yaml:"datastore"`
-	Queues       []QueueSpec    `json:"queues" yaml:"queues"`
+	Port         string         `json:"port"          yaml:"port"`
+	HTTP         []HTTPRoute    `json:"http"          yaml:"http"`
+	Plugins      []string       `json:"plugins"       yaml:"plugins"`
+	Datastore    *DatastoreSpec `json:"datastore"     yaml:"datastore"`
+	Queues       []QueueSpec    `json:"queues"        yaml:"queues"`
 }
 
 type HTTPRoute struct {
-	Route    string `json:"route" yaml:"route"`
-	Method   string `json:"method" yaml:"method"`
-	Handler  string `json:"handler" yaml:"handler"`
+	Route    string `json:"route"    yaml:"route"`
+	Method   string `json:"method"   yaml:"method"`
+	Handler  string `json:"handler"  yaml:"handler"`
 	Response string `json:"response" yaml:"response"`
 }
 
 type DatastoreSpec struct {
-	Migrate       bool   `json:"migrate" yaml:"migrate"`
+	Migrate       bool   `json:"migrate"         yaml:"migrate"`
 	PrimaryURLEnv string `json:"primary_url_env" yaml:"primary_url_env"`
 }
 
 type QueueSpec struct {
-	Publisher  string `json:"publisher" yaml:"publisher"`
+	Publisher  string `json:"publisher"  yaml:"publisher"`
 	Subscriber string `json:"subscriber" yaml:"subscriber"`
-	URL        string `json:"url" yaml:"url"`
-	Handler    string `json:"handler" yaml:"handler"`
+	URL        string `json:"url"        yaml:"url"`
+	Handler    string `json:"handler"    yaml:"handler"`
 }
 
 func (bp *Blueprint) runtimeMode() string {

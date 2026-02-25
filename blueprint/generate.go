@@ -45,19 +45,23 @@ func generatePolylith(outDir, modulePath string, svc ServiceSpec) error {
 
 	appDir := filepath.Join(outDir, "apps", svc.Name)
 	cmdDir := filepath.Join(appDir, "cmd")
-	handlersDir := filepath.Join(outDir, "internal", "handlers", svc.Name)
-	queuesDir := filepath.Join(outDir, "internal", "queues", svc.Name)
-	pluginsDir := filepath.Join(outDir, "internal", "plugins")
+	handlersDir := filepath.Join(outDir, "pkg", "handlers", svc.Name)
+	queuesDir := filepath.Join(outDir, "pkg", "queues", svc.Name)
+	pluginsDir := filepath.Join(outDir, "pkg", "plugins")
 
+	// #nosec G301 -- scaffolding directories should be readable by developers.
 	if err := os.MkdirAll(cmdDir, 0o755); err != nil {
 		return err
 	}
+	// #nosec G301 -- scaffolding directories should be readable by developers.
 	if err := os.MkdirAll(handlersDir, 0o755); err != nil {
 		return err
 	}
+	// #nosec G301 -- scaffolding directories should be readable by developers.
 	if err := os.MkdirAll(queuesDir, 0o755); err != nil {
 		return err
 	}
+	// #nosec G301 -- scaffolding directories should be readable by developers.
 	if err := os.MkdirAll(pluginsDir, 0o755); err != nil {
 		return err
 	}
@@ -70,16 +74,25 @@ func generatePolylith(outDir, modulePath string, svc ServiceSpec) error {
 		module = "example.com/project"
 	}
 
-	handlerPkgPath := fmt.Sprintf("%s/internal/handlers/%s", module, svc.Name)
-	queuePkgPath := fmt.Sprintf("%s/internal/queues/%s", module, svc.Name)
+	handlerPkgPath := fmt.Sprintf("%s/pkg/handlers/%s", module, svc.Name)
+	queuePkgPath := fmt.Sprintf("%s/pkg/queues/%s", module, svc.Name)
 
-	if err := writeFile(filepath.Join(handlersDir, "routes.go"), renderHandlers(svc, "handlers")); err != nil {
+	if err := writeFile(
+		filepath.Join(handlersDir, "routes.go"),
+		renderHandlers(svc, "handlers"),
+	); err != nil {
 		return err
 	}
-	if err := writeFile(filepath.Join(queuesDir, "queues.go"), renderQueueHandlers(svc, "queues")); err != nil {
+	if err := writeFile(
+		filepath.Join(queuesDir, "queues.go"),
+		renderQueueHandlers(svc, "queues"),
+	); err != nil {
 		return err
 	}
-	if err := writeFile(filepath.Join(cmdDir, "main.go"), renderMainPolylith(svc, handlerPkgPath, queuePkgPath)); err != nil {
+	if err := writeFile(
+		filepath.Join(cmdDir, "main.go"),
+		renderMainPolylith(svc, handlerPkgPath, queuePkgPath),
+	); err != nil {
 		return err
 	}
 
@@ -90,6 +103,7 @@ func generateMonolith(outDir, modulePath string, services []ServiceSpec) error {
 	sortServices(services)
 
 	cmdDir := filepath.Join(outDir, "cmd")
+	// #nosec G301 -- scaffolding directories should be readable by developers.
 	if err := os.MkdirAll(cmdDir, 0o755); err != nil {
 		return err
 	}
@@ -103,34 +117,46 @@ func generateMonolith(outDir, modulePath string, services []ServiceSpec) error {
 	queuePkgs := make([]string, 0, len(services))
 
 	for _, svc := range services {
-		serviceDir := filepath.Join(outDir, "internal", "services", svc.Name)
-		queuesDir := filepath.Join(outDir, "internal", "queues", svc.Name)
-		pluginsDir := filepath.Join(outDir, "internal", "plugins")
+		serviceDir := filepath.Join(outDir, "pkg", "services", svc.Name)
+		queuesDir := filepath.Join(outDir, "pkg", "queues", svc.Name)
+		pluginsDir := filepath.Join(outDir, "pkg", "plugins")
 
+		// #nosec G301 -- scaffolding directories should be readable by developers.
 		if err := os.MkdirAll(serviceDir, 0o755); err != nil {
 			return err
 		}
+		// #nosec G301 -- scaffolding directories should be readable by developers.
 		if err := os.MkdirAll(queuesDir, 0o755); err != nil {
 			return err
 		}
+		// #nosec G301 -- scaffolding directories should be readable by developers.
 		if err := os.MkdirAll(pluginsDir, 0o755); err != nil {
 			return err
 		}
 
-		pkgPath := fmt.Sprintf("%s/internal/services/%s", module, svc.Name)
-		queuePkg := fmt.Sprintf("%s/internal/queues/%s", module, svc.Name)
+		pkgPath := fmt.Sprintf("%s/pkg/services/%s", module, svc.Name)
+		queuePkg := fmt.Sprintf("%s/pkg/queues/%s", module, svc.Name)
 
-		if err := writeFile(filepath.Join(serviceDir, "routes.go"), renderHandlers(svc, servicePackageName(svc.Name))); err != nil {
+		if err := writeFile(
+			filepath.Join(serviceDir, "routes.go"),
+			renderHandlers(svc, servicePackageName(svc.Name)),
+		); err != nil {
 			return err
 		}
-		if err := writeFile(filepath.Join(queuesDir, "queues.go"), renderQueueHandlers(svc, "queues")); err != nil {
+		if err := writeFile(
+			filepath.Join(queuesDir, "queues.go"),
+			renderQueueHandlers(svc, "queues"),
+		); err != nil {
 			return err
 		}
 		servicePkgs = append(servicePkgs, pkgPath)
 		queuePkgs = append(queuePkgs, queuePkg)
 	}
 
-	if err := writeFile(filepath.Join(cmdDir, "main.go"), renderMainMonolith(services, servicePkgs, queuePkgs)); err != nil {
+	if err := writeFile(
+		filepath.Join(cmdDir, "main.go"),
+		renderMainMonolith(services, servicePkgs, queuePkgs),
+	); err != nil {
 		return err
 	}
 
@@ -146,12 +172,12 @@ func renderHandlers(svc ServiceSpec, pkgName string) string {
 
 	b.WriteString("func RegisterRoutes(mux *http.ServeMux) {\n")
 	for _, r := range svc.HTTP {
-		b.WriteString(fmt.Sprintf("\tmux.HandleFunc(\"%s\", %s)\n", r.Route, r.Handler))
+		fmt.Fprintf(&b, "\tmux.HandleFunc(%q, %s)\n", r.Route, r.Handler)
 	}
 	b.WriteString("}\n\n")
 
 	for _, r := range svc.HTTP {
-		b.WriteString(fmt.Sprintf("func %s(w http.ResponseWriter, r *http.Request) {\n", r.Handler))
+		fmt.Fprintf(&b, "func %s(w http.ResponseWriter, r *http.Request) {\n", r.Handler)
 		b.WriteString(methodCheck(r.Method))
 		b.WriteString("\tw.Write([]byte(\"ok\"))\n")
 		b.WriteString("}\n\n")
@@ -181,16 +207,22 @@ func renderQueueHandlers(svc ServiceSpec, pkgName string) string {
 		}
 		seen[h] = true
 
-		b.WriteString(fmt.Sprintf("type %s struct{}\n\n", h))
-		b.WriteString(fmt.Sprintf("func (h %s) Handle(ctx context.Context, metadata map[string]string, message []byte) error {\n", h))
+		fmt.Fprintf(&b, "type %s struct{}\n\n", h)
+		fmt.Fprintf(
+			&b,
+			"func (h %s) Handle(ctx context.Context, metadata map[string]string, message []byte) error {\n",
+			h,
+		)
 		b.WriteString("\tlog.Printf(\"queue message: %s\", string(message))\n")
 		b.WriteString("\treturn nil\n}\n\n")
-		b.WriteString(fmt.Sprintf("var _ queue.SubscribeWorker = %s{}\n\n", h))
+		fmt.Fprintf(&b, "var _ queue.SubscribeWorker = %s{}\n\n", h)
 	}
 
 	if len(seen) == 0 {
 		b.WriteString("type Handler struct{}\n\n")
-		b.WriteString("func (h Handler) Handle(ctx context.Context, metadata map[string]string, message []byte) error {\n")
+		b.WriteString(
+			"func (h Handler) Handle(ctx context.Context, metadata map[string]string, message []byte) error {\n",
+		)
 		b.WriteString("\tlog.Printf(\"queue message: %s\", string(message))\n")
 		b.WriteString("\treturn nil\n}\n\n")
 		b.WriteString("var _ queue.SubscribeWorker = Handler{}\n")
@@ -201,14 +233,14 @@ func renderQueueHandlers(svc ServiceSpec, pkgName string) string {
 
 func renderMainPolylith(svc ServiceSpec, handlersPath, queuesPath string) string {
 	plugins := resolvePlugins(svc)
-	queueOpts := renderQueueOptions(svc, queuesPath)
+	queueOpts := renderQueueOptions(svc)
 
 	var b strings.Builder
 	b.WriteString("package main\n\n")
 	b.WriteString("import (\n\t\"log\"\n\t\"net/http\"\n\n\t\"github.com/pitabwire/frame\"\n")
-	b.WriteString(fmt.Sprintf("\t\"%s\"\n", handlersPath))
+	fmt.Fprintf(&b, "\t%q\n", handlersPath)
 	if queueOpts != "" {
-		b.WriteString(fmt.Sprintf("\t\"%s\"\n", queuesPath))
+		fmt.Fprintf(&b, "\t%q\n", queuesPath)
 	}
 	b.WriteString(")\n\n")
 
@@ -216,16 +248,16 @@ func renderMainPolylith(svc ServiceSpec, handlersPath, queuesPath string) string
 	b.WriteString("\tmux := http.NewServeMux()\n")
 	b.WriteString("\thandlers.RegisterRoutes(mux)\n\n")
 	b.WriteString("\tctx, svc := frame.NewService(\n")
-	b.WriteString(fmt.Sprintf("\t\tframe.WithName(\"%s\"),\n", svc.Name))
+	fmt.Fprintf(&b, "\t\tframe.WithName(%q),\n", svc.Name)
 	b.WriteString("\t\tframe.WithHTTPHandler(mux),\n")
 	for _, opt := range plugins {
-		b.WriteString(fmt.Sprintf("\t\t%s,\n", opt))
+		fmt.Fprintf(&b, "\t\t%s,\n", opt)
 	}
 	for _, opt := range queueOptsLines(queueOpts) {
-		b.WriteString(fmt.Sprintf("\t\t%s,\n", opt))
+		fmt.Fprintf(&b, "\t\t%s,\n", opt)
 	}
 	b.WriteString("\t)\n\n")
-	b.WriteString(fmt.Sprintf("\tif err := svc.Run(ctx, \"%s\"); err != nil {\n", defaultPort(svc.Port)))
+	fmt.Fprintf(&b, "\tif err := svc.Run(ctx, %q); err != nil {\n", defaultPort(svc.Port))
 	b.WriteString("\t\tlog.Fatal(err)\n\t}\n")
 	b.WriteString("}\n")
 
@@ -238,13 +270,13 @@ func renderMainMonolith(services []ServiceSpec, servicePkgs []string, queuePkgs 
 	b.WriteString("import (\n\t\"log\"\n\t\"net/http\"\n\t\"sync\"\n\n\t\"github.com/pitabwire/frame\"\n")
 
 	for i, pkg := range servicePkgs {
-		b.WriteString(fmt.Sprintf("\t%[1]s \"%[2]s\"\n", serviceAlias(services[i].Name), pkg))
+		fmt.Fprintf(&b, "\t%[1]s %q\n", serviceAlias(services[i].Name), pkg)
 	}
 	for i, pkg := range queuePkgs {
 		if len(services[i].Queues) == 0 {
 			continue
 		}
-		b.WriteString(fmt.Sprintf("\t%[1]s \"%[2]s\"\n", queueAlias(services[i].Name), pkg))
+		fmt.Fprintf(&b, "\t%[1]s %q\n", queueAlias(services[i].Name), pkg)
 	}
 	b.WriteString(")\n\n")
 
@@ -256,16 +288,16 @@ func renderMainMonolith(services []ServiceSpec, servicePkgs []string, queuePkgs 
 		alias := serviceAlias(svc.Name)
 		b.WriteString("\t{\n")
 		b.WriteString("\t\tmu := http.NewServeMux()\n")
-		b.WriteString(fmt.Sprintf("\t\t%s.RegisterRoutes(mu)\n", alias))
+		fmt.Fprintf(&b, "\t\t%s.RegisterRoutes(mu)\n", alias)
 		b.WriteString("\t\tctx, s := frame.NewService(\n")
-		b.WriteString(fmt.Sprintf("\t\t\tframe.WithName(\"%s\"),\n", svc.Name))
+		fmt.Fprintf(&b, "\t\t\tframe.WithName(%q),\n", svc.Name)
 		b.WriteString("\t\t\tframe.WithHTTPHandler(mu),\n")
 		for _, opt := range resolvePlugins(svc) {
-			b.WriteString(fmt.Sprintf("\t\t\t%s,\n", opt))
+			fmt.Fprintf(&b, "\t\t\t%s,\n", opt)
 		}
-		for _, opt := range queueOptsLines(renderQueueOptions(svc, "")) {
+		for _, opt := range queueOptsLines(renderQueueOptions(svc)) {
 			opt = strings.ReplaceAll(opt, "queues.", queueAlias(svc.Name)+".")
-			b.WriteString(fmt.Sprintf("\t\t\t%s,\n", opt))
+			fmt.Fprintf(&b, "\t\t\t%s,\n", opt)
 		}
 		b.WriteString("\t\t)\n")
 		b.WriteString("\t\tport := \"")
@@ -303,7 +335,7 @@ func resolvePlugins(svc ServiceSpec) []string {
 	return opts
 }
 
-func renderQueueOptions(svc ServiceSpec, queuePkgPath string) string {
+func renderQueueOptions(svc ServiceSpec) string {
 	var opts []string
 	for _, q := range svc.Queues {
 		if q.Publisher != "" {
@@ -314,7 +346,10 @@ func renderQueueOptions(svc ServiceSpec, queuePkgPath string) string {
 			if h == "" {
 				h = "Handler"
 			}
-			opts = append(opts, fmt.Sprintf("frame.WithRegisterSubscriber(\"%s\", \"%s\", queues.%s{})", q.Subscriber, q.URL, h))
+			opts = append(
+				opts,
+				fmt.Sprintf("frame.WithRegisterSubscriber(\"%s\", \"%s\", queues.%s{})", q.Subscriber, q.URL, h),
+			)
 		}
 	}
 	if len(opts) == 0 {
@@ -377,7 +412,10 @@ func methodCheck(method string) string {
 	case "PATCH":
 		return "\tif r.Method != http.MethodPatch {\n\t\tw.WriteHeader(http.StatusMethodNotAllowed)\n\t\treturn\n\t}\n"
 	default:
-		return fmt.Sprintf("\tif r.Method != %q {\n\t\tw.WriteHeader(http.StatusMethodNotAllowed)\n\t\treturn\n\t}\n", m)
+		return fmt.Sprintf(
+			"\tif r.Method != %q {\n\t\tw.WriteHeader(http.StatusMethodNotAllowed)\n\t\treturn\n\t}\n",
+			m,
+		)
 	}
 }
 
@@ -397,6 +435,7 @@ func moduleFromGoMod(dir string) (string, error) {
 }
 
 func writeFile(path, content string) error {
+	// #nosec G306 -- generated files should be readable by the developer.
 	return os.WriteFile(path, []byte(content), 0o644)
 }
 

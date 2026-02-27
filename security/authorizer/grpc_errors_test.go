@@ -4,11 +4,12 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/pitabwire/frame/security"
-	"github.com/pitabwire/frame/security/authorizer"
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+
+	"github.com/pitabwire/frame/security"
+	"github.com/pitabwire/frame/security/authorizer"
 )
 
 func TestToGrpcError_Nil(t *testing.T) {

@@ -5,9 +5,10 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+
 	"github.com/pitabwire/frame/security"
 	"github.com/pitabwire/frame/security/authorizer"
-	"github.com/stretchr/testify/assert"
 )
 
 func TestToHTTPStatusCode_Nil(t *testing.T) {

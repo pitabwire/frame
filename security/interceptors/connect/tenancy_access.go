@@ -48,7 +48,9 @@ func (t *tenancyAccessInterceptor) WrapStreamingClient(next connect.StreamingCli
 }
 
 // WrapStreamingHandler implements the streaming handler interceptor for tenancy access.
-func (t *tenancyAccessInterceptor) WrapStreamingHandler(next connect.StreamingHandlerFunc) connect.StreamingHandlerFunc {
+func (t *tenancyAccessInterceptor) WrapStreamingHandler(
+	next connect.StreamingHandlerFunc,
+) connect.StreamingHandlerFunc {
 	return func(ctx context.Context, conn connect.StreamingHandlerConn) error {
 		if err := t.checkAccess(ctx); err != nil {
 			return err

@@ -39,6 +39,12 @@ namespaces:
     name: default
   - id: 1
     name: partition
+  - id: 2
+    name: default/profile
+  - id: 3
+    name: profile
+  - id: 4
+    name: custom
 
 `
 )

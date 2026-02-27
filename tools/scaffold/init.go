@@ -276,7 +276,6 @@ func writeRepoEntrypoints(root string, services []string, module string) error {
 import (
 	"log"
 	"net/http"
-
 	"github.com/pitabwire/frame"
 	"%s/apps/%s/service"
 )

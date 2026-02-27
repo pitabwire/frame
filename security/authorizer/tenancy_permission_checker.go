@@ -4,8 +4,9 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/pitabwire/frame/security"
 	"github.com/pitabwire/util"
+
+	"github.com/pitabwire/frame/security"
 )
 
 // TenancyAccessDeniedFunc is called when a system_internal caller is denied permission.
@@ -53,7 +54,7 @@ func NewTenancyAccessChecker(
 		authorizer:       auth,
 		objectNamespace:  objectNamespace,
 		subjectNamespace: security.NamespaceProfile,
-		onTenancyAccessDenied: func(ctx context.Context, auth security.Authorizer, tenancyPath, subjectID string) error {
+		onTenancyAccessDenied: func(ctx context.Context, _ security.Authorizer, tenancyPath, subjectID string) error {
 			util.Log(ctx).WithFields(map[string]any{
 				"tenant_id":  tenancyPath,
 				"subject_id": subjectID,
@@ -124,5 +125,4 @@ func (c *TenancyAccessChecker) Check(ctx context.Context, permission string) err
 	}
 
 	return NewPermissionDeniedError(req.Object, permission, req.Subject, result.Reason)
-
 }

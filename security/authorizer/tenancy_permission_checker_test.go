@@ -94,29 +94,33 @@ func (s *AuthorizerTestSuite) TestPermissionChecker_Denied() {
 	)
 
 	err := c.Check(claimsCtx("pc-u-denied", "pc-t-denied", "pc-p-denied", "user"), "view")
-	s.Error(err)
+	s.Require().Error(err)
 
 	var permErr *authorizer.PermissionDeniedError
-	s.True(errors.As(err, &permErr))
+	s.ErrorAs(err, &permErr)
 }
 
 func (s *AuthorizerTestSuite) TestPermissionChecker_SelfHeals() {
 	ctx := s.T().Context()
 	adapter := s.newAdapter(nil)
 
-	c := authorizer.NewTenancyAccessChecker(adapter, "default",
+	c := authorizer.NewTenancyAccessChecker(
+		adapter,
+		"default",
 		authorizer.WithSubjectNamespace("profile"),
-		authorizer.WithOnTenancyAccessDenied(func(ctx context.Context, auth security.Authorizer, tenancyPath, subjectID string) error {
-			return auth.WriteTuple(ctx, security.RelationTuple{
-				Object:   security.ObjectRef{Namespace: "default", ID: tenancyPath},
-				Relation: "view",
-				Subject:  security.SubjectRef{Namespace: "profile", ID: subjectID},
-			})
-		}),
+		authorizer.WithOnTenancyAccessDenied(
+			func(ctx context.Context, auth security.Authorizer, tenancyPath, subjectID string) error {
+				return auth.WriteTuple(ctx, security.RelationTuple{
+					Object:   security.ObjectRef{Namespace: "default", ID: tenancyPath},
+					Relation: "view",
+					Subject:  security.SubjectRef{Namespace: "profile", ID: subjectID},
+				})
+			},
+		),
 	)
 
 	err := c.Check(claimsCtx("pc-svc1", "pc-t-heal", "pc-p-heal", "system_internal"), "view")
-	s.NoError(err)
+	s.Require().NoError(err)
 
 	// Verify tuple was provisioned.
 	tp := tenancyPath("pc-t-heal", "pc-p-heal")
@@ -140,32 +144,36 @@ func (s *AuthorizerTestSuite) TestPermissionChecker_ProvisionFails() {
 	)
 
 	err := c.Check(claimsCtx("pc-svc-pf", "pc-t-pf", "pc-p-pf", "system_internal"), "view")
-	s.Error(err)
+	s.Require().Error(err)
 
 	var permErr *authorizer.PermissionDeniedError
-	s.True(errors.As(err, &permErr))
+	s.ErrorAs(err, &permErr)
 }
 
 func (s *AuthorizerTestSuite) TestPermissionChecker_RetryDenied() {
 	adapter := s.newAdapter(nil)
 
 	// Provision succeeds but writes a different relation, not the one checked.
-	c := authorizer.NewTenancyAccessChecker(adapter, "default",
+	c := authorizer.NewTenancyAccessChecker(
+		adapter,
+		"default",
 		authorizer.WithSubjectNamespace("profile"),
-		authorizer.WithOnTenancyAccessDenied(func(ctx context.Context, auth security.Authorizer, tenancyPath, subjectID string) error {
-			return auth.WriteTuple(ctx, security.RelationTuple{
-				Object:   security.ObjectRef{Namespace: "default", ID: tenancyPath},
-				Relation: "other",
-				Subject:  security.SubjectRef{Namespace: "profile", ID: subjectID},
-			})
-		}),
+		authorizer.WithOnTenancyAccessDenied(
+			func(ctx context.Context, auth security.Authorizer, tenancyPath, subjectID string) error {
+				return auth.WriteTuple(ctx, security.RelationTuple{
+					Object:   security.ObjectRef{Namespace: "default", ID: tenancyPath},
+					Relation: "other",
+					Subject:  security.SubjectRef{Namespace: "profile", ID: subjectID},
+				})
+			},
+		),
 	)
 
 	err := c.Check(claimsCtx("pc-svc-rd", "pc-t-rd", "pc-p-rd", "system_internal"), "view")
-	s.Error(err)
+	s.Require().Error(err)
 
 	var permErr *authorizer.PermissionDeniedError
-	s.True(errors.As(err, &permErr))
+	s.Require().ErrorAs(err, &permErr)
 }
 
 func (s *AuthorizerTestSuite) TestPermissionChecker_WithSubjectNamespace() {
@@ -184,7 +192,7 @@ func (s *AuthorizerTestSuite) TestPermissionChecker_WithSubjectNamespace() {
 		authorizer.WithSubjectNamespace("custom"),
 	)
 	err = c.Check(claimsCtx("pc-u-ns", "pc-t-ns", "pc-p-ns", "user"), "view")
-	s.NoError(err)
+	s.Require().NoError(err)
 }
 
 func (s *AuthorizerTestSuite) TestPermissionChecker_DefaultCallbackRetries() {
@@ -193,8 +201,8 @@ func (s *AuthorizerTestSuite) TestPermissionChecker_DefaultCallbackRetries() {
 	c := authorizer.NewTenancyAccessChecker(adapter, "default")
 
 	err := c.Check(claimsCtx("pc-def", "pc-t-def", "pc-p-def", "system_internal"), "view")
-	s.Error(err)
+	s.Require().Error(err)
 
 	var permErr *authorizer.PermissionDeniedError
-	s.True(errors.As(err, &permErr))
+	s.ErrorAs(err, &permErr)
 }

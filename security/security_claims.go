@@ -14,9 +14,13 @@ func (c contextKey) String() string {
 	return "frame/security/" + string(c)
 }
 
-const ctxKeyAuthenticationClaim = contextKey("authenticationClaimKey")
-const ctxKeySkipTenancyCheckOnClaim = contextKey("skipTenancyCheckOnClaimKey")
-const ctxKeyAuthenticationJwt = contextKey("authenticationJwtKey")
+const (
+	ctxKeyAuthenticationClaim     = contextKey("authenticationClaimKey")
+	ctxKeySkipTenancyCheckOnClaim = contextKey("skipTenancyCheckOnClaimKey")
+	ctxKeyAuthenticationJwt       = contextKey("authenticationJwtKey")
+
+	ConstantSystemInternalRole = "system_internal"
+)
 
 // JwtToContext adds authentication jwt to the current supplied context.
 func JwtToContext(ctx context.Context, jwt string) context.Context {
@@ -205,12 +209,15 @@ func (a *AuthenticationClaims) GetServiceName() string {
 func (a *AuthenticationClaims) isInternalSystem() bool {
 	roles := a.GetRoles()
 	if len(roles) == 1 {
-		if strings.HasPrefix(roles[0], "system_internal") {
-			return true
-		}
+		return strings.EqualFold(ConstantSystemInternalRole, roles[0])
 	}
 
 	return false
+}
+
+// IsInternalSystem reports whether the claims belong to an internal system caller.
+func (a *AuthenticationClaims) IsInternalSystem() bool {
+	return a.isInternalSystem()
 }
 
 // AsMetadata Creates a string map to be used as metadata in queue data.

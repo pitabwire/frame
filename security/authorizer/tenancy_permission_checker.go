@@ -68,6 +68,55 @@ func NewTenancyAccessChecker(
 	return c
 }
 
+// CheckAccess verifies that the caller has data access to the partition
+// identified in their claims. For regular users it checks the "member"
+// relation; for system_internal callers it checks the "service" relation.
+func (c *TenancyAccessChecker) CheckAccess(ctx context.Context) error {
+	claims := security.ClaimsFromContext(ctx)
+	if claims == nil {
+		return ErrInvalidSubject
+	}
+
+	subjectID, err := claims.GetSubject()
+	if err != nil || subjectID == "" {
+		return ErrInvalidSubject
+	}
+
+	tenantID := claims.GetTenantID()
+	if tenantID == "" {
+		return ErrInvalidObject
+	}
+
+	partitionID := claims.GetPartitionID()
+	if partitionID == "" {
+		return ErrInvalidObject
+	}
+
+	tenancyPath := fmt.Sprintf("%s/%s", tenantID, partitionID)
+
+	relation := "member"
+	if claims.IsInternalSystem() {
+		relation = "service"
+	}
+
+	req := security.CheckRequest{
+		Object:     security.ObjectRef{Namespace: c.objectNamespace, ID: tenancyPath},
+		Permission: relation,
+		Subject:    security.SubjectRef{Namespace: c.subjectNamespace, ID: subjectID},
+	}
+
+	result, err := c.authorizer.Check(ctx, req)
+	if err != nil {
+		return err
+	}
+
+	if result.Allowed {
+		return nil
+	}
+
+	return NewPermissionDeniedError(req.Object, relation, req.Subject, result.Reason)
+}
+
 // Check verifies that the caller in ctx has the given permission on the
 // tenant identified in their claims.
 func (c *TenancyAccessChecker) Check(ctx context.Context, permission string) error {

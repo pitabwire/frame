@@ -6,7 +6,7 @@ import (
 	"github.com/pitabwire/frame/config"
 )
 
-const NamespaceProfile = "default/profile"
+const NamespaceProfile = "profile/user"
 
 // ObjectRef represents a reference to an object (resource).
 type ObjectRef struct {

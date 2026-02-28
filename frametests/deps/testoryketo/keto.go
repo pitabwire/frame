@@ -165,16 +165,24 @@ func (d *dependancy) writeHostFiles() ([]mount.Mount, error) {
 	return mounts, nil
 }
 
-// containerFiles returns file copies for containers that don't need OPL evaluation
-// (e.g. the migration container).
+// containerFiles returns file copies including the config and any namespace files.
+// Used for containers that need config parsing but not OPL file watching (e.g. migration).
 func (d *dependancy) containerFiles() []testcontainers.ContainerFile {
-	return []testcontainers.ContainerFile{
+	files := []testcontainers.ContainerFile{
 		{
 			Reader:            strings.NewReader(d.configuration),
 			ContainerFilePath: "/home/ory/keto.yml",
 			FileMode:          definition.ContainerFileMode,
 		},
 	}
+	for _, ns := range d.namespaceFiles {
+		files = append(files, testcontainers.ContainerFile{
+			Reader:            strings.NewReader(ns.Content),
+			ContainerFilePath: ns.ContainerPath,
+			FileMode:          definition.ContainerFileMode,
+		})
+	}
+	return files
 }
 
 func (d *dependancy) migrateContainer(

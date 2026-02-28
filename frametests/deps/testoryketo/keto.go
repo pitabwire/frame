@@ -2,7 +2,6 @@ package testoryketo
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 
@@ -89,6 +88,8 @@ func NewWithOpts(
 // NewWithNamespaces creates a new Keto test resource with OPL namespace files.
 // The configuration string should reference the namespace files via
 // "namespaces: location: file:///path/to/file.ts".
+// When no database dependency is provided, Keto uses in-memory storage
+// with auto-migration, which is required for OPL permit evaluation.
 func NewWithNamespaces(
 	configuration string,
 	namespaceFiles []NamespaceFile,
@@ -160,31 +161,39 @@ func (d *dependancy) migrateContainer(
 	return nil
 }
 
+// hasDBDependency checks if a database dependency is available.
+func (d *dependancy) hasDBDependency(ctx context.Context) bool {
+	deps := d.Opts().Dependencies
+	return len(deps) > 0 && deps[0].GetDS(ctx).IsDB()
+}
+
 func (d *dependancy) Setup(ctx context.Context, ntwk *testcontainers.DockerNetwork) error {
-	if len(d.Opts().Dependencies) == 0 || !d.Opts().Dependencies[0].GetDS(ctx).IsDB() {
-		return errors.New("no ByIsDatabase dependencies was supplied")
-	}
+	env := d.Opts().Env(map[string]string{
+		"LOG_LEVEL":                 "debug",
+		"LOG_LEAK_SENSITIVE_VALUES": "true",
+	})
 
-	ketoDB, _, err := testpostgres.CreateDatabase(ctx, d.Opts().Dependencies[0].GetInternalDS(ctx), "keto")
-	if err != nil {
-		return err
-	}
+	// When a database dependency is available, use it with separate migration.
+	// Otherwise, use in-memory storage with auto-migration (supports OPL evaluation).
+	if d.hasDBDependency(ctx) {
+		ketoDB, _, err := testpostgres.CreateDatabase(ctx, d.Opts().Dependencies[0].GetInternalDS(ctx), "keto")
+		if err != nil {
+			return err
+		}
 
-	databaseURL := ketoDB.String()
+		databaseURL := ketoDB.String()
+		env["DSN"] = databaseURL
 
-	err = d.migrateContainer(ctx, ntwk, databaseURL)
-	if err != nil {
-		return err
+		err = d.migrateContainer(ctx, ntwk, databaseURL)
+		if err != nil {
+			return err
+		}
 	}
 
 	containerRequest := testcontainers.ContainerRequest{
-		Image: d.Name(),
-		Cmd:   []string{"serve", "--config", "/home/ory/keto.yml"},
-		Env: d.Opts().Env(map[string]string{
-			"LOG_LEVEL":                 "debug",
-			"LOG_LEAK_SENSITIVE_VALUES": "true",
-			"DSN":                       databaseURL,
-		}),
+		Image:      d.Name(),
+		Cmd:        []string{"serve", "--config", "/home/ory/keto.yml"},
+		Env:        env,
 		Files:      d.containerFiles(),
 		WaitingFor: wait.ForHTTP("/health/ready").WithPort(d.DefaultPort),
 	}

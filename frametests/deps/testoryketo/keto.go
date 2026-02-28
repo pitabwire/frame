@@ -49,15 +49,29 @@ namespaces:
 `
 )
 
+// NamespaceFile represents an OPL namespace file to mount into the Keto container.
+type NamespaceFile struct {
+	// ContainerPath is the absolute path inside the container (e.g. "/home/ory/namespaces/tenancy.ts").
+	ContainerPath string
+	// Content is the OPL TypeScript content.
+	Content string
+}
+
 type dependancy struct {
 	*definition.DefaultImpl
-	configuration string
+	configuration  string
+	namespaceFiles []NamespaceFile
 }
 
 func New() definition.TestResource {
 	return NewWithOpts(KetoConfiguration)
 }
 
+// NewWithOpts creates a new Keto test resource.
+// The configuration string is the Keto YAML config.
+// Optional NamespaceFile entries are mounted into the container alongside the config,
+// enabling OPL-based permission evaluation. When using namespace files, the configuration
+// should reference them via "namespaces: location: file:///path/to/file.ts".
 func NewWithOpts(
 	configuration string,
 	containerOpts ...definition.ContainerOption,
@@ -75,6 +89,46 @@ func NewWithOpts(
 	}
 }
 
+// NewWithNamespaces creates a new Keto test resource with OPL namespace files.
+// The configuration string should reference the namespace files via
+// "namespaces: location: file:///path/to/file.ts".
+func NewWithNamespaces(
+	configuration string,
+	namespaceFiles []NamespaceFile,
+	containerOpts ...definition.ContainerOption,
+) definition.TestResource {
+	opts := definition.ContainerOpts{
+		ImageName:      OryKetoImage,
+		Ports:          []string{"4467/tcp", "4466/tcp"},
+		NetworkAliases: []string{"keto", "auth-keto"},
+	}
+	opts.Setup(containerOpts...)
+
+	return &dependancy{
+		DefaultImpl:    definition.NewDefaultImpl(opts, "http"),
+		configuration:  configuration,
+		namespaceFiles: namespaceFiles,
+	}
+}
+
+func (d *dependancy) containerFiles() []testcontainers.ContainerFile {
+	files := []testcontainers.ContainerFile{
+		{
+			Reader:            strings.NewReader(d.configuration),
+			ContainerFilePath: "/home/ory/keto.yml",
+			FileMode:          definition.ContainerFileMode,
+		},
+	}
+	for _, ns := range d.namespaceFiles {
+		files = append(files, testcontainers.ContainerFile{
+			Reader:            strings.NewReader(ns.Content),
+			ContainerFilePath: ns.ContainerPath,
+			FileMode:          definition.ContainerFileMode,
+		})
+	}
+	return files
+}
+
 func (d *dependancy) migrateContainer(
 	ctx context.Context,
 	ntwk *testcontainers.DockerNetwork,
@@ -87,13 +141,7 @@ func (d *dependancy) migrateContainer(
 			"LOG_LEVEL": "debug",
 			"DSN":       databaseURL,
 		},
-		Files: []testcontainers.ContainerFile{
-			{
-				Reader:            strings.NewReader(d.configuration),
-				ContainerFilePath: "/home/ory/keto.yml",
-				FileMode:          definition.ContainerFileMode,
-			},
-		},
+		Files:      d.containerFiles(),
 		WaitingFor: wait.ForExit(),
 	}
 
@@ -139,13 +187,7 @@ func (d *dependancy) Setup(ctx context.Context, ntwk *testcontainers.DockerNetwo
 			"LOG_LEAK_SENSITIVE_VALUES": "true",
 			"DSN":                       databaseURL,
 		}),
-		Files: []testcontainers.ContainerFile{
-			{
-				Reader:            strings.NewReader(d.configuration),
-				ContainerFilePath: "/home/ory/keto.yml",
-				FileMode:          definition.ContainerFileMode,
-			},
-		},
+		Files:      d.containerFiles(),
 		WaitingFor: wait.ForHTTP("/health/ready").WithPort(d.DefaultPort),
 	}
 

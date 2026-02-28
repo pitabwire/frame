@@ -4,12 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 
-	"github.com/docker/docker/api/types/mount"
-	container "github.com/docker/docker/api/types/container"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
 
@@ -53,7 +49,7 @@ namespaces:
 `
 )
 
-// NamespaceFile represents an OPL namespace file to mount into the Keto container.
+// NamespaceFile represents an OPL namespace file to copy into the Keto container.
 type NamespaceFile struct {
 	// ContainerPath is the absolute path inside the container (e.g. "/home/ory/namespaces/tenancy.ts").
 	ContainerPath string
@@ -65,7 +61,6 @@ type dependancy struct {
 	*definition.DefaultImpl
 	configuration  string
 	namespaceFiles []NamespaceFile
-	tmpDir         string // temp directory for host-mounted files
 }
 
 func New() definition.TestResource {
@@ -113,60 +108,7 @@ func NewWithNamespaces(
 	}
 }
 
-// writeHostFiles writes the configuration and namespace files to a temp directory
-// on the host, returning bind mount specs for docker. This is more reliable than
-// testcontainers ContainerFile for Keto's namespace file watcher.
-func (d *dependancy) writeHostFiles() ([]mount.Mount, error) {
-	if d.tmpDir == "" {
-		tmpDir, err := os.MkdirTemp("", "keto-test-*")
-		if err != nil {
-			return nil, fmt.Errorf("failed to create temp dir: %w", err)
-		}
-		// Make traversable by all users (container runs as non-root ory user)
-		if err := os.Chmod(tmpDir, 0o755); err != nil { //nolint:gosec // test dir
-			return nil, fmt.Errorf("failed to chmod temp dir: %w", err)
-		}
-		d.tmpDir = tmpDir
-	}
-
-	// Write keto config
-	configPath := filepath.Join(d.tmpDir, "keto.yml")
-	if err := os.WriteFile(configPath, []byte(d.configuration), 0o644); err != nil { //nolint:gosec // test file
-		return nil, fmt.Errorf("failed to write keto config: %w", err)
-	}
-
-	mounts := []mount.Mount{
-		{
-			Type:   mount.TypeBind,
-			Source: configPath,
-			Target: "/home/ory/keto.yml",
-		},
-	}
-
-	// Write namespace files
-	for i, ns := range d.namespaceFiles {
-		nsDir := filepath.Join(d.tmpDir, fmt.Sprintf("ns_%d", i))
-		if err := os.MkdirAll(nsDir, 0o755); err != nil { //nolint:gosec,gocritic // test dir
-			return nil, fmt.Errorf("failed to create namespace dir: %w", err)
-		}
-
-		nsPath := filepath.Join(nsDir, filepath.Base(ns.ContainerPath))
-		if err := os.WriteFile(nsPath, []byte(ns.Content), 0o644); err != nil { //nolint:gosec // test file
-			return nil, fmt.Errorf("failed to write namespace file: %w", err)
-		}
-
-		mounts = append(mounts, mount.Mount{
-			Type:   mount.TypeBind,
-			Source: nsPath,
-			Target: ns.ContainerPath,
-		})
-	}
-
-	return mounts, nil
-}
-
 // containerFiles returns file copies including the config and any namespace files.
-// Used for containers that need config parsing but not OPL file watching (e.g. migration).
 func (d *dependancy) containerFiles() []testcontainers.ContainerFile {
 	files := []testcontainers.ContainerFile{
 		{
@@ -243,22 +185,8 @@ func (d *dependancy) Setup(ctx context.Context, ntwk *testcontainers.DockerNetwo
 			"LOG_LEAK_SENSITIVE_VALUES": "true",
 			"DSN":                       databaseURL,
 		}),
+		Files:      d.containerFiles(),
 		WaitingFor: wait.ForHTTP("/health/ready").WithPort(d.DefaultPort),
-	}
-
-	// Use bind mounts for the serve container when namespace files are present,
-	// as Keto's namespace file watcher requires host-mounted files to work
-	// correctly with OPL evaluation.
-	if len(d.namespaceFiles) > 0 {
-		mounts, mountErr := d.writeHostFiles()
-		if mountErr != nil {
-			return fmt.Errorf("failed to write host files: %w", mountErr)
-		}
-		containerRequest.HostConfigModifier = func(hc *container.HostConfig) {
-			hc.Mounts = append(hc.Mounts, mounts...)
-		}
-	} else {
-		containerRequest.Files = d.containerFiles()
 	}
 
 	d.Configure(ctx, ntwk, &containerRequest)
@@ -275,13 +203,4 @@ func (d *dependancy) Setup(ctx context.Context, ntwk *testcontainers.DockerNetwo
 
 	d.SetContainer(ketoContainer)
 	return nil
-}
-
-func (d *dependancy) Cleanup(ctx context.Context) {
-	d.DefaultImpl.Cleanup(ctx)
-
-	// Clean up temp files
-	if d.tmpDir != "" {
-		_ = os.RemoveAll(d.tmpDir)
-	}
 }

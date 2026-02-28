@@ -2,6 +2,7 @@ package frametests
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/pitabwire/util"
@@ -11,6 +12,7 @@ import (
 	"github.com/testcontainers/testcontainers-go/network"
 
 	"github.com/pitabwire/frame/frametests/definition"
+	"github.com/pitabwire/frame/security"
 )
 
 // FrameBaseTestSuite provides a base test suite with all necessary test components.
@@ -84,4 +86,37 @@ func WithTestDependencies(t *testing.T,
 			testFn(tt, nueOpt)
 		})
 	}
+}
+
+// WithAuthClaims creates a context with fully populated authentication claims
+// for test scenarios that require tenant-scoped operations.
+func (s *FrameBaseTestSuite) WithAuthClaims(ctx context.Context, tenantID, partitionID, profileID string) context.Context {
+	claims := &security.AuthenticationClaims{
+		TenantID:    tenantID,
+		PartitionID: partitionID,
+		AccessID:    util.IDString(),
+		ContactID:   profileID,
+		SessionID:   util.IDString(),
+		DeviceID:    "test-device",
+	}
+	claims.Subject = profileID
+
+	return claims.ClaimsToContext(ctx)
+}
+
+// SeedTenantAccess writes a tenancy_access member tuple so the profile can pass
+// the TenancyAccessChecker (data access layer). The tenancyAccessNamespace is
+// typically "tenancy_access".
+func (s *FrameBaseTestSuite) SeedTenantAccess(
+	ctx context.Context,
+	auth security.Authorizer,
+	tenancyAccessNamespace, tenantID, partitionID, profileID string,
+) {
+	tenancyPath := fmt.Sprintf("%s/%s", tenantID, partitionID)
+	err := auth.WriteTuple(ctx, security.RelationTuple{
+		Object:   security.ObjectRef{Namespace: tenancyAccessNamespace, ID: tenancyPath},
+		Relation: "member",
+		Subject:  security.SubjectRef{Namespace: security.NamespaceProfile, ID: profileID},
+	})
+	s.Require().NoError(err, "failed to seed tenant access")
 }

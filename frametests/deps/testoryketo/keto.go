@@ -122,6 +122,10 @@ func (d *dependancy) writeHostFiles() ([]mount.Mount, error) {
 		if err != nil {
 			return nil, fmt.Errorf("failed to create temp dir: %w", err)
 		}
+		// Make traversable by all users (container runs as non-root ory user)
+		if err := os.Chmod(tmpDir, 0o755); err != nil { //nolint:gosec // test dir
+			return nil, fmt.Errorf("failed to chmod temp dir: %w", err)
+		}
 		d.tmpDir = tmpDir
 	}
 
@@ -142,7 +146,7 @@ func (d *dependancy) writeHostFiles() ([]mount.Mount, error) {
 	// Write namespace files
 	for i, ns := range d.namespaceFiles {
 		nsDir := filepath.Join(d.tmpDir, fmt.Sprintf("ns_%d", i))
-		if err := os.MkdirAll(nsDir, 0o755); err != nil { //nolint:gosec // test dir
+		if err := os.MkdirAll(nsDir, 0o755); err != nil { //nolint:gosec,gocritic // test dir
 			return nil, fmt.Errorf("failed to create namespace dir: %w", err)
 		}
 

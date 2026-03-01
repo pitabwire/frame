@@ -21,13 +21,13 @@ func DefaultList(
 		return nil, err
 	}
 
-	interceptorList = append(interceptorList, moreInterceptors...)
 	interceptorList = append(
 		interceptorList,
 		otelInterceptor,
 		NewValidationInterceptor(),
 		NewAuthInterceptor(authI),
 	)
+	interceptorList = append(interceptorList, moreInterceptors...)
 
 	return interceptorList, nil
 }

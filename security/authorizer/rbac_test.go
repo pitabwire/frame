@@ -12,18 +12,18 @@ func (s *AuthorizerTestSuite) TestRBACDirectRoleAssignment() {
 	ctx := s.T().Context()
 	adapter := s.newAdapter(nil)
 
-	// Create role: "editors" is a group object in namespace "default"
+	// Create role: "editors" is a group object in namespace "resource"
 	// Grant role access to a document
 	err := adapter.WriteTuple(ctx, security.RelationTuple{
-		Object:   security.ObjectRef{Namespace: "default", ID: "rbac-doc-1"},
+		Object:   security.ObjectRef{Namespace: "resource", ID: "rbac-doc-1"},
 		Relation: "edit",
-		Subject:  security.SubjectRef{Namespace: "default", ID: "rbac-editors", Relation: "member"},
+		Subject:  security.SubjectRef{Namespace: "resource", ID: "rbac-editors", Relation: "member"},
 	})
 	s.Require().NoError(err)
 
 	// Assign alice to the editors role
 	err = adapter.WriteTuple(ctx, security.RelationTuple{
-		Object:   security.ObjectRef{Namespace: "default", ID: "rbac-editors"},
+		Object:   security.ObjectRef{Namespace: "resource", ID: "rbac-editors"},
 		Relation: "member",
 		Subject:  security.SubjectRef{ID: "alice-rbac"},
 	})
@@ -31,16 +31,16 @@ func (s *AuthorizerTestSuite) TestRBACDirectRoleAssignment() {
 
 	// Alice should have edit access to the document through her role
 	result, err := adapter.Check(ctx, security.CheckRequest{
-		Object:     security.ObjectRef{Namespace: "default", ID: "rbac-doc-1"},
+		Object:     security.ObjectRef{Namespace: "resource", ID: "rbac-doc-1"},
 		Permission: "edit",
-		Subject:    security.SubjectRef{Namespace: "default", ID: "rbac-editors", Relation: "member"},
+		Subject:    security.SubjectRef{Namespace: "resource", ID: "rbac-editors", Relation: "member"},
 	})
 	s.Require().NoError(err)
 	s.True(result.Allowed, "editors role should have edit access")
 
 	// Non-member should be denied
 	result, err = adapter.Check(ctx, security.CheckRequest{
-		Object:     security.ObjectRef{Namespace: "default", ID: "rbac-doc-1"},
+		Object:     security.ObjectRef{Namespace: "resource", ID: "rbac-doc-1"},
 		Permission: "edit",
 		Subject:    security.SubjectRef{ID: "outsider-rbac"},
 	})
@@ -56,13 +56,13 @@ func (s *AuthorizerTestSuite) TestRBACMultipleRoles() {
 	ctx := s.T().Context()
 	adapter := s.newAdapter(nil)
 
-	doc := security.ObjectRef{Namespace: "default", ID: "rbac-multi-doc-1"}
+	doc := security.ObjectRef{Namespace: "resource", ID: "rbac-multi-doc-1"}
 
 	// "viewers" role can view
 	err := adapter.WriteTuple(ctx, security.RelationTuple{
 		Object:   doc,
 		Relation: "view",
-		Subject:  security.SubjectRef{Namespace: "default", ID: "rbac-viewers", Relation: "member"},
+		Subject:  security.SubjectRef{Namespace: "resource", ID: "rbac-viewers", Relation: "member"},
 	})
 	s.Require().NoError(err)
 
@@ -70,14 +70,14 @@ func (s *AuthorizerTestSuite) TestRBACMultipleRoles() {
 	err = adapter.WriteTuple(ctx, security.RelationTuple{
 		Object:   doc,
 		Relation: "edit",
-		Subject:  security.SubjectRef{Namespace: "default", ID: "rbac-multi-editors", Relation: "member"},
+		Subject:  security.SubjectRef{Namespace: "resource", ID: "rbac-multi-editors", Relation: "member"},
 	})
 	s.Require().NoError(err)
 
 	// Bob is in both roles
 	for _, role := range []string{"rbac-viewers", "rbac-multi-editors"} {
 		err = adapter.WriteTuple(ctx, security.RelationTuple{
-			Object:   security.ObjectRef{Namespace: "default", ID: role},
+			Object:   security.ObjectRef{Namespace: "resource", ID: role},
 			Relation: "member",
 			Subject:  security.SubjectRef{ID: "bob-rbac-multi"},
 		})
@@ -86,7 +86,7 @@ func (s *AuthorizerTestSuite) TestRBACMultipleRoles() {
 
 	// Carol is only a viewer
 	err = adapter.WriteTuple(ctx, security.RelationTuple{
-		Object:   security.ObjectRef{Namespace: "default", ID: "rbac-viewers"},
+		Object:   security.ObjectRef{Namespace: "resource", ID: "rbac-viewers"},
 		Relation: "member",
 		Subject:  security.SubjectRef{ID: "carol-rbac-multi"},
 	})
@@ -95,9 +95,9 @@ func (s *AuthorizerTestSuite) TestRBACMultipleRoles() {
 	// Batch check bob's capabilities
 	bobChecks := []security.CheckRequest{
 		{Object: doc, Permission: "view",
-			Subject: security.SubjectRef{Namespace: "default", ID: "rbac-viewers", Relation: "member"}},
+			Subject: security.SubjectRef{Namespace: "resource", ID: "rbac-viewers", Relation: "member"}},
 		{Object: doc, Permission: "edit",
-			Subject: security.SubjectRef{Namespace: "default", ID: "rbac-multi-editors", Relation: "member"}},
+			Subject: security.SubjectRef{Namespace: "resource", ID: "rbac-multi-editors", Relation: "member"}},
 	}
 	results, err := adapter.BatchCheck(ctx, bobChecks)
 	s.Require().NoError(err)
@@ -109,7 +109,7 @@ func (s *AuthorizerTestSuite) TestRBACMultipleRoles() {
 	carolView, err := adapter.Check(ctx, security.CheckRequest{
 		Object:     doc,
 		Permission: "view",
-		Subject:    security.SubjectRef{Namespace: "default", ID: "rbac-viewers", Relation: "member"},
+		Subject:    security.SubjectRef{Namespace: "resource", ID: "rbac-viewers", Relation: "member"},
 	})
 	s.Require().NoError(err)
 	s.True(carolView.Allowed)
@@ -131,14 +131,14 @@ func (s *AuthorizerTestSuite) TestRBACRoleRevocation() {
 	ctx := s.T().Context()
 	adapter := s.newAdapter(nil)
 
-	role := security.ObjectRef{Namespace: "default", ID: "rbac-revoke-admins"}
-	resource := security.ObjectRef{Namespace: "default", ID: "rbac-revoke-res-1"}
+	role := security.ObjectRef{Namespace: "resource", ID: "rbac-revoke-admins"}
+	resource := security.ObjectRef{Namespace: "resource", ID: "rbac-revoke-res-1"}
 
 	// Grant admins delete permission on resource
 	err := adapter.WriteTuple(ctx, security.RelationTuple{
 		Object:   resource,
 		Relation: "delete",
-		Subject:  security.SubjectRef{Namespace: "default", ID: role.ID, Relation: "member"},
+		Subject:  security.SubjectRef{Namespace: "resource", ID: role.ID, Relation: "member"},
 	})
 	s.Require().NoError(err)
 
@@ -155,7 +155,7 @@ func (s *AuthorizerTestSuite) TestRBACRoleRevocation() {
 	result, err := adapter.Check(ctx, security.CheckRequest{
 		Object:     resource,
 		Permission: "delete",
-		Subject:    security.SubjectRef{Namespace: "default", ID: role.ID, Relation: "member"},
+		Subject:    security.SubjectRef{Namespace: "resource", ID: role.ID, Relation: "member"},
 	})
 	s.Require().NoError(err)
 	s.True(result.Allowed, "dan should have delete access as admin")
@@ -257,14 +257,14 @@ func (s *AuthorizerTestSuite) TestRBACBulkRoleMembers() {
 	ctx := s.T().Context()
 	adapter := s.newAdapter(nil)
 
-	role := security.ObjectRef{Namespace: "default", ID: "rbac-bulk-contributors"}
-	repo := security.ObjectRef{Namespace: "default", ID: "rbac-bulk-repo-1"}
+	role := security.ObjectRef{Namespace: "resource", ID: "rbac-bulk-contributors"}
+	repo := security.ObjectRef{Namespace: "resource", ID: "rbac-bulk-repo-1"}
 
 	// Grant contributors push access
 	err := adapter.WriteTuple(ctx, security.RelationTuple{
 		Object:   repo,
 		Relation: "push",
-		Subject:  security.SubjectRef{Namespace: "default", ID: role.ID, Relation: "member"},
+		Subject:  security.SubjectRef{Namespace: "resource", ID: role.ID, Relation: "member"},
 	})
 	s.Require().NoError(err)
 
@@ -283,7 +283,7 @@ func (s *AuthorizerTestSuite) TestRBACBulkRoleMembers() {
 	result, err := adapter.Check(ctx, security.CheckRequest{
 		Object:     repo,
 		Permission: "push",
-		Subject:    security.SubjectRef{Namespace: "default", ID: role.ID, Relation: "member"},
+		Subject:    security.SubjectRef{Namespace: "resource", ID: role.ID, Relation: "member"},
 	})
 	s.Require().NoError(err)
 	s.True(result.Allowed, "contributors should have push access")
@@ -310,15 +310,15 @@ func (s *AuthorizerTestSuite) TestRBACResourceIsolation() {
 	ctx := s.T().Context()
 	adapter := s.newAdapter(nil)
 
-	role := security.ObjectRef{Namespace: "default", ID: "rbac-iso-editors"}
-	allowedDoc := security.ObjectRef{Namespace: "default", ID: "rbac-iso-allowed-doc"}
-	forbiddenDoc := security.ObjectRef{Namespace: "default", ID: "rbac-iso-forbidden-doc"}
+	role := security.ObjectRef{Namespace: "resource", ID: "rbac-iso-editors"}
+	allowedDoc := security.ObjectRef{Namespace: "resource", ID: "rbac-iso-allowed-doc"}
+	forbiddenDoc := security.ObjectRef{Namespace: "resource", ID: "rbac-iso-forbidden-doc"}
 
 	// Role grants edit only on allowedDoc
 	err := adapter.WriteTuple(ctx, security.RelationTuple{
 		Object:   allowedDoc,
 		Relation: "edit",
-		Subject:  security.SubjectRef{Namespace: "default", ID: role.ID, Relation: "member"},
+		Subject:  security.SubjectRef{Namespace: "resource", ID: role.ID, Relation: "member"},
 	})
 	s.Require().NoError(err)
 
@@ -335,12 +335,12 @@ func (s *AuthorizerTestSuite) TestRBACResourceIsolation() {
 		{
 			Object:     allowedDoc,
 			Permission: "edit",
-			Subject:    security.SubjectRef{Namespace: "default", ID: role.ID, Relation: "member"},
+			Subject:    security.SubjectRef{Namespace: "resource", ID: role.ID, Relation: "member"},
 		},
 		{
 			Object:     forbiddenDoc,
 			Permission: "edit",
-			Subject:    security.SubjectRef{Namespace: "default", ID: role.ID, Relation: "member"},
+			Subject:    security.SubjectRef{Namespace: "resource", ID: role.ID, Relation: "member"},
 		},
 	}
 
@@ -424,7 +424,7 @@ func (s *AuthorizerTestSuite) TestRBACRoleEnumeration() {
 
 	for _, role := range roles {
 		err := adapter.WriteTuple(ctx, security.RelationTuple{
-			Object:   security.ObjectRef{Namespace: "default", ID: role},
+			Object:   security.ObjectRef{Namespace: "resource", ID: role},
 			Relation: "member",
 			Subject:  user,
 		})
@@ -432,14 +432,14 @@ func (s *AuthorizerTestSuite) TestRBACRoleEnumeration() {
 	}
 
 	// Enumerate Ivy's memberships using ListSubjectRelations
-	ivyTuples, err := adapter.ListSubjectRelations(ctx, user, "default")
+	ivyTuples, err := adapter.ListSubjectRelations(ctx, user, "resource")
 	s.Require().NoError(err)
 	s.GreaterOrEqual(len(ivyTuples), 3, "ivy should have at least 3 role memberships")
 
 	// Verify each role lists ivy as a member
 	for _, role := range roles {
 		members, listErr := adapter.ListRelations(ctx,
-			security.ObjectRef{Namespace: "default", ID: role})
+			security.ObjectRef{Namespace: "resource", ID: role})
 		s.Require().NoError(listErr)
 
 		found := false
@@ -461,16 +461,16 @@ func (s *AuthorizerTestSuite) TestRBACCapabilitiesDiscovery() {
 	ctx := s.T().Context()
 	adapter := s.newAdapter(nil)
 
-	resource := security.ObjectRef{Namespace: "default", ID: "rbac-cap-project"}
-	ownerRole := security.ObjectRef{Namespace: "default", ID: "rbac-cap-owners"}
-	devRole := security.ObjectRef{Namespace: "default", ID: "rbac-cap-devs"}
+	resource := security.ObjectRef{Namespace: "resource", ID: "rbac-cap-project"}
+	ownerRole := security.ObjectRef{Namespace: "resource", ID: "rbac-cap-owners"}
+	devRole := security.ObjectRef{Namespace: "resource", ID: "rbac-cap-devs"}
 
 	// Owner role gets all permissions
 	for _, perm := range []string{"view", "edit", "delete", "manage", "deploy"} {
 		err := adapter.WriteTuple(ctx, security.RelationTuple{
 			Object:   resource,
 			Relation: perm,
-			Subject:  security.SubjectRef{Namespace: "default", ID: ownerRole.ID, Relation: "member"},
+			Subject:  security.SubjectRef{Namespace: "resource", ID: ownerRole.ID, Relation: "member"},
 		})
 		s.Require().NoError(err)
 	}
@@ -480,7 +480,7 @@ func (s *AuthorizerTestSuite) TestRBACCapabilitiesDiscovery() {
 		err := adapter.WriteTuple(ctx, security.RelationTuple{
 			Object:   resource,
 			Relation: perm,
-			Subject:  security.SubjectRef{Namespace: "default", ID: devRole.ID, Relation: "member"},
+			Subject:  security.SubjectRef{Namespace: "resource", ID: devRole.ID, Relation: "member"},
 		})
 		s.Require().NoError(err)
 	}
@@ -509,7 +509,7 @@ func (s *AuthorizerTestSuite) TestRBACCapabilitiesDiscovery() {
 		ownerChecks[i] = security.CheckRequest{
 			Object:     resource,
 			Permission: p,
-			Subject:    security.SubjectRef{Namespace: "default", ID: ownerRole.ID, Relation: "member"},
+			Subject:    security.SubjectRef{Namespace: "resource", ID: ownerRole.ID, Relation: "member"},
 		}
 	}
 	ownerResults, err := adapter.BatchCheck(ctx, ownerChecks)
@@ -532,7 +532,7 @@ func (s *AuthorizerTestSuite) TestRBACCapabilitiesDiscovery() {
 		devChecks[i] = security.CheckRequest{
 			Object:     resource,
 			Permission: p,
-			Subject:    security.SubjectRef{Namespace: "default", ID: devRole.ID, Relation: "member"},
+			Subject:    security.SubjectRef{Namespace: "resource", ID: devRole.ID, Relation: "member"},
 		}
 	}
 	devResults, err := adapter.BatchCheck(ctx, devChecks)
@@ -558,14 +558,14 @@ func (s *AuthorizerTestSuite) TestRBACRoleMembershipTransfer() {
 	ctx := s.T().Context()
 	adapter := s.newAdapter(nil)
 
-	role := security.ObjectRef{Namespace: "default", ID: "rbac-transfer-leads"}
-	resource := security.ObjectRef{Namespace: "default", ID: "rbac-transfer-pipeline"}
+	role := security.ObjectRef{Namespace: "resource", ID: "rbac-transfer-leads"}
+	resource := security.ObjectRef{Namespace: "resource", ID: "rbac-transfer-pipeline"}
 
 	// Grant leads access to pipeline
 	err := adapter.WriteTuple(ctx, security.RelationTuple{
 		Object:   resource,
 		Relation: "approve",
-		Subject:  security.SubjectRef{Namespace: "default", ID: role.ID, Relation: "member"},
+		Subject:  security.SubjectRef{Namespace: "resource", ID: role.ID, Relation: "member"},
 	})
 	s.Require().NoError(err)
 
@@ -582,7 +582,7 @@ func (s *AuthorizerTestSuite) TestRBACRoleMembershipTransfer() {
 	result, err := adapter.Check(ctx, security.CheckRequest{
 		Object:     resource,
 		Permission: "approve",
-		Subject:    security.SubjectRef{Namespace: "default", ID: role.ID, Relation: "member"},
+		Subject:    security.SubjectRef{Namespace: "resource", ID: role.ID, Relation: "member"},
 	})
 	s.Require().NoError(err)
 	s.True(result.Allowed)
@@ -613,8 +613,8 @@ func (s *AuthorizerTestSuite) TestRBACCrossNamespaceAccess() {
 	ctx := s.T().Context()
 	adapter := s.newAdapter(nil)
 
-	// Role defined in "default" namespace
-	role := security.ObjectRef{Namespace: "default", ID: "rbac-cross-superadmins"}
+	// Role defined in "resource" namespace
+	role := security.ObjectRef{Namespace: "resource", ID: "rbac-cross-superadmins"}
 
 	// Resource in "partition" namespace
 	resource := security.ObjectRef{Namespace: "partition", ID: "rbac-cross-global-config"}
@@ -623,7 +623,7 @@ func (s *AuthorizerTestSuite) TestRBACCrossNamespaceAccess() {
 	err := adapter.WriteTuple(ctx, security.RelationTuple{
 		Object:   resource,
 		Relation: "configure",
-		Subject:  security.SubjectRef{Namespace: "default", ID: role.ID, Relation: "member"},
+		Subject:  security.SubjectRef{Namespace: "resource", ID: role.ID, Relation: "member"},
 	})
 	s.Require().NoError(err)
 
@@ -639,7 +639,7 @@ func (s *AuthorizerTestSuite) TestRBACCrossNamespaceAccess() {
 	result, err := adapter.Check(ctx, security.CheckRequest{
 		Object:     resource,
 		Permission: "configure",
-		Subject:    security.SubjectRef{Namespace: "default", ID: role.ID, Relation: "member"},
+		Subject:    security.SubjectRef{Namespace: "resource", ID: role.ID, Relation: "member"},
 	})
 	s.Require().NoError(err)
 	s.True(result.Allowed, "superadmin should configure partition resource")

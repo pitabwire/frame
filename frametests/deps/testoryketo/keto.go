@@ -17,8 +17,6 @@ const (
 	OryKetoImage = "oryd/keto:latest"
 
 	KetoConfiguration = `
-version: v0.14.0
-
 dsn: memory
 
 serve:
@@ -29,24 +27,66 @@ serve:
     host: 0.0.0.0
     port: 4467
 
+namespaces:
+  location: file:///home/ory/namespaces
+
 log:
   level: debug
   format: text
 
-namespaces:
-  - id: 0
-    name: default
-  - id: 1
-    name: partition
-  - id: 2
-    name: default/profile
-  - id: 3
-    name: profile
-  - id: 4
-    name: custom
+`
 
+	// NamespacesOPL defines all OPL namespaces used by the authorizer tests.
+	// All namespaces and relations that tests reference must be declared here
+	// so that Keto's namespace validation accepts the relation tuples.
+	NamespacesOPL = `import { Namespace, Context } from "@ory/keto-namespace-types"
+
+class User implements Namespace {}
+class profile_user implements Namespace {}
+class profile implements Namespace {}
+class custom implements Namespace {}
+
+class resource implements Namespace {
+  related: {
+    member: (User | SubjectSet<resource, "member">)[]
+    owner: (User | SubjectSet<resource, "member">)[]
+    admin: (User | SubjectSet<resource, "member">)[]
+    viewer: (User | SubjectSet<resource, "member">)[]
+    view: (User | SubjectSet<resource, "member">)[]
+    comment: (User | SubjectSet<resource, "member">)[]
+    edit: (User | SubjectSet<resource, "member">)[]
+    delete: (User | SubjectSet<resource, "member">)[]
+    push: (User | SubjectSet<resource, "member">)[]
+    approve: (User | SubjectSet<resource, "member">)[]
+    manage: (User | SubjectSet<resource, "member">)[]
+    deploy: (User | SubjectSet<resource, "member">)[]
+    configure: (User | SubjectSet<resource, "member">)[]
+    other: (User | SubjectSet<resource, "member">)[]
+    service: (User)[]
+  }
+}
+
+class partition implements Namespace {
+  related: {
+    member: (User | partition)[]
+    manage: (User | SubjectSet<partition, "member">)[]
+    read: (User | SubjectSet<partition, "member">)[]
+    configure: (User | SubjectSet<partition, "member">)[]
+    service: (User | profile_user)[]
+  }
+}
 `
 )
+
+// DefaultNamespaceFiles returns the OPL namespace files for test Keto setup.
+func DefaultNamespaceFiles() []NamespaceFile {
+	return []NamespaceFile{
+		{
+			ContainerPath: "/home/ory/namespaces/namespaces.ts",
+			Content:       NamespacesOPL,
+		},
+	}
+}
 
 // NamespaceFile represents an OPL namespace file to copy into the Keto container.
 type NamespaceFile struct {

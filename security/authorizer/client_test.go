@@ -12,7 +12,6 @@ import (
 	"github.com/pitabwire/frame/config"
 	"github.com/pitabwire/frame/frametests/definition"
 	"github.com/pitabwire/frame/frametests/deps/testoryketo"
-	"github.com/pitabwire/frame/frametests/deps/testpostgres"
 	"github.com/pitabwire/frame/security"
 	"github.com/pitabwire/frame/security/authorizer"
 	"github.com/pitabwire/frame/tests"
@@ -53,20 +52,13 @@ type AuthorizerTestSuite struct {
 }
 
 func initAuthorizerResources(_ context.Context) []definition.TestResource {
-	pg := testpostgres.NewWithOpts("authorizer_test",
-		definition.WithUserName("ant"),
-		definition.WithCredential("s3cr3t"),
-		definition.WithEnableLogging(false),
-		definition.WithUseHostMode(false),
-	)
-
-	keto := testoryketo.NewWithOpts(
+	keto := testoryketo.NewWithNamespaces(
 		testoryketo.KetoConfiguration,
-		definition.WithDependancies(pg),
+		testoryketo.DefaultNamespaceFiles(),
 		definition.WithEnableLogging(false),
 	)
 
-	return []definition.TestResource{pg, keto}
+	return []definition.TestResource{keto}
 }
 
 func (s *AuthorizerTestSuite) SetupSuite() {
@@ -126,7 +118,7 @@ func (s *AuthorizerTestSuite) TestWriteAndCheckTuple() {
 	adapter := s.newAdapter(nil)
 
 	tuple := security.RelationTuple{
-		Object:   security.ObjectRef{Namespace: "default", ID: "wc-obj-1"},
+		Object:   security.ObjectRef{Namespace: "resource", ID: "wc-obj-1"},
 		Relation: "member",
 		Subject:  security.SubjectRef{ID: "user-wc-1"},
 	}
@@ -149,7 +141,7 @@ func (s *AuthorizerTestSuite) TestCheckDenied() {
 	adapter := s.newAdapter(nil)
 
 	result, err := adapter.Check(ctx, security.CheckRequest{
-		Object:     security.ObjectRef{Namespace: "default", ID: "nonexistent-obj"},
+		Object:     security.ObjectRef{Namespace: "resource", ID: "nonexistent-obj"},
 		Permission: "view",
 		Subject:    security.SubjectRef{ID: "nonexistent-user"},
 	})
@@ -163,9 +155,9 @@ func (s *AuthorizerTestSuite) TestCheckWithSubjectSet() {
 	adapter := s.newAdapter(nil)
 
 	tuple := security.RelationTuple{
-		Object:   security.ObjectRef{Namespace: "default", ID: "ss-doc-1"},
+		Object:   security.ObjectRef{Namespace: "resource", ID: "ss-doc-1"},
 		Relation: "viewer",
-		Subject:  security.SubjectRef{Namespace: "default", ID: "editors", Relation: "member"},
+		Subject:  security.SubjectRef{Namespace: "resource", ID: "editors", Relation: "member"},
 	}
 
 	err := adapter.WriteTuple(ctx, tuple)
@@ -174,7 +166,7 @@ func (s *AuthorizerTestSuite) TestCheckWithSubjectSet() {
 	result, err := adapter.Check(ctx, security.CheckRequest{
 		Object:     tuple.Object,
 		Permission: "viewer",
-		Subject:    security.SubjectRef{Namespace: "default", ID: "editors", Relation: "member"},
+		Subject:    security.SubjectRef{Namespace: "resource", ID: "editors", Relation: "member"},
 	})
 	s.Require().NoError(err)
 	s.True(result.Allowed)
@@ -186,7 +178,7 @@ func (s *AuthorizerTestSuite) TestCheckContextCancelled() {
 
 	adapter := s.newAdapter(nil)
 	_, err := adapter.Check(ctx, security.CheckRequest{
-		Object:     security.ObjectRef{Namespace: "default", ID: "ctx-obj"},
+		Object:     security.ObjectRef{Namespace: "resource", ID: "ctx-obj"},
 		Permission: "view",
 		Subject:    security.SubjectRef{ID: "user-ctx"},
 	})
@@ -202,7 +194,7 @@ func (s *AuthorizerTestSuite) TestWriteAndDeleteTuple() {
 	adapter := s.newAdapter(nil)
 
 	tuple := security.RelationTuple{
-		Object:   security.ObjectRef{Namespace: "default", ID: "del-obj-1"},
+		Object:   security.ObjectRef{Namespace: "resource", ID: "del-obj-1"},
 		Relation: "admin",
 		Subject:  security.SubjectRef{ID: "user-del-1"},
 	}
@@ -235,7 +227,7 @@ func (s *AuthorizerTestSuite) TestDeleteNonExistentTuple() {
 	adapter := s.newAdapter(nil)
 
 	err := adapter.DeleteTuple(ctx, security.RelationTuple{
-		Object:   security.ObjectRef{Namespace: "default", ID: "never-existed"},
+		Object:   security.ObjectRef{Namespace: "resource", ID: "never-existed"},
 		Relation: "member",
 		Subject:  security.SubjectRef{ID: "nobody"},
 	})
@@ -248,12 +240,12 @@ func (s *AuthorizerTestSuite) TestDeleteMultipleTuples() {
 
 	tuples := []security.RelationTuple{
 		{
-			Object:   security.ObjectRef{Namespace: "default", ID: "dm-obj-1"},
+			Object:   security.ObjectRef{Namespace: "resource", ID: "dm-obj-1"},
 			Relation: "member",
 			Subject:  security.SubjectRef{ID: "user-dm1"},
 		},
 		{
-			Object:   security.ObjectRef{Namespace: "default", ID: "dm-obj-1"},
+			Object:   security.ObjectRef{Namespace: "resource", ID: "dm-obj-1"},
 			Relation: "admin",
 			Subject:  security.SubjectRef{ID: "user-dm2"},
 		},
@@ -287,7 +279,7 @@ func (s *AuthorizerTestSuite) TestListRelations() {
 	ctx := s.T().Context()
 	adapter := s.newAdapter(nil)
 
-	obj := security.ObjectRef{Namespace: "default", ID: "lr-obj-1"}
+	obj := security.ObjectRef{Namespace: "resource", ID: "lr-obj-1"}
 
 	tuples := []security.RelationTuple{
 		{Object: obj, Relation: "owner", Subject: security.SubjectRef{ID: "user-lr1"}},
@@ -317,7 +309,7 @@ func (s *AuthorizerTestSuite) TestListRelationsEmpty() {
 	adapter := s.newAdapter(nil)
 
 	result, err := adapter.ListRelations(ctx, security.ObjectRef{
-		Namespace: "default",
+		Namespace: "resource",
 		ID:        "no-relations-obj",
 	})
 	s.Require().NoError(err)
@@ -328,12 +320,12 @@ func (s *AuthorizerTestSuite) TestListRelationsWithSubjectSet() {
 	ctx := s.T().Context()
 	adapter := s.newAdapter(nil)
 
-	obj := security.ObjectRef{Namespace: "default", ID: "lrss-obj-1"}
+	obj := security.ObjectRef{Namespace: "resource", ID: "lrss-obj-1"}
 
 	tuple := security.RelationTuple{
 		Object:   obj,
 		Relation: "viewer",
-		Subject:  security.SubjectRef{Namespace: "default", ID: "team-eng", Relation: "member"},
+		Subject:  security.SubjectRef{Namespace: "resource", ID: "team-eng", Relation: "member"},
 	}
 	err := adapter.WriteTuple(ctx, tuple)
 	s.Require().NoError(err)
@@ -342,7 +334,7 @@ func (s *AuthorizerTestSuite) TestListRelationsWithSubjectSet() {
 	s.Require().NoError(err)
 	s.Require().Len(result, 1)
 	s.Equal("viewer", result[0].Relation)
-	s.Equal("default", result[0].Subject.Namespace)
+	s.Equal("resource", result[0].Subject.Namespace)
 	s.Equal("team-eng", result[0].Subject.ID)
 	s.Equal("member", result[0].Subject.Relation)
 }
@@ -359,12 +351,12 @@ func (s *AuthorizerTestSuite) TestListSubjectRelations() {
 
 	tuples := []security.RelationTuple{
 		{
-			Object:   security.ObjectRef{Namespace: "default", ID: "lsr-room-1"},
+			Object:   security.ObjectRef{Namespace: "resource", ID: "lsr-room-1"},
 			Relation: "member",
 			Subject:  subject,
 		},
 		{
-			Object:   security.ObjectRef{Namespace: "default", ID: "lsr-room-2"},
+			Object:   security.ObjectRef{Namespace: "resource", ID: "lsr-room-2"},
 			Relation: "admin",
 			Subject:  subject,
 		},
@@ -374,7 +366,7 @@ func (s *AuthorizerTestSuite) TestListSubjectRelations() {
 		s.Require().NoError(err)
 	}
 
-	result, err := adapter.ListSubjectRelations(ctx, subject, "default")
+	result, err := adapter.ListSubjectRelations(ctx, subject, "resource")
 	s.Require().NoError(err)
 	s.GreaterOrEqual(len(result), 2, "should find at least the 2 written tuples")
 }
@@ -388,7 +380,7 @@ func (s *AuthorizerTestSuite) TestBatchCheck() {
 	adapter := s.newAdapter(nil)
 
 	err := adapter.WriteTuple(ctx, security.RelationTuple{
-		Object:   security.ObjectRef{Namespace: "default", ID: "bc-obj-1"},
+		Object:   security.ObjectRef{Namespace: "resource", ID: "bc-obj-1"},
 		Relation: "member",
 		Subject:  security.SubjectRef{ID: "user-bc-1"},
 	})
@@ -396,12 +388,12 @@ func (s *AuthorizerTestSuite) TestBatchCheck() {
 
 	requests := []security.CheckRequest{
 		{
-			Object:     security.ObjectRef{Namespace: "default", ID: "bc-obj-1"},
+			Object:     security.ObjectRef{Namespace: "resource", ID: "bc-obj-1"},
 			Permission: "member",
 			Subject:    security.SubjectRef{ID: "user-bc-1"},
 		},
 		{
-			Object:     security.ObjectRef{Namespace: "default", ID: "bc-obj-1"},
+			Object:     security.ObjectRef{Namespace: "resource", ID: "bc-obj-1"},
 			Permission: "admin",
 			Subject:    security.SubjectRef{ID: "user-bc-1"},
 		},
@@ -433,7 +425,7 @@ func (s *AuthorizerTestSuite) TestCheckWithAuditLogger() {
 	adapter := s.newAdapter(logger)
 
 	req := security.CheckRequest{
-		Object:     security.ObjectRef{Namespace: "default", ID: "audit-obj-1"},
+		Object:     security.ObjectRef{Namespace: "resource", ID: "audit-obj-1"},
 		Permission: "view",
 		Subject:    security.SubjectRef{ID: "user-audit-1"},
 	}
@@ -453,7 +445,7 @@ func (s *AuthorizerTestSuite) TestExpand() {
 	ctx := s.T().Context()
 	adapter := s.newAdapter(nil)
 
-	obj := security.ObjectRef{Namespace: "default", ID: "exp-obj-1"}
+	obj := security.ObjectRef{Namespace: "resource", ID: "exp-obj-1"}
 
 	for _, id := range []string{"user-exp-1", "user-exp-2"} {
 		err := adapter.WriteTuple(ctx, security.RelationTuple{
@@ -481,7 +473,7 @@ func (s *AuthorizerTestSuite) TestScenarioRoomAccessControl() {
 	ctx := s.T().Context()
 	adapter := s.newAdapter(nil)
 
-	room := security.ObjectRef{Namespace: "default", ID: "rac-room-1"}
+	room := security.ObjectRef{Namespace: "resource", ID: "rac-room-1"}
 
 	// Step 1: Assign owner and members
 	for _, t := range []security.RelationTuple{
@@ -539,7 +531,7 @@ func (s *AuthorizerTestSuite) TestScenarioBatchPermissionEvaluation() {
 	ctx := s.T().Context()
 	adapter := s.newAdapter(nil)
 
-	doc := security.ObjectRef{Namespace: "default", ID: "bpe-doc-1"}
+	doc := security.ObjectRef{Namespace: "resource", ID: "bpe-doc-1"}
 	user := security.SubjectRef{ID: "user-bpe"}
 
 	// Grant view and comment only
@@ -578,7 +570,7 @@ func (s *AuthorizerTestSuite) TestScenarioBatchPermissionEvaluation() {
 func (s *AuthorizerTestSuite) TestCheckPermissiveMode() {
 	adapter := s.permissiveAdapter()
 	result, err := adapter.Check(s.T().Context(), security.CheckRequest{
-		Object:     security.ObjectRef{Namespace: "default", ID: "obj-1"},
+		Object:     security.ObjectRef{Namespace: "resource", ID: "obj-1"},
 		Permission: "view",
 		Subject:    security.SubjectRef{ID: "user-1"},
 	})
@@ -591,12 +583,12 @@ func (s *AuthorizerTestSuite) TestBatchCheckPermissiveMode() {
 	adapter := s.permissiveAdapter()
 	requests := []security.CheckRequest{
 		{
-			Object:     security.ObjectRef{Namespace: "default", ID: "obj-1"},
+			Object:     security.ObjectRef{Namespace: "resource", ID: "obj-1"},
 			Permission: "view",
 			Subject:    security.SubjectRef{ID: "user-1"},
 		},
 		{
-			Object:     security.ObjectRef{Namespace: "default", ID: "obj-2"},
+			Object:     security.ObjectRef{Namespace: "resource", ID: "obj-2"},
 			Permission: "edit",
 			Subject:    security.SubjectRef{ID: "user-2"},
 		},
@@ -614,7 +606,7 @@ func (s *AuthorizerTestSuite) TestBatchCheckPermissiveMode() {
 func (s *AuthorizerTestSuite) TestWriteTuplesPermissive() {
 	adapter := s.permissiveAdapter()
 	err := adapter.WriteTuple(s.T().Context(), security.RelationTuple{
-		Object:   security.ObjectRef{Namespace: "default", ID: "obj-1"},
+		Object:   security.ObjectRef{Namespace: "resource", ID: "obj-1"},
 		Relation: "member",
 		Subject:  security.SubjectRef{ID: "user-1"},
 	})
@@ -630,7 +622,7 @@ func (s *AuthorizerTestSuite) TestWriteTuplesEmpty() {
 func (s *AuthorizerTestSuite) TestDeleteTuplesPermissive() {
 	adapter := s.permissiveAdapter()
 	err := adapter.DeleteTuple(s.T().Context(), security.RelationTuple{
-		Object:   security.ObjectRef{Namespace: "default", ID: "obj-1"},
+		Object:   security.ObjectRef{Namespace: "resource", ID: "obj-1"},
 		Relation: "member",
 		Subject:  security.SubjectRef{ID: "user-1"},
 	})
@@ -646,7 +638,7 @@ func (s *AuthorizerTestSuite) TestDeleteTuplesEmpty() {
 func (s *AuthorizerTestSuite) TestListRelationsPermissive() {
 	adapter := s.permissiveAdapter()
 	tuples, err := adapter.ListRelations(s.T().Context(), security.ObjectRef{
-		Namespace: "default", ID: "obj-1",
+		Namespace: "resource", ID: "obj-1",
 	})
 	s.Require().NoError(err)
 	s.Empty(tuples)
@@ -655,7 +647,7 @@ func (s *AuthorizerTestSuite) TestListRelationsPermissive() {
 func (s *AuthorizerTestSuite) TestListSubjectRelationsPermissive() {
 	adapter := s.permissiveAdapter()
 	tuples, err := adapter.ListSubjectRelations(s.T().Context(),
-		security.SubjectRef{ID: "user-1"}, "default")
+		security.SubjectRef{ID: "user-1"}, "resource")
 	s.Require().NoError(err)
 	s.Empty(tuples)
 }
@@ -663,7 +655,7 @@ func (s *AuthorizerTestSuite) TestListSubjectRelationsPermissive() {
 func (s *AuthorizerTestSuite) TestExpandPermissive() {
 	adapter := s.permissiveAdapter()
 	subjects, err := adapter.Expand(s.T().Context(), security.ObjectRef{
-		Namespace: "default", ID: "obj-1",
+		Namespace: "resource", ID: "obj-1",
 	}, "member")
 	s.Require().NoError(err)
 	s.Empty(subjects)
@@ -757,7 +749,7 @@ func (s *AuthorizerTestSuite) TestNewKetoAdapterNilAuditLogger() {
 
 	// Should not panic — nil logger replaced by NoOp
 	result, err := adapter.Check(s.T().Context(), security.CheckRequest{
-		Object:     security.ObjectRef{Namespace: "default", ID: "nil-audit-obj"},
+		Object:     security.ObjectRef{Namespace: "resource", ID: "nil-audit-obj"},
 		Permission: "view",
 		Subject:    security.SubjectRef{ID: "nil-audit-user"},
 	})

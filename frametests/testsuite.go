@@ -90,7 +90,10 @@ func WithTestDependencies(t *testing.T,
 
 // WithAuthClaims creates a context with fully populated authentication claims
 // for test scenarios that require tenant-scoped operations.
-func (s *FrameBaseTestSuite) WithAuthClaims(ctx context.Context, tenantID, partitionID, profileID string) context.Context {
+func (s *FrameBaseTestSuite) WithAuthClaims(
+	ctx context.Context,
+	tenantID, partitionID, profileID string,
+) context.Context {
 	claims := &security.AuthenticationClaims{
 		TenantID:    tenantID,
 		PartitionID: partitionID,

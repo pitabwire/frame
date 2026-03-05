@@ -29,7 +29,7 @@ func tenancyPath(tenantID, partitionID string) string {
 
 func (s *AuthorizerTestSuite) TestPermissionChecker_NoClaims() {
 	adapter := s.newAdapter(nil)
-	c := authorizer.NewTenancyAccessChecker(adapter, "default")
+	c := authorizer.NewTenancyAccessChecker(adapter, "resource")
 
 	err := c.Check(context.Background(), "view")
 	s.ErrorIs(err, authorizer.ErrInvalidSubject)
@@ -37,7 +37,7 @@ func (s *AuthorizerTestSuite) TestPermissionChecker_NoClaims() {
 
 func (s *AuthorizerTestSuite) TestPermissionChecker_NoSubject() {
 	adapter := s.newAdapter(nil)
-	c := authorizer.NewTenancyAccessChecker(adapter, "default")
+	c := authorizer.NewTenancyAccessChecker(adapter, "resource")
 
 	claims := &security.AuthenticationClaims{TenantID: "t1", PartitionID: "p1"}
 	ctx := claims.ClaimsToContext(context.Background())
@@ -47,7 +47,7 @@ func (s *AuthorizerTestSuite) TestPermissionChecker_NoSubject() {
 
 func (s *AuthorizerTestSuite) TestPermissionChecker_NoTenant() {
 	adapter := s.newAdapter(nil)
-	c := authorizer.NewTenancyAccessChecker(adapter, "default")
+	c := authorizer.NewTenancyAccessChecker(adapter, "resource")
 
 	claims := &security.AuthenticationClaims{PartitionID: "p1"}
 	claims.Subject = "u1"
@@ -58,7 +58,7 @@ func (s *AuthorizerTestSuite) TestPermissionChecker_NoTenant() {
 
 func (s *AuthorizerTestSuite) TestPermissionChecker_NoPartition() {
 	adapter := s.newAdapter(nil)
-	c := authorizer.NewTenancyAccessChecker(adapter, "default")
+	c := authorizer.NewTenancyAccessChecker(adapter, "resource")
 
 	claims := &security.AuthenticationClaims{TenantID: "t1"}
 	claims.Subject = "u1"
@@ -73,13 +73,13 @@ func (s *AuthorizerTestSuite) TestPermissionChecker_Allowed() {
 
 	tp := tenancyPath("pc-t1", "pc-p1")
 	err := adapter.WriteTuple(ctx, security.RelationTuple{
-		Object:   security.ObjectRef{Namespace: "default", ID: tp},
+		Object:   security.ObjectRef{Namespace: "resource", ID: tp},
 		Relation: "view",
 		Subject:  security.SubjectRef{Namespace: security.NamespaceProfile, ID: "pc-u1"},
 	})
 	s.Require().NoError(err)
 
-	c := authorizer.NewTenancyAccessChecker(adapter, "default")
+	c := authorizer.NewTenancyAccessChecker(adapter, "resource")
 	err = c.Check(claimsCtx("pc-u1", "pc-t1", "pc-p1", "user"), "view")
 	s.NoError(err)
 }
@@ -87,7 +87,7 @@ func (s *AuthorizerTestSuite) TestPermissionChecker_Allowed() {
 func (s *AuthorizerTestSuite) TestPermissionChecker_Denied() {
 	adapter := s.newAdapter(nil)
 	// Override default callback to return error so retry doesn't mask the denial.
-	c := authorizer.NewTenancyAccessChecker(adapter, "default",
+	c := authorizer.NewTenancyAccessChecker(adapter, "resource",
 		authorizer.WithOnTenancyAccessDenied(func(_ context.Context, _ security.Authorizer, _, _ string) error {
 			return errors.New("no provisioning")
 		}),
@@ -106,12 +106,12 @@ func (s *AuthorizerTestSuite) TestPermissionChecker_SelfHeals() {
 
 	c := authorizer.NewTenancyAccessChecker(
 		adapter,
-		"default",
+		"resource",
 		authorizer.WithSubjectNamespace("profile"),
 		authorizer.WithOnTenancyAccessDenied(
 			func(ctx context.Context, auth security.Authorizer, tenancyPath, subjectID string) error {
 				return auth.WriteTuple(ctx, security.RelationTuple{
-					Object:   security.ObjectRef{Namespace: "default", ID: tenancyPath},
+					Object:   security.ObjectRef{Namespace: "resource", ID: tenancyPath},
 					Relation: "view",
 					Subject:  security.SubjectRef{Namespace: "profile", ID: subjectID},
 				})
@@ -125,7 +125,7 @@ func (s *AuthorizerTestSuite) TestPermissionChecker_SelfHeals() {
 	// Verify tuple was provisioned.
 	tp := tenancyPath("pc-t-heal", "pc-p-heal")
 	result, err := adapter.Check(ctx, security.CheckRequest{
-		Object:     security.ObjectRef{Namespace: "default", ID: tp},
+		Object:     security.ObjectRef{Namespace: "resource", ID: tp},
 		Permission: "view",
 		Subject:    security.SubjectRef{Namespace: "profile", ID: "pc-svc1"},
 	})
@@ -136,7 +136,7 @@ func (s *AuthorizerTestSuite) TestPermissionChecker_SelfHeals() {
 func (s *AuthorizerTestSuite) TestPermissionChecker_ProvisionFails() {
 	adapter := s.newAdapter(nil)
 
-	c := authorizer.NewTenancyAccessChecker(adapter, "default",
+	c := authorizer.NewTenancyAccessChecker(adapter, "resource",
 		authorizer.WithSubjectNamespace("profile"),
 		authorizer.WithOnTenancyAccessDenied(func(_ context.Context, _ security.Authorizer, _, _ string) error {
 			return errors.New("provision failed")
@@ -156,12 +156,12 @@ func (s *AuthorizerTestSuite) TestPermissionChecker_RetryDenied() {
 	// Provision succeeds but writes a different relation, not the one checked.
 	c := authorizer.NewTenancyAccessChecker(
 		adapter,
-		"default",
+		"resource",
 		authorizer.WithSubjectNamespace("profile"),
 		authorizer.WithOnTenancyAccessDenied(
 			func(ctx context.Context, auth security.Authorizer, tenancyPath, subjectID string) error {
 				return auth.WriteTuple(ctx, security.RelationTuple{
-					Object:   security.ObjectRef{Namespace: "default", ID: tenancyPath},
+					Object:   security.ObjectRef{Namespace: "resource", ID: tenancyPath},
 					Relation: "other",
 					Subject:  security.SubjectRef{Namespace: "profile", ID: subjectID},
 				})
@@ -182,13 +182,13 @@ func (s *AuthorizerTestSuite) TestPermissionChecker_WithSubjectNamespace() {
 
 	tp := tenancyPath("pc-t-ns", "pc-p-ns")
 	err := adapter.WriteTuple(ctx, security.RelationTuple{
-		Object:   security.ObjectRef{Namespace: "default", ID: tp},
+		Object:   security.ObjectRef{Namespace: "resource", ID: tp},
 		Relation: "view",
 		Subject:  security.SubjectRef{Namespace: "custom", ID: "pc-u-ns"},
 	})
 	s.Require().NoError(err)
 
-	c := authorizer.NewTenancyAccessChecker(adapter, "default",
+	c := authorizer.NewTenancyAccessChecker(adapter, "resource",
 		authorizer.WithSubjectNamespace("custom"),
 	)
 	err = c.Check(claimsCtx("pc-u-ns", "pc-t-ns", "pc-p-ns", "user"), "view")
@@ -198,7 +198,7 @@ func (s *AuthorizerTestSuite) TestPermissionChecker_WithSubjectNamespace() {
 func (s *AuthorizerTestSuite) TestPermissionChecker_DefaultCallbackRetries() {
 	adapter := s.newAdapter(nil)
 	// Default callback logs and returns nil, which triggers a retry that fails.
-	c := authorizer.NewTenancyAccessChecker(adapter, "default")
+	c := authorizer.NewTenancyAccessChecker(adapter, "resource")
 
 	err := c.Check(claimsCtx("pc-def", "pc-t-def", "pc-p-def", "system_internal"), "view")
 	s.Require().Error(err)

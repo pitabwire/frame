@@ -1,16 +1,28 @@
 package profiler_test
 
 import (
-	"context"
+	"fmt"
 	"net/http"
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
+
+	"github.com/pitabwire/frame"
 	"github.com/pitabwire/frame/config"
-	"github.com/pitabwire/frame/profiler"
+	"github.com/pitabwire/frame/frametests"
 )
 
-func TestServer_StartIfEnabled(t *testing.T) {
+type ProfilerServerSuite struct {
+	suite.Suite
+}
+
+func TestProfilerServerSuite(t *testing.T) {
+	suite.Run(t, new(ProfilerServerSuite))
+}
+
+func (s *ProfilerServerSuite) TestStartIfEnabled() {
 	tests := []struct {
 		name           string
 		profilerEnable bool
@@ -38,106 +50,97 @@ func TestServer_StartIfEnabled(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			cfg := createTestConfig(tt.profilerEnable, tt.profilerPort)
-			server := profiler.NewServer()
-			ctx := t.Context()
+		s.Run(tt.name, func() {
+			t := s.T()
 
-			startProfilerAndVerify(ctx, t, server, cfg, tt.expectRunning)
-
-			if tt.expectRunning {
-				verifyPprofEndpoint(t, tt.profilerPort)
+			cfg := &config.ConfigurationDefault{
+				ProfilerEnable:   tt.profilerEnable,
+				ProfilerPortAddr: tt.profilerPort,
 			}
 
-			stopProfilerAndVerify(ctx, t, server)
+			httpTestOpt, _ := frametests.WithHTTPTestDriver()
+
+			ctx, svc := frame.NewService(
+				frame.WithName("profiler-test"),
+				frame.WithConfig(cfg),
+				httpTestOpt,
+			)
+			defer svc.Stop(ctx)
+
+			err := svc.Run(ctx, "")
+			require.NoError(t, err)
+
+			if tt.expectRunning {
+				// Give the server a moment to start
+				time.Sleep(200 * time.Millisecond)
+
+				resp, httpErr := http.Get(fmt.Sprintf("http://localhost%s/debug/pprof/", tt.profilerPort))
+				require.NoError(t, httpErr)
+				defer resp.Body.Close()
+				require.Equal(t, http.StatusOK, resp.StatusCode)
+			}
 		})
 	}
 }
 
-func createTestConfig(enable bool, port string) *config.ConfigurationDefault {
-	return &config.ConfigurationDefault{
-		ProfilerEnable:   enable,
-		ProfilerPortAddr: port,
-	}
-}
+func (s *ProfilerServerSuite) TestStop() {
+	t := s.T()
 
-func startProfilerAndVerify(
-	ctx context.Context,
-	t *testing.T,
-	server *profiler.Server,
-	cfg *config.ConfigurationDefault,
-	expectRunning bool,
-) {
-	err := server.StartIfEnabled(ctx, cfg)
-	if err != nil {
-		t.Errorf("unexpected error starting profiler: %v", err)
-	}
-
-	if expectRunning && !server.IsRunning() {
-		t.Error("expected profiler server to be running when enabled")
-	}
-	if !expectRunning && server.IsRunning() {
-		t.Error("expected profiler server to not be running when disabled")
-	}
-}
-
-func verifyPprofEndpoint(t *testing.T, port string) {
-	// Give the server a moment to start
-	time.Sleep(200 * time.Millisecond)
-
-	resp, httpErr := http.Get("http://localhost" + port + "/debug/pprof/")
-	if httpErr != nil {
-		t.Errorf("failed to connect to pprof server: %v", httpErr)
-		return
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		t.Errorf("expected status 200, got %d", resp.StatusCode)
-	}
-}
-
-func stopProfilerAndVerify(ctx context.Context, t *testing.T, server *profiler.Server) {
-	err := server.Stop(ctx)
-	if err != nil {
-		t.Errorf("unexpected error stopping profiler: %v", err)
-	}
-
-	if server.IsRunning() {
-		t.Error("expected profiler server to be stopped after Stop()")
-	}
-}
-
-func TestServer_Stop(t *testing.T) {
-	server := profiler.NewServer()
-	ctx := t.Context()
-
-	// Test stopping when not running
-	err := server.Stop(ctx)
-	if err != nil {
-		t.Errorf("unexpected error stopping non-running server: %v", err)
-	}
-
-	// Test stopping when running
 	cfg := &config.ConfigurationDefault{
 		ProfilerEnable:   true,
 		ProfilerPortAddr: ":6062",
 	}
 
-	err = server.StartIfEnabled(ctx, cfg)
-	if err != nil {
-		t.Fatalf("failed to start profiler: %v", err)
-	}
+	httpTestOpt, _ := frametests.WithHTTPTestDriver()
 
-	// Give it a moment to start
+	ctx, svc := frame.NewService(
+		frame.WithName("profiler-stop-test"),
+		frame.WithConfig(cfg),
+		httpTestOpt,
+	)
+
+	err := svc.Run(ctx, "")
+	require.NoError(t, err)
+
+	// Give the server a moment to start
+	time.Sleep(200 * time.Millisecond)
+
+	// Verify profiler is reachable
+	resp, err := http.Get("http://localhost:6062/debug/pprof/")
+	require.NoError(t, err)
+	resp.Body.Close()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+
+	// Stop the service which should also stop the profiler
+	svc.Stop(ctx)
+
+	// Give it a moment to shut down
+	time.Sleep(200 * time.Millisecond)
+
+	// Verify profiler is no longer reachable
+	_, err = http.Get("http://localhost:6062/debug/pprof/")
+	require.Error(t, err, "profiler should not be reachable after service stop")
+}
+
+func (s *ProfilerServerSuite) TestProfilerDisabledByDefault() {
+	t := s.T()
+
+	httpTestOpt, _ := frametests.WithHTTPTestDriver()
+
+	ctx, svc := frame.NewService(
+		frame.WithName("profiler-default-test"),
+		httpTestOpt,
+	)
+	defer svc.Stop(ctx)
+
+	err := svc.Run(ctx, "")
+	require.NoError(t, err)
+
+	// Default config has profiler disabled, so port :6060 should not respond
+	// with pprof (unless something else is on that port)
 	time.Sleep(100 * time.Millisecond)
 
-	err = server.Stop(ctx)
-	if err != nil {
-		t.Errorf("unexpected error stopping running server: %v", err)
-	}
-
-	if server.IsRunning() {
-		t.Error("expected server to be stopped after Stop()")
-	}
+	client := &http.Client{Timeout: 500 * time.Millisecond}
+	_, err = client.Get("http://localhost:6063/debug/pprof/")
+	require.Error(t, err, "profiler should not be running with default config")
 }

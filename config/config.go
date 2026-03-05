@@ -409,9 +409,11 @@ func (c *ConfigurationDefault) LoadOauth2Config(ctx context.Context) error {
 		return err
 	}
 
-	c.Oauth2WellKnownJwkData, err = c.oidcMap.loadJWKData(ctx, c.GetOauth2WellKnownJwk())
-	if err != nil {
-		return err
+	if c.Oauth2WellKnownJwkData == "" {
+		c.Oauth2WellKnownJwkData, err = c.oidcMap.loadJWKData(ctx, c.GetOauth2WellKnownJwk())
+		if err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -419,6 +421,17 @@ func (c *ConfigurationDefault) GetOauth2WellKnownOIDC() string {
 	res, _ := url.JoinPath(c.GetOauth2ServiceURI(), c.Oauth2WellKnownOIDCPath)
 	return res
 }
+
+// SetOIDCValue sets a value in the OIDC discovery map. This is useful
+// for tests that need to manually configure OIDC endpoints without
+// performing actual OIDC discovery.
+func (c *ConfigurationDefault) SetOIDCValue(key string, value any) {
+	if c.oidcMap == nil {
+		c.oidcMap = make(OIDCMap)
+	}
+	c.oidcMap[key] = value
+}
+
 func (c *ConfigurationDefault) GetOauth2WellKnownJwk() string {
 	val, ok := c.oidcMap["jwks_uri"]
 	if !ok {
@@ -533,6 +546,7 @@ func (c *ConfigurationDefault) GetOauth2ServiceAdminURI() string {
 
 type ConfigurationJWTVerification interface {
 	GetOauth2WellKnownJwk() string
+	GetOauth2WellKnownJwkData() string
 	GetVerificationAudience() []string
 	GetVerificationIssuer() string
 }

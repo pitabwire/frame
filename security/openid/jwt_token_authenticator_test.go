@@ -200,6 +200,10 @@ func (m *mockJWTConfig) GetVerificationAudience() []string {
 func (m *mockJWTConfig) GetVerificationIssuer() string {
 	return m.issuer
 }
+
+func (m *mockJWTConfig) GetOauth2WellKnownJwkData() string {
+	return ""
+}
 func (s *JwtAuthenticatorTestSuite) createValidToken(keyType string, kid string) (string, error) {
 	var signingMethod jwt.SigningMethod
 	var key any

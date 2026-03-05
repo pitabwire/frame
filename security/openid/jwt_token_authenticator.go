@@ -46,6 +46,13 @@ func NewJwtTokenAuthenticator(cfg config.ConfigurationJWTVerification) security.
 		cfg.GetOauth2WellKnownJwk(),
 		defaultJWKSRefreshInterval,
 	)
+
+	// If JWK data is pre-loaded (e.g. from OAUTH2_WELL_KNOWN_JWK_DATA env var),
+	// parse it directly so keys are available even without a reachable JWKS URL.
+	if jwkData := cfg.GetOauth2WellKnownJwkData(); jwkData != "" {
+		_ = auth.LoadFromJSON([]byte(jwkData))
+	}
+
 	auth.Start()
 
 	return &jwtTokenAuthenticator{
@@ -234,6 +241,39 @@ func (a *TokenAuthenticator) GetKey(token *jwt.Token) (any, error) {
 		return nil, fmt.Errorf("no jwk found for kid %s", kid)
 	}
 	return key, nil
+}
+
+// LoadFromJSON parses JWK Set JSON data and loads the keys directly,
+// without fetching from a URL. This is useful when JWKS data is
+// provided via configuration (e.g. OAUTH2_WELL_KNOWN_JWK_DATA env var).
+func (a *TokenAuthenticator) LoadFromJSON(data []byte) error {
+	var jwks JWKSet
+	if err := json.Unmarshal(data, &jwks); err != nil {
+		return fmt.Errorf("failed to parse JWK JSON: %w", err)
+	}
+
+	keyMap := make(map[string]any)
+	for _, k := range jwks.Keys {
+		if k.Kid == "" {
+			continue
+		}
+		pub, err := a.buildKey(k)
+		if err != nil {
+			continue
+		}
+		keyMap[k.Kid] = pub
+	}
+
+	if len(keyMap) == 0 {
+		return errors.New("no valid keys in JWK data")
+	}
+
+	a.mu.Lock()
+	a.keys = keyMap
+	a.lastErr = nil
+	a.mu.Unlock()
+
+	return nil
 }
 
 // ------------------------------

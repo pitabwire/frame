@@ -1,6 +1,6 @@
-# HTTP and gRPC Server
+# HTTP Server
 
-Frame provides an HTTP server with optional gRPC sidecar support. The server layer is configured via `Service` options and environment-based config interfaces.
+Frame provides an HTTP server with configurable lifecycle and transport limits. The server layer is configured via `Service` options and environment-based config interfaces.
 
 ## HTTP Server Basics
 
@@ -40,24 +40,6 @@ _ = svc.Run(ctx, ":8080")
 - Default path: `/healthz`
 - Register custom checks using `AddHealthCheck`.
 
-## gRPC Server
-
-```go
-grpcServer := grpc.NewServer()
-
-ctx, svc := frame.NewService(
-    frame.WithHTTPHandler(http.DefaultServeMux),
-    frame.WithGRPCServer(grpcServer),
-    frame.WithGRPCPort(":50051"),
-)
-
-_ = svc.Run(ctx, ":8080")
-```
-
-Optional:
-- `WithEnableGRPCServerReflection()`
-- `WithGRPCServerListener(listener net.Listener)`
-
 ## HTTP/2 Support
 
 Frame configures HTTP/2 support automatically:
@@ -82,12 +64,13 @@ type ServerDriver interface {
 
 You can inject a custom driver with `WithDriver` for testing or custom transport.
 
-## Default HTTP Timeouts
+## Default HTTP Limits
 
-These defaults are hard-coded in `service.go`:
+These defaults are configurable via `config.ConfigurationHTTPServer` and environment variables:
 
-- Read timeout: 5s
-- Write timeout: 10s
-- Idle timeout: 90s
-
-Adjust by supplying a custom driver.
+- `HTTP_SERVER_READ_TIMEOUT=30s`
+- `HTTP_SERVER_READ_HEADER_TIMEOUT=5s`
+- `HTTP_SERVER_WRITE_TIMEOUT=30s`
+- `HTTP_SERVER_IDLE_TIMEOUT=90s`
+- `HTTP_SERVER_SHUTDOWN_TIMEOUT=15s`
+- `HTTP_SERVER_MAX_HEADER_KB=1024`

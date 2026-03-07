@@ -9,7 +9,7 @@ Frame is a fast, extensible Go framework built around a minimal core `Service` a
 
 ## Mental Model
 
-Frame bootstraps a `Service` that owns shared runtime state and managers. Options configure the service and register startup hooks. The service then starts HTTP/gRPC servers, background workers, and pluggable components.
+Frame bootstraps a `Service` that owns shared runtime state and managers. Options configure the service and register startup hooks. The service then starts the HTTP server, background workers, and pluggable components.
 
 ```
 ctx, svc := frame.NewService(
@@ -49,15 +49,16 @@ Run
   -> validate startup errors
   -> initialize queue manager
   -> start background consumer (if configured)
-  -> start HTTP/gRPC server(s)
+  -> start HTTP server
   -> start profiler (if enabled)
   -> execute startup hooks
   -> block until shutdown or error
 
 Stop
+  -> drain HTTP server
   -> stop profiler
-  -> cancel service context
   -> run cleanup hooks
+  -> cancel service context
 ```
 
 ## Extension Points (Plugin Architecture)

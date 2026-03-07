@@ -98,7 +98,6 @@ func (s *ConfigSuite) TestFallbacksTable() {
 		cfg         ConfigurationDefault
 		wantPort    string
 		wantHTTP    string
-		wantGRPC    string
 		wantProfile string
 		wantExpiry  time.Duration
 	}{
@@ -107,13 +106,11 @@ func (s *ConfigSuite) TestFallbacksTable() {
 			cfg: ConfigurationDefault{
 				ServerPort:               "7000",
 				HTTPServerPort:           "8080",
-				GrpcServerPort:           "50051",
 				ProfilerPortAddr:         ":6600",
 				WorkerPoolExpiryDuration: "1500ms",
 			},
 			wantPort:    ":7000",
 			wantHTTP:    ":8080",
-			wantGRPC:    ":50051",
 			wantProfile: ":6600",
 			wantExpiry:  1500 * time.Millisecond,
 		},
@@ -122,13 +119,11 @@ func (s *ConfigSuite) TestFallbacksTable() {
 			cfg: ConfigurationDefault{
 				ServerPort:               "invalid",
 				HTTPServerPort:           "invalid",
-				GrpcServerPort:           "invalid",
 				ProfilerPortAddr:         "",
 				WorkerPoolExpiryDuration: "invalid",
 			},
 			wantPort:    ":80",
 			wantHTTP:    ":8080",
-			wantGRPC:    ":80",
 			wantProfile: ":6060",
 			wantExpiry:  time.Second,
 		},
@@ -137,12 +132,10 @@ func (s *ConfigSuite) TestFallbacksTable() {
 			cfg: ConfigurationDefault{
 				ServerPort:               "0.0.0.0:7000",
 				HTTPServerPort:           ":8088",
-				GrpcServerPort:           "127.0.0.1:50052",
 				WorkerPoolExpiryDuration: "1s",
 			},
 			wantPort:    "0.0.0.0:7000",
 			wantHTTP:    ":8088",
-			wantGRPC:    "127.0.0.1:50052",
 			wantProfile: ":6060",
 			wantExpiry:  time.Second,
 		},
@@ -152,11 +145,42 @@ func (s *ConfigSuite) TestFallbacksTable() {
 		s.Run(tc.name, func() {
 			s.Equal(tc.wantPort, tc.cfg.Port())
 			s.Equal(tc.wantHTTP, tc.cfg.HTTPPort())
-			s.Equal(tc.wantGRPC, tc.cfg.GrpcPort())
 			s.Equal(tc.wantProfile, tc.cfg.ProfilerPort())
 			s.Equal(tc.wantExpiry, tc.cfg.GetExpiryDuration())
 		})
 	}
+}
+
+func (s *ConfigSuite) TestHTTPServerSettings() {
+	cfg := &ConfigurationDefault{
+		HTTPServerReadTimeout:       "31s",
+		HTTPServerReadHeaderTimeout: "6s",
+		HTTPServerWriteTimeout:      "32s",
+		HTTPServerIdleTimeout:       "91s",
+		HTTPServerShutdownTimeout:   "16s",
+		HTTPServerMaxHeaderBytes:    2048,
+	}
+
+	s.Equal(31*time.Second, cfg.HTTPReadTimeout())
+	s.Equal(6*time.Second, cfg.HTTPReadHeaderTimeout())
+	s.Equal(32*time.Second, cfg.HTTPWriteTimeout())
+	s.Equal(91*time.Second, cfg.HTTPIdleTimeout())
+	s.Equal(16*time.Second, cfg.HTTPShutdownTimeout())
+	s.Equal(2048*1024, cfg.HTTPMaxHeaderBytes())
+
+	cfg.HTTPServerReadTimeout = "invalid"
+	cfg.HTTPServerReadHeaderTimeout = "invalid"
+	cfg.HTTPServerWriteTimeout = "invalid"
+	cfg.HTTPServerIdleTimeout = "invalid"
+	cfg.HTTPServerShutdownTimeout = "invalid"
+	cfg.HTTPServerMaxHeaderBytes = 0
+
+	s.Equal(30*time.Second, cfg.HTTPReadTimeout())
+	s.Equal(5*time.Second, cfg.HTTPReadHeaderTimeout())
+	s.Equal(30*time.Second, cfg.HTTPWriteTimeout())
+	s.Equal(90*time.Second, cfg.HTTPIdleTimeout())
+	s.Equal(15*time.Second, cfg.HTTPShutdownTimeout())
+	s.Equal(1024*1024, cfg.HTTPMaxHeaderBytes())
 }
 
 func (s *ConfigSuite) TestDatabaseAndEventConfig() {

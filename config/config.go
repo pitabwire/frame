@@ -25,9 +25,17 @@ func (c contextKey) String() string {
 const (
 	ctxKeyConfiguration = contextKey("configurationKey")
 	httpStatusOKClass   = 2
+	bytesPerKiB         = 1024
 	// DefaultSlowQueryThresholdMilliseconds is defined in datastore_logger.go.
 
-	DefaultSlowQueryThreshold = 200 * time.Millisecond
+	DefaultSlowQueryThreshold     = 200 * time.Millisecond
+	defaultHTTPReadTimeout        = 30 * time.Second
+	defaultHTTPReadHeaderTimeout  = 5 * time.Second
+	defaultHTTPWriteTimeout       = 30 * time.Second
+	defaultHTTPIdleTimeout        = 90 * time.Second
+	defaultHTTPShutdownTimeout    = 15 * time.Second
+	defaultHTTPMaxHeaderKilobytes = 1024
+	defaultHTTPMaxHeaderBytes     = defaultHTTPMaxHeaderKilobytes * bytesPerKiB
 )
 
 // ToContext adds service configuration to the current supplied context.
@@ -77,6 +85,17 @@ func FillEnv(v any) error {
 	return env.Parse(v)
 }
 
+func parseDurationOrDefault(value string, fallback time.Duration) time.Duration {
+	if value != "" {
+		duration, err := time.ParseDuration(value)
+		if err == nil {
+			return duration
+		}
+	}
+
+	return fallback
+}
+
 type ConfigurationDefault struct {
 	LogLevel      string `envDefault:"info"                      env:"LOG_LEVEL"       yaml:"log_level"`
 	LogFormat     string `envDefault:"info"                      env:"LOG_FORMAT"      yaml:"log_format"`
@@ -106,9 +125,15 @@ type ConfigurationDefault struct {
 	DebugEndpointsEnabledValue  bool   `envDefault:"false"        env:"FRAME_DEBUG_ENDPOINTS"          yaml:"frame_debug_endpoints"`
 	DebugEndpointsBasePathValue string `envDefault:"/debug/frame" env:"FRAME_DEBUG_ENDPOINTS_BASEPATH" yaml:"frame_debug_endpoints_basepath"`
 
-	ServerPort     string `envDefault:":7000"  env:"PORT"      yaml:"server_port"`
-	HTTPServerPort string `envDefault:":8080"  env:"HTTP_PORT" yaml:"http_server_port"`
-	GrpcServerPort string `envDefault:":50051" env:"GRPC_PORT" yaml:"grpc_server_port"`
+	ServerPort     string `envDefault:":7000" env:"PORT"      yaml:"server_port"`
+	HTTPServerPort string `envDefault:":8080" env:"HTTP_PORT" yaml:"http_server_port"`
+
+	HTTPServerReadTimeout       string `envDefault:"30s"  env:"HTTP_SERVER_READ_TIMEOUT"        yaml:"http_server_read_timeout"`
+	HTTPServerReadHeaderTimeout string `envDefault:"5s"   env:"HTTP_SERVER_READ_HEADER_TIMEOUT" yaml:"http_server_read_header_timeout"`
+	HTTPServerWriteTimeout      string `envDefault:"30s"  env:"HTTP_SERVER_WRITE_TIMEOUT"       yaml:"http_server_write_timeout"`
+	HTTPServerIdleTimeout       string `envDefault:"90s"  env:"HTTP_SERVER_IDLE_TIMEOUT"        yaml:"http_server_idle_timeout"`
+	HTTPServerShutdownTimeout   string `envDefault:"15s"  env:"HTTP_SERVER_SHUTDOWN_TIMEOUT"    yaml:"http_server_shutdown_timeout"`
+	HTTPServerMaxHeaderBytes    int    `envDefault:"1024" env:"HTTP_SERVER_MAX_HEADER_KB"       yaml:"http_server_max_header_kb"`
 
 	// Worker pool settings
 	WorkerPoolCPUFactorForWorkerCount int    `envDefault:"10"  env:"WORKER_POOL_CPU_FACTOR_FOR_WORKER_COUNT" yaml:"worker_pool_cpu_factor_for_worker_count"`
@@ -292,7 +317,6 @@ func (c *ConfigurationDefault) ProfilerPort() string {
 type ConfigurationPorts interface {
 	Port() string
 	HTTPPort() string
-	GrpcPort() string
 }
 
 var _ ConfigurationPorts = new(ConfigurationDefault)
@@ -319,18 +343,6 @@ func (c *ConfigurationDefault) HTTPPort() string {
 	}
 
 	return ":8080"
-}
-
-func (c *ConfigurationDefault) GrpcPort() string {
-	if i, err := strconv.Atoi(c.GrpcServerPort); err == nil && i > 0 {
-		return fmt.Sprintf(":%s", strings.TrimSpace(c.GrpcServerPort))
-	}
-
-	if strings.HasPrefix(c.GrpcServerPort, ":") || strings.Contains(c.GrpcServerPort, ":") {
-		return c.GrpcServerPort
-	}
-
-	return c.Port()
 }
 
 type ConfigurationTelemetry interface {
@@ -378,6 +390,45 @@ func (c *ConfigurationDefault) GetExpiryDuration() time.Duration {
 	}
 
 	return time.Second
+}
+
+type ConfigurationHTTPServer interface {
+	HTTPReadTimeout() time.Duration
+	HTTPReadHeaderTimeout() time.Duration
+	HTTPWriteTimeout() time.Duration
+	HTTPIdleTimeout() time.Duration
+	HTTPShutdownTimeout() time.Duration
+	HTTPMaxHeaderBytes() int
+}
+
+var _ ConfigurationHTTPServer = new(ConfigurationDefault)
+
+func (c *ConfigurationDefault) HTTPReadTimeout() time.Duration {
+	return parseDurationOrDefault(c.HTTPServerReadTimeout, defaultHTTPReadTimeout)
+}
+
+func (c *ConfigurationDefault) HTTPReadHeaderTimeout() time.Duration {
+	return parseDurationOrDefault(c.HTTPServerReadHeaderTimeout, defaultHTTPReadHeaderTimeout)
+}
+
+func (c *ConfigurationDefault) HTTPWriteTimeout() time.Duration {
+	return parseDurationOrDefault(c.HTTPServerWriteTimeout, defaultHTTPWriteTimeout)
+}
+
+func (c *ConfigurationDefault) HTTPIdleTimeout() time.Duration {
+	return parseDurationOrDefault(c.HTTPServerIdleTimeout, defaultHTTPIdleTimeout)
+}
+
+func (c *ConfigurationDefault) HTTPShutdownTimeout() time.Duration {
+	return parseDurationOrDefault(c.HTTPServerShutdownTimeout, defaultHTTPShutdownTimeout)
+}
+
+func (c *ConfigurationDefault) HTTPMaxHeaderBytes() int {
+	if c.HTTPServerMaxHeaderBytes > 0 {
+		return c.HTTPServerMaxHeaderBytes * bytesPerKiB
+	}
+
+	return defaultHTTPMaxHeaderBytes
 }
 
 type ConfigurationOAUTH2 interface {

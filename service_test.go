@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"strconv"
+	"sync/atomic"
 	"syscall"
 	"testing"
 	"time"
@@ -25,6 +26,7 @@ import (
 	"github.com/pitabwire/frame/config"
 	"github.com/pitabwire/frame/frametests"
 	"github.com/pitabwire/frame/frametests/definition"
+	frameserver "github.com/pitabwire/frame/server"
 	"github.com/pitabwire/frame/tests"
 )
 
@@ -797,10 +799,6 @@ func TestService_SecurityManagerConfiguration(t *testing.T) {
 	// Verify security manager is created
 	require.NotNil(t, sm)
 
-	// Verify we can get security components
-	registrar := sm.GetOauth2ClientRegistrar(ctx)
-	require.NotNil(t, registrar)
-
 	authenticator := sm.GetAuthenticator(ctx)
 	require.NotNil(t, authenticator)
 
@@ -960,4 +958,85 @@ func TestService_H2CClientConfiguration(t *testing.T) {
 			assert.NotNil(t, httpClient.Transport)
 		})
 	}
+}
+
+type configWithoutHTTPServer struct{}
+
+func (c *configWithoutHTTPServer) GetEventsQueueName() string {
+	return "frame.events.internal_._queue"
+}
+
+func (c *configWithoutHTTPServer) GetEventsQueueURL() string {
+	return "mem://frame.events.internal_._queue"
+}
+
+func (s *ServiceTestSuite) TestRunRequiresHTTPServerConfig() {
+	ctx, svc := frame.NewServiceWithContext(context.Background(), frame.WithConfig(&configWithoutHTTPServer{}))
+
+	err := svc.Run(ctx, ":0")
+	s.Require().ErrorIs(err, frame.ErrHTTPServerConfigRequired)
+}
+
+type shutdownTrackingDriver struct {
+	started       chan struct{}
+	stopped       chan struct{}
+	shutdownCount int32
+}
+
+func newShutdownTrackingDriver() *shutdownTrackingDriver {
+	return &shutdownTrackingDriver{
+		started: make(chan struct{}),
+		stopped: make(chan struct{}),
+	}
+}
+
+func (d *shutdownTrackingDriver) ListenAndServe(_ string, _ http.Handler) error {
+	close(d.started)
+	<-d.stopped
+	return http.ErrServerClosed
+}
+
+func (d *shutdownTrackingDriver) ListenAndServeTLS(_, _, _ string, _ http.Handler) error {
+	return d.ListenAndServe("", nil)
+}
+
+func (d *shutdownTrackingDriver) Shutdown(_ context.Context) error {
+	if atomic.AddInt32(&d.shutdownCount, 1) == 1 {
+		close(d.stopped)
+	}
+
+	return nil
+}
+
+var _ frameserver.Driver = (*shutdownTrackingDriver)(nil)
+
+func (s *ServiceTestSuite) TestRunTriggersDriverShutdownOnContextCancel() {
+	driver := newShutdownTrackingDriver()
+	parentCtx, cancel := context.WithCancel(context.Background())
+	ctx, svc := frame.NewServiceWithContext(parentCtx,
+		frame.WithName("shutdown-test"),
+		frame.WithDriver(driver),
+	)
+
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- svc.Run(ctx, ":0")
+	}()
+
+	select {
+	case <-driver.started:
+	case <-time.After(2 * time.Second):
+		s.T().Fatal("service did not start listening")
+	}
+
+	cancel()
+
+	select {
+	case err := <-errCh:
+		s.Require().ErrorIs(err, context.Canceled)
+	case <-time.After(2 * time.Second):
+		s.T().Fatal("service did not stop after context cancellation")
+	}
+
+	s.Require().Equal(int32(1), atomic.LoadInt32(&driver.shutdownCount))
 }

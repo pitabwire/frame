@@ -22,7 +22,7 @@ ctx, svc := frame.NewServiceWithContext(ctx, frame.WithName("orders"))
 ## Service Lifecycle
 
 - `NewService` applies options and initializes core managers.
-- `Run` starts HTTP/gRPC servers, background processing, and startup hooks.
+- `Run` starts the HTTP server, background processing, and startup hooks.
 - `Stop` executes cleanup and shuts down gracefully.
 
 ### Startup Hooks (Ordering Matters)
@@ -65,11 +65,7 @@ Service options are composable and can be applied at construction or later via `
 
 - `WithHTTPHandler(h http.Handler)`
 - `WithHTTPMiddleware(mw ...func(http.Handler) http.Handler)`
-- `WithGRPCServer(grpcServer *grpc.Server)`
-- `WithGRPCPort(port string)`
-- `WithEnableGRPCServerReflection()`
-- `WithGRPCServerListener(listener net.Listener)`
-- `WithDriver(driver ServerDriver)`
+- `WithDriver(driver server.Driver)`
 
 ### Configuration and Logging
 
@@ -133,4 +129,3 @@ Health checks are registered using `AddHealthCheck`, and are served on `/healthz
 
 - Startup errors are collected via `AddStartupError` and returned when `Run` is called.
 - `ErrorIsNotFound(err)` helps normalize "not found" checks across data, gRPC, and HTTP.
-

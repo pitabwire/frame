@@ -5,7 +5,6 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
-	"net"
 	"net/http"
 	"os/signal"
 	"slices"
@@ -15,8 +14,6 @@ import (
 
 	"github.com/pitabwire/util"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
-	"gocloud.dev/server/driver"
-	"google.golang.org/grpc"
 
 	"github.com/pitabwire/frame/cache"
 	"github.com/pitabwire/frame/client"
@@ -49,6 +46,8 @@ const (
 	defaultOpenAPIBasePath = "/debug/frame/openapi"
 )
 
+var ErrHTTPServerConfigRequired = errors.New("configuration must implement config.ConfigurationHTTPServer")
+
 // Service framework struct to hold together all application components
 // An instance of this type scoped to stay for the lifetime of the application.
 // It is pushed and pulled from contexts to make it easy to pass around.
@@ -68,11 +67,7 @@ type Service struct {
 
 	backGroundClient func(ctx context.Context) error
 
-	driver                     server.Driver
-	grpcServer                 *grpc.Server
-	grpcServerEnableReflection bool
-	grpcListener               net.Listener
-	grpcPort                   string
+	driver server.Driver
 
 	healthCheckers  []Checker
 	healthCheckPath string
@@ -412,13 +407,14 @@ func (s *Service) Run(ctx context.Context, address string) error {
 
 	select {
 	case <-ctx.Done():
+		s.stopWithTimeout(ctx)
 		return ctx.Err()
 	case err0 := <-s.errorChannel:
 		if err0 != nil {
 			s.Log(ctx).
 				WithError(err0).
 				Error("system exit in error")
-			s.Stop(ctx)
+			s.stopWithTimeout(ctx)
 		} else {
 			s.Log(ctx).Debug("system exit")
 		}
@@ -443,18 +439,6 @@ func (s *Service) determineHTTPPort(currentPort string) string {
 		return ":http" // Existing logic; consider ":http" or a default port like ":8080"
 	}
 	return cfg.HTTPPort()
-}
-
-func (s *Service) determineGRPCPort(currentPort string) string {
-	if currentPort != "" {
-		return currentPort
-	}
-
-	cfg, ok := s.Config().(config.ConfigurationPorts)
-	if !ok {
-		return ":50051" // Default gRPC port
-	}
-	return cfg.GrpcPort()
 }
 
 func (s *Service) createAndConfigureMux(ctx context.Context) *http.ServeMux {
@@ -522,31 +506,79 @@ func (s *Service) openAPIHandler(base string) http.HandlerFunc {
 	}
 }
 
-func (s *Service) initializeServerDrivers(ctx context.Context, httpPort string) {
+func (s *Service) initializeServerDrivers(ctx context.Context, httpPort string) error {
 	if s.driver != nil {
-		return
+		return nil
 	}
 
-	s.driver = implementation.NewDefaultDriverWithTLS(ctx, s.handler, httpPort, s.setupWorkloadAPITLS(ctx))
+	httpCfg := s.mustHTTPServerConfig()
+	if httpCfg == nil {
+		return ErrHTTPServerConfigRequired
+	}
+
+	tlsConfig, ok, err := s.setupWorkloadAPITLS(ctx)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		tlsConfig = nil
+	}
+
+	s.driver = implementation.NewDefaultDriverWithTLS(
+		ctx,
+		httpCfg,
+		s.handler,
+		httpPort,
+		tlsConfig,
+	)
+
+	return nil
 }
 
-func (s *Service) setupWorkloadAPITLS(ctx context.Context) *tls.Config {
+func (s *Service) setupWorkloadAPITLS(ctx context.Context) (*tls.Config, bool, error) {
 	if s.securityManager == nil {
-		return nil
+		return nil, false, nil
 	}
 
 	workloadAPI := s.securityManager.GetWorkloadAPI(ctx)
 	if workloadAPI == nil {
-		return nil
+		return nil, false, nil
 	}
 
 	tlsConfig, err := workloadAPI.Setup(ctx)
 	if err != nil {
+		if s.mustStaySecureWithoutFileTLS() {
+			return nil, false, fmt.Errorf("secure transport setup failed: %w", err)
+		}
+
 		s.Log(ctx).WithError(err).Warn("failed to setup workload API")
-		return nil
+		return nil, false, nil
 	}
 
-	return tlsConfig
+	return tlsConfig, true, nil
+}
+
+func (s *Service) mustStaySecureWithoutFileTLS() bool {
+	securityCfg, ok := s.Config().(config.ConfigurationSecurity)
+	if !ok || !securityCfg.IsRunSecurely() || s.TLSEnabled() {
+		return false
+	}
+
+	workloadCfg, ok := s.Config().(config.ConfigurationWorkloadAPI)
+	if !ok {
+		return false
+	}
+
+	return strings.TrimSpace(workloadCfg.GetTrustedDomain()) != ""
+}
+
+func (s *Service) mustHTTPServerConfig() config.ConfigurationHTTPServer {
+	cfg, ok := s.Config().(config.ConfigurationHTTPServer)
+	if ok {
+		return cfg
+	}
+
+	return nil
 }
 
 // executeStartupMethods runs all startup methods in the correct order.
@@ -584,18 +616,18 @@ func (s *Service) startServerDriver(ctx context.Context, httpPort string) error 
 		if !ok {
 			return errors.New("TLS is enabled but configuration does not implement ConfigurationTLS")
 		}
-		tlsServer, ok := s.driver.(driver.TLSServer)
-		if !ok {
-			return errors.New("driver does not implement internal.TLSServer for TLS mode")
+		err := s.driver.ListenAndServeTLS(httpPort, cfg.TLSCertPath(), cfg.TLSCertKeyPath(), s.handler)
+		if errors.Is(err, http.ErrServerClosed) {
+			return nil
 		}
-		return tlsServer.ListenAndServeTLS(httpPort, cfg.TLSCertPath(), cfg.TLSCertKeyPath(), s.handler)
+		return err
 	}
 
-	nonTLSServer, ok := s.driver.(driver.Server)
-	if !ok {
-		return errors.New("driver does not implement internal.Server for non-TLS mode")
+	err := s.driver.ListenAndServe(httpPort, s.handler)
+	if errors.Is(err, http.ErrServerClosed) {
+		return nil
 	}
-	return nonTLSServer.ListenAndServe(httpPort, s.handler)
+	return err
 }
 
 // initServer starts the Service. It initializes server drivers.
@@ -607,10 +639,6 @@ func (s *Service) initServer(ctx context.Context, httpPort string) error {
 
 	httpPort = s.determineHTTPPort(httpPort)
 
-	if s.grpcServer != nil {
-		s.grpcPort = s.determineGRPCPort(s.grpcPort)
-	}
-
 	s.startOnce.Do(func() {
 		rootHandler := s.createAndConfigureMux(ctx)
 		if s.telemetryManager.Disabled() {
@@ -618,8 +646,11 @@ func (s *Service) initServer(ctx context.Context, httpPort string) error {
 		} else {
 			s.handler = otelhttp.NewHandler(rootHandler, s.Name())
 		}
-		s.initializeServerDrivers(ctx, httpPort)
 	})
+
+	if err := s.initializeServerDrivers(ctx, httpPort); err != nil {
+		return err
+	}
 
 	// Start profiler if enabled
 	if err := s.startProfilerIfEnabled(ctx); err != nil {
@@ -655,6 +686,12 @@ func (s *Service) Stop(ctx context.Context) {
 
 	log.Info("service stopping")
 
+	if s.driver != nil {
+		if err := s.driver.Shutdown(ctx); err != nil && !errors.Is(err, context.Canceled) {
+			log.WithError(err).Error("failed to shutdown HTTP server")
+		}
+	}
+
 	// Stop profiler server if it was started
 	if s.profilerServer != nil {
 		if err := s.profilerServer.Stop(ctx); err != nil {
@@ -662,16 +699,35 @@ func (s *Service) Stop(ctx context.Context) {
 		}
 	}
 
-	// Cancel the service's main context.
-	if s.cancelFunc != nil {
-		log.Info("canceling service context")
-		s.cancelFunc()
-	}
-
 	// Call user-defined cleanup functions first.
 	if s.cleanup != nil {
 		s.cleanup(ctx)
 	}
+
+	// Cancel the service's main context after listeners and cleanup paths have drained.
+	if s.cancelFunc != nil {
+		log.Info("canceling service context")
+		s.cancelFunc()
+	}
+}
+
+func (s *Service) stopWithTimeout(ctx context.Context) {
+	shutdownCtx, cancel := s.shutdownContext(ctx)
+	defer cancel()
+	s.Stop(shutdownCtx)
+}
+
+func (s *Service) shutdownContext(_ context.Context) (context.Context, context.CancelFunc) {
+	base := context.Background()
+	base = ToContext(base, s)
+	base = config.ToContext(base, s.Config())
+	base = util.ContextWithLogger(base, s.logger)
+	httpCfg := s.mustHTTPServerConfig()
+	if httpCfg == nil {
+		return context.WithCancel(base)
+	}
+
+	return context.WithTimeout(base, httpCfg.HTTPShutdownTimeout())
 }
 
 // initWorkersAndQueues sets up the worker pool manager, queue manager, and events queue.

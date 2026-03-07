@@ -5,15 +5,13 @@ import (
 	"crypto/tls"
 	"net"
 	"net/http"
-	"time"
 
 	"github.com/pitabwire/util"
 	"golang.org/x/net/http2"
 
+	"github.com/pitabwire/frame/config"
 	"github.com/pitabwire/frame/server"
 )
-
-const defaultReadHeaderTimeout = 5 * time.Second
 
 type defaultDriver struct {
 	ctx        context.Context
@@ -23,18 +21,37 @@ type defaultDriver struct {
 	tlsCfg     *tls.Config
 }
 
-func NewDefaultDriver(ctx context.Context, h http.Handler, port string) server.Driver {
-	return NewDefaultDriverWithTLS(ctx, h, port, nil)
+func NewDefaultDriver(
+	ctx context.Context,
+	httpCfg config.ConfigurationHTTPServer,
+	h http.Handler,
+	port string,
+) server.Driver {
+	return NewDefaultDriverWithTLS(ctx, httpCfg, h, port, nil)
 }
 
-func NewDefaultDriverWithTLS(ctx context.Context, h http.Handler, port string, tlsCfg *tls.Config) server.Driver {
+func NewDefaultDriverWithTLS(
+	ctx context.Context,
+	httpCfg config.ConfigurationHTTPServer,
+	h http.Handler,
+	port string,
+	tlsCfg *tls.Config,
+) server.Driver {
+	if httpCfg == nil {
+		panic("config.ConfigurationHTTPServer is required")
+	}
+
 	return &defaultDriver{
 		ctx:  ctx,
 		port: port,
 		httpServer: &http.Server{
 			Addr:              port,
 			Handler:           h,
-			ReadHeaderTimeout: defaultReadHeaderTimeout,
+			ReadTimeout:       httpCfg.HTTPReadTimeout(),
+			ReadHeaderTimeout: httpCfg.HTTPReadHeaderTimeout(),
+			WriteTimeout:      httpCfg.HTTPWriteTimeout(),
+			IdleTimeout:       httpCfg.HTTPIdleTimeout(),
+			MaxHeaderBytes:    httpCfg.HTTPMaxHeaderBytes(),
 			BaseContext: func(_ net.Listener) context.Context {
 				return ctx
 			},

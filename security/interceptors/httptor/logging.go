@@ -38,26 +38,25 @@ type loggingConfig struct {
 var (
 	//nolint:gochecknoglobals // immutable config with sync.Pool for performance
 	loggingConfigInstance = &loggingConfig{
-		// Pool with pre-allocated, capped buffer — zero reallocs.
+		// Pool response wrappers to avoid per-request wrapper allocations.
 		responseWriterPool: &sync.Pool{
 			New: func() any {
-				buf := make([]byte, 0, maxBodyLogSize)
 				return &responseWriterWrapper{
-					body: bytes.NewBuffer(buf),
+					body: new(bytes.Buffer),
 				}
 			},
 		},
 		// Allow-list only: never accidentally log a secret header.
 		allowedLogHeaders: map[string]bool{
-			"Content-Type":     true,
-			"Accept":           true,
-			"Accept-Encoding":  true,
-			"User-Agent":       true,
-			"Cache-Control":    true,
-			"Origin":           true,
-			"Referer":          true,
-			"X-Request-Id":     true,
-			"X-Correlation-Id": true,
+			"content-type":     true,
+			"accept":           true,
+			"accept-encoding":  true,
+			"user-agent":       true,
+			"cache-control":    true,
+			"origin":           true,
+			"referer":          true,
+			"x-request-id":     true,
+			"x-correlation-id": true,
 		},
 		// Query params that are safe to log (very conservative).
 		safeQueryParams: map[string]bool{
@@ -80,6 +79,7 @@ type responseWriterWrapper struct {
 	w          http.ResponseWriter
 	statusCode int
 	body       *bytes.Buffer
+	logBody    bool
 	written    bool
 }
 
@@ -100,12 +100,15 @@ func (w *responseWriterWrapper) Write(b []byte) (int, error) {
 		w.WriteHeader(http.StatusOK)
 	}
 
-	// Only log up to maxBodyLogSize — never mutate input `b`
-	if remaining := maxBodyLogSize - w.body.Len(); remaining > 0 {
-		if len(b) > remaining {
-			_, _ = w.body.Write(b[:remaining])
-		} else {
-			_, _ = w.body.Write(b)
+	// Only capture response bodies when body logging is explicitly enabled.
+	if w.logBody {
+		remaining := maxBodyLogSize - w.body.Len()
+		if remaining > 0 {
+			if len(b) > remaining {
+				_, _ = w.body.Write(b[:remaining])
+			} else {
+				_, _ = w.body.Write(b)
+			}
 		}
 	}
 
@@ -130,6 +133,7 @@ func (w *responseWriterWrapper) Flush() {
 func (w *responseWriterWrapper) reset() {
 	w.w = nil
 	w.statusCode = 0
+	w.logBody = false
 	w.written = false
 	w.body.Reset()
 }
@@ -160,6 +164,7 @@ func LoggingMiddleware(next http.Handler, logBody bool) http.HandlerFunc {
 		}
 		wrapper.w = w
 		wrapper.statusCode = http.StatusOK
+		wrapper.logBody = logBody
 		wrapper.body.Reset()
 		defer loggingConfigInstance.responseWriterPool.Put(wrapper)
 		defer wrapper.reset()
@@ -259,8 +264,8 @@ func logHTTPRequest(
 		log = log.WithField("http.request_body", bodyStr)
 	}
 
-	// Response body (only if written and under limit)
-	if w.body.Len() > 0 {
+	// Response body (only if body logging is enabled)
+	if logBody && w.body.Len() > 0 {
 		respStr := bytesToString(w.body.Bytes())
 		if w.body.Len() == maxBodyLogSize {
 			respStr += " [truncated]"

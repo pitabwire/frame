@@ -50,6 +50,9 @@ func (t *testDriver) ListenAndServeTLS(_, _, _ string, h http.Handler) error {
 func (t *testDriver) Shutdown(_ context.Context) error {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
+	if t.srv == nil {
+		return nil
+	}
 	t.srv.Close()
 	return nil
 }

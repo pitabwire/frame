@@ -66,12 +66,9 @@ import (
     "net/http"
 
     "github.com/pitabwire/frame"
-    "google.golang.org/grpc"
 )
 
 func main() {
-    grpcServer := grpc.NewServer()
-
     http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
         w.Write([]byte("HTTP ok"))
     })
@@ -79,8 +76,6 @@ func main() {
     ctx, svc := frame.NewService(
         frame.WithName("hello"),
         frame.WithHTTPHandler(http.DefaultServeMux),
-        frame.WithGRPCServer(grpcServer),
-        frame.WithGRPCPort(":50051"),
     )
 
     if err := svc.Run(ctx, ":8080"); err != nil {

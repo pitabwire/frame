@@ -1,4 +1,4 @@
-package frame_test
+package server_test
 
 import (
 	"bytes"

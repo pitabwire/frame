@@ -8,10 +8,12 @@ import (
 	"github.com/pitabwire/frame/security"
 	"github.com/pitabwire/frame/security/authorizer"
 	"github.com/pitabwire/frame/security/openid"
+	"github.com/pitabwire/frame/security/workloadapi"
 )
 
 // SecurityConfiguration combines all configuration interfaces needed by the security manager.
 type SecurityConfiguration interface {
+	config.ConfigurationWorkloadAPI
 	config.ConfigurationOAUTH2
 	config.ConfigurationJWTVerification
 	config.ConfigurationAuthorization
@@ -19,20 +21,17 @@ type SecurityConfiguration interface {
 
 // managerImpl is the concrete implementation of the Manager interface.
 type managerImpl struct {
-	clientID        string
-	clientSecret    string
-	jwtClient       map[string]any
-	clientRegistrar security.Oauth2ClientRegistrar
-	authenticator   security.Authenticator
-	authorizer      security.Authorizer
+	workloadAPI   security.WorkloadAPI
+	authenticator security.Authenticator
+	authorizer    security.Authorizer
 }
 
 // NewManager creates and returns a new security Manager.
-func NewManager(_ context.Context, serviceName, serviceEnv string,
-	cfg SecurityConfiguration, invoker client.Manager) security.Manager {
+func NewManager(_ context.Context, _, _ string,
+	cfg SecurityConfiguration, _ client.Manager) security.Manager {
 	return &managerImpl{
-		clientRegistrar: openid.NewClientRegistrar(serviceName, serviceEnv, cfg, invoker),
-		authenticator:   openid.NewJwtTokenAuthenticator(cfg),
+		workloadAPI:   workloadapi.NewWorkloadAPI(cfg),
+		authenticator: openid.NewJwtTokenAuthenticator(cfg),
 		authorizer: authorizer.NewKetoAdapter(
 			cfg,
 			authorizer.NewAuditLogger(authorizer.AuditLoggerConfig{}),
@@ -40,8 +39,8 @@ func NewManager(_ context.Context, serviceName, serviceEnv string,
 	}
 }
 
-func (s *managerImpl) GetOauth2ClientRegistrar(_ context.Context) security.Oauth2ClientRegistrar {
-	return s.clientRegistrar
+func (s *managerImpl) GetWorkloadAPI(_ context.Context) security.WorkloadAPI {
+	return s.workloadAPI
 }
 
 func (s *managerImpl) GetAuthenticator(_ context.Context) security.Authenticator {
@@ -63,6 +62,10 @@ func (s *managerImpl) Close() {
 	}
 
 	if c, ok := s.authorizer.(closer); ok {
+		c.Close()
+	}
+
+	if c, ok := s.workloadAPI.(closer); ok {
 		c.Close()
 	}
 }

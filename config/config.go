@@ -119,6 +119,8 @@ type ConfigurationDefault struct {
 	TLSCertificatePath    string `env:"TLS_CERTIFICATE_PATH"     yaml:"tls_certificate_path"`
 	TLSCertificateKeyPath string `env:"TLS_CERTIFICATE_KEY_PATH" yaml:"tls_certificate_key_path"`
 
+	WorkloadAPITrustedDomain string `env:"WORKLOAD_API_TRUSTED_DOMAIN" yaml:"workload_api_trusted_domain"`
+
 	Oauth2ServiceURI          string   `env:"OAUTH2_SERVICE_URI"           yaml:"oauth2_service_uri"`
 	Oauth2ServiceAdminURI     string   `env:"OAUTH2_SERVICE_ADMIN_URI"     yaml:"oauth2_service_admin_uri"`
 	Oauth2WellKnownOIDCPath   string   `env:"OAUTH2_WELL_KNOWN_OIDC_PATH"  yaml:"oauth2_well_known_oidc_path"  envDefault:".well-known/openid-configuration"`
@@ -558,6 +560,16 @@ func (c *ConfigurationDefault) GetVerificationAudience() []string {
 }
 func (c *ConfigurationDefault) GetVerificationIssuer() string {
 	return c.Oauth2JwtVerifyIssuer
+}
+
+type ConfigurationWorkloadAPI interface {
+	GetTrustedDomain() string
+}
+
+var _ ConfigurationWorkloadAPI = new(ConfigurationDefault)
+
+func (c *ConfigurationDefault) GetTrustedDomain() string {
+	return c.WorkloadAPITrustedDomain
 }
 
 type ConfigurationAuthorization interface {

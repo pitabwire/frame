@@ -2,22 +2,21 @@ package frame
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"net"
 	"net/http"
 	"os/signal"
+	"slices"
 	"strings"
 	"sync"
 	"syscall"
-	"time"
 
 	"github.com/pitabwire/util"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"gocloud.dev/server/driver"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/health/grpc_health_v1"
-	"google.golang.org/grpc/reflection"
 
 	"github.com/pitabwire/frame/cache"
 	"github.com/pitabwire/frame/client"
@@ -31,6 +30,8 @@ import (
 	"github.com/pitabwire/frame/security"
 	httpInterceptor "github.com/pitabwire/frame/security/interceptors/httptor"
 	securityManager "github.com/pitabwire/frame/security/manager"
+	"github.com/pitabwire/frame/server"
+	"github.com/pitabwire/frame/server/implementation"
 	"github.com/pitabwire/frame/telemetry"
 	"github.com/pitabwire/frame/version"
 	"github.com/pitabwire/frame/workerpool"
@@ -44,11 +45,6 @@ func (c contextKey) String() string {
 
 const (
 	ctxKeyService = contextKey("serviceKey")
-
-	defaultHTTPReadTimeoutSeconds  = 5
-	defaultHTTPWriteTimeoutSeconds = 10
-	defaultHTTPTimeoutSeconds      = 30
-	defaultHTTPIdleTimeoutSeconds  = 90
 
 	defaultOpenAPIBasePath = "/debug/frame/openapi"
 )
@@ -72,7 +68,7 @@ type Service struct {
 
 	backGroundClient func(ctx context.Context) error
 
-	driver                     ServerDriver
+	driver                     server.Driver
 	grpcServer                 *grpc.Server
 	grpcServerEnableReflection bool
 	grpcListener               net.Listener
@@ -84,8 +80,6 @@ type Service struct {
 	cleanup         func(ctx context.Context)
 
 	configuration any
-
-	registerOauth2Cli bool
 
 	clientManager       client.Manager
 	workerPoolManager   workerpool.Manager
@@ -138,8 +132,6 @@ func NewServiceWithContext(ctx context.Context, opts ...Option) (context.Context
 		syscall.SIGTERM,
 		syscall.SIGQUIT)
 
-	var err error
-
 	cfg, _ := config.FromEnv[config.ConfigurationDefault]()
 
 	svc := &Service{
@@ -170,24 +162,13 @@ func NewServiceWithContext(ctx context.Context, opts ...Option) (context.Context
 		smCfg = &cfg
 	}
 	svc.securityManager = securityManager.NewManager(ctx, svc.name, svc.environment, smCfg, svc.clientManager)
-
+	svc.registerPlugin("security")
 	// Register cleanup for the security manager to stop background goroutines (e.g., JWKS refresh)
 	svc.AddCleanupMethod(func(_ context.Context) {
 		if svc.securityManager != nil {
 			svc.securityManager.Close()
 		}
 	})
-
-	if svc.registerOauth2Cli {
-		sm := svc.SecurityManager()
-		clr := sm.GetOauth2ClientRegistrar(ctx)
-
-		// Register for JWT
-		err = clr.RegisterForJwt(ctx, sm)
-		if err != nil {
-			svc.AddStartupError(fmt.Errorf("could not register server client for jwt: %w", err))
-		}
-	}
 
 	svc.initWorkersAndQueues(ctx, &cfg)
 
@@ -236,10 +217,8 @@ func (s *Service) registerPlugin(name string) {
 	if name == "" {
 		return
 	}
-	for _, existing := range s.registeredPlugins {
-		if existing == name {
-			return
-		}
+	if slices.Contains(s.registeredPlugins, name) {
+		return
 	}
 	s.registeredPlugins = append(s.registeredPlugins, name)
 }
@@ -544,41 +523,30 @@ func (s *Service) openAPIHandler(base string) http.HandlerFunc {
 }
 
 func (s *Service) initializeServerDrivers(ctx context.Context, httpPort string) {
-	if s.driver == nil {
-		s.driver = &defaultDriver{
-			ctx:  ctx,
-			port: httpPort,
-			httpServer: &http.Server{
-				Handler: s.handler, // s.handlers is the (potentially CORS-wrapped) mux
-				BaseContext: func(_ net.Listener) context.Context {
-					return ctx
-				},
-				ReadTimeout:  defaultHTTPReadTimeoutSeconds * time.Second,
-				WriteTimeout: defaultHTTPWriteTimeoutSeconds * time.Second,
-				IdleTimeout:  defaultHTTPIdleTimeoutSeconds * time.Second,
-			},
-		}
+	if s.driver != nil {
+		return
 	}
 
-	// If grpc server is setup, configure the grpcDriver.
-	// Always add the gRPC driver if it's configured.
-	if s.grpcServer != nil {
-		grpcHS := NewGrpcHealthServer(s)
-		grpc_health_v1.RegisterHealthServer(s.grpcServer, grpcHS)
+	s.driver = implementation.NewDefaultDriverWithTLS(ctx, s.handler, httpPort, s.setupWorkloadAPITLS(ctx))
+}
 
-		if s.grpcServerEnableReflection {
-			reflection.Register(s.grpcServer)
-		}
-
-		s.driver = &grpcDriver{
-			ctx:                ctx,
-			internalHTTPDriver: s.driver, // Embed the fully configured defaultServer
-			grpcPort:           s.grpcPort,
-			reportError:        s.sendStopError,
-			grpcServer:         s.grpcServer,
-			grpcListener:       s.grpcListener, // Use the primary listener established for gRPC
-		}
+func (s *Service) setupWorkloadAPITLS(ctx context.Context) *tls.Config {
+	if s.securityManager == nil {
+		return nil
 	}
+
+	workloadAPI := s.securityManager.GetWorkloadAPI(ctx)
+	if workloadAPI == nil {
+		return nil
+	}
+
+	tlsConfig, err := workloadAPI.Setup(ctx)
+	if err != nil {
+		s.Log(ctx).WithError(err).Warn("failed to setup workload API")
+		return nil
+	}
+
+	return tlsConfig
 }
 
 // executeStartupMethods runs all startup methods in the correct order.
@@ -630,7 +598,7 @@ func (s *Service) startServerDriver(ctx context.Context, httpPort string) error 
 	return nonTLSServer.ListenAndServe(httpPort, s.handler)
 }
 
-// initServer starts the Service. It initializes server drivers (HTTP, gRPC).
+// initServer starts the Service. It initializes server drivers.
 func (s *Service) initServer(ctx context.Context, httpPort string) error {
 	if s.healthCheckPath == "" ||
 		(s.healthCheckPath == "/" && s.handler != nil) {

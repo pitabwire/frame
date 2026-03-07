@@ -3,21 +3,17 @@ name: Test
 on: [push]
 
 jobs:
-
   build:
-
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-go@v6
         with:
-          go-version: 'stable'
+          go-version: "stable"
       - name: Set up gotestfmt
         uses: gotesttools/gotestfmt-action@v2
         with:
           # Optional: pass GITHUB_TOKEN to avoid rate limiting.
           token: ${{ secrets.GITHUB_TOKEN }}
       - name: Run tests with coverage
-        env:
-          GOTOOLCHAIN: go1.25.0+auto
         run: go test -p 1 -json -v ./... 2>&1 | gotestfmt -hide all

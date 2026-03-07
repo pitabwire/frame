@@ -723,10 +723,12 @@ func (s *Service) shutdownContext(_ context.Context) (context.Context, context.C
 	base = util.ContextWithLogger(base, s.logger)
 	httpCfg := s.mustHTTPServerConfig()
 	if httpCfg == nil {
-		return context.WithCancel(base)
+		ctx, cancel := context.WithCancel(base)
+		return ctx, cancel
 	}
 
-	return context.WithTimeout(base, httpCfg.HTTPShutdownTimeout())
+	ctx, cancel := context.WithTimeout(base, httpCfg.HTTPShutdownTimeout())
+	return ctx, cancel
 }
 
 // initWorkersAndQueues sets up the worker pool manager, queue manager, and events queue.

@@ -723,8 +723,7 @@ func (s *Service) shutdownContext(_ context.Context) (context.Context, context.C
 	base = util.ContextWithLogger(base, s.logger)
 	httpCfg := s.mustHTTPServerConfig()
 	if httpCfg == nil {
-		ctx, cancel := context.WithCancel(base)
-		return ctx, cancel
+		return base, func() {}
 	}
 
 	ctx, cancel := context.WithTimeout(base, httpCfg.HTTPShutdownTimeout())

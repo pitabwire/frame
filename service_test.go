@@ -1040,3 +1040,57 @@ func (s *ServiceTestSuite) TestRunTriggersDriverShutdownOnContextCancel() {
 
 	s.Require().Equal(int32(1), atomic.LoadInt32(&driver.shutdownCount))
 }
+
+func (s *ServiceTestSuite) TestHTTPClientManagerStaysGenericWithOnlyWorkloadTrustDomainConfigured() {
+	s.T().Setenv("SPIFFE_ENDPOINT_SOCKET", "unix:///tmp/frame-service-spiffe-missing.sock")
+
+	cfg := &config.ConfigurationDefault{
+		WorkloadAPITrustedDomain: "example.org",
+	}
+
+	ctx, svc := frame.NewServiceWithContext(context.Background(), frame.WithConfig(cfg))
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer server.Close()
+
+	resp, err := svc.HTTPClientManager().Invoke(ctx, http.MethodGet, server.URL, nil, nil)
+	s.Require().NoError(err)
+	s.Equal(http.StatusNoContent, resp.StatusCode)
+	s.NoError(resp.Close())
+}
+
+func (s *ServiceTestSuite) TestHTTPClientManagerUsesConfiguredTrustDomainForPerRequestWorkloadAPITargets() {
+	s.T().Setenv("SPIFFE_ENDPOINT_SOCKET", "unix:///tmp/frame-service-spiffe-missing.sock")
+
+	cfg := &config.ConfigurationDefault{
+		WorkloadAPITrustedDomain: "example.org",
+	}
+
+	ctx, svc := frame.NewServiceWithContext(context.Background(), frame.WithConfig(cfg))
+
+	var count atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		count.Add(1)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	resp, err := svc.HTTPClientManager().Invoke(
+		func() context.Context {
+			callCtx, cancel := context.WithTimeout(ctx, 200*time.Millisecond)
+			s.T().Cleanup(cancel)
+			return callCtx
+		}(),
+		http.MethodGet,
+		server.URL,
+		nil,
+		nil,
+		client.WithHTTPWorkloadAPITargetPath("/ns/backend/sa/payments-api"),
+	)
+
+	s.Nil(resp)
+	s.Require().Error(err)
+	s.Equal(int32(0), count.Load())
+}

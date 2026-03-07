@@ -22,7 +22,6 @@ require (
 	github.com/pitabwire/util v0.6.0
 	github.com/redis/go-redis/v9 v9.18.0
 	github.com/rs/xid v1.6.0
-	github.com/sony/gobreaker/v2 v2.4.0
 	github.com/spiffe/go-spiffe/v2 v2.6.0
 	github.com/stretchr/testify v1.11.1
 	github.com/testcontainers/testcontainers-go v0.40.0

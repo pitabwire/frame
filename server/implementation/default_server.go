@@ -23,21 +23,21 @@ type defaultDriver struct {
 
 func NewDefaultDriver(
 	ctx context.Context,
-	httpCfg config.ConfigurationHTTPServer,
+	cfg config.ConfigurationHTTPServer,
 	h http.Handler,
 	port string,
 ) server.Driver {
-	return NewDefaultDriverWithTLS(ctx, httpCfg, h, port, nil)
+	return NewDefaultDriverWithTLS(ctx, cfg, h, port, nil)
 }
 
 func NewDefaultDriverWithTLS(
 	ctx context.Context,
-	httpCfg config.ConfigurationHTTPServer,
+	cfg config.ConfigurationHTTPServer,
 	h http.Handler,
 	port string,
 	tlsCfg *tls.Config,
 ) server.Driver {
-	if httpCfg == nil {
+	if cfg == nil {
 		panic("config.ConfigurationHTTPServer is required")
 	}
 
@@ -47,16 +47,16 @@ func NewDefaultDriverWithTLS(
 		httpServer: &http.Server{
 			Addr:              port,
 			Handler:           h,
-			ReadTimeout:       httpCfg.HTTPReadTimeout(),
-			ReadHeaderTimeout: httpCfg.HTTPReadHeaderTimeout(),
-			WriteTimeout:      httpCfg.HTTPWriteTimeout(),
-			IdleTimeout:       httpCfg.HTTPIdleTimeout(),
-			MaxHeaderBytes:    httpCfg.HTTPMaxHeaderBytes(),
+			ReadTimeout:       cfg.HTTPReadTimeout(),
+			ReadHeaderTimeout: cfg.HTTPReadHeaderTimeout(),
+			WriteTimeout:      cfg.HTTPWriteTimeout(),
+			IdleTimeout:       cfg.HTTPIdleTimeout(),
+			MaxHeaderBytes:    cfg.HTTPMaxHeaderBytes(),
 			BaseContext: func(_ net.Listener) context.Context {
 				return ctx
 			},
 		},
-		tlsCfg: tlsCfg,
+		tlsCfg: server.NormalizeTLSConfig(tlsCfg),
 	}
 }
 
@@ -83,6 +83,20 @@ func (dd *defaultDriver) getListener(ctx context.Context,
 	return tls.NewListener(listener, dd.tlsCfg), nil
 }
 
+func (dd *defaultDriver) configureProtocols(isTLS bool) error {
+	protocols := new(http.Protocols)
+	protocols.SetHTTP1(true)
+	if isTLS {
+		protocols.SetHTTP2(true)
+		dd.httpServer.Protocols = protocols
+		return http2.ConfigureServer(dd.httpServer, nil)
+	}
+
+	protocols.SetUnencryptedHTTP2(true)
+	dd.httpServer.Protocols = protocols
+	return nil
+}
+
 // ListenAndServe sets the address and handlers on DefaultDriver's http.Server,
 // then calls ListenAndServe on it.
 func (dd *defaultDriver) ListenAndServe(addr string, h http.Handler) error {
@@ -90,13 +104,15 @@ func (dd *defaultDriver) ListenAndServe(addr string, h http.Handler) error {
 
 	dd.httpServer.Addr = addr
 	dd.httpServer.Handler = h
-	log := util.Log(dd.ctx).WithField("http port", addr)
+	if err := dd.configureProtocols(dd.tlsCfg != nil); err != nil {
+		return err
+	}
 
-	// Configure h2c (HTTP/2 without TLS) by default
-	protocols := new(http.Protocols)
-	protocols.SetHTTP1(true)
-	protocols.SetUnencryptedHTTP2(true)
-	dd.httpServer.Protocols = protocols
+	logField := "http port"
+	if dd.tlsCfg != nil {
+		logField = "https port"
+	}
+	log := util.Log(dd.ctx).WithField(logField, addr)
 
 	ln, err0 := dd.getListener(dd.ctx, addr, dd.listener)
 	if err0 != nil {
@@ -113,17 +129,17 @@ func (dd *defaultDriver) ListenAndServeTLS(addr, certPath, certKeyPath string, h
 	dd.httpServer.Handler = h
 	log := util.Log(dd.ctx).WithField("https port", addr)
 
-	// Configure standard HTTP/2 with TLS when h2c is explicitly disabled
-	err := http2.ConfigureServer(dd.httpServer, nil)
-	if err != nil {
-		return err
-	}
-
 	if dd.tlsCfg == nil {
+		var err error
 		dd.tlsCfg, err = server.TLSConfigFromPath(certPath, certKeyPath)
 		if err != nil {
 			return err
 		}
+	}
+
+	dd.tlsCfg = server.NormalizeTLSConfig(dd.tlsCfg)
+	if err := dd.configureProtocols(true); err != nil {
+		return err
 	}
 
 	ln, err0 := dd.getListener(dd.ctx, addr, dd.listener)

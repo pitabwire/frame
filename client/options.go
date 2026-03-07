@@ -2,12 +2,25 @@ package client
 
 import (
 	"context"
+	"crypto/tls"
+	"errors"
+	"fmt"
+	"io"
 	"net/http"
+	"runtime"
+	"strings"
+	"sync"
 	"time"
 
+	"github.com/pitabwire/util"
+	"github.com/spiffe/go-spiffe/v2/spiffeid"
+	"github.com/spiffe/go-spiffe/v2/spiffetls/tlsconfig"
+	"github.com/spiffe/go-spiffe/v2/workloadapi"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/clientcredentials"
+
+	"github.com/pitabwire/frame/config"
 )
 
 const (
@@ -16,6 +29,18 @@ const (
 
 	defaultMaxRetryAttempts = 3
 	defaultMinRetryDuration = 100 * time.Millisecond
+)
+
+var (
+	ErrWorkloadAPITargetPathRequiresTrustDomain = errors.New(
+		"workload API target path requires a trust domain",
+	)
+	ErrWorkloadAPIH2CIncompatible = errors.New(
+		"workload API mTLS cannot be combined with h2c",
+	)
+	ErrWorkloadAPITransportUnsupported = errors.New(
+		"workload API mTLS requires *http.Transport",
+	)
 )
 
 type RetryPolicy struct {
@@ -41,12 +66,30 @@ type httpConfig struct {
 	traceRequests       bool
 	traceRequestHeaders bool
 
-	retryPolicy *RetryPolicy
+	retryPolicy            *RetryPolicy
+	retryPolicyConfigured  bool
+	workloadAPIRequested   bool
+	workloadAPITrustDomain string
+	workloadAPITargetID    string
+	workloadAPITargetPath  string
 }
 
-func (hc *httpConfig) process(opts ...HTTPOption) {
+func (hc *httpConfig) process(ctx context.Context, opts ...HTTPOption) {
 	for _, opt := range opts {
 		opt(hc)
+	}
+
+	if hc.workloadAPITrustDomain == "" {
+		hc.workloadAPITrustDomain = resolveWorkloadAPITrustDomain(ctx)
+	}
+
+	if hc.workloadAPITargetID == "" &&
+		hc.workloadAPITargetPath != "" &&
+		hc.workloadAPITrustDomain != "" {
+		hc.workloadAPITargetID = buildWorkloadAPITargetID(
+			hc.workloadAPITrustDomain,
+			hc.workloadAPITargetPath,
+		)
 	}
 
 	if hc.retryPolicy == nil {
@@ -125,47 +168,77 @@ func WithHTTPTraceRequestHeaders() HTTPOption {
 // WithHTTPRetryPolicy setts required retry policy.
 func WithHTTPRetryPolicy(retryPolicy *RetryPolicy) HTTPOption {
 	return func(c *httpConfig) {
+		c.retryPolicyConfigured = true
 		c.retryPolicy = retryPolicy
 	}
 }
 
+// WithHTTPWorkloadAPITargetID configures SPIFFE mTLS for outbound calls and
+// authorizes the exact upstream SPIFFE ID.
+func WithHTTPWorkloadAPITargetID(targetID string) HTTPOption {
+	return func(c *httpConfig) {
+		c.workloadAPIRequested = true
+		c.workloadAPITargetID = strings.TrimSpace(targetID)
+	}
+}
+
+// WithHTTPWorkloadAPITargetPath configures SPIFFE mTLS for an upstream path
+// within the configured trust domain.
+func WithHTTPWorkloadAPITargetPath(targetPath string) HTTPOption {
+	return func(c *httpConfig) {
+		c.workloadAPIRequested = true
+		c.workloadAPITargetPath = strings.TrimSpace(targetPath)
+	}
+}
+
+// WithHTTPWorkloadAPITrustDomain configures trust-domain-wide SPIFFE mTLS.
+// Prefer exact target IDs or target paths for service-to-service traffic.
+func WithHTTPWorkloadAPITrustDomain(trustDomain string) HTTPOption {
+	return func(c *httpConfig) {
+		c.workloadAPIRequested = true
+		c.workloadAPITrustDomain = strings.TrimSpace(trustDomain)
+	}
+}
+
 // NewHTTPClient creates a new HTTP client with the provided options.
-// If no transport is specified, it defaults to otelhttp.NewTransport(http.DefaultTransport).
 func NewHTTPClient(ctx context.Context, opts ...HTTPOption) *http.Client {
+	client, _ := newHTTPClient(ctx, opts...)
+	return client
+}
+
+func newHTTPClient(ctx context.Context, opts ...HTTPOption) (*http.Client, error) {
 	cfg := &httpConfig{
 		timeout:     time.Duration(defaultHTTPTimeoutSeconds) * time.Second,
 		idleTimeout: time.Duration(defaultHTTPIdleTimeoutSeconds) * time.Second,
 		transport:   http.DefaultTransport,
 	}
 
-	cfg.process(opts...)
+	cfg.process(ctx, opts...)
 
-	base := cfg.transport
-
-	// Enable H2C if desired
-	if cfg.enableH2C {
-		if t, ok := base.(*http.Transport); ok {
-			protocols := new(http.Protocols)
-			protocols.SetUnencryptedHTTP2(true)
-			t.Protocols = protocols
-		}
+	base, closeIdleFn, err := prepareBaseTransport(ctx, cfg)
+	if err != nil {
+		return newErrorHTTPClient(cfg, err), err
 	}
 
-	// Add OpenTelemetry wrapper once
 	if _, ok := base.(*otelhttp.Transport); !ok {
 		base = otelhttp.NewTransport(base)
 	}
 
-	// Add circuit breaker + retry transport
 	base = newResilientTransport(base, cfg.retryPolicy)
 
-	// Optional: request/response logging
 	if cfg.traceRequests {
 		base = NewLoggingTransport(base,
 			WithTransportLogRequests(true),
 			WithTransportLogResponses(true),
 			WithTransportLogHeaders(cfg.traceRequestHeaders),
 			WithTransportLogBody(false))
+	}
+
+	if closeIdleFn != nil {
+		base = closeIdleTransport{
+			inner:       base,
+			closeIdleFn: closeIdleFn,
+		}
 	}
 
 	client := &http.Client{
@@ -177,13 +250,221 @@ func NewHTTPClient(ctx context.Context, opts ...HTTPOption) *http.Client {
 
 	if cfg.cliCredCfg != nil {
 		oauth2Ctx := context.WithValue(ctx, oauth2.HTTPClient, client)
-		// Get the OAuth2 client and preserve our transport configuration
 		client = cfg.cliCredCfg.Client(oauth2Ctx)
 	}
 
-	if t, ok := base.(*http.Transport); ok && cfg.idleTimeout > 0 {
-		t.IdleConnTimeout = cfg.idleTimeout
+	return client, nil
+}
+
+func newErrorHTTPClient(cfg *httpConfig, err error) *http.Client {
+	if cfg == nil {
+		cfg = &httpConfig{}
 	}
 
-	return client
+	return &http.Client{
+		Transport:     errorTransport{err: err},
+		Timeout:       cfg.timeout,
+		Jar:           cfg.jar,
+		CheckRedirect: cfg.checkRedirect,
+	}
+}
+
+func resolveWorkloadAPITrustDomain(ctx context.Context) string {
+	cfg := config.FromContext[any](ctx)
+	workloadCfg, ok := cfg.(config.ConfigurationWorkloadAPI)
+	if !ok {
+		return ""
+	}
+
+	return strings.TrimSpace(workloadCfg.GetTrustedDomain())
+}
+
+func prepareBaseTransport(ctx context.Context, cfg *httpConfig) (http.RoundTripper, func(), error) {
+	base := cfg.transport
+	transport, ok := base.(*http.Transport)
+	if !ok {
+		if cfg.workloadAPIRequested {
+			return nil, nil, ErrWorkloadAPITransportUnsupported
+		}
+		if cfg.enableH2C {
+			util.Log(ctx).Warn("ignoring h2c configuration for non-http transport")
+		}
+		return base, nil, nil
+	}
+
+	transport = transport.Clone()
+
+	if cfg.workloadAPIRequested {
+		if cfg.enableH2C {
+			return nil, nil, ErrWorkloadAPIH2CIncompatible
+		}
+
+		tlsConfig, source, err := newWorkloadAPIMTLSClientConfig(ctx, cfg)
+		if err != nil {
+			return nil, nil, err
+		}
+
+		transport.TLSClientConfig = tlsConfig
+		managed := newManagedTransport(transport, source)
+		return managed, managed.CloseIdleConnections, nil
+	}
+
+	if cfg.enableH2C {
+		protocols := new(http.Protocols)
+		protocols.SetUnencryptedHTTP2(true)
+		transport.Protocols = protocols
+	}
+
+	if cfg.idleTimeout > 0 {
+		transport.IdleConnTimeout = cfg.idleTimeout
+	}
+
+	return transport, nil, nil
+}
+
+func newWorkloadAPIMTLSClientConfig(
+	ctx context.Context,
+	cfg *httpConfig,
+) (*tls.Config, *workloadapi.X509Source, error) {
+	if cfg == nil {
+		return nil, nil, errors.New("http config is required")
+	}
+
+	authorizer, err := newWorkloadAPIAuthorizer(cfg)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	source, err := workloadapi.NewX509Source(ctx)
+	if err != nil {
+		return nil, nil, fmt.Errorf("create x509 source: %w", err)
+	}
+
+	tlsCfg := tlsconfig.MTLSClientConfig(source, source, authorizer)
+	return tlsCfg, source, nil
+}
+
+func newWorkloadAPIAuthorizer(cfg *httpConfig) (tlsconfig.Authorizer, error) {
+	if cfg == nil {
+		return nil, errors.New("http config is required")
+	}
+
+	if cfg.workloadAPITargetID != "" {
+		serverID, err := spiffeid.FromString(strings.TrimSpace(cfg.workloadAPITargetID))
+		if err != nil {
+			return nil, err
+		}
+		return tlsconfig.AuthorizeID(serverID), nil
+	}
+
+	if cfg.workloadAPITargetPath != "" {
+		if strings.TrimSpace(cfg.workloadAPITrustDomain) == "" {
+			return nil, ErrWorkloadAPITargetPathRequiresTrustDomain
+		}
+
+		td, err := spiffeid.TrustDomainFromString(strings.TrimSpace(cfg.workloadAPITrustDomain))
+		if err != nil {
+			return nil, err
+		}
+
+		serverID, err := spiffeid.FromPath(td, strings.TrimSpace(cfg.workloadAPITargetPath))
+		if err != nil {
+			return nil, err
+		}
+
+		return tlsconfig.AuthorizeID(serverID), nil
+	}
+
+	if strings.TrimSpace(cfg.workloadAPITrustDomain) == "" {
+		return nil, ErrWorkloadAPITargetPathRequiresTrustDomain
+	}
+
+	td, err := spiffeid.TrustDomainFromString(strings.TrimSpace(cfg.workloadAPITrustDomain))
+	if err != nil {
+		return nil, err
+	}
+
+	return tlsconfig.AuthorizeMemberOf(td), nil
+}
+
+func buildWorkloadAPITargetID(trustDomain string, targetPath string) string {
+	trustDomain = strings.TrimSpace(trustDomain)
+	targetPath = strings.TrimSpace(targetPath)
+	if trustDomain == "" || targetPath == "" {
+		return ""
+	}
+
+	td, err := spiffeid.TrustDomainFromString(trustDomain)
+	if err != nil {
+		return ""
+	}
+
+	id, err := spiffeid.FromPath(td, targetPath)
+	if err != nil {
+		return ""
+	}
+
+	return id.String()
+}
+
+type errorTransport struct {
+	err error
+}
+
+func (e errorTransport) RoundTrip(_ *http.Request) (*http.Response, error) {
+	return nil, e.err
+}
+
+func (e errorTransport) CloseIdleConnections() {}
+
+type managedTransport struct {
+	transport *http.Transport
+	closer    io.Closer
+	closeOnce sync.Once
+}
+
+type closeIdleTransport struct {
+	inner       http.RoundTripper
+	closeIdleFn func()
+}
+
+func (c closeIdleTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	return c.inner.RoundTrip(req)
+}
+
+func (c closeIdleTransport) CloseIdleConnections() {
+	if closer, ok := c.inner.(interface{ CloseIdleConnections() }); ok {
+		closer.CloseIdleConnections()
+	}
+	if c.closeIdleFn != nil {
+		c.closeIdleFn()
+	}
+}
+
+func newManagedTransport(transport *http.Transport, closer *workloadapi.X509Source) *managedTransport {
+	mt := &managedTransport{
+		transport: transport,
+		closer:    closer,
+	}
+	runtime.SetFinalizer(mt, func(t *managedTransport) {
+		t.close()
+	})
+	return mt
+}
+
+func (m *managedTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	return m.transport.RoundTrip(req)
+}
+
+func (m *managedTransport) CloseIdleConnections() {
+	m.transport.CloseIdleConnections()
+	m.close()
+}
+
+func (m *managedTransport) close() {
+	m.closeOnce.Do(func() {
+		if m.closer != nil {
+			_ = m.closer.Close()
+		}
+	})
 }

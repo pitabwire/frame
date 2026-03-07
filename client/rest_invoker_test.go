@@ -1,4 +1,4 @@
-package client //nolint:testpackage // white-box tests for internal circuit breaker and retry logic
+package client //nolint:testpackage // white-box tests for internal transport behavior
 
 import (
 	"bytes"
@@ -14,14 +14,17 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sony/gobreaker/v2"
+	"github.com/stretchr/testify/suite"
 )
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
+type InvokerSuite struct {
+	suite.Suite
+}
 
-// noRetry returns a retry policy that makes a single attempt with no backoff.
+func TestInvokerSuite(t *testing.T) {
+	suite.Run(t, new(InvokerSuite))
+}
+
 func noRetry() *RetryPolicy {
 	return &RetryPolicy{
 		MaxAttempts: 1,
@@ -29,21 +32,17 @@ func noRetry() *RetryPolicy {
 	}
 }
 
-// fastRetry returns a retry policy with the given attempts and minimal backoff.
-func fastRetry(maxAttempts int) *RetryPolicy {
+func fastRetry() *RetryPolicy {
 	return &RetryPolicy{
-		MaxAttempts: maxAttempts,
+		MaxAttempts: 3,
 		Backoff:     func(int) time.Duration { return time.Millisecond },
 	}
 }
 
-// newTestTransport creates a resilientTransport wrapping the given inner transport.
 func newTestTransport(inner http.RoundTripper, retry *RetryPolicy) *resilientTransport {
 	return newResilientTransport(inner, retry)
 }
 
-// newTestInvoker creates an invoker with a plain HTTP client whose transport
-// is a resilientTransport wrapping the given inner transport.
 func newTestInvoker(inner http.RoundTripper, retry *RetryPolicy) *invoker {
 	rt := newTestTransport(inner, retry)
 	return &invoker{
@@ -52,64 +51,14 @@ func newTestInvoker(inner http.RoundTripper, retry *RetryPolicy) *invoker {
 	}
 }
 
-// loadBreaker pre-loads a circuit breaker with a low threshold so tests can
-// trip it without sending 20+ requests.
-func loadBreaker(rt *resilientTransport, key string, threshold uint32, cbTimeout time.Duration) {
-	st := gobreaker.Settings{
-		Name:        "test:" + key,
-		MaxRequests: 1,
-		Interval:    60 * time.Second,
-		Timeout:     cbTimeout,
-		ReadyToTrip: func(c gobreaker.Counts) bool {
-			if c.Requests < threshold {
-				return false
-			}
-			return float64(c.TotalFailures)/float64(c.Requests) >= 0.5
-		},
-	}
-	cb := gobreaker.NewCircuitBreaker[*http.Response](st)
-	rt.breakers.Store(key, cb)
-}
-
-// bkey computes the breaker key for a method + server URL, matching breakerKey().
-//
-//nolint:unparam // method is parameterized to match breakerKey signature
-func bkey(method, serverURL string) string {
-	u, _ := url.Parse(serverURL)
-	return method + " " + u.Host
-}
-
-// roundTripFunc adapts a function into an http.RoundTripper.
 type roundTripFunc func(*http.Request) (*http.Response, error)
 
 func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
 	return f(req)
 }
 
-// ---------------------------------------------------------------------------
-// Unit tests: small functions
-// ---------------------------------------------------------------------------
-
-func TestBreakerKey(t *testing.T) {
-	tests := []struct {
-		method string
-		rawURL string
-		want   string
-	}{
-		{"GET", "https://example.com:8080/path?q=1", "GET example.com:8080"},
-		{"POST", "http://api.example.com/v1/resource", "POST api.example.com"},
-		{"DELETE", "http://localhost:9090/", "DELETE localhost:9090"},
-	}
-	for _, tt := range tests {
-		req, _ := http.NewRequest(tt.method, tt.rawURL, nil)
-		if got := breakerKey(req); got != tt.want {
-			t.Errorf("breakerKey(%s %s) = %q, want %q", tt.method, tt.rawURL, got, tt.want)
-		}
-	}
-}
-
-func TestIsRetryableStatus(t *testing.T) {
-	tests := []struct {
+func (s *InvokerSuite) TestIsRetryableStatus() {
+	testCases := []struct {
 		code int
 		want bool
 	}{
@@ -124,767 +73,379 @@ func TestIsRetryableStatus(t *testing.T) {
 		{504, true},
 		{505, false},
 	}
-	for _, tt := range tests {
-		if got := isRetryableStatus(tt.code); got != tt.want {
-			t.Errorf("isRetryableStatus(%d) = %v, want %v", tt.code, got, tt.want)
-		}
+
+	for _, tc := range testCases {
+		s.Equal(tc.want, isRetryableStatus(tc.code))
 	}
 }
 
-func TestServerError_Error(t *testing.T) {
-	err := &serverError{statusCode: 503}
-	want := "server error: HTTP 503"
-	if err.Error() != want {
-		t.Errorf("Error() = %q, want %q", err.Error(), want)
-	}
-}
-
-// ---------------------------------------------------------------------------
-// breakerFor
-// ---------------------------------------------------------------------------
-
-func TestBreakerFor_CachesPerKey(t *testing.T) {
-	rt := newTestTransport(http.DefaultTransport, noRetry())
-
-	cb1 := rt.breakerFor("GET example.com")
-	cb2 := rt.breakerFor("GET example.com")
-	cb3 := rt.breakerFor("POST example.com")
-
-	if cb1 != cb2 {
-		t.Error("same key should return the same breaker instance")
-	}
-	if cb1 == cb3 {
-		t.Error("different keys should return different breaker instances")
-	}
-}
-
-// ---------------------------------------------------------------------------
-// ResilientTransport: basic behavior
-// ---------------------------------------------------------------------------
-
-func TestResilientTransport_Success(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+func (s *InvokerSuite) TestResilientTransportSuccess() {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("ok"))
+		_, _ = w.Write([]byte("ok"))
 	}))
-	defer srv.Close()
+	defer server.Close()
 
-	rt := newTestTransport(srv.Client().Transport, noRetry())
-	req, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, srv.URL, nil)
+	rt := newTestTransport(server.Client().Transport, noRetry())
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, server.URL, nil)
+	s.Require().NoError(err)
 
 	resp, err := rt.RoundTrip(req)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	s.Require().NoError(err)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		t.Errorf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
-	body, _ := io.ReadAll(resp.Body)
-	if string(body) != "ok" {
-		t.Errorf("body = %q, want %q", body, "ok")
-	}
+	s.Equal(http.StatusOK, resp.StatusCode)
+	body, err := io.ReadAll(resp.Body)
+	s.Require().NoError(err)
+	s.Equal("ok", string(body))
 }
 
-func TestResilientTransport_ServerError500_NotRetried(t *testing.T) {
+func (s *InvokerSuite) TestResilientTransportServerError500NotRetried() {
 	var count atomic.Int32
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		count.Add(1)
 		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte("fail"))
+		_, _ = w.Write([]byte("fail"))
 	}))
-	defer srv.Close()
+	defer server.Close()
 
-	rt := newTestTransport(srv.Client().Transport, fastRetry(3))
-	req, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, srv.URL, nil)
+	rt := newTestTransport(server.Client().Transport, fastRetry())
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, server.URL, nil)
+	s.Require().NoError(err)
 
 	resp, err := rt.RoundTrip(req)
-	if err != nil {
-		t.Fatalf("expected nil error (serverError unwrapped), got: %v", err)
-	}
+	s.Require().NoError(err)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusInternalServerError {
-		t.Errorf("status = %d, want %d", resp.StatusCode, http.StatusInternalServerError)
-	}
-	if c := count.Load(); c != 1 {
-		t.Errorf("request count = %d, want 1 (500 is not retried)", c)
-	}
-	body, _ := io.ReadAll(resp.Body)
-	if string(body) != "fail" {
-		t.Errorf("body = %q, want %q", body, "fail")
-	}
+	s.Equal(http.StatusInternalServerError, resp.StatusCode)
+	s.Equal(int32(1), count.Load())
+
+	body, err := io.ReadAll(resp.Body)
+	s.Require().NoError(err)
+	s.Equal("fail", string(body))
 }
 
-func TestResilientTransport_ServerError501_NotRetried(t *testing.T) {
+func (s *InvokerSuite) TestResilientTransportServerError501NotRetried() {
 	var count atomic.Int32
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		count.Add(1)
 		w.WriteHeader(http.StatusNotImplemented)
 	}))
-	defer srv.Close()
+	defer server.Close()
 
-	rt := newTestTransport(srv.Client().Transport, fastRetry(3))
-	req, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, srv.URL, nil)
+	rt := newTestTransport(server.Client().Transport, fastRetry())
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, server.URL, nil)
+	s.Require().NoError(err)
 
 	resp, err := rt.RoundTrip(req)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	s.Require().NoError(err)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusNotImplemented {
-		t.Errorf("status = %d, want %d", resp.StatusCode, http.StatusNotImplemented)
-	}
-	if c := count.Load(); c != 1 {
-		t.Errorf("request count = %d, want 1 (501 is not retried)", c)
-	}
+	s.Equal(http.StatusNotImplemented, resp.StatusCode)
+	s.Equal(int32(1), count.Load())
 }
 
-// ---------------------------------------------------------------------------
-// ResilientTransport: retry on transient status codes (502, 503, 504)
-// ---------------------------------------------------------------------------
-
-func TestResilientTransport_RetryableStatus_SucceedsOnRetry(t *testing.T) {
+func (s *InvokerSuite) TestResilientTransportRetryableStatusSucceedsOnRetry() {
 	for _, code := range []int{
 		http.StatusBadGateway,
 		http.StatusServiceUnavailable,
 		http.StatusGatewayTimeout,
 	} {
-		t.Run(http.StatusText(code), func(t *testing.T) {
+		statusCode := code
+		s.Run(http.StatusText(statusCode), func() {
 			var count atomic.Int32
-			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 				if count.Add(1) == 1 {
-					w.WriteHeader(code)
+					w.WriteHeader(statusCode)
 					return
 				}
 				w.WriteHeader(http.StatusOK)
-				w.Write([]byte("recovered"))
+				_, _ = w.Write([]byte("recovered"))
 			}))
-			defer srv.Close()
+			defer server.Close()
 
-			rt := newTestTransport(srv.Client().Transport, fastRetry(3))
-			req, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, srv.URL, nil)
+			rt := newTestTransport(server.Client().Transport, fastRetry())
+			req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, server.URL, nil)
+			s.Require().NoError(err)
 
 			resp, err := rt.RoundTrip(req)
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
+			s.Require().NoError(err)
 			defer resp.Body.Close()
 
-			if resp.StatusCode != http.StatusOK {
-				t.Errorf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-			}
-			if c := count.Load(); c != 2 {
-				t.Errorf("request count = %d, want 2", c)
-			}
+			s.Equal(http.StatusOK, resp.StatusCode)
+			s.Equal(int32(2), count.Load())
 		})
 	}
 }
 
-func TestResilientTransport_RetryableStatus_ExhaustedRetries(t *testing.T) {
+func (s *InvokerSuite) TestResilientTransportRetryableStatusExhaustsRetries() {
 	var count atomic.Int32
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		count.Add(1)
 		w.WriteHeader(http.StatusServiceUnavailable)
-		w.Write([]byte("unavailable"))
+		_, _ = w.Write([]byte("unavailable"))
 	}))
-	defer srv.Close()
+	defer server.Close()
 
-	rt := newTestTransport(srv.Client().Transport, fastRetry(3))
-	req, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, srv.URL, nil)
+	rt := newTestTransport(server.Client().Transport, fastRetry())
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, server.URL, nil)
+	s.Require().NoError(err)
 
 	resp, err := rt.RoundTrip(req)
-	if err != nil {
-		t.Fatalf("expected nil error (serverError unwrapped), got: %v", err)
-	}
+	s.Require().NoError(err)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusServiceUnavailable {
-		t.Errorf("status = %d, want %d", resp.StatusCode, http.StatusServiceUnavailable)
-	}
-	if c := count.Load(); c != 3 {
-		t.Errorf("request count = %d, want 3 (all attempts exhausted)", c)
-	}
-	body, _ := io.ReadAll(resp.Body)
-	if string(body) != "unavailable" {
-		t.Errorf("body = %q, want %q", body, "unavailable")
-	}
+	s.Equal(http.StatusServiceUnavailable, resp.StatusCode)
+	s.Equal(int32(3), count.Load())
+
+	body, err := io.ReadAll(resp.Body)
+	s.Require().NoError(err)
+	s.Equal("unavailable", string(body))
 }
 
-func TestResilientTransport_4xxNotRetried(t *testing.T) {
+func (s *InvokerSuite) TestResilientTransport4xxNotRetried() {
 	var count atomic.Int32
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		count.Add(1)
 		w.WriteHeader(http.StatusBadRequest)
 	}))
-	defer srv.Close()
+	defer server.Close()
 
-	rt := newTestTransport(srv.Client().Transport, fastRetry(3))
-	req, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, srv.URL, nil)
+	rt := newTestTransport(server.Client().Transport, fastRetry())
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, server.URL, nil)
+	s.Require().NoError(err)
 
 	resp, err := rt.RoundTrip(req)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	s.Require().NoError(err)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Errorf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
-	if c := count.Load(); c != 1 {
-		t.Errorf("request count = %d, want 1 (4xx is not retried)", c)
-	}
+	s.Equal(http.StatusBadRequest, resp.StatusCode)
+	s.Equal(int32(1), count.Load())
 }
 
-// ---------------------------------------------------------------------------
-// ResilientTransport: retry on transport errors
-// ---------------------------------------------------------------------------
-
-func TestResilientTransport_TransportError_Retried(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+func (s *InvokerSuite) TestResilientTransportTransportErrorRetried() {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("ok"))
+		_, _ = w.Write([]byte("ok"))
 	}))
-	defer srv.Close()
+	defer server.Close()
 
-	var rtCount atomic.Int32
+	var count atomic.Int32
 	inner := roundTripFunc(func(req *http.Request) (*http.Response, error) {
-		if rtCount.Add(1) == 1 {
+		if count.Add(1) == 1 {
 			return nil, errors.New("connection refused")
 		}
 		return http.DefaultTransport.RoundTrip(req)
 	})
 
-	rt := newTestTransport(inner, fastRetry(3))
-	req, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, srv.URL, nil)
+	rt := newTestTransport(inner, fastRetry())
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, server.URL, nil)
+	s.Require().NoError(err)
 
 	resp, err := rt.RoundTrip(req)
-	if err != nil {
-		t.Fatalf("unexpected error after retry: %v", err)
-	}
+	s.Require().NoError(err)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		t.Errorf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
-	if c := rtCount.Load(); c != 2 {
-		t.Errorf("attempt count = %d, want 2", c)
-	}
+	s.Equal(http.StatusOK, resp.StatusCode)
+	s.Equal(int32(2), count.Load())
 }
 
-func TestResilientTransport_TransportError_AllAttemptsFail(t *testing.T) {
+func (s *InvokerSuite) TestResilientTransportTransportErrorAllAttemptsFail() {
 	inner := roundTripFunc(func(_ *http.Request) (*http.Response, error) {
 		return nil, errors.New("connection refused")
 	})
 
-	rt := newTestTransport(inner, fastRetry(3))
-	req, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, "http://unreachable.invalid", nil)
+	rt := newTestTransport(inner, fastRetry())
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, "http://unreachable.invalid", nil)
+	s.Require().NoError(err)
 
-	_, err := rt.RoundTrip(req)
-	if err == nil {
-		t.Fatal("expected error after all retries exhausted")
-	}
+	_, err = rt.RoundTrip(req)
+	s.Require().Error(err)
 }
 
-// ---------------------------------------------------------------------------
-// ResilientTransport: request body reset on retry
-// ---------------------------------------------------------------------------
-
-func TestResilientTransport_RequestBodyResetOnRetry(t *testing.T) {
+func (s *InvokerSuite) TestResilientTransportRequestBodyResetOnRetry() {
 	var receivedBodies []string
 	var count atomic.Int32
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		body, _ := io.ReadAll(r.Body)
-		receivedBodies = append(receivedBodies, string(body))
-		if count.Add(1) == 1 {
-			w.WriteHeader(http.StatusBadGateway) // retryable
-			return
-		}
-		w.WriteHeader(http.StatusOK)
-		w.Write(body)
-	}))
-	defer srv.Close()
-
-	rt := newTestTransport(srv.Client().Transport, fastRetry(3))
-
-	payload := `{"key":"value"}`
-	body := bytes.NewReader([]byte(payload))
-	req, _ := http.NewRequestWithContext(context.Background(), http.MethodPost, srv.URL, body)
-	// Set GetBody so the transport can reset the body on retry.
-	req.GetBody = func() (io.ReadCloser, error) {
-		if _, err := body.Seek(0, io.SeekStart); err != nil {
-			return nil, err
-		}
-		return io.NopCloser(body), nil
-	}
-
-	resp, err := rt.RoundTrip(req)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		t.Errorf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
-	if len(receivedBodies) != 2 {
-		t.Fatalf("expected 2 requests, got %d", len(receivedBodies))
-	}
-	for i, b := range receivedBodies {
-		if b != payload {
-			t.Errorf("request %d body = %q, want %q", i+1, b, payload)
-		}
-	}
-}
-
-func TestResilientTransport_NonResettableBody_StopsRetry(t *testing.T) {
-	var count atomic.Int32
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		count.Add(1)
-		w.WriteHeader(http.StatusBadGateway) // retryable
-	}))
-	defer srv.Close()
-
-	rt := newTestTransport(srv.Client().Transport, fastRetry(3))
-
-	// Wrap in a type the stdlib doesn't recognize so GetBody stays nil.
-	body := struct{ io.Reader }{strings.NewReader("data")}
-	req, _ := http.NewRequestWithContext(context.Background(), http.MethodPost, srv.URL, io.NopCloser(body))
-
-	if req.GetBody != nil {
-		t.Fatal("precondition: GetBody should be nil for unrecognized reader type")
-	}
-
-	_, err := rt.RoundTrip(req)
-	// Should get an error because the body can't be reset and resp was
-	// closed during the retryable-status path.
-	if err == nil {
-		t.Fatal("expected error when body is non-resettable")
-	}
-	if c := count.Load(); c != 1 {
-		t.Errorf("request count = %d, want 1 (retry should have been aborted)", c)
-	}
-}
-
-// ---------------------------------------------------------------------------
-// ResilientTransport: context cancellation during backoff
-// ---------------------------------------------------------------------------
-
-func TestResilientTransport_ContextCancelledDuringBackoff(t *testing.T) {
-	var count atomic.Int32
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		count.Add(1)
-		w.WriteHeader(http.StatusBadGateway) // retryable
-	}))
-	defer srv.Close()
-
-	slowRetry := &RetryPolicy{
-		MaxAttempts: 5,
-		Backoff:     func(int) time.Duration { return 10 * time.Second },
-	}
-	rt := newTestTransport(srv.Client().Transport, slowRetry)
-
-	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
-	defer cancel()
-
-	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, srv.URL, nil)
-	_, err := rt.RoundTrip(req)
-
-	if !errors.Is(err, context.DeadlineExceeded) {
-		t.Errorf("expected context.DeadlineExceeded, got: %v", err)
-	}
-	if c := count.Load(); c != 1 {
-		t.Errorf("expected 1 attempt before context cancel, got %d", c)
-	}
-}
-
-// ---------------------------------------------------------------------------
-// Circuit breaker: trips on 5xx server errors
-// ---------------------------------------------------------------------------
-
-func TestCircuitBreaker_TripsOn5xxErrors(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusInternalServerError)
-	}))
-	defer srv.Close()
-
-	rt := newTestTransport(srv.Client().Transport, noRetry())
-	key := bkey(http.MethodGet, srv.URL)
-	loadBreaker(rt, key, 3, time.Minute)
-
-	// Send 3 requests that all return 500 → CB records 3 failures.
-	for i := range 3 {
-		req, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, srv.URL, nil)
-		resp, err := rt.RoundTrip(req)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, err := io.ReadAll(r.Body)
 		if err != nil {
-			t.Fatalf("request %d: unexpected error: %v", i+1, err)
-		}
-		resp.Body.Close()
-		if resp.StatusCode != http.StatusInternalServerError {
-			t.Fatalf("request %d: status = %d, want 500", i+1, resp.StatusCode)
-		}
-	}
-
-	// 4th request should be rejected by the open circuit breaker.
-	req, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, srv.URL, nil)
-	_, err := rt.RoundTrip(req)
-	if !errors.Is(err, gobreaker.ErrOpenState) {
-		t.Errorf("expected gobreaker.ErrOpenState, got: %v", err)
-	}
-}
-
-func TestCircuitBreaker_TripsOnTransportErrors(t *testing.T) {
-	inner := roundTripFunc(func(_ *http.Request) (*http.Response, error) {
-		return nil, errors.New("connection refused")
-	})
-
-	rt := newTestTransport(inner, noRetry())
-	key := bkey(http.MethodGet, "http://unreachable.invalid")
-	loadBreaker(rt, key, 3, time.Minute)
-
-	// 3 transport errors to trip the breaker.
-	for range 3 {
-		req, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, "http://unreachable.invalid", nil)
-		_, _ = rt.RoundTrip(req)
-	}
-
-	// 4th should be blocked.
-	req, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, "http://unreachable.invalid", nil)
-	_, err := rt.RoundTrip(req)
-	if !errors.Is(err, gobreaker.ErrOpenState) {
-		t.Errorf("expected gobreaker.ErrOpenState, got: %v", err)
-	}
-}
-
-// ---------------------------------------------------------------------------
-// Circuit breaker: per-host isolation
-// ---------------------------------------------------------------------------
-
-func TestCircuitBreaker_PerHostIsolation(t *testing.T) {
-	srvFail := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusInternalServerError)
-	}))
-	defer srvFail.Close()
-
-	srvOK := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("ok"))
-	}))
-	defer srvOK.Close()
-
-	rt := newTestTransport(http.DefaultTransport, noRetry())
-
-	keyFail := bkey(http.MethodGet, srvFail.URL)
-	keyOK := bkey(http.MethodGet, srvOK.URL)
-	loadBreaker(rt, keyFail, 3, time.Minute)
-	loadBreaker(rt, keyOK, 3, time.Minute)
-
-	// Trip the breaker for srvFail.
-	for i := range 3 {
-		req, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, srvFail.URL, nil)
-		resp, err := rt.RoundTrip(req)
-		if err != nil {
-			t.Fatalf("srvFail request %d: unexpected error: %v", i+1, err)
-		}
-		resp.Body.Close()
-	}
-
-	// srvFail should be tripped.
-	req, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, srvFail.URL, nil)
-	_, err := rt.RoundTrip(req)
-	if !errors.Is(err, gobreaker.ErrOpenState) {
-		t.Fatalf("srvFail: expected ErrOpenState, got: %v", err)
-	}
-
-	// srvOK should still work.
-	req, _ = http.NewRequestWithContext(context.Background(), http.MethodGet, srvOK.URL, nil)
-	resp, err := rt.RoundTrip(req)
-	if err != nil {
-		t.Fatalf("srvOK: unexpected error: %v", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		t.Errorf("srvOK: status = %d, want 200", resp.StatusCode)
-	}
-}
-
-// ---------------------------------------------------------------------------
-// Circuit breaker: does not trip below threshold
-// ---------------------------------------------------------------------------
-
-func TestCircuitBreaker_DoesNotTripBelowThreshold(t *testing.T) {
-	var count atomic.Int32
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		n := count.Add(1)
-		// Every 3rd request fails (33% failure rate < 50%).
-		if n%3 == 0 {
+			s.T().Error(err)
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
-		w.WriteHeader(http.StatusOK)
-	}))
-	defer srv.Close()
-
-	rt := newTestTransport(srv.Client().Transport, noRetry())
-	key := bkey(http.MethodGet, srv.URL)
-	loadBreaker(rt, key, 5, time.Minute)
-
-	// Send 9 requests: 6 succeed, 3 fail → 33% failure rate.
-	for i := range 9 {
-		req, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, srv.URL, nil)
-		resp, err := rt.RoundTrip(req)
-		if err != nil {
-			t.Fatalf("request %d: unexpected error: %v", i+1, err)
-		}
-		resp.Body.Close()
-	}
-
-	// Breaker should still be closed.
-	req, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, srv.URL, nil)
-	resp, err := rt.RoundTrip(req)
-	if err != nil {
-		t.Fatalf("breaker should not have tripped (33%% < 50%%): %v", err)
-	}
-	resp.Body.Close()
-}
-
-// ---------------------------------------------------------------------------
-// Circuit breaker: does trip at exactly 50% failure rate
-// ---------------------------------------------------------------------------
-
-func TestCircuitBreaker_TripsAtFailureRate(t *testing.T) {
-	var count atomic.Int32
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		n := count.Add(1)
-		// Alternate: odd succeed, even fail → 50% failure rate.
-		if n%2 == 0 {
-			w.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-		w.WriteHeader(http.StatusOK)
-	}))
-	defer srv.Close()
-
-	rt := newTestTransport(srv.Client().Transport, noRetry())
-	key := bkey(http.MethodGet, srv.URL)
-	loadBreaker(rt, key, 4, time.Minute)
-
-	// Send 4 requests: 2 succeed (n=1,3), 2 fail (n=2,4) → 50%.
-	for i := range 4 {
-		req, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, srv.URL, nil)
-		resp, err := rt.RoundTrip(req)
-		if err != nil {
-			t.Fatalf("request %d: unexpected error: %v", i+1, err)
-		}
-		resp.Body.Close()
-	}
-
-	// Breaker should be open (50% >= 50%).
-	req, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, srv.URL, nil)
-	_, err := rt.RoundTrip(req)
-	if !errors.Is(err, gobreaker.ErrOpenState) {
-		t.Errorf("expected ErrOpenState at 50%% failure rate, got: %v", err)
-	}
-}
-
-// ---------------------------------------------------------------------------
-// Circuit breaker: recovery after timeout
-// ---------------------------------------------------------------------------
-
-func TestCircuitBreaker_RecoverAfterTimeout(t *testing.T) {
-	var count atomic.Int32
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		n := count.Add(1)
-		if n <= 3 {
-			w.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("recovered"))
-	}))
-	defer srv.Close()
-
-	rt := newTestTransport(srv.Client().Transport, noRetry())
-	key := bkey(http.MethodGet, srv.URL)
-	loadBreaker(rt, key, 3, 100*time.Millisecond)
-
-	// Trip the breaker: 3 failures.
-	for i := range 3 {
-		req, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, srv.URL, nil)
-		resp, err := rt.RoundTrip(req)
-		if err != nil {
-			t.Fatalf("request %d: unexpected error: %v", i+1, err)
-		}
-		resp.Body.Close()
-	}
-
-	// Verify it's open.
-	req, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, srv.URL, nil)
-	_, err := rt.RoundTrip(req)
-	if !errors.Is(err, gobreaker.ErrOpenState) {
-		t.Fatalf("expected ErrOpenState, got: %v", err)
-	}
-
-	// Wait for the CB timeout to expire → half-open.
-	time.Sleep(150 * time.Millisecond)
-
-	// Next request should go through (half-open allows 1 request).
-	// Server now returns 200 (count=4 > 3).
-	req, _ = http.NewRequestWithContext(context.Background(), http.MethodGet, srv.URL, nil)
-	resp, err := rt.RoundTrip(req)
-	if err != nil {
-		t.Fatalf("expected recovery in half-open state, got: %v", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		t.Errorf("status = %d, want 200 after recovery", resp.StatusCode)
-	}
-}
-
-// ---------------------------------------------------------------------------
-// Circuit breaker: mixed 5xx and retryable status interaction
-// ---------------------------------------------------------------------------
-
-func TestCircuitBreaker_RetryableExhaustionCountsAsFailure(t *testing.T) {
-	// All requests return 503 (retryable). After retries are exhausted,
-	// the CB should record the result as a failure.
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusServiceUnavailable)
-	}))
-	defer srv.Close()
-
-	rt := newTestTransport(srv.Client().Transport, fastRetry(2))
-	key := bkey(http.MethodGet, srv.URL)
-	loadBreaker(rt, key, 3, time.Minute)
-
-	// Each RoundTrip call exhausts 2 attempts → CB records 1 failure.
-	for i := range 3 {
-		req, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, srv.URL, nil)
-		resp, err := rt.RoundTrip(req)
-		if err != nil {
-			t.Fatalf("request %d: unexpected error: %v", i+1, err)
-		}
-		resp.Body.Close()
-	}
-
-	// Breaker should be open.
-	req, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, srv.URL, nil)
-	_, err := rt.RoundTrip(req)
-	if !errors.Is(err, gobreaker.ErrOpenState) {
-		t.Errorf("expected ErrOpenState after exhausted retryable failures, got: %v", err)
-	}
-}
-
-// ---------------------------------------------------------------------------
-// InvokeStream: context tied to body lifetime
-// ---------------------------------------------------------------------------
-
-func TestInvokeStream_ContextTiedToBody(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("streaming data"))
-	}))
-	defer srv.Close()
-
-	inv := newTestInvoker(srv.Client().Transport, noRetry())
-
-	resp, err := inv.InvokeStream(context.Background(), http.MethodGet, srv.URL, nil, nil,
-		WithHTTPTimeout(5*time.Second))
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	// Body should be wrapped with cancelOnCloseBody since timeout was set.
-	if _, ok := resp.Body.(*cancelOnCloseBody); !ok {
-		t.Errorf("expected cancelOnCloseBody wrapper, got %T", resp.Body)
-	}
-
-	// Body should be readable after InvokeStream returns.
-	data, err := io.ReadAll(resp.Body)
-	if err != nil {
-		t.Fatalf("reading body: %v", err)
-	}
-	if string(data) != "streaming data" {
-		t.Errorf("body = %q, want %q", data, "streaming data")
-	}
-
-	if closeErr := resp.Body.Close(); closeErr != nil {
-		t.Errorf("closing body: %v", closeErr)
-	}
-}
-
-func TestInvokeStream_NoTimeoutNoWrapper(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusOK)
-	}))
-	defer srv.Close()
-
-	inv := newTestInvoker(srv.Client().Transport, noRetry())
-
-	resp, err := inv.InvokeStream(context.Background(), http.MethodGet, srv.URL, nil, nil)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	defer resp.Body.Close()
-
-	// Without timeout, body should NOT be wrapped.
-	if _, ok := resp.Body.(*cancelOnCloseBody); ok {
-		t.Error("body should not be wrapped when no timeout is set")
-	}
-}
-
-// ---------------------------------------------------------------------------
-// InvokeStream: seekable body sets GetBody for retries
-// ---------------------------------------------------------------------------
-
-func TestInvokeStream_SeekableBodyRetried(t *testing.T) {
-	var receivedBodies []string
-	var count atomic.Int32
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		body, _ := io.ReadAll(r.Body)
 		receivedBodies = append(receivedBodies, string(body))
 		if count.Add(1) == 1 {
 			w.WriteHeader(http.StatusBadGateway)
 			return
 		}
 		w.WriteHeader(http.StatusOK)
-		w.Write(body)
+		_, _ = w.Write(body)
 	}))
-	defer srv.Close()
+	defer server.Close()
 
-	inv := newTestInvoker(srv.Client().Transport, fastRetry(3))
-
-	payload := `{"test":"data"}`
-	resp, err := inv.InvokeStream(context.Background(), http.MethodPost, srv.URL,
-		bytes.NewReader([]byte(payload)),
-		http.Header{"Content-Type": {"application/json"}})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	rt := newTestTransport(server.Client().Transport, fastRetry())
+	payload := `{"key":"value"}`
+	body := bytes.NewReader([]byte(payload))
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, server.URL, body)
+	s.Require().NoError(err)
+	req.GetBody = func() (io.ReadCloser, error) {
+		_, seekErr := body.Seek(0, io.SeekStart)
+		if seekErr != nil {
+			return nil, seekErr
+		}
+		return io.NopCloser(body), nil
 	}
+
+	resp, err := rt.RoundTrip(req)
+	s.Require().NoError(err)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		t.Errorf("status = %d, want 200", resp.StatusCode)
-	}
-	if len(receivedBodies) != 2 {
-		t.Fatalf("expected 2 attempts, got %d", len(receivedBodies))
-	}
-	for i, b := range receivedBodies {
-		if b != payload {
-			t.Errorf("attempt %d body = %q, want %q", i+1, b, payload)
-		}
+	s.Equal(http.StatusOK, resp.StatusCode)
+	s.Len(receivedBodies, 2)
+	for _, received := range receivedBodies {
+		s.Equal(payload, received)
 	}
 }
 
-// ---------------------------------------------------------------------------
-// InvokeResponse: ToContent
-// ---------------------------------------------------------------------------
+func (s *InvokerSuite) TestResilientTransportNonResettableBodyStopsRetry() {
+	var count atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		count.Add(1)
+		w.WriteHeader(http.StatusBadGateway)
+	}))
+	defer server.Close()
 
-func TestToContent_TruncatesExactly(t *testing.T) {
+	rt := newTestTransport(server.Client().Transport, fastRetry())
+	body := struct{ io.Reader }{Reader: strings.NewReader("data")}
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, server.URL, io.NopCloser(body))
+	s.Require().NoError(err)
+	s.Nil(req.GetBody)
+
+	_, err = rt.RoundTrip(req)
+	s.Require().Error(err)
+	s.Equal(int32(1), count.Load())
+}
+
+func (s *InvokerSuite) TestResilientTransportContextCancelledDuringBackoff() {
+	var count atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		count.Add(1)
+		w.WriteHeader(http.StatusBadGateway)
+	}))
+	defer server.Close()
+
+	slowRetry := &RetryPolicy{
+		MaxAttempts: 5,
+		Backoff:     func(int) time.Duration { return 10 * time.Second },
+	}
+	rt := newTestTransport(server.Client().Transport, slowRetry)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, server.URL, nil)
+	s.Require().NoError(err)
+
+	_, err = rt.RoundTrip(req)
+	s.Require().ErrorIs(err, context.DeadlineExceeded)
+	s.Equal(int32(1), count.Load())
+}
+
+func (s *InvokerSuite) TestInvokeStreamContextTiedToBody() {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("streaming data"))
+	}))
+	defer server.Close()
+
+	inv := newTestInvoker(server.Client().Transport, noRetry())
+	resp, err := inv.InvokeStream(context.Background(), http.MethodGet, server.URL, nil, nil,
+		WithHTTPTimeout(5*time.Second))
+	s.Require().NoError(err)
+
+	_, ok := resp.Body.(*closeFuncBody)
+	s.True(ok)
+
+	data, err := io.ReadAll(resp.Body)
+	s.Require().NoError(err)
+	s.Equal("streaming data", string(data))
+	s.NoError(resp.Body.Close())
+}
+
+func (s *InvokerSuite) TestInvokeStreamNoTimeoutNoWrapper() {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	inv := newTestInvoker(server.Client().Transport, noRetry())
+	resp, err := inv.InvokeStream(context.Background(), http.MethodGet, server.URL, nil, nil)
+	s.Require().NoError(err)
+	defer resp.Body.Close()
+
+	_, ok := resp.Body.(*closeFuncBody)
+	s.False(ok)
+}
+
+func (s *InvokerSuite) TestInvokeStreamSeekableBodyRetried() {
+	var receivedBodies []string
+	var count atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			s.T().Error(err)
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		receivedBodies = append(receivedBodies, string(body))
+		if count.Add(1) == 1 {
+			w.WriteHeader(http.StatusBadGateway)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(body)
+	}))
+	defer server.Close()
+
+	inv := newTestInvoker(server.Client().Transport, fastRetry())
+	payload := `{"test":"data"}`
+	resp, err := inv.InvokeStream(context.Background(), http.MethodPost, server.URL,
+		bytes.NewReader([]byte(payload)),
+		http.Header{"Content-Type": {"application/json"}})
+	s.Require().NoError(err)
+	defer resp.Body.Close()
+
+	s.Equal(http.StatusOK, resp.StatusCode)
+	s.Len(receivedBodies, 2)
+	for _, received := range receivedBodies {
+		s.Equal(payload, received)
+	}
+}
+
+func (s *InvokerSuite) TestInvokeStreamAppliesPerRequestWorkloadAPIOptions() {
+	var count atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		count.Add(1)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	inv := newTestInvoker(server.Client().Transport, noRetry())
+	resp, err := inv.InvokeStream(
+		context.Background(),
+		http.MethodGet,
+		server.URL,
+		nil,
+		nil,
+		WithHTTPWorkloadAPITargetID("not-a-valid-spiffe-id"),
+	)
+
+	s.Nil(resp)
+	s.Require().Error(err)
+	s.Equal(int32(0), count.Load())
+}
+
+func (s *InvokerSuite) TestToContentTruncatesExactly() {
 	content := strings.Repeat("x", 100)
 	resp := &InvokeResponse{
 		StatusCode: http.StatusOK,
@@ -893,32 +454,23 @@ func TestToContent_TruncatesExactly(t *testing.T) {
 	}
 
 	data, err := resp.ToContent(context.Background())
-	if !errors.Is(err, ErrResponseTooLarge) {
-		t.Fatalf("expected ErrResponseTooLarge, got: %v", err)
-	}
-	if len(data) != 50 {
-		t.Errorf("len(data) = %d, want exactly 50", len(data))
-	}
+	s.Require().ErrorIs(err, ErrResponseTooLarge)
+	s.Len(data, 50)
 }
 
-func TestToContent_UnderLimit(t *testing.T) {
-	content := "hello"
+func (s *InvokerSuite) TestToContentUnderLimit() {
 	resp := &InvokeResponse{
 		StatusCode: http.StatusOK,
-		Body:       io.NopCloser(strings.NewReader(content)),
+		Body:       io.NopCloser(strings.NewReader("hello")),
 		maxBodyLen: 100,
 	}
 
 	data, err := resp.ToContent(context.Background())
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if string(data) != content {
-		t.Errorf("data = %q, want %q", data, content)
-	}
+	s.Require().NoError(err)
+	s.Equal("hello", string(data))
 }
 
-func TestToContent_NoLimit(t *testing.T) {
+func (s *InvokerSuite) TestToContentNoLimit() {
 	content := strings.Repeat("x", 1000)
 	resp := &InvokeResponse{
 		StatusCode: http.StatusOK,
@@ -926,21 +478,14 @@ func TestToContent_NoLimit(t *testing.T) {
 	}
 
 	data, err := resp.ToContent(context.Background())
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(data) != 1000 {
-		t.Errorf("len(data) = %d, want 1000", len(data))
-	}
+	s.Require().NoError(err)
+	s.Len(data, 1000)
 }
 
-// ---------------------------------------------------------------------------
-// InvokeResponse: Decode
-// ---------------------------------------------------------------------------
-
-func TestDecode_Success(t *testing.T) {
+func (s *InvokerSuite) TestDecodeSuccess() {
 	payload := map[string]string{"hello": "world"}
-	encoded, _ := json.Marshal(payload)
+	encoded, err := json.Marshal(payload)
+	s.Require().NoError(err)
 
 	resp := &InvokeResponse{
 		StatusCode: http.StatusOK,
@@ -948,172 +493,112 @@ func TestDecode_Success(t *testing.T) {
 	}
 
 	var result map[string]string
-	if err := resp.Decode(context.Background(), &result); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if result["hello"] != "world" {
-		t.Errorf("decoded = %v, want map[hello:world]", result)
-	}
+	s.Require().NoError(resp.Decode(context.Background(), &result))
+	s.Equal("world", result["hello"])
 }
 
-func TestDecode_InvalidJSON(t *testing.T) {
+func (s *InvokerSuite) TestDecodeInvalidJSON() {
 	resp := &InvokeResponse{
 		StatusCode: http.StatusOK,
 		Body:       io.NopCloser(strings.NewReader("not json")),
 	}
 
 	var result map[string]string
-	if err := resp.Decode(context.Background(), &result); err == nil {
-		t.Fatal("expected error for invalid JSON")
-	}
+	s.Require().Error(resp.Decode(context.Background(), &result))
 }
 
-// ---------------------------------------------------------------------------
-// Invoke (full path)
-// ---------------------------------------------------------------------------
-
-func TestInvoke_Success(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if ct := r.Header.Get("Content-Type"); ct != "application/json" {
-			t.Errorf("Content-Type = %q, want application/json", ct)
-		}
-		if accept := r.Header.Get("Accept"); accept != "application/json" {
-			t.Errorf("Accept = %q, want application/json", accept)
-		}
+func (s *InvokerSuite) TestInvokeSuccess() {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		s.Equal("application/json", r.Header.Get("Content-Type"))
+		s.Equal("application/json", r.Header.Get("Accept"))
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 	}))
-	defer srv.Close()
+	defer server.Close()
 
-	inv := newTestInvoker(srv.Client().Transport, noRetry())
-	ctx := context.Background()
+	inv := newTestInvoker(server.Client().Transport, noRetry())
+	resp, err := inv.Invoke(context.Background(), http.MethodGet, server.URL, nil, nil)
+	s.Require().NoError(err)
 
-	resp, err := inv.Invoke(ctx, http.MethodGet, srv.URL, nil, nil)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if resp.StatusCode != http.StatusOK {
-		t.Errorf("status = %d, want 200", resp.StatusCode)
-	}
-	body, err := resp.ToContent(ctx)
-	if err != nil {
-		t.Fatalf("unexpected error reading body: %v", err)
-	}
-	if len(body) == 0 {
-		t.Error("expected non-empty body")
-	}
+	s.Equal(http.StatusOK, resp.StatusCode)
+	body, err := resp.ToContent(context.Background())
+	s.Require().NoError(err)
+	s.NotEmpty(body)
 }
 
-func TestInvoke_WithPayload(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+func (s *InvokerSuite) TestInvokeWithPayload() {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var payload map[string]string
-		_ = json.NewDecoder(r.Body).Decode(&payload)
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			s.T().Error(err)
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
 		w.WriteHeader(http.StatusOK)
 		_ = json.NewEncoder(w).Encode(payload)
 	}))
-	defer srv.Close()
+	defer server.Close()
 
-	inv := newTestInvoker(srv.Client().Transport, noRetry())
-	ctx := context.Background()
-
+	inv := newTestInvoker(server.Client().Transport, noRetry())
 	input := map[string]string{"key": "value"}
-	resp, err := inv.Invoke(ctx, http.MethodPost, srv.URL, input, nil)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if resp.StatusCode != http.StatusOK {
-		t.Errorf("status = %d, want 200", resp.StatusCode)
-	}
+	resp, err := inv.Invoke(context.Background(), http.MethodPost, server.URL, input, nil)
+	s.Require().NoError(err)
+	s.Equal(http.StatusOK, resp.StatusCode)
 
 	var result map[string]string
-	err = resp.Decode(ctx, &result)
-	if err != nil {
-		t.Fatalf("unexpected decode error: %v", err)
-	}
-	if result["key"] != "value" {
-		t.Errorf("result = %v, want map[key:value]", result)
-	}
+	s.Require().NoError(resp.Decode(context.Background(), &result))
+	s.Equal("value", result["key"])
 }
 
-func TestInvoke_ServerError_ReturnsStatusAndBody(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+func (s *InvokerSuite) TestInvokeServerErrorReturnsStatusAndBody() {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		_, _ = w.Write([]byte(`{"error":"something broke"}`))
 	}))
-	defer srv.Close()
+	defer server.Close()
 
-	inv := newTestInvoker(srv.Client().Transport, noRetry())
-	ctx := context.Background()
+	inv := newTestInvoker(server.Client().Transport, noRetry())
+	resp, err := inv.Invoke(context.Background(), http.MethodGet, server.URL, nil, nil)
+	s.Require().NoError(err)
+	s.Equal(http.StatusInternalServerError, resp.StatusCode)
 
-	resp, err := inv.Invoke(ctx, http.MethodGet, srv.URL, nil, nil)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if resp.StatusCode != http.StatusInternalServerError {
-		t.Errorf("status = %d, want 500", resp.StatusCode)
-	}
-	body, err := resp.ToContent(ctx)
-	if err != nil {
-		t.Fatalf("unexpected error reading body: %v", err)
-	}
-	if !strings.Contains(string(body), "something broke") {
-		t.Errorf("body = %q, want it to contain error message", body)
-	}
+	body, err := resp.ToContent(context.Background())
+	s.Require().NoError(err)
+	s.Contains(string(body), "something broke")
 }
 
-// ---------------------------------------------------------------------------
-// InvokeWithURLEncoded (full path)
-// ---------------------------------------------------------------------------
-
-func TestInvokeWithURLEncoded_Success(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if ct := r.Header.Get("Content-Type"); ct != "application/x-www-form-urlencoded" {
-			t.Errorf("Content-Type = %q, want application/x-www-form-urlencoded", ct)
+func (s *InvokerSuite) TestInvokeWithURLEncodedSuccess() {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		s.Equal("application/x-www-form-urlencoded", r.Header.Get("Content-Type"))
+		if err := r.ParseForm(); err != nil {
+			s.T().Error(err)
+			w.WriteHeader(http.StatusBadRequest)
+			return
 		}
-		_ = r.ParseForm()
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(r.FormValue("key")))
 	}))
-	defer srv.Close()
+	defer server.Close()
 
-	inv := newTestInvoker(srv.Client().Transport, noRetry())
-	ctx := context.Background()
-
+	inv := newTestInvoker(server.Client().Transport, noRetry())
 	payload := url.Values{"key": {"value"}}
-	resp, err := inv.InvokeWithURLEncoded(ctx, http.MethodPost, srv.URL, payload, nil)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if resp.StatusCode != http.StatusOK {
-		t.Errorf("status = %d, want 200", resp.StatusCode)
-	}
-	body, err := resp.ToContent(ctx)
-	if err != nil {
-		t.Fatalf("unexpected error reading body: %v", err)
-	}
-	if string(body) != "value" {
-		t.Errorf("body = %q, want %q", body, "value")
-	}
+	resp, err := inv.InvokeWithURLEncoded(context.Background(), http.MethodPost, server.URL, payload, nil)
+	s.Require().NoError(err)
+	s.Equal(http.StatusOK, resp.StatusCode)
+
+	body, err := resp.ToContent(context.Background())
+	s.Require().NoError(err)
+	s.Equal("value", string(body))
 }
 
-// ---------------------------------------------------------------------------
-// Client / SetClient
-// ---------------------------------------------------------------------------
-
-func TestClient_GetSet(t *testing.T) {
+func (s *InvokerSuite) TestClientGetSet() {
 	inv := newTestInvoker(http.DefaultTransport, noRetry())
-	ctx := context.Background()
 
-	original := inv.Client(ctx)
-	if original == nil {
-		t.Fatal("Client() returned nil")
-	}
+	original := inv.Client(context.Background())
+	s.NotNil(original)
 
 	replacement := &http.Client{Timeout: 99 * time.Second}
-	inv.SetClient(ctx, replacement)
-
-	if got := inv.Client(ctx); got != replacement {
-		t.Error("SetClient did not replace the client")
-	}
+	inv.SetClient(context.Background(), replacement)
+	s.Same(replacement, inv.Client(context.Background()))
 }

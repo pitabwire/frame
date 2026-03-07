@@ -18,11 +18,16 @@ func WithHTTPClient(opts ...client.HTTPOption) Option {
 	return func(ctx context.Context, s *Service) {
 		s.registerPlugin("http_client")
 
-		cfg, ok := s.Config().(config.ConfigurationTraceRequests)
-		if ok && cfg.TraceReq() {
-			opts = append(opts, client.WithHTTPTraceRequests(), client.WithHTTPTraceRequestHeaders())
+		effectiveOpts := append([]client.HTTPOption{}, opts...)
+
+		traceCfg, ok := s.Config().(config.ConfigurationTraceRequests)
+		if ok && traceCfg.TraceReq() {
+			effectiveOpts = append(effectiveOpts, client.WithHTTPTraceRequests(), client.WithHTTPTraceRequestHeaders())
 		}
 
-		s.clientManager = client.NewManager(ctx, opts...)
+		s.clientManager = client.NewManager(ctx, effectiveOpts...)
+		s.AddCleanupMethod(func(_ context.Context) {
+			s.clientManager.Close()
+		})
 	}
 }

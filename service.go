@@ -536,6 +536,10 @@ func (s *Service) initializeServerDrivers(ctx context.Context, httpPort string) 
 }
 
 func (s *Service) setupWorkloadAPITLS(ctx context.Context) (*tls.Config, bool, error) {
+	if !s.shouldUseWorkloadAPIServerTLS() {
+		return nil, false, nil
+	}
+
 	if s.securityManager == nil {
 		return nil, false, nil
 	}
@@ -547,18 +551,13 @@ func (s *Service) setupWorkloadAPITLS(ctx context.Context) (*tls.Config, bool, e
 
 	tlsConfig, err := workloadAPI.Setup(ctx)
 	if err != nil {
-		if s.mustStaySecureWithoutFileTLS() {
-			return nil, false, fmt.Errorf("secure transport setup failed: %w", err)
-		}
-
-		s.Log(ctx).WithError(err).Warn("failed to setup workload API")
-		return nil, false, nil
+		return nil, false, fmt.Errorf("secure transport setup failed: %w", err)
 	}
 
 	return tlsConfig, true, nil
 }
 
-func (s *Service) mustStaySecureWithoutFileTLS() bool {
+func (s *Service) shouldUseWorkloadAPIServerTLS() bool {
 	securityCfg, ok := s.Config().(config.ConfigurationSecurity)
 	if !ok || !securityCfg.IsRunSecurely() || s.TLSEnabled() {
 		return false

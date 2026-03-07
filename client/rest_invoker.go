@@ -2,11 +2,9 @@ package client
 
 import (
 	"bytes"
-	"container/list"
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -15,255 +13,92 @@ import (
 	"time"
 
 	"github.com/pitabwire/util"
-	"github.com/sony/gobreaker/v2"
 )
 
-// resilientTransport is an http.RoundTripper that adds circuit breaker and
-// retry logic around an inner transport. Every request that flows through
-// this transport gets automatic per-host circuit breaking and retries on
-// transient failures (502, 503, 504, transport errors).
+// resilientTransport is an http.RoundTripper that adds retry logic around an
+// inner transport. Requests get automatic retries on transient failures
+// (502, 503, 504, and transport errors).
 type resilientTransport struct {
 	inner       http.RoundTripper
-	breakers    sync.Map // map[string]*gobreaker.CircuitBreaker[*http.Response]
 	retryPolicy *RetryPolicy
-
-	breakerMu    sync.Mutex
-	breakerOrder *list.List
-	breakerIndex map[string]*list.Element
-	maxBreakers  int
-	breakerTTL   time.Duration
 }
 
 func newResilientTransport(inner http.RoundTripper, retry *RetryPolicy) *resilientTransport {
+	if retry == nil {
+		retry = &RetryPolicy{
+			MaxAttempts: defaultMaxRetryAttempts,
+			Backoff: func(attempt int) time.Duration {
+				return time.Duration(attempt*attempt) * defaultMinRetryDuration
+			},
+		}
+	}
+
 	return &resilientTransport{
-		inner:        inner,
-		retryPolicy:  retry,
-		breakerOrder: list.New(),
-		breakerIndex: map[string]*list.Element{},
-		maxBreakers:  defaultCircuitBreakerMaxEntries,
-		breakerTTL:   defaultCircuitBreakerIdleTTL,
+		inner:       inner,
+		retryPolicy: retry,
 	}
 }
 
-func (rt *resilientTransport) breakerFor(key string) *gobreaker.CircuitBreaker[*http.Response] {
-	if cb, ok := rt.breakers.Load(key); ok {
-		rt.touchBreaker(key)
-		//nolint:errcheck // only *gobreaker.CircuitBreaker[*http.Response] is stored
-		return cb.(*gobreaker.CircuitBreaker[*http.Response])
-	}
-
-	rt.breakerMu.Lock()
-	defer rt.breakerMu.Unlock()
-
-	rt.ensureBreakerStateLocked()
-
-	if cb, ok := rt.breakers.Load(key); ok {
-		rt.touchBreakerLocked(key, time.Now())
-		//nolint:errcheck // only *gobreaker.CircuitBreaker[*http.Response] is stored
-		return cb.(*gobreaker.CircuitBreaker[*http.Response])
-	}
-
-	st := gobreaker.Settings{
-		Name:        "http:" + key,
-		MaxRequests: defaultCircuitBreakerMaxRequests,
-		Interval:    defaultCircuitBreakerInterval,
-		Timeout:     defaultCircuitBreakerTimeout,
-
-		ReadyToTrip: func(c gobreaker.Counts) bool {
-			if c.Requests < defaultCircuitBreakerThreshold {
-				return false
-			}
-			return float64(c.TotalFailures)/float64(c.Requests) >= defaultCircuitBreakerFailureRate
-		},
-	}
-
-	//nolint:bodyclose //this is done by consuming party to avoid buffering
-	cb := gobreaker.NewCircuitBreaker[*http.Response](st)
-
-	rt.breakers.Store(key, cb)
-	rt.touchBreakerLocked(key, time.Now())
-	rt.evictBreakersLocked()
-
-	return cb
-}
-
-//nolint:gocognit // retry loop with circuit breaker is inherently complex
 func (rt *resilientTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	key := breakerKey(req)
-	cb := rt.breakerFor(key)
 	retry := rt.retryPolicy
+	var lastResp *http.Response
+	var lastErr error
 
-	resp, err := cb.Execute(func() (*http.Response, error) {
-		var lastResp *http.Response
-		var lastErr error
-
-		for attempt := 1; attempt <= retry.MaxAttempts; attempt++ {
-			// Reset the request body before each retry attempt.
-			if attempt > 1 {
-				if req.GetBody != nil {
-					bodyReader, bErr := req.GetBody()
-					if bErr != nil {
-						return lastResp, lastErr
-					}
-					req.Body = bodyReader
-				} else if req.Body != nil {
-					// Body is non-nil and non-resettable; cannot retry.
-					return lastResp, lastErr
+	for attempt := 1; attempt <= retry.MaxAttempts; attempt++ {
+		if attempt > 1 {
+			if req.GetBody != nil {
+				bodyReader, bodyErr := req.GetBody()
+				if bodyErr != nil {
+					return lastResp, bodyErr
 				}
-			}
-
-			resp, doErr := rt.inner.RoundTrip(req)
-			switch {
-			case doErr != nil:
-				// Always close body when RoundTrip returns both a response and an error.
-				if resp != nil && resp.Body != nil {
-					_ = resp.Body.Close()
-				}
-				lastErr = doErr
-				lastResp = nil
-			case isRetryableStatus(resp.StatusCode) && attempt < retry.MaxAttempts:
-				// Transient server error — close body and retry.
-				_ = resp.Body.Close()
-				lastErr = &serverError{statusCode: resp.StatusCode}
-				lastResp = nil
-			case resp.StatusCode >= http.StatusInternalServerError:
-				// Non-retryable 5xx or final attempt: signal CB failure.
-				return resp, &serverError{statusCode: resp.StatusCode}
-			default:
-				return resp, nil
-			}
-
-			// Respect context cancellation during backoff.
-			t := time.NewTimer(retry.Backoff(attempt))
-			select {
-			case <-req.Context().Done():
-				t.Stop()
-				return nil, req.Context().Err()
-			case <-t.C:
+				req.Body = bodyReader
+			} else if req.Body != nil {
+				return lastResp, errors.New("request body cannot be retried")
 			}
 		}
 
-		return lastResp, lastErr
-	})
+		resp, err := rt.inner.RoundTrip(req)
+		switch {
+		case err != nil:
+			if resp != nil && resp.Body != nil {
+				_ = resp.Body.Close()
+			}
+			lastResp = nil
+			lastErr = err
+		case isRetryableStatus(resp.StatusCode) && attempt < retry.MaxAttempts:
+			_ = resp.Body.Close()
+			lastResp = nil
+			lastErr = nil
+		default:
+			return resp, nil
+		}
 
-	// Unwrap serverError so callers can still read the response body.
-	// Only unwrap when resp is non-nil; a nil resp with a nil error would
-	// cause a panic in the caller.
-	var sErr *serverError
-	if resp != nil && errors.As(err, &sErr) {
-		return resp, nil
+		t := time.NewTimer(retry.Backoff(attempt))
+		select {
+		case <-req.Context().Done():
+			t.Stop()
+			return nil, req.Context().Err()
+		case <-t.C:
+		}
 	}
 
-	return resp, err
+	return lastResp, lastErr
 }
 
-const (
-	defaultMaxResponseBodyLen        = 100 << 20 // 100MB default safety cap
-	defaultCircuitBreakerMaxRequests = 3
-	defaultCircuitBreakerInterval    = 30 * time.Second
-	defaultCircuitBreakerTimeout     = 45 * time.Second
-	defaultCircuitBreakerThreshold   = 20
-	defaultCircuitBreakerFailureRate = 0.5
-	defaultCircuitBreakerMaxEntries  = 1024
-	defaultCircuitBreakerIdleTTL     = 15 * time.Minute
-)
+func (rt *resilientTransport) CloseIdleConnections() {
+	if closer, ok := rt.inner.(interface{ CloseIdleConnections() }); ok {
+		closer.CloseIdleConnections()
+	}
+}
+
+const defaultMaxResponseBodyLen = 100 << 20 // 100MB default safety cap
 
 var ErrResponseTooLarge = errors.New("response body truncated, it exceeds configured limit")
-
-// serverError wraps a 5xx response so the circuit breaker records it as a
-// failure, while still allowing callers to read the response body.
-type serverError struct {
-	statusCode int
-}
-
-func (e *serverError) Error() string {
-	return fmt.Sprintf("server error: HTTP %d", e.statusCode)
-}
-
-type breakerMeta struct {
-	key      string
-	lastUsed time.Time
-}
-
-func (rt *resilientTransport) touchBreaker(key string) {
-	rt.breakerMu.Lock()
-	defer rt.breakerMu.Unlock()
-
-	rt.ensureBreakerStateLocked()
-	rt.touchBreakerLocked(key, time.Now())
-	rt.evictBreakersLocked()
-}
-
-func (rt *resilientTransport) touchBreakerLocked(key string, now time.Time) {
-	if elem, ok := rt.breakerIndex[key]; ok {
-		meta, _ := elem.Value.(*breakerMeta)
-		if meta == nil {
-			meta = &breakerMeta{key: key}
-			elem.Value = meta
-		}
-		meta.lastUsed = now
-		rt.breakerOrder.MoveToFront(elem)
-		return
-	}
-
-	meta := &breakerMeta{
-		key:      key,
-		lastUsed: now,
-	}
-	rt.breakerIndex[key] = rt.breakerOrder.PushFront(meta)
-}
-
-func (rt *resilientTransport) evictBreakersLocked() {
-	if rt.breakerOrder == nil || len(rt.breakerIndex) == 0 {
-		return
-	}
-
-	now := time.Now()
-
-	// Remove stale entries first.
-	if rt.breakerTTL > 0 {
-		for elem := rt.breakerOrder.Back(); elem != nil; {
-			prev := elem.Prev()
-			meta, _ := elem.Value.(*breakerMeta)
-			if meta == nil || now.Sub(meta.lastUsed) > rt.breakerTTL {
-				rt.removeBreakerLocked(elem)
-			}
-			elem = prev
-		}
-	}
-
-	// Enforce hard bound.
-	for rt.maxBreakers > 0 && len(rt.breakerIndex) > rt.maxBreakers {
-		elem := rt.breakerOrder.Back()
-		if elem == nil {
-			break
-		}
-		rt.removeBreakerLocked(elem)
-	}
-}
-
-func (rt *resilientTransport) removeBreakerLocked(elem *list.Element) {
-	meta, _ := elem.Value.(*breakerMeta)
-	if meta != nil {
-		delete(rt.breakerIndex, meta.key)
-		rt.breakers.Delete(meta.key)
-	}
-
-	rt.breakerOrder.Remove(elem)
-}
-
-func (rt *resilientTransport) ensureBreakerStateLocked() {
-	if rt.breakerOrder == nil {
-		rt.breakerOrder = list.New()
-	}
-	if rt.breakerIndex == nil {
-		rt.breakerIndex = map[string]*list.Element{}
-	}
-}
 
 type Manager interface {
 	Client(ctx context.Context) *http.Client
 	SetClient(ctx context.Context, cl *http.Client)
+	Close()
 
 	Invoke(ctx context.Context,
 		method string, endpointURL string, payload any,
@@ -278,21 +113,6 @@ type Manager interface {
 		headers http.Header,
 		opts ...HTTPOption,
 	) (*InvokeResponse, error)
-}
-
-// cancelOnCloseBody wraps an io.ReadCloser and calls a cancel function when
-// the body is closed. This ties a context's lifetime to the body lifetime,
-// preventing the context from being cancelled before the caller finishes
-// reading the stream.
-type cancelOnCloseBody struct {
-	io.ReadCloser
-	cancel context.CancelFunc
-}
-
-func (b *cancelOnCloseBody) Close() error {
-	err := b.ReadCloser.Close()
-	b.cancel()
-	return err
 }
 
 type InvokeResponse struct {
@@ -348,20 +168,27 @@ func (s *InvokeResponse) Decode(ctx context.Context, v any) error {
 type invoker struct {
 	client     *http.Client
 	maxBodyLen int64
+	baseOpts   []HTTPOption
 }
 
 // NewManager creates a new invoker with the provided options.
 func NewManager(ctx context.Context, opts ...HTTPOption) Manager {
-	httpClient := NewHTTPClient(ctx, opts...)
+	httpClient, err := newHTTPClient(ctx, opts...)
+	if err != nil {
+		util.Log(ctx).WithError(err).Error("failed to initialize HTTP client")
+	}
 
 	return &invoker{
 		client:     httpClient,
 		maxBodyLen: defaultMaxResponseBodyLen,
+		baseOpts:   append([]HTTPOption{}, opts...),
 	}
 }
 
-func breakerKey(req *http.Request) string {
-	return req.Method + " " + req.URL.Host
+func (s *invoker) Close() {
+	if s.client != nil {
+		s.client.CloseIdleConnections()
+	}
 }
 
 // Client returns the HTTP client used by the invoker.
@@ -446,32 +273,90 @@ func (s *invoker) InvokeStream(
 		return nil, err
 	}
 
-	httpCfg := &httpConfig{}
-	for _, opt := range opts {
-		opt(httpCfg)
+	req, cancel, httpCfg, err := s.newInvokeRequest(ctx, method, u.String(), body, headers, opts...)
+	if err != nil {
+		return nil, err
 	}
+
+	requestClient, temporaryClient, err := s.clientForInvoke(req.Context(), httpCfg, opts...)
+	if err != nil {
+		if cancel != nil {
+			cancel()
+		}
+		return nil, err
+	}
+
+	//nolint:bodyclose // response body ownership is transferred to InvokeResponse
+	resp, err := s.executeInvokeRequest(requestClient, req, cancel, temporaryClient)
+	if err != nil {
+		return nil, err
+	}
+
+	return newInvokeResponse(resp, cancel, requestClient, temporaryClient), nil
+}
+
+func (s *invoker) newInvokeRequest(
+	ctx context.Context,
+	method string,
+	endpointURL string,
+	body io.Reader,
+	headers http.Header,
+	opts ...HTTPOption,
+) (*http.Request, context.CancelFunc, *httpConfig, error) {
+	httpCfg := &httpConfig{}
+	httpCfg.process(ctx, opts...)
 
 	var cancel context.CancelFunc
 	if httpCfg.timeout > 0 {
 		ctx, cancel = context.WithTimeout(ctx, httpCfg.timeout)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, method, u.String(), body)
+	req, err := http.NewRequestWithContext(ctx, method, endpointURL, body)
 	if err != nil {
 		if cancel != nil {
 			cancel()
 		}
-		return nil, err
+		return nil, nil, nil, err
 	}
 	req.Header = headers
 
 	enableBodyRewind(req, body)
 
-	resp, err := s.client.Do(req)
+	return req, cancel, httpCfg, nil
+}
+
+func (s *invoker) clientForInvoke(
+	ctx context.Context,
+	httpCfg *httpConfig,
+	opts ...HTTPOption,
+) (*http.Client, bool, error) {
+	requestClient := s.client
+	temporaryClient := false
+	if shouldCreateRequestScopedClient(httpCfg) {
+		var err error
+		requestClient, err = s.requestScopedClient(ctx, opts...)
+		if err != nil {
+			return nil, false, err
+		}
+		temporaryClient = true
+	}
+
+	return requestClient, temporaryClient, nil
+}
+
+func (s *invoker) executeInvokeRequest(
+	requestClient *http.Client,
+	req *http.Request,
+	cancel context.CancelFunc,
+	temporaryClient bool,
+) (*http.Response, error) {
+	resp, err := requestClient.Do(req)
 	if err != nil {
-		// client.Do may return (resp, err) on redirect errors; close body to avoid leak.
 		if resp != nil && resp.Body != nil {
 			_ = resp.Body.Close()
+		}
+		if temporaryClient {
+			requestClient.CloseIdleConnections()
 		}
 		if cancel != nil {
 			cancel()
@@ -479,19 +364,51 @@ func (s *invoker) InvokeStream(
 		return nil, err
 	}
 
-	// Tie context lifetime to body lifetime so the caller can read the
-	// stream without the context being cancelled on function return.
-	respBody := resp.Body
+	return resp, nil
+}
+
+func newInvokeResponse(
+	resp *http.Response,
+	cancel context.CancelFunc,
+	requestClient *http.Client,
+	temporaryClient bool,
+) *InvokeResponse {
+	var closeFns []func()
+	if temporaryClient {
+		closeFns = append(closeFns, requestClient.CloseIdleConnections)
+	}
 	if cancel != nil {
-		respBody = &cancelOnCloseBody{ReadCloser: resp.Body, cancel: cancel}
+		closeFns = append(closeFns, cancel)
 	}
 
-	// Caller owns body lifecycle
 	return &InvokeResponse{
 		StatusCode: resp.StatusCode,
 		Headers:    resp.Header,
-		Body:       respBody,
-	}, nil
+		Body:       wrapResponseBody(resp.Body, closeFns...),
+	}
+}
+
+func (s *invoker) requestScopedClient(ctx context.Context, opts ...HTTPOption) (*http.Client, error) {
+	effectiveOpts := append([]HTTPOption{}, s.baseOpts...)
+	effectiveOpts = append(effectiveOpts, opts...)
+	return newHTTPClient(ctx, effectiveOpts...)
+}
+
+func shouldCreateRequestScopedClient(cfg *httpConfig) bool {
+	if cfg == nil {
+		return false
+	}
+
+	return cfg.transport != nil ||
+		cfg.jar != nil ||
+		cfg.checkRedirect != nil ||
+		cfg.idleTimeout > 0 ||
+		cfg.enableH2C ||
+		cfg.cliCredCfg != nil ||
+		cfg.traceRequests ||
+		cfg.traceRequestHeaders ||
+		cfg.retryPolicyConfigured ||
+		cfg.workloadAPIRequested
 }
 
 // enableBodyRewind sets GetBody on req so the HTTP client can replay the body
@@ -511,4 +428,33 @@ func enableBodyRewind(req *http.Request, body io.Reader) {
 		}
 		return io.NopCloser(seeker), nil
 	}
+}
+
+type closeFuncBody struct {
+	io.ReadCloser
+	closeFns  []func()
+	closeOnce sync.Once
+}
+
+func wrapResponseBody(body io.ReadCloser, closeFns ...func()) io.ReadCloser {
+	if len(closeFns) == 0 {
+		return body
+	}
+
+	return &closeFuncBody{
+		ReadCloser: body,
+		closeFns:   closeFns,
+	}
+}
+
+func (b *closeFuncBody) Close() error {
+	err := b.ReadCloser.Close()
+	b.closeOnce.Do(func() {
+		for _, closeFn := range b.closeFns {
+			if closeFn != nil {
+				closeFn()
+			}
+		}
+	})
+	return err
 }

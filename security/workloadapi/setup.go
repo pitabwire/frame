@@ -27,6 +27,16 @@ func (w *workloadAPI) Setup(ctx context.Context) (*tls.Config, error) {
 		return nil, errors.New("no trust domain set up for workload API")
 	}
 
+	td, err := spiffeid.TrustDomainFromString(w.trustedDomain)
+	if err != nil {
+		return nil, err
+	}
+
+	if w.source != nil {
+		_ = w.source.Close()
+		w.source = nil
+	}
+
 	// Connect to the SPIFFE Workload API exposed by the local SPIRE agent.
 	source, err := workloadapi.NewX509Source(ctx)
 	if err != nil {
@@ -35,7 +45,6 @@ func (w *workloadAPI) Setup(ctx context.Context) (*tls.Config, error) {
 	w.source = source
 
 	// Only allow callers from our trust domain, or tighten this to an exact ID.
-	td := spiffeid.RequireTrustDomainFromString(w.trustedDomain)
 	authorizer := tlsconfig.AuthorizeMemberOf(td)
 
 	tlsConfig := tlsconfig.MTLSServerConfig(source, source, authorizer)

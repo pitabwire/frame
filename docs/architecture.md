@@ -86,7 +86,7 @@ In practice, plugin extension looks like:
 - `telemetry`: OpenTelemetry setup.
 - `security`: authentication, authorization, interceptors.
 - `workerpool`: job execution and retry scheduler.
-- `client`: resilient HTTP client with circuit breakers and retries.
+- `client`: resilient HTTP client with retries and explicit SPIFFE mTLS targeting.
 
 ## When to Extend vs When to Replace
 

@@ -1,6 +1,6 @@
 # HTTP Client
 
-Frame includes a resilient HTTP client with retries, circuit breaking, OTel instrumentation, and optional OAuth2 client credentials.
+Frame includes a resilient HTTP client with retries, OTel instrumentation, and optional OAuth2 client credentials.
 
 ## Quick Start
 
@@ -16,7 +16,7 @@ resp, err := cli.Do(req)
 
 - Automatic OpenTelemetry instrumentation.
 - Retry policy on transient failures.
-- Per-host circuit breaker using `gobreaker`.
+- Explicit SPIFFE mTLS for internal service calls, with trust domain resolved from config or context.
 - Optional request/response logging.
 - OAuth2 client credentials support.
 
@@ -31,6 +31,25 @@ _, svc := frame.NewService(
     ),
 )
 ```
+
+Startup config provides the trust-domain foundation:
+
+- `WORKLOAD_API_TRUSTED_DOMAIN`
+
+To enable workload API mTLS for a specific downstream call or client, supply a
+runtime target. The trust domain is picked up automatically from service config
+or a config-bearing context:
+
+```go
+cli := client.NewHTTPClient(
+    ctx,
+    client.WithHTTPWorkloadAPITargetPath("/ns/backend/sa/payments-api"),
+)
+```
+
+Or provide the full SPIFFE ID directly with `client.WithHTTPWorkloadAPITargetID(...)`.
+Trust-domain-wide authorization is also available, but it is explicit:
+`client.WithHTTPWorkloadAPITrustDomain("example.org")`.
 
 ## REST Invoker
 
@@ -49,8 +68,6 @@ if err == nil {
 - Timeout: 30s
 - Retry attempts: 3
 - Backoff: quadratic
-- Circuit breaker max entries: 1024
-
 ## Best Practices
 
 - Use a single client per service.

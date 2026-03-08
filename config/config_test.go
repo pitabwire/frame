@@ -270,10 +270,72 @@ func (s *ConfigSuite) TestOIDCLoadAndGetters() {
 	s.Equal("http://logout.local", cfg.GetOauth2EndSessionEndpoint())
 	s.Equal("client-id", cfg.GetOauth2ServiceClientID())
 	s.Equal("client-secret", cfg.GetOauth2ServiceClientSecret())
+	s.Empty(cfg.GetOauth2TokenEndpointAuthMethod())
+	s.Nil(cfg.GetOauth2PrivateKeyJWTConfig())
 	s.Equal([]string{"aud1"}, cfg.GetOauth2ServiceAudience())
 	s.Equal("http://admin.local", cfg.GetOauth2ServiceAdminURI())
 	s.Equal([]string{"verifier"}, cfg.GetVerificationAudience())
 	s.Equal("issuer", cfg.GetVerificationIssuer())
+}
+
+func (s *ConfigSuite) TestPrivateKeyJWTGetters() {
+	cfg := &ConfigurationDefault{
+		Oauth2ServiceClientID:         "svc-client",
+		Oauth2TokenEndpointAuthMethod: "private_key_jwt",
+		Oauth2PrivateJwtKey: OAuth2PrivateJWTKeyConfig{
+			PrivateKeyPEM: "pem-data",
+			KeyID:         "kid-1",
+			Audience:      "https://issuer.local/oauth2/token",
+			Issuer:        "issuer-id",
+			Subject:       "subject-id",
+		},
+	}
+
+	privateKeyJWT := cfg.GetOauth2PrivateKeyJWTConfig()
+	s.Require().NotNil(privateKeyJWT)
+	s.Equal("private_key_jwt", cfg.GetOauth2TokenEndpointAuthMethod())
+	s.Equal([]byte("pem-data"), privateKeyJWT.PrivateKeyPEM)
+	s.Equal("kid-1", privateKeyJWT.KeyID)
+	s.Equal("https://issuer.local/oauth2/token", privateKeyJWT.Audience)
+	s.Equal("issuer-id", privateKeyJWT.Issuer)
+	s.Equal("subject-id", privateKeyJWT.Subject)
+}
+
+func (s *ConfigSuite) TestPrivateKeyJWTInfersPreferredAuthMethod() {
+	cfg := &ConfigurationDefault{
+		Oauth2PrivateJwtKey: OAuth2PrivateJWTKeyConfig{
+			Source:   PrivateKeyJWTSourceWorkloadAPI,
+			SPIFFEID: "spiffe://example.org/ns/default/sa/service-authentication",
+			Hint:     "internal",
+		},
+	}
+
+	privateKeyJWT := cfg.GetOauth2PrivateKeyJWTConfig()
+	s.Require().NotNil(privateKeyJWT)
+	s.Equal(TokenEndpointAuthMethodPrivateKeyJWT, cfg.GetOauth2TokenEndpointAuthMethod())
+	s.Equal(PrivateKeyJWTSourceWorkloadAPI, privateKeyJWT.Source)
+	s.Equal("spiffe://example.org/ns/default/sa/service-authentication", privateKeyJWT.SPIFFEID)
+	s.Equal("internal", privateKeyJWT.Hint)
+}
+
+func (s *ConfigSuite) TestPrivateKeyJWTEnvJSONParsing() {
+	s.T().Setenv(
+		"OAUTH2_PRIVATE_JWT_KEY",
+		`{"source":"workload_api","spiffe_id":"spiffe://example.org/ns/default/sa/service-authentication","hint":"internal","key_id":"kid-1"}`,
+	)
+
+	type oidcCfg struct {
+		ConfigurationDefault
+	}
+
+	cfg, err := FromEnv[oidcCfg]()
+	s.Require().NoError(err)
+	privateKeyJWT := cfg.GetOauth2PrivateKeyJWTConfig()
+	s.Require().NotNil(privateKeyJWT)
+	s.Equal(PrivateKeyJWTSourceWorkloadAPI, privateKeyJWT.Source)
+	s.Equal("spiffe://example.org/ns/default/sa/service-authentication", privateKeyJWT.SPIFFEID)
+	s.Equal("internal", privateKeyJWT.Hint)
+	s.Equal("kid-1", privateKeyJWT.KeyID)
 }
 
 func (s *ConfigSuite) TestOIDCMapTypeGuardsAndLoadErrors() {

@@ -61,7 +61,8 @@ type httpConfig struct {
 	idleTimeout   time.Duration
 	enableH2C     bool
 
-	cliCredCfg *clientcredentials.Config
+	cliCredCfg  *clientcredentials.Config
+	tokenSource oauth2.TokenSource
 
 	traceRequests       bool
 	traceRequestHeaders bool
@@ -248,6 +249,30 @@ func newHTTPClient(ctx context.Context, opts ...HTTPOption) (*http.Client, error
 		CheckRedirect: cfg.checkRedirect,
 	}
 
+	tokenClient := &http.Client{
+		Transport:     base,
+		Timeout:       cfg.timeout,
+		Jar:           cfg.jar,
+		CheckRedirect: cfg.checkRedirect,
+	}
+
+	if cfg.tokenSource == nil && cfg.cliCredCfg == nil {
+		cfg.tokenSource, _, err = resolveAutoOAuth2TokenSource(ctx, tokenClient)
+		if err != nil {
+			return newErrorHTTPClient(cfg, err), err
+		}
+	}
+
+	if cfg.tokenSource != nil {
+		client.Transport = oauth2CloseIdleTransport{
+			inner: &oauth2.Transport{
+				Base:   base,
+				Source: oauth2.ReuseTokenSource(nil, cfg.tokenSource),
+			},
+			base: base,
+		}
+	}
+
 	if cfg.cliCredCfg != nil {
 		oauth2Ctx := context.WithValue(ctx, oauth2.HTTPClient, client)
 		client = cfg.cliCredCfg.Client(oauth2Ctx)
@@ -428,6 +453,11 @@ type closeIdleTransport struct {
 	closeIdleFn func()
 }
 
+type oauth2CloseIdleTransport struct {
+	inner http.RoundTripper
+	base  http.RoundTripper
+}
+
 func (c closeIdleTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	return c.inner.RoundTrip(req)
 }
@@ -438,6 +468,16 @@ func (c closeIdleTransport) CloseIdleConnections() {
 	}
 	if c.closeIdleFn != nil {
 		c.closeIdleFn()
+	}
+}
+
+func (t oauth2CloseIdleTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	return t.inner.RoundTrip(req)
+}
+
+func (t oauth2CloseIdleTransport) CloseIdleConnections() {
+	if closer, ok := t.base.(interface{ CloseIdleConnections() }); ok {
+		closer.CloseIdleConnections()
 	}
 }
 

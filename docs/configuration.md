@@ -121,6 +121,8 @@ Frame reads configuration through narrow interfaces. Implement only what you nee
 | `OAUTH2_SERVICE_AUDIENCE` | empty | Expected audience values.
 | `OAUTH2_SERVICE_CLIENT_ID` | empty | Client ID.
 | `OAUTH2_SERVICE_CLIENT_SECRET` | empty | Client secret.
+| `OAUTH2_TOKEN_ENDPOINT_AUTH_METHOD` | empty | OAuth2 token endpoint client authentication method. When omitted, `private_key_jwt` is inferred if `OAUTH2_PRIVATE_JWT_KEY` is set.
+| `OAUTH2_PRIVATE_JWT_KEY` | empty | JSON object for private key JWT client auth. Supports `private_key_pem`, `private_key_path`, `source`, `spiffe_id`, `hint`, `key_id`, `audience`, `issuer`, and `subject`.
 | `OAUTH2_WELL_KNOWN_JWK_DATA` | empty | Pre-fetched JWKS JSON.
 | `OAUTH2_JWT_VERIFY_AUDIENCE` | empty | JWT audience verification.
 | `OAUTH2_JWT_VERIFY_ISSUER` | empty | JWT issuer verification.

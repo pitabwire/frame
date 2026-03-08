@@ -470,6 +470,7 @@ func (s *Service) createAndConfigureMux(ctx context.Context) *http.ServeMux {
 	s.registerDebugEndpoints(mux)
 	mux.HandleFunc(s.healthCheckPath, s.HandleHealth)
 	s.registerOpenAPIRoutes(mux)
+	s.registerOAuth2ClientJWKSRoute(mux)
 	mux.Handle("/", applicationHandler)
 	return mux
 }

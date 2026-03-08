@@ -36,6 +36,10 @@ const (
 	defaultHTTPShutdownTimeout    = 15 * time.Second
 	defaultHTTPMaxHeaderKilobytes = 1024
 	defaultHTTPMaxHeaderBytes     = defaultHTTPMaxHeaderKilobytes * bytesPerKiB
+
+	//nolint:gosec // configuration key, not a credential
+	TokenEndpointAuthMethodPrivateKeyJWT = "private_key_jwt"
+	PrivateKeyJWTSourceWorkloadAPI       = "workload_api"
 )
 
 // ToContext adds service configuration to the current supplied context.
@@ -96,6 +100,113 @@ func parseDurationOrDefault(value string, fallback time.Duration) time.Duration 
 	return fallback
 }
 
+//nolint:golines // struct tags define external config keys and are clearer kept inline
+type OAuth2PrivateJWTKeyConfig struct {
+	PrivateKeyPEM  string `json:"private_key_pem" yaml:"private_key_pem"`
+	PrivateKeyPath string `json:"private_key_path" yaml:"private_key_path"`
+	Source         string `json:"source" yaml:"source"`
+	SPIFFEID       string `json:"spiffe_id" yaml:"spiffe_id"`
+	Hint           string `json:"hint" yaml:"hint"`
+	KeyID          string `json:"key_id" yaml:"key_id"`
+	Audience       string `json:"audience" yaml:"audience"`
+	Issuer         string `json:"issuer" yaml:"issuer"`
+	Subject        string `json:"subject" yaml:"subject"`
+}
+
+type PrivateKeyJWTConfig struct {
+	PrivateKeyPEM  []byte
+	PrivateKeyPath string
+	Source         string
+	SPIFFEID       string
+	Hint           string
+	KeyID          string
+	Audience       string
+	Issuer         string
+	Subject        string
+}
+
+func (c *OAuth2PrivateJWTKeyConfig) UnmarshalText(text []byte) error {
+	if len(strings.TrimSpace(string(text))) == 0 {
+		*c = OAuth2PrivateJWTKeyConfig{}
+		return nil
+	}
+
+	return c.UnmarshalJSON(text)
+}
+
+func (c *OAuth2PrivateJWTKeyConfig) UnmarshalJSON(text []byte) error {
+	if len(strings.TrimSpace(string(text))) == 0 || string(text) == "null" {
+		*c = OAuth2PrivateJWTKeyConfig{}
+		return nil
+	}
+
+	type alias OAuth2PrivateJWTKeyConfig
+
+	var payload alias
+	if err := json.Unmarshal(text, &payload); err != nil {
+		return err
+	}
+
+	*c = OAuth2PrivateJWTKeyConfig(payload)
+	return nil
+}
+
+func (c *OAuth2PrivateJWTKeyConfig) IsZero() bool {
+	if c == nil {
+		return true
+	}
+
+	return strings.TrimSpace(c.PrivateKeyPEM) == "" &&
+		strings.TrimSpace(c.PrivateKeyPath) == "" &&
+		strings.TrimSpace(c.Source) == "" &&
+		strings.TrimSpace(c.SPIFFEID) == "" &&
+		strings.TrimSpace(c.Hint) == "" &&
+		strings.TrimSpace(c.KeyID) == "" &&
+		strings.TrimSpace(c.Audience) == "" &&
+		strings.TrimSpace(c.Issuer) == "" &&
+		strings.TrimSpace(c.Subject) == ""
+}
+
+func (c PrivateKeyJWTConfig) IsZero() bool {
+	return len(c.PrivateKeyPEM) == 0 &&
+		strings.TrimSpace(c.PrivateKeyPath) == "" &&
+		strings.TrimSpace(c.Source) == "" &&
+		strings.TrimSpace(c.SPIFFEID) == "" &&
+		strings.TrimSpace(c.Hint) == "" &&
+		strings.TrimSpace(c.KeyID) == "" &&
+		strings.TrimSpace(c.Audience) == "" &&
+		strings.TrimSpace(c.Issuer) == "" &&
+		strings.TrimSpace(c.Subject) == ""
+}
+
+func (c *OAuth2PrivateJWTKeyConfig) ToPrivateKeyJWTConfig() *PrivateKeyJWTConfig {
+	if c == nil {
+		return nil
+	}
+
+	cfg := &PrivateKeyJWTConfig{
+		PrivateKeyPath: strings.TrimSpace(c.PrivateKeyPath),
+		Source:         strings.TrimSpace(c.Source),
+		SPIFFEID:       strings.TrimSpace(c.SPIFFEID),
+		Hint:           strings.TrimSpace(c.Hint),
+		KeyID:          strings.TrimSpace(c.KeyID),
+		Audience:       strings.TrimSpace(c.Audience),
+		Issuer:         strings.TrimSpace(c.Issuer),
+		Subject:        strings.TrimSpace(c.Subject),
+	}
+
+	if pem := strings.TrimSpace(c.PrivateKeyPEM); pem != "" {
+		cfg.PrivateKeyPEM = []byte(pem)
+	}
+
+	if cfg.IsZero() {
+		return nil
+	}
+
+	return cfg
+}
+
+//nolint:golines // config tags intentionally stay inline for readability and env/yaml parity
 type ConfigurationDefault struct {
 	LogLevel      string `envDefault:"info"                      env:"LOG_LEVEL"       yaml:"log_level"`
 	LogFormat     string `envDefault:"info"                      env:"LOG_FORMAT"      yaml:"log_format"`
@@ -146,12 +257,14 @@ type ConfigurationDefault struct {
 
 	WorkloadAPITrustedDomain string `env:"WORKLOAD_API_TRUSTED_DOMAIN" yaml:"workload_api_trusted_domain"`
 
-	Oauth2ServiceURI          string   `env:"OAUTH2_SERVICE_URI"           yaml:"oauth2_service_uri"`
-	Oauth2ServiceAdminURI     string   `env:"OAUTH2_SERVICE_ADMIN_URI"     yaml:"oauth2_service_admin_uri"`
-	Oauth2WellKnownOIDCPath   string   `env:"OAUTH2_WELL_KNOWN_OIDC_PATH"  yaml:"oauth2_well_known_oidc_path"  envDefault:".well-known/openid-configuration"`
-	Oauth2ServiceAudience     []string `env:"OAUTH2_SERVICE_AUDIENCE"      yaml:"oauth2_service_audience"`
-	Oauth2ServiceClientID     string   `env:"OAUTH2_SERVICE_CLIENT_ID"     yaml:"oauth2_service_client_id"`
-	Oauth2ServiceClientSecret string   `env:"OAUTH2_SERVICE_CLIENT_SECRET" yaml:"oauth2_service_client_secret"`
+	Oauth2ServiceURI              string                    `env:"OAUTH2_SERVICE_URI"           yaml:"oauth2_service_uri"`
+	Oauth2ServiceAdminURI         string                    `env:"OAUTH2_SERVICE_ADMIN_URI"     yaml:"oauth2_service_admin_uri"`
+	Oauth2WellKnownOIDCPath       string                    `env:"OAUTH2_WELL_KNOWN_OIDC_PATH"  yaml:"oauth2_well_known_oidc_path"  envDefault:".well-known/openid-configuration"`
+	Oauth2ServiceAudience         []string                  `env:"OAUTH2_SERVICE_AUDIENCE"      yaml:"oauth2_service_audience"`
+	Oauth2ServiceClientID         string                    `env:"OAUTH2_SERVICE_CLIENT_ID"     yaml:"oauth2_service_client_id"`
+	Oauth2ServiceClientSecret     string                    `env:"OAUTH2_SERVICE_CLIENT_SECRET" yaml:"oauth2_service_client_secret"`
+	Oauth2TokenEndpointAuthMethod string                    `env:"OAUTH2_TOKEN_ENDPOINT_AUTH_METHOD" yaml:"oauth2_token_endpoint_auth_method"`
+	Oauth2PrivateJwtKey           OAuth2PrivateJWTKeyConfig `env:"OAUTH2_PRIVATE_JWT_KEY" yaml:"oauth2_private_jwt_key"`
 
 	Oauth2WellKnownJwkData  string   `env:"OAUTH2_WELL_KNOWN_JWK_DATA" yaml:"oauth2_well_known_jwk_data"`
 	Oauth2JwtVerifyAudience []string `env:"OAUTH2_JWT_VERIFY_AUDIENCE" yaml:"oauth2_jwt_verify_audience"`
@@ -446,6 +559,8 @@ type ConfigurationOAUTH2 interface {
 	GetOauth2ServiceURI() string
 	GetOauth2ServiceClientID() string
 	GetOauth2ServiceClientSecret() string
+	GetOauth2TokenEndpointAuthMethod() string
+	GetOauth2PrivateKeyJWTConfig() *PrivateKeyJWTConfig
 	GetOauth2ServiceAudience() []string
 	GetOauth2ServiceAdminURI() string
 }
@@ -589,6 +704,21 @@ func (c *ConfigurationDefault) GetOauth2ServiceClientID() string {
 }
 func (c *ConfigurationDefault) GetOauth2ServiceClientSecret() string {
 	return c.Oauth2ServiceClientSecret
+}
+func (c *ConfigurationDefault) GetOauth2TokenEndpointAuthMethod() string {
+	method := strings.TrimSpace(c.Oauth2TokenEndpointAuthMethod)
+	if method != "" {
+		return method
+	}
+
+	if !c.Oauth2PrivateJwtKey.IsZero() {
+		return TokenEndpointAuthMethodPrivateKeyJWT
+	}
+
+	return ""
+}
+func (c *ConfigurationDefault) GetOauth2PrivateKeyJWTConfig() *PrivateKeyJWTConfig {
+	return c.Oauth2PrivateJwtKey.ToPrivateKeyJWTConfig()
 }
 func (c *ConfigurationDefault) GetOauth2ServiceAudience() []string {
 	return c.Oauth2ServiceAudience

@@ -25,7 +25,8 @@ func WithHTTPClient(opts ...client.HTTPOption) Option {
 			effectiveOpts = append(effectiveOpts, client.WithHTTPTraceRequests(), client.WithHTTPTraceRequestHeaders())
 		}
 
-		s.clientManager = client.NewManager(ctx, effectiveOpts...)
+		clientCtx := config.ToContext(ctx, s.Config())
+		s.clientManager = client.NewManager(clientCtx, effectiveOpts...)
 		s.AddCleanupMethod(func(_ context.Context) {
 			s.clientManager.Close()
 		})

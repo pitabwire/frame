@@ -19,6 +19,7 @@ resp, err := cli.Do(req)
 - Explicit SPIFFE mTLS for internal service calls, with trust domain resolved from config or context.
 - Optional request/response logging.
 - OAuth2 client credentials support.
+- Automatic `private_key_jwt` client authentication when Frame is configured with Workload API-backed OAuth2 credentials.
 
 ## Configure
 
@@ -35,6 +36,12 @@ _, svc := frame.NewService(
 Startup config provides the trust-domain foundation:
 
 - `WORKLOAD_API_TRUSTED_DOMAIN`
+
+If the service config also sets `OAUTH2_TOKEN_ENDPOINT_AUTH_METHOD=private_key_jwt`
+and `OAUTH2_PRIVATE_JWT_KEY.source=workload_api`, the default Frame HTTP client
+automatically fetches access tokens using Workload API-backed `private_key_jwt`
+client authentication. The assertion is signed with the selected X509-SVID private
+key and sent to the discovered OAuth2 token endpoint.
 
 To enable workload API mTLS for a specific downstream call or client, supply a
 runtime target. The trust domain is picked up automatically from service config

@@ -21,7 +21,7 @@ type JWTAssertionSigner interface {
 // appropriate signer implementation.
 func Resolve(
 	_ context.Context,
-	_ *http.Client,
+	httpClient *http.Client,
 	cfg *config.PrivateKeyJWTConfig,
 ) (JWTAssertionSigner, error) {
 	if cfg == nil || cfg.IsZero() {
@@ -31,13 +31,18 @@ func Resolve(
 	source := strings.ToLower(strings.TrimSpace(cfg.Source))
 
 	switch {
+	case source == config.PrivateKeyJWTSourceURL:
+		if strings.TrimSpace(cfg.SignerURL) == "" {
+			return nil, errors.New("private_key_jwt url source requires signer_url")
+		}
+		return NewJWKSURLSigner(httpClient, cfg), nil
 	case source == config.PrivateKeyJWTSourceWorkloadAPI:
 		return NewWorkloadAPISigner(cfg), nil
 	case strings.TrimSpace(cfg.SPIFFEID) != "" || strings.TrimSpace(cfg.Hint) != "":
 		return NewWorkloadAPISigner(cfg), nil
 	default:
 		return nil, errors.New(
-			"unsupported private_key_jwt signer source: must be workload_api or provide SPIFFE ID/hint",
+			"unsupported private_key_jwt signer source: must be url, workload_api, or provide SPIFFE ID/hint",
 		)
 	}
 }

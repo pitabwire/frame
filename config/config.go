@@ -40,6 +40,7 @@ const (
 	//nolint:gosec // configuration key, not a credential
 	TokenEndpointAuthMethodPrivateKeyJWT = "private_key_jwt"
 	PrivateKeyJWTSourceWorkloadAPI       = "workload_api"
+	PrivateKeyJWTSourceURL               = "url"
 )
 
 // ToContext adds service configuration to the current supplied context.
@@ -105,6 +106,7 @@ type OAuth2PrivateJWTKeyConfig struct {
 	PrivateKeyPEM  string `json:"private_key_pem" yaml:"private_key_pem"`
 	PrivateKeyPath string `json:"private_key_path" yaml:"private_key_path"`
 	Source         string `json:"source" yaml:"source"`
+	SignerURL      string `json:"signer_url" yaml:"signer_url"`
 	SPIFFEID       string `json:"spiffe_id" yaml:"spiffe_id"`
 	Hint           string `json:"hint" yaml:"hint"`
 	KeyID          string `json:"key_id" yaml:"key_id"`
@@ -117,6 +119,7 @@ type PrivateKeyJWTConfig struct {
 	PrivateKeyPEM  []byte
 	PrivateKeyPath string
 	Source         string
+	SignerURL      string
 	SPIFFEID       string
 	Hint           string
 	KeyID          string
@@ -159,6 +162,7 @@ func (c *OAuth2PrivateJWTKeyConfig) IsZero() bool {
 	return strings.TrimSpace(c.PrivateKeyPEM) == "" &&
 		strings.TrimSpace(c.PrivateKeyPath) == "" &&
 		strings.TrimSpace(c.Source) == "" &&
+		strings.TrimSpace(c.SignerURL) == "" &&
 		strings.TrimSpace(c.SPIFFEID) == "" &&
 		strings.TrimSpace(c.Hint) == "" &&
 		strings.TrimSpace(c.KeyID) == "" &&
@@ -171,6 +175,7 @@ func (c PrivateKeyJWTConfig) IsZero() bool {
 	return len(c.PrivateKeyPEM) == 0 &&
 		strings.TrimSpace(c.PrivateKeyPath) == "" &&
 		strings.TrimSpace(c.Source) == "" &&
+		strings.TrimSpace(c.SignerURL) == "" &&
 		strings.TrimSpace(c.SPIFFEID) == "" &&
 		strings.TrimSpace(c.Hint) == "" &&
 		strings.TrimSpace(c.KeyID) == "" &&
@@ -187,6 +192,7 @@ func (c *OAuth2PrivateJWTKeyConfig) ToPrivateKeyJWTConfig() *PrivateKeyJWTConfig
 	cfg := &PrivateKeyJWTConfig{
 		PrivateKeyPath: strings.TrimSpace(c.PrivateKeyPath),
 		Source:         strings.TrimSpace(c.Source),
+		SignerURL:      strings.TrimSpace(c.SignerURL),
 		SPIFFEID:       strings.TrimSpace(c.SPIFFEID),
 		Hint:           strings.TrimSpace(c.Hint),
 		KeyID:          strings.TrimSpace(c.KeyID),

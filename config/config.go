@@ -706,16 +706,7 @@ func (c *ConfigurationDefault) GetOauth2ServiceClientSecret() string {
 	return c.Oauth2ServiceClientSecret
 }
 func (c *ConfigurationDefault) GetOauth2TokenEndpointAuthMethod() string {
-	method := strings.TrimSpace(c.Oauth2TokenEndpointAuthMethod)
-	if method != "" {
-		return method
-	}
-
-	if !c.Oauth2PrivateJwtKey.IsZero() {
-		return TokenEndpointAuthMethodPrivateKeyJWT
-	}
-
-	return ""
+	return strings.TrimSpace(c.Oauth2TokenEndpointAuthMethod)
 }
 func (c *ConfigurationDefault) GetOauth2PrivateKeyJWTConfig() *PrivateKeyJWTConfig {
 	return c.Oauth2PrivateJwtKey.ToPrivateKeyJWTConfig()

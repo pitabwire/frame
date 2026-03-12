@@ -89,13 +89,13 @@ func (s *clientSecretTokenSource) Token() (*oauth2.Token, error) {
 	form := url.Values{}
 	form.Set("grant_type", "client_credentials")
 
-	var basicAuth *BasicAuth
+	var ba *basicAuth
 
 	switch s.authStyle {
 	case StyleBasic:
-		basicAuth = &BasicAuth{
-			Username: s.clientID,
-			Password: s.clientSecret,
+		ba = &basicAuth{
+			username: s.clientID,
+			password: s.clientSecret,
 		}
 	case StylePost:
 		form.Set("client_id", s.clientID)
@@ -111,13 +111,13 @@ func (s *clientSecretTokenSource) Token() (*oauth2.Token, error) {
 		}
 	}
 
-	return ExchangeToken(
+	return exchangeToken(
 		s.ctx,
 		s.httpClient,
 		s.tokenURL,
-		TokenEndpointRequest{
-			Form:      form,
-			BasicAuth: basicAuth,
+		tokenEndpointRequest{
+			form:      form,
+			basicAuth: ba,
 		},
 		s.now,
 	)

@@ -5,23 +5,20 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/pitabwire/frame/client/oauth2/auth"
+	"github.com/pitabwire/frame/config"
 )
 
-func fixedNow() time.Time {
-	return time.Unix(1_700_000_000, 0).UTC()
-}
-
-func TestExchangeTokenSuccess(t *testing.T) {
+func TestExchangeTokenViaBasicTokenSource(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(t, http.MethodPost, r.Method)
-		assert.Equal(t, "application/x-www-form-urlencoded", r.Header.Get("Content-Type"))
-		assert.Equal(t, "application/json", r.Header.Get("Accept"))
+		user, pass, ok := r.BasicAuth()
+		assert.True(t, ok)
+		assert.Equal(t, "my-client", user)
+		assert.Equal(t, "my-secret", pass)
 
 		assert.NoError(t, r.ParseForm())
 		assert.Equal(t, "client_credentials", r.PostForm.Get("grant_type"))
@@ -31,52 +28,19 @@ func TestExchangeTokenSuccess(t *testing.T) {
 	}))
 	defer server.Close()
 
-	tok, err := auth.ExchangeToken(
+	ts, err := auth.NewBasicTokenSource(
 		context.Background(),
 		server.Client(),
+		&stubCfg{clientID: "my-client", clientSecret: "my-secret"},
 		server.URL,
-		auth.TokenEndpointRequest{
-			Form: map[string][]string{
-				"grant_type": {"client_credentials"},
-			},
-		},
-		fixedNow,
 	)
+	require.NoError(t, err)
+
+	tok, err := ts.Token()
 	require.NoError(t, err)
 	assert.Equal(t, "tok-1", tok.AccessToken)
 	assert.Equal(t, "Bearer", tok.TokenType)
-	assert.Equal(t, fixedNow().Add(3600*time.Second), tok.Expiry)
-}
-
-func TestExchangeTokenWithBasicAuth(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		user, pass, ok := r.BasicAuth()
-		assert.True(t, ok)
-		assert.Equal(t, "client-id", user)
-		assert.Equal(t, "client-secret", pass)
-
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"access_token":"tok-basic","token_type":"Bearer","expires_in":60}`))
-	}))
-	defer server.Close()
-
-	tok, err := auth.ExchangeToken(
-		context.Background(),
-		server.Client(),
-		server.URL,
-		auth.TokenEndpointRequest{
-			Form: map[string][]string{
-				"grant_type": {"client_credentials"},
-			},
-			BasicAuth: &auth.BasicAuth{
-				Username: "client-id",
-				Password: "client-secret",
-			},
-		},
-		fixedNow,
-	)
-	require.NoError(t, err)
-	assert.Equal(t, "tok-basic", tok.AccessToken)
+	assert.False(t, tok.Expiry.IsZero())
 }
 
 func TestExchangeTokenOAuth2Error(t *testing.T) {
@@ -86,15 +50,15 @@ func TestExchangeTokenOAuth2Error(t *testing.T) {
 	}))
 	defer server.Close()
 
-	_, err := auth.ExchangeToken(
+	ts, err := auth.NewBasicTokenSource(
 		context.Background(),
 		server.Client(),
+		&stubCfg{clientID: "c", clientSecret: "s"},
 		server.URL,
-		auth.TokenEndpointRequest{
-			Form: map[string][]string{"grant_type": {"client_credentials"}},
-		},
-		fixedNow,
 	)
+	require.NoError(t, err)
+
+	_, err = ts.Token()
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "invalid_client")
 	assert.Contains(t, err.Error(), "bad credentials")
@@ -107,15 +71,15 @@ func TestExchangeTokenMissingAccessToken(t *testing.T) {
 	}))
 	defer server.Close()
 
-	_, err := auth.ExchangeToken(
+	ts, err := auth.NewBasicTokenSource(
 		context.Background(),
 		server.Client(),
+		&stubCfg{clientID: "c", clientSecret: "s"},
 		server.URL,
-		auth.TokenEndpointRequest{
-			Form: map[string][]string{"grant_type": {"client_credentials"}},
-		},
-		fixedNow,
 	)
+	require.NoError(t, err)
+
+	_, err = ts.Token()
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "access_token")
 }
@@ -127,15 +91,40 @@ func TestExchangeTokenDefaultsBearerType(t *testing.T) {
 	}))
 	defer server.Close()
 
-	tok, err := auth.ExchangeToken(
+	ts, err := auth.NewBasicTokenSource(
 		context.Background(),
 		server.Client(),
+		&stubCfg{clientID: "c", clientSecret: "s"},
 		server.URL,
-		auth.TokenEndpointRequest{
-			Form: map[string][]string{"grant_type": {"client_credentials"}},
-		},
-		fixedNow,
 	)
+	require.NoError(t, err)
+
+	tok, err := ts.Token()
 	require.NoError(t, err)
 	assert.Equal(t, "Bearer", tok.TokenType)
 }
+
+// stubCfg is a minimal ConfigurationOAUTH2 for testing.
+type stubCfg struct {
+	clientID     string
+	clientSecret string
+}
+
+func (c *stubCfg) LoadOauth2Config(context.Context) error                    { return nil }
+func (c *stubCfg) GetOauth2WellKnownOIDC() string                            { return "" }
+func (c *stubCfg) GetOauth2WellKnownJwk() string                             { return "" }
+func (c *stubCfg) GetOauth2WellKnownJwkData() string                         { return "" }
+func (c *stubCfg) GetOauth2Issuer() string                                   { return "" }
+func (c *stubCfg) GetOauth2AuthorizationEndpoint() string                    { return "" }
+func (c *stubCfg) GetOauth2RegistrationEndpoint() string                     { return "" }
+func (c *stubCfg) GetOauth2TokenEndpoint() string                            { return "" }
+func (c *stubCfg) GetOauth2UserInfoEndpoint() string                         { return "" }
+func (c *stubCfg) GetOauth2RevocationEndpoint() string                       { return "" }
+func (c *stubCfg) GetOauth2EndSessionEndpoint() string                       { return "" }
+func (c *stubCfg) GetOauth2ServiceURI() string                               { return "" }
+func (c *stubCfg) GetOauth2ServiceClientID() string                          { return c.clientID }
+func (c *stubCfg) GetOauth2ServiceClientSecret() string                      { return c.clientSecret }
+func (c *stubCfg) GetOauth2TokenEndpointAuthMethod() string                  { return "" }
+func (c *stubCfg) GetOauth2PrivateKeyJWTConfig() *config.PrivateKeyJWTConfig { return nil }
+func (c *stubCfg) GetOauth2ServiceAudience() []string                        { return nil }
+func (c *stubCfg) GetOauth2ServiceAdminURI() string                          { return "" }

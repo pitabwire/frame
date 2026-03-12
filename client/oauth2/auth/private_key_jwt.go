@@ -91,11 +91,11 @@ func (s *privateKeyJWTTokenSource) Token() (*oauth2.Token, error) {
 		}
 	}
 
-	return ExchangeToken(
+	return exchangeToken(
 		s.ctx,
 		s.httpClient,
 		s.tokenURL,
-		TokenEndpointRequest{Form: form},
+		tokenEndpointRequest{form: form},
 		s.now,
 	)
 }

@@ -154,6 +154,32 @@ func (s *OptionsSuite) TestPrepareBaseTransportRejectsWorkloadAPIWithH2C() {
 	s.Require().ErrorIs(err, ErrWorkloadAPIH2CIncompatible)
 }
 
+func (s *OptionsSuite) TestProcessSkipsWorkloadAPITargetPathWhenTrustDomainAbsent() {
+	cfg := &httpConfig{}
+	cfg.process(context.Background(), WithHTTPWorkloadAPITargetPath("/ns/backend/sa/payments-api"))
+
+	s.False(cfg.workloadAPIRequested)
+	s.Empty(cfg.workloadAPITargetPath)
+	s.Empty(cfg.workloadAPITargetID)
+}
+
+func (s *OptionsSuite) TestNewHTTPClientWorksWhenTargetPathSetWithoutTrustDomain() {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	client := NewHTTPClient(context.Background(),
+		WithHTTPWorkloadAPITargetPath("/ns/backend/sa/payments-api"),
+	)
+
+	resp, err := client.Get(server.URL)
+	s.Require().NoError(err)
+	s.Require().NotNil(resp)
+	s.Equal(http.StatusOK, resp.StatusCode)
+	s.NoError(resp.Body.Close())
+}
+
 func (s *OptionsSuite) TestNewHTTPClientFailsClosedForInvalidWorkloadAPITargetID() {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)

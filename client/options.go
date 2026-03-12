@@ -85,6 +85,17 @@ func (hc *httpConfig) process(ctx context.Context, opts ...HTTPOption) {
 		hc.workloadAPITrustDomain = resolveWorkloadAPITrustDomain(ctx)
 	}
 
+	// When workload API target path was requested but no trust domain is
+	// configured anywhere (env, context, explicit option), silently skip
+	// workload API — the SPIFFE infrastructure simply isn't deployed.
+	if hc.workloadAPIRequested &&
+		hc.workloadAPITargetID == "" &&
+		hc.workloadAPITargetPath != "" &&
+		hc.workloadAPITrustDomain == "" {
+		hc.workloadAPIRequested = false
+		hc.workloadAPITargetPath = ""
+	}
+
 	if hc.workloadAPITargetID == "" &&
 		hc.workloadAPITargetPath != "" &&
 		hc.workloadAPITrustDomain != "" {

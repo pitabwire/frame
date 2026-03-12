@@ -57,11 +57,24 @@ func NewTokenSource(
 	case authMethodClientSecretPost:
 		return auth.NewPostTokenSource(ctx, httpClient, cfg, tokenURL)
 	case config.TokenEndpointAuthMethodPrivateKeyJWT:
-		return auth.NewPrivateKeyJWTTokenSource(ctx, httpClient, cfg, tokenURL)
+		return newPrivateKeyJWTSource(ctx, httpClient, cfg, tokenURL)
 	default:
 		return nil, fmt.Errorf(
 			"unsupported oauth2 token endpoint auth method %q",
 			method,
 		)
 	}
+}
+
+func newPrivateKeyJWTSource(
+	ctx context.Context,
+	httpClient *http.Client,
+	cfg config.ConfigurationOAUTH2,
+	tokenURL string,
+) (oauth2.TokenSource, error) {
+	pkcfg := cfg.GetOauth2PrivateKeyJWTConfig()
+	if pkcfg != nil && strings.ToLower(strings.TrimSpace(pkcfg.Source)) == config.PrivateKeyJWTSourceURL {
+		return auth.NewRemoteSignerTokenSource(ctx, httpClient, cfg, tokenURL)
+	}
+	return auth.NewPrivateKeyJWTTokenSource(ctx, httpClient, cfg, tokenURL)
 }

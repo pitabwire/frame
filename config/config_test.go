@@ -301,7 +301,7 @@ func (s *ConfigSuite) TestPrivateKeyJWTGetters() {
 	s.Equal("subject-id", privateKeyJWT.Subject)
 }
 
-func (s *ConfigSuite) TestPrivateKeyJWTInfersPreferredAuthMethod() {
+func (s *ConfigSuite) TestPrivateKeyJWTRequiresExplicitAuthMethod() {
 	cfg := &ConfigurationDefault{
 		Oauth2PrivateJwtKey: OAuth2PrivateJWTKeyConfig{
 			Source:   PrivateKeyJWTSourceWorkloadAPI,
@@ -312,10 +312,14 @@ func (s *ConfigSuite) TestPrivateKeyJWTInfersPreferredAuthMethod() {
 
 	privateKeyJWT := cfg.GetOauth2PrivateKeyJWTConfig()
 	s.Require().NotNil(privateKeyJWT)
-	s.Equal(TokenEndpointAuthMethodPrivateKeyJWT, cfg.GetOauth2TokenEndpointAuthMethod())
+	s.Empty(cfg.GetOauth2TokenEndpointAuthMethod(), "auth method should not be inferred")
 	s.Equal(PrivateKeyJWTSourceWorkloadAPI, privateKeyJWT.Source)
 	s.Equal("spiffe://example.org/ns/default/sa/service-authentication", privateKeyJWT.SPIFFEID)
 	s.Equal("internal", privateKeyJWT.Hint)
+
+	// With explicit auth method set, it is returned as-is.
+	cfg.Oauth2TokenEndpointAuthMethod = TokenEndpointAuthMethodPrivateKeyJWT
+	s.Equal(TokenEndpointAuthMethodPrivateKeyJWT, cfg.GetOauth2TokenEndpointAuthMethod())
 }
 
 func (s *ConfigSuite) TestPrivateKeyJWTEnvJSONParsing() {

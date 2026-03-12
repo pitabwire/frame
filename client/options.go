@@ -20,6 +20,7 @@ import (
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/clientcredentials"
 
+	oauth2source "github.com/pitabwire/frame/client/oauth2"
 	"github.com/pitabwire/frame/config"
 )
 
@@ -257,7 +258,7 @@ func newHTTPClient(ctx context.Context, opts ...HTTPOption) (*http.Client, error
 	}
 
 	if cfg.tokenSource == nil && cfg.cliCredCfg == nil {
-		cfg.tokenSource, _, err = resolveAutoOAuth2TokenSource(ctx, tokenClient)
+		cfg.tokenSource, err = resolveConfiguredTokenSource(ctx, tokenClient)
 		if err != nil {
 			return newErrorHTTPClient(cfg, err), err
 		}
@@ -279,6 +280,24 @@ func newHTTPClient(ctx context.Context, opts ...HTTPOption) (*http.Client, error
 	}
 
 	return client, nil
+}
+
+//nolint:nilnil // nil TokenSource with nil error means "not configured"
+func resolveConfiguredTokenSource(
+	ctx context.Context,
+	httpClient *http.Client,
+) (oauth2.TokenSource, error) {
+	oauthCfg, ok := config.FromContext[any](ctx).(config.ConfigurationOAUTH2)
+	if !ok {
+		return nil, nil
+	}
+
+	method := strings.TrimSpace(oauthCfg.GetOauth2TokenEndpointAuthMethod())
+	if method == "" {
+		return nil, nil
+	}
+
+	return oauth2source.NewTokenSource(ctx, httpClient, oauthCfg)
 }
 
 func newErrorHTTPClient(cfg *httpConfig, err error) *http.Client {

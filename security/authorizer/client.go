@@ -4,6 +4,7 @@ package authorizer
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"time"
 
 	rts "github.com/ory/keto/proto/ory/keto/relation_tuples/v1alpha2"
@@ -45,7 +46,7 @@ func NewKetoAdapter(
 
 	if cfg.AuthorizationServiceCanRead() {
 		readConn, err := grpc.NewClient(
-			cfg.GetAuthorizationServiceReadURI(),
+			grpcTarget(cfg.GetAuthorizationServiceReadURI()),
 			grpc.WithTransportCredentials(insecure.NewCredentials()),
 		)
 		if err == nil {
@@ -58,7 +59,7 @@ func NewKetoAdapter(
 
 	if cfg.AuthorizationServiceCanWrite() {
 		writeConn, err := grpc.NewClient(
-			cfg.GetAuthorizationServiceWriteURI(),
+			grpcTarget(cfg.GetAuthorizationServiceWriteURI()),
 			grpc.WithTransportCredentials(insecure.NewCredentials()),
 		)
 		if err == nil {
@@ -68,6 +69,16 @@ func NewKetoAdapter(
 	}
 
 	return adapter
+}
+
+// grpcTarget extracts a host:port suitable for grpc.NewClient from a URI.
+// grpc.NewClient treats "http" as a resolver scheme and appends ":443",
+// so we must strip the scheme and pass only host:port.
+func grpcTarget(uri string) string {
+	if u, err := url.Parse(uri); err == nil && u.Host != "" {
+		return u.Host
+	}
+	return uri
 }
 
 // Close releases gRPC connections.

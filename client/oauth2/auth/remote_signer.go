@@ -22,14 +22,15 @@ const maxSignerResponseBytes = 64 << 10 // 64 KiB
 const remoteClientAssertionTypeJWTBearer = "urn:ietf:params:oauth:client-assertion-type:jwt-bearer"
 
 type remoteSignerTokenSource struct {
-	ctx        context.Context
-	httpClient *http.Client
-	tokenURL   string
-	signerURL  string
-	clientID   string
-	audiences  []string
-	audience   string
-	now        func() time.Time
+	ctx          context.Context
+	httpClient   *http.Client
+	tokenURL     string
+	signerURL    string
+	signerAPIKey string
+	clientID     string
+	audiences    []string
+	audience     string
+	now          func() time.Time
 }
 
 type signAssertionRequest struct {
@@ -75,14 +76,15 @@ func NewRemoteSignerTokenSource(
 	}
 
 	return &remoteSignerTokenSource{
-		ctx:        ctx,
-		httpClient: httpClient,
-		tokenURL:   tokenURL,
-		signerURL:  signerURL,
-		clientID:   clientID,
-		audiences:  append([]string(nil), cfg.GetOauth2ServiceAudience()...),
-		audience:   audience,
-		now:        time.Now,
+		ctx:          ctx,
+		httpClient:   httpClient,
+		tokenURL:     tokenURL,
+		signerURL:    signerURL,
+		signerAPIKey: strings.TrimSpace(pkcfg.SignerAPIKey),
+		clientID:     clientID,
+		audiences:    append([]string(nil), cfg.GetOauth2ServiceAudience()...),
+		audience:     audience,
+		now:          time.Now,
 	}, nil
 }
 
@@ -139,6 +141,10 @@ func (s *remoteSignerTokenSource) fetchSignedAssertion() (string, error) {
 
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("Accept", "application/json")
+
+	if s.signerAPIKey != "" {
+		httpReq.Header.Set("Authorization", "Bearer "+s.signerAPIKey)
+	}
 
 	resp, err := s.httpClient.Do(httpReq)
 	if err != nil {

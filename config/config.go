@@ -107,6 +107,7 @@ type OAuth2PrivateJWTKeyConfig struct {
 	PrivateKeyPath string `json:"private_key_path" yaml:"private_key_path"`
 	Source         string `json:"source" yaml:"source"`
 	SignerURL      string `json:"signer_url" yaml:"signer_url"`
+	SignerAPIKey   string `json:"signer_api_key" yaml:"signer_api_key"`
 	SPIFFEID       string `json:"spiffe_id" yaml:"spiffe_id"`
 	Hint           string `json:"hint" yaml:"hint"`
 	KeyID          string `json:"key_id" yaml:"key_id"`
@@ -120,6 +121,7 @@ type PrivateKeyJWTConfig struct {
 	PrivateKeyPath string
 	Source         string
 	SignerURL      string
+	SignerAPIKey   string
 	SPIFFEID       string
 	Hint           string
 	KeyID          string
@@ -193,6 +195,7 @@ func (c *OAuth2PrivateJWTKeyConfig) ToPrivateKeyJWTConfig() *PrivateKeyJWTConfig
 		PrivateKeyPath: strings.TrimSpace(c.PrivateKeyPath),
 		Source:         strings.TrimSpace(c.Source),
 		SignerURL:      strings.TrimSpace(c.SignerURL),
+		SignerAPIKey:   strings.TrimSpace(c.SignerAPIKey),
 		SPIFFEID:       strings.TrimSpace(c.SPIFFEID),
 		Hint:           strings.TrimSpace(c.Hint),
 		KeyID:          strings.TrimSpace(c.KeyID),
@@ -271,6 +274,7 @@ type ConfigurationDefault struct {
 	Oauth2ServiceClientSecret     string                    `env:"OAUTH2_SERVICE_CLIENT_SECRET" yaml:"oauth2_service_client_secret"`
 	Oauth2TokenEndpointAuthMethod string                    `env:"OAUTH2_TOKEN_ENDPOINT_AUTH_METHOD" yaml:"oauth2_token_endpoint_auth_method"`
 	Oauth2PrivateJwtKey           OAuth2PrivateJWTKeyConfig `env:"OAUTH2_PRIVATE_JWT_KEY" yaml:"oauth2_private_jwt_key"`
+	Oauth2SignerAPIKey            string                    `env:"OAUTH2_SIGNER_API_KEY" yaml:"oauth2_signer_api_key"`
 
 	Oauth2WellKnownJwkData  string   `env:"OAUTH2_WELL_KNOWN_JWK_DATA" yaml:"oauth2_well_known_jwk_data"`
 	Oauth2JwtVerifyAudience []string `env:"OAUTH2_JWT_VERIFY_AUDIENCE" yaml:"oauth2_jwt_verify_audience"`
@@ -715,7 +719,12 @@ func (c *ConfigurationDefault) GetOauth2TokenEndpointAuthMethod() string {
 	return strings.TrimSpace(c.Oauth2TokenEndpointAuthMethod)
 }
 func (c *ConfigurationDefault) GetOauth2PrivateKeyJWTConfig() *PrivateKeyJWTConfig {
-	return c.Oauth2PrivateJwtKey.ToPrivateKeyJWTConfig()
+	cfg := c.Oauth2PrivateJwtKey.ToPrivateKeyJWTConfig()
+	if cfg != nil && cfg.SignerAPIKey == "" {
+		cfg.SignerAPIKey = strings.TrimSpace(c.Oauth2SignerAPIKey)
+	}
+
+	return cfg
 }
 func (c *ConfigurationDefault) GetOauth2ServiceAudience() []string {
 	return c.Oauth2ServiceAudience

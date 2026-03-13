@@ -28,6 +28,7 @@ type remoteSignerTokenSource struct {
 	signerURL    string
 	signerAPIKey string
 	clientID     string
+	keyID        string
 	audiences    []string
 	audience     string
 	now          func() time.Time
@@ -82,6 +83,7 @@ func NewRemoteSignerTokenSource(
 		signerURL:    signerURL,
 		signerAPIKey: strings.TrimSpace(pkcfg.SignerAPIKey),
 		clientID:     clientID,
+		keyID:        strings.TrimSpace(pkcfg.KeyID),
 		audiences:    append([]string(nil), cfg.GetOauth2ServiceAudience()...),
 		audience:     audience,
 		now:          time.Now,
@@ -121,7 +123,7 @@ func (s *remoteSignerTokenSource) fetchSignedAssertion() (string, error) {
 		ClientID:      s.clientID,
 		TokenEndpoint: s.tokenURL,
 		Audience:      s.audience,
-		JWKSetName:    s.clientID,
+		JWKSetName:    s.keyID,
 	}
 
 	bodyJSON, err := json.Marshal(reqBody)

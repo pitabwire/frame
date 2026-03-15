@@ -19,7 +19,7 @@ const (
 	ctxKeySkipTenancyCheckOnClaim = contextKey("skipTenancyCheckOnClaimKey")
 	ctxKeyAuthenticationJwt       = contextKey("authenticationJwtKey")
 
-	ConstantSystemInternalRole = "system_internal"
+	ConstantSystemInternalRole = "internal"
 )
 
 // JwtToContext adds authentication jwt to the current supplied context.
@@ -89,8 +89,7 @@ func (a *AuthenticationClaims) GetPartitionID() string {
 }
 
 func (a *AuthenticationClaims) GetProfileID() string {
-	result, _ := a.GetSubject()
-
+	result, _ := a.RegisteredClaims.GetSubject()
 	return result
 }
 
@@ -211,7 +210,6 @@ func (a *AuthenticationClaims) isInternalSystem() bool {
 	if len(roles) == 1 {
 		return strings.EqualFold(ConstantSystemInternalRole, roles[0])
 	}
-
 	return false
 }
 

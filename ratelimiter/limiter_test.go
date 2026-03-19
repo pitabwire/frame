@@ -134,3 +134,57 @@ func TestWindowLimiterAllow(t *testing.T) {
 	assert.False(t, wl.Allow(ctx, "tenant-1"))
 	assert.True(t, wl.Allow(ctx, "tenant-2"))
 }
+
+type countingCache struct {
+	cache.RawCache
+	increments int
+}
+
+func (c *countingCache) Increment(ctx context.Context, key string, delta int64) (int64, error) {
+	c.increments++
+	return c.RawCache.Increment(ctx, key, delta)
+}
+
+func TestLeasedWindowLimiterAllow(t *testing.T) {
+	raw := cache.NewInMemoryCache()
+	t.Cleanup(func() { _ = raw.Close() })
+
+	ll, err := ratelimiter.NewLeasedWindowLimiter(raw, &ratelimiter.WindowConfig{
+		WindowDuration:  time.Minute,
+		MaxPerWindow:    5,
+		KeyPrefix:       "leased:test",
+		FailOpen:        false,
+		ReservationSize: 2,
+	})
+	require.NoError(t, err)
+
+	ctx := context.Background()
+	assert.True(t, ll.Allow(ctx, "tenant-1"))
+	assert.True(t, ll.Allow(ctx, "tenant-1"))
+	assert.True(t, ll.Allow(ctx, "tenant-1"))
+	assert.True(t, ll.Allow(ctx, "tenant-1"))
+	assert.True(t, ll.Allow(ctx, "tenant-1"))
+	assert.False(t, ll.Allow(ctx, "tenant-1"))
+}
+
+func TestLeasedWindowLimiterReducesCacheOperations(t *testing.T) {
+	raw := &countingCache{RawCache: cache.NewInMemoryCache()}
+	t.Cleanup(func() { _ = raw.Close() })
+
+	ll, err := ratelimiter.NewLeasedWindowLimiter(raw, &ratelimiter.WindowConfig{
+		WindowDuration:  time.Minute,
+		MaxPerWindow:    1000,
+		KeyPrefix:       "leased:chunked",
+		FailOpen:        false,
+		ReservationSize: 64,
+	})
+	require.NoError(t, err)
+
+	ctx := context.Background()
+	for range 128 {
+		assert.True(t, ll.Allow(ctx, "tenant-1"))
+	}
+
+	assert.Less(t, raw.increments, 128)
+	assert.LessOrEqual(t, raw.increments, 3)
+}

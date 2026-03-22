@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync"
 	"syscall"
+	"time"
 
 	"github.com/pitabwire/util"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
@@ -96,6 +97,7 @@ type Service struct {
 	registeredPlugins []string
 	routeLister       RouteLister
 
+	startedAt            time.Time
 	startOnce            sync.Once
 	startupOnce          sync.Once
 	startupCompleted     bool
@@ -374,6 +376,7 @@ func (s *Service) AddHealthCheck(checker Checker) {
 
 // Run keeps the service useful by handling incoming requests.
 func (s *Service) Run(ctx context.Context, address string) error {
+	s.startedAt = time.Now()
 	log := util.Log(ctx)
 	log.WithFields(map[string]any{
 		"repository": version.Repository,

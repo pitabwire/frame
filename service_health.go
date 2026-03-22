@@ -17,29 +17,77 @@ package frame
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
-	"io"
+	"fmt"
 	"net/http"
+	"time"
+
+	"github.com/pitabwire/frame/version"
 )
 
 var ErrHealthCheckFailed = errors.New("health check failed")
+
+// HealthResponse is the JSON structure returned by the health check endpoint.
+type HealthResponse struct {
+	Service    string              `json:"service"`
+	Version    string              `json:"version"`
+	Repository string              `json:"repository,omitempty"`
+	Commit     string              `json:"commit,omitempty"`
+	BuildDate  string              `json:"build_date,omitempty"`
+	Uptime     string              `json:"uptime"`
+	Status     string              `json:"status"`
+	Checks     []HealthCheckResult `json:"checks"`
+}
+
+// HealthCheckResult holds the result of an individual health checker.
+type HealthCheckResult struct {
+	Name   string `json:"name"`
+	Status string `json:"status"`
+	Error  string `json:"error,omitempty"`
+}
 
 func (s *Service) HealthCheckers() []Checker {
 	return s.healthCheckers
 }
 
-// HandleHealth returns 200 if it is healthy, 500 otherwise.
+// HandleHealth returns 200 with a JSON health report if all checks pass, 500 otherwise.
 func (s *Service) HandleHealth(w http.ResponseWriter, _ *http.Request) {
-	for _, c := range s.healthCheckers {
-		if err := c.CheckHealth(); err != nil {
-			writeUnhealthy(w)
-			return
+	overall := "healthy"
+	statusCode := http.StatusOK
+
+	checks := make([]HealthCheckResult, 0, len(s.healthCheckers))
+	for i, c := range s.healthCheckers {
+		result := HealthCheckResult{
+			Name:   checkerName(c, i),
+			Status: "healthy",
 		}
+		if err := c.CheckHealth(); err != nil {
+			result.Status = "unhealthy"
+			result.Error = err.Error()
+			overall = "unhealthy"
+			statusCode = http.StatusInternalServerError
+		}
+		checks = append(checks, result)
 	}
-	writeHealthy(w)
+
+	resp := HealthResponse{
+		Service:    s.Name(),
+		Version:    s.Version(),
+		Repository: version.Repository,
+		Commit:     version.Commit,
+		BuildDate:  version.Date,
+		Uptime:     s.uptime(),
+		Status:     overall,
+		Checks:     checks,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(statusCode)
+	_ = json.NewEncoder(w).Encode(resp)
 }
 
-// HandleHealthByDefault returns 200 if it is healthy, 500 when there is an err or 404 otherwise.
+// HandleHealthByDefault returns the health report at root, 404 for other paths.
 func (s *Service) HandleHealthByDefault(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path == "" || r.URL.Path == "/" {
 		s.HandleHealth(w, r)
@@ -49,38 +97,21 @@ func (s *Service) HandleHealthByDefault(w http.ResponseWriter, r *http.Request) 
 	http.NotFound(w, r)
 }
 
-func writeHeaders(statusLen string, w http.ResponseWriter) {
-	w.Header().Set("Content-Length", statusLen)
-	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	w.Header().Set("X-Content-Type-Options", "nosniff")
+func (s *Service) uptime() string {
+	if s.startedAt.IsZero() {
+		return "0s"
+	}
+	return time.Since(s.startedAt).Truncate(time.Second).String()
 }
 
-func writeUnhealthy(w http.ResponseWriter) {
-	const (
-		status    = "unhealthy"
-		statusLen = "9"
-	)
-
-	writeHeaders(statusLen, w)
-	w.WriteHeader(http.StatusInternalServerError)
-	_, err := io.WriteString(w, status)
-	if err != nil {
-		return
+// checkerName returns a display name for a health checker. If the checker
+// implements the NamedChecker interface its name is used, otherwise a
+// positional fallback is generated.
+func checkerName(c Checker, index int) string {
+	if nc, ok := c.(NamedChecker); ok {
+		return nc.Name()
 	}
-}
-
-func writeHealthy(w http.ResponseWriter) {
-	const (
-		status    = "ok"
-		statusLen = "2"
-	)
-
-	writeHeaders(statusLen, w)
-	w.WriteHeader(http.StatusOK)
-	_, err := io.WriteString(w, status)
-	if err != nil {
-		return
-	}
+	return fmt.Sprintf("check-%d", index)
 }
 
 // WithHealthCheckPath Option checks that the system is up and running.
@@ -97,6 +128,12 @@ func WithHealthCheckPath(path string) Option {
 // call from multiple goroutines.
 type Checker interface {
 	CheckHealth() error
+}
+
+// NamedChecker is an optional interface that a Checker can implement to
+// provide a human-readable name in health check responses.
+type NamedChecker interface {
+	Name() string
 }
 
 // CheckerFunc is an adapter type to allow the use of ordinary functions as

@@ -405,6 +405,71 @@ func (s *ServiceTestSuite) TestHealthCheckEndpoints() {
 	})
 }
 
+// TestHealthCheckResponseBody validates the JSON health response structure.
+func (s *ServiceTestSuite) TestHealthCheckResponseBody() {
+	s.WithTestDependancies(s.T(), func(t *testing.T, _ *definition.DependencyOption) {
+		failChecker := frame.CheckerFunc(func() error {
+			return errors.New("db down")
+		})
+
+		t.Run("healthy with no checkers", func(t *testing.T) {
+			ctx, svc := frame.NewService(
+				frame.WithName("my-svc"),
+				frame.WithVersion("1.2.3"),
+				frametests.WithNoopDriver(),
+			)
+			defer svc.Stop(ctx)
+
+			err := svc.Run(ctx, ":0")
+			require.NoError(t, err)
+
+			ts := httptest.NewServer(svc.H())
+			defer ts.Close()
+
+			resp, err := http.Get(ts.URL + "/healthz")
+			require.NoError(t, err)
+
+			var hr frame.HealthResponse
+			require.NoError(t, json.NewDecoder(resp.Body).Decode(&hr))
+
+			assert.Equal(t, http.StatusOK, resp.StatusCode)
+			assert.Equal(t, "my-svc", hr.Service)
+			assert.Equal(t, "1.2.3", hr.Version)
+			assert.Equal(t, "healthy", hr.Status)
+			assert.NotEmpty(t, hr.Uptime)
+			assert.Empty(t, hr.Checks)
+		})
+
+		t.Run("unhealthy with failing checker", func(t *testing.T) {
+			ctx, svc := frame.NewService(
+				frame.WithName("fail-svc"),
+				frametests.WithNoopDriver(),
+			)
+			defer svc.Stop(ctx)
+
+			svc.AddHealthCheck(failChecker)
+
+			err := svc.Run(ctx, ":0")
+			require.NoError(t, err)
+
+			ts := httptest.NewServer(svc.H())
+			defer ts.Close()
+
+			resp, err := http.Get(ts.URL + "/healthz")
+			require.NoError(t, err)
+
+			var hr frame.HealthResponse
+			require.NoError(t, json.NewDecoder(resp.Body).Decode(&hr))
+
+			assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
+			assert.Equal(t, "unhealthy", hr.Status)
+			require.Len(t, hr.Checks, 1)
+			assert.Equal(t, "unhealthy", hr.Checks[0].Status)
+			assert.Equal(t, "db down", hr.Checks[0].Error)
+		})
+	})
+}
+
 func TestService_ConfigurationSetup(t *testing.T) {
 	testCases := []struct {
 		name                string

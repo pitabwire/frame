@@ -79,7 +79,7 @@ func (h *HydraImageSetupTestSuite) TestHydraImageSetup() {
 			name:      "Straight to hydra",
 			path:      "",
 			portToUse: "4444/tcp",
-			status:    301,
+			status:    307,
 		},
 		{
 			name:      "Open ID Configuration admin",

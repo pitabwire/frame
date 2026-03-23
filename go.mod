@@ -13,14 +13,14 @@ require (
 	github.com/exaring/otelpgx v0.10.0
 	github.com/go-jose/go-jose/v4 v4.1.3
 	github.com/golang-jwt/jwt/v5 v5.3.1
-	github.com/jackc/pgx/v5 v5.8.0
+	github.com/jackc/pgx/v5 v5.9.1
 	github.com/lmittmann/tint v1.1.3
 	github.com/nats-io/nats.go v1.49.0
 	github.com/nicksnyder/go-i18n/v2 v2.6.1
 	github.com/ory/keto/proto v0.13.0-alpha.0
-	github.com/panjf2000/ants/v2 v2.11.6
+	github.com/panjf2000/ants/v2 v2.12.0
 	github.com/pitabwire/natspubsub v0.8.0
-	github.com/pitabwire/util v0.6.1
+	github.com/pitabwire/util v0.7.0
 	github.com/redis/go-redis/v9 v9.18.0
 	github.com/rs/xid v1.6.0
 	github.com/spiffe/go-spiffe/v2 v2.6.0

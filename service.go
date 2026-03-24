@@ -94,6 +94,7 @@ type Service struct {
 	openapiBasePath   string
 	debugEnabled      bool
 	debugBasePath     string
+	oplSpecs          map[string][]byte
 	registeredPlugins []string
 	routeLister       RouteLister
 
@@ -471,6 +472,7 @@ func (s *Service) createAndConfigureMux(ctx context.Context) *http.ServeMux {
 	mux := http.NewServeMux()
 
 	s.registerDebugEndpoints(mux)
+	s.registerOPLEndpoints(mux)
 	mux.HandleFunc(s.healthCheckPath, s.HandleHealth)
 	s.registerOpenAPIRoutes(mux)
 	s.registerOAuth2ClientJWKSRoute(mux)

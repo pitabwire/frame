@@ -24,3 +24,4 @@ bin/
 docs/venv/
 site/
 _generated/
+WORK_STATE.md

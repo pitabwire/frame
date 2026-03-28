@@ -376,12 +376,8 @@ func collectSubjects(tree *rts.SubjectTree) []security.SubjectRef {
 // Helper functions
 
 func toKetoSubject(s security.SubjectRef) *rts.Subject {
-	if s.Namespace != "" {
-		relation := s.Relation
-		if relation == "" {
-			relation = "self"
-		}
-		return rts.NewSubjectSet(s.Namespace, s.ID, relation)
+	if s.Namespace != "" && s.Relation != "" {
+		return rts.NewSubjectSet(s.Namespace, s.ID, s.Relation)
 	}
 	return rts.NewSubjectID(s.ID)
 }

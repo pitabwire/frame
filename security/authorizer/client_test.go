@@ -619,6 +619,58 @@ func (s *AuthorizerTestSuite) TestWriteTuplesEmpty() {
 	s.Require().NoError(err)
 }
 
+func (s *AuthorizerTestSuite) TestWriteTupleIdempotent() {
+	ctx := s.T().Context()
+	adapter := s.newAdapter(nil)
+
+	tuple := security.RelationTuple{
+		Object:   security.ObjectRef{Namespace: "resource", ID: "idempotent-obj-1"},
+		Relation: "member",
+		Subject:  security.SubjectRef{ID: "user-idempotent-1"},
+	}
+
+	// First write creates the tuple.
+	err := adapter.WriteTuple(ctx, tuple)
+	s.Require().NoError(err)
+
+	result, err := adapter.Check(ctx, security.CheckRequest{
+		Object:     tuple.Object,
+		Permission: tuple.Relation,
+		Subject:    tuple.Subject,
+	})
+	s.Require().NoError(err)
+	s.True(result.Allowed, "tuple should exist after first write")
+
+	// Second write should not create a duplicate.
+	err = adapter.WriteTuple(ctx, tuple)
+	s.Require().NoError(err)
+
+	tuples, err := adapter.ListRelations(ctx, tuple.Object)
+	s.Require().NoError(err)
+	s.Len(tuples, 1, "repeated write should not create duplicates")
+}
+
+func (s *AuthorizerTestSuite) TestWriteTuplesIdempotentMultiple() {
+	ctx := s.T().Context()
+	adapter := s.newAdapter(nil)
+
+	obj := security.ObjectRef{Namespace: "resource", ID: "idempotent-multi-obj"}
+	tuples := []security.RelationTuple{
+		{Object: obj, Relation: "member", Subject: security.SubjectRef{ID: "user-im1"}},
+		{Object: obj, Relation: "admin", Subject: security.SubjectRef{ID: "user-im2"}},
+	}
+
+	// Write twice — should be idempotent.
+	err := adapter.WriteTuples(ctx, tuples)
+	s.Require().NoError(err)
+	err = adapter.WriteTuples(ctx, tuples)
+	s.Require().NoError(err)
+
+	result, err := adapter.ListRelations(ctx, obj)
+	s.Require().NoError(err)
+	s.Len(result, 2, "repeated WriteTuples should not create duplicates")
+}
+
 func (s *AuthorizerTestSuite) TestDeleteTuplesPermissive() {
 	adapter := s.permissiveAdapter()
 	err := adapter.DeleteTuple(s.T().Context(), security.RelationTuple{

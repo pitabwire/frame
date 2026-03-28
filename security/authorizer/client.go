@@ -174,7 +174,8 @@ func (k *ketoAdapter) WriteTuple(ctx context.Context, tuple security.RelationTup
 	return k.WriteTuples(ctx, []security.RelationTuple{tuple})
 }
 
-// WriteTuples creates multiple relationship tuples in a single transaction.
+// WriteTuples idempotently creates multiple relationship tuples in a single
+// transaction. Tuples that already exist are skipped to prevent duplicates.
 func (k *ketoAdapter) WriteTuples(ctx context.Context, tuples []security.RelationTuple) error {
 	if !k.config.AuthorizationServiceCanWrite() {
 		return nil
@@ -184,8 +185,20 @@ func (k *ketoAdapter) WriteTuples(ctx context.Context, tuples []security.Relatio
 		return nil
 	}
 
-	deltas := make([]*rts.RelationTupleDelta, len(tuples))
-	for i, t := range tuples {
+	var missing []security.RelationTuple
+	for _, t := range tuples {
+		if k.tupleExists(ctx, t) {
+			continue
+		}
+		missing = append(missing, t)
+	}
+
+	if len(missing) == 0 {
+		return nil
+	}
+
+	deltas := make([]*rts.RelationTupleDelta, len(missing))
+	for i, t := range missing {
 		deltas[i] = &rts.RelationTupleDelta{
 			Action:        rts.RelationTupleDelta_ACTION_INSERT,
 			RelationTuple: toKetoTuple(t),
@@ -200,6 +213,22 @@ func (k *ketoAdapter) WriteTuples(ctx context.Context, tuples []security.Relatio
 	}
 
 	return nil
+}
+
+// tupleExists checks whether a relation tuple already exists using the Check API.
+func (k *ketoAdapter) tupleExists(ctx context.Context, t security.RelationTuple) bool {
+	if k.checkClient == nil {
+		return false
+	}
+
+	resp, err := k.checkClient.Check(ctx, &rts.CheckRequest{
+		Tuple: toKetoTuple(t),
+	})
+	if err != nil {
+		return false
+	}
+
+	return resp.GetAllowed()
 }
 
 // DeleteTuple removes a relationship tuple.

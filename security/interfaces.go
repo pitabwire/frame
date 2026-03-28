@@ -26,7 +26,7 @@ type Authorizer interface {
 	// WriteTuple creates a relationship tuple.
 	WriteTuple(ctx context.Context, tuple RelationTuple) error
 
-	// WriteTuples creates multiple relationship tuples atomically.
+	// WriteTuples idempotently creates multiple relationship tuples atomically.
 	WriteTuples(ctx context.Context, tuples []RelationTuple) error
 
 	// DeleteTuple removes a relationship tuple.

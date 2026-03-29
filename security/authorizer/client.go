@@ -101,15 +101,7 @@ func (k *ketoAdapter) Check(ctx context.Context, req security.CheckRequest) (sec
 		}, nil
 	}
 
-	tuple := &rts.RelationTuple{
-		Namespace: req.Object.Namespace,
-		Object:    req.Object.ID,
-		Relation:  req.Permission,
-		Subject:   toKetoSubject(req.Subject),
-	}
-
 	resp, err := k.checkClient.Check(ctx, &rts.CheckRequest{
-		Tuple:     tuple,
 		Namespace: req.Object.Namespace,
 		Object:    req.Object.ID,
 		Relation:  req.Permission,

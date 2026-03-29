@@ -60,5 +60,10 @@ func hasPrefix(path, prefix string) bool {
 	if len(path) < len(prefix) {
 		return false
 	}
-	return path[:len(prefix)] == prefix
+	if path[:len(prefix)] != prefix {
+		return false
+	}
+	// Exact match, prefix ends with '/', or the next character is a path separator.
+	// This prevents "/api/profile" from matching "/api/profileadmin".
+	return len(path) == len(prefix) || prefix[len(prefix)-1] == '/' || path[len(prefix)] == '/'
 }

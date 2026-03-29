@@ -102,10 +102,12 @@ func (k *ketoAdapter) Check(ctx context.Context, req security.CheckRequest) (sec
 	}
 
 	resp, err := k.checkClient.Check(ctx, &rts.CheckRequest{
-		Namespace: req.Object.Namespace,
-		Object:    req.Object.ID,
-		Relation:  req.Permission,
-		Subject:   toKetoSubject(req.Subject),
+		Tuple: &rts.RelationTuple{
+			Namespace: req.Object.Namespace,
+			Object:    req.Object.ID,
+			Relation:  req.Permission,
+			Subject:   toKetoSubject(req.Subject),
+		},
 	})
 	if err != nil {
 		return security.CheckResult{}, NewAuthzServiceError("check", err)
@@ -218,10 +220,12 @@ func (k *ketoAdapter) tupleExists(ctx context.Context, t security.RelationTuple)
 	}
 
 	resp, err := k.checkClient.Check(ctx, &rts.CheckRequest{
-		Namespace: t.Object.Namespace,
-		Object:    t.Object.ID,
-		Relation:  t.Relation,
-		Subject:   toKetoSubject(t.Subject),
+		Tuple: &rts.RelationTuple{
+			Namespace: t.Object.Namespace,
+			Object:    t.Object.ID,
+			Relation:  t.Relation,
+			Subject:   toKetoSubject(t.Subject),
+		},
 	})
 	if err != nil {
 		return false

@@ -123,3 +123,28 @@ func (s *FrameBaseTestSuite) SeedTenantAccess(
 	})
 	s.Require().NoError(err, "failed to seed tenant access")
 }
+
+// SeedPartitionInheritance links a child partition to a parent so that members
+// (or services) of the parent automatically inherit access to the child.
+// The reverse does NOT hold — child members cannot access the parent.
+func (s *FrameBaseTestSuite) SeedPartitionInheritance(
+	ctx context.Context,
+	auth security.Authorizer,
+	tenancyAccessNamespace, tenantID, parentPartitionID, childPartitionID string,
+) {
+	parentPath := fmt.Sprintf("%s/%s", tenantID, parentPartitionID)
+	childPath := fmt.Sprintf("%s/%s", tenantID, childPartitionID)
+
+	for _, relation := range []string{"member", "service"} {
+		err := auth.WriteTuple(ctx, security.RelationTuple{
+			Object:   security.ObjectRef{Namespace: tenancyAccessNamespace, ID: childPath},
+			Relation: relation,
+			Subject: security.SubjectRef{
+				Namespace: tenancyAccessNamespace,
+				ID:        parentPath,
+				Relation:  relation,
+			},
+		})
+		s.Require().NoError(err, "failed to seed partition inheritance for %s", relation)
+	}
+}

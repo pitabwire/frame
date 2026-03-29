@@ -32,6 +32,14 @@ func WithOnTenancyAccessDenied(fn TenancyAccessDeniedFunc) TenantPermissionCheck
 	}
 }
 
+// WithTenancyConstraints adds contextual constraints evaluated after the
+// Keto relation check passes.
+func WithTenancyConstraints(constraints ...AccessConstraint) TenantPermissionCheckerOption {
+	return func(c *TenancyAccessChecker) {
+		c.constraints = append(c.constraints, constraints...)
+	}
+}
+
 // TenancyAccessChecker extracts claims from context, builds a CheckRequest
 // against a tenant-scoped object namespace, and calls the authorizer. For
 // system_internal callers it supports a self-healing callback that provisions
@@ -41,6 +49,7 @@ type TenancyAccessChecker struct {
 	objectNamespace       string
 	subjectNamespace      string
 	onTenancyAccessDenied TenancyAccessDeniedFunc
+	constraints           []AccessConstraint
 }
 
 // NewTenancyAccessChecker creates a checker that verifies permissions
@@ -71,6 +80,8 @@ func NewTenancyAccessChecker(
 // CheckAccess verifies that the caller has data access to the partition
 // identified in their claims. For regular users it checks the "member"
 // relation; for system_internal callers it checks the "service" relation.
+// If denied and a self-healing callback is set, it invokes the callback
+// and retries once.
 func (c *TenancyAccessChecker) CheckAccess(ctx context.Context) error {
 	claims := security.ClaimsFromContext(ctx)
 	if claims == nil {
@@ -111,7 +122,22 @@ func (c *TenancyAccessChecker) CheckAccess(ctx context.Context) error {
 	}
 
 	if result.Allowed {
-		return nil
+		return evaluateConstraints(ctx, c.constraints, relation, req.Object, req.Subject)
+	}
+
+	// Self-healing: invoke callback and retry once.
+	if c.onTenancyAccessDenied != nil {
+		if provisionErr := c.onTenancyAccessDenied(ctx, c.authorizer, tenancyPath, subjectID); provisionErr != nil {
+			return NewPermissionDeniedError(req.Object, relation, req.Subject, result.Reason)
+		}
+
+		result, err = c.authorizer.Check(ctx, req)
+		if err != nil {
+			return err
+		}
+		if result.Allowed {
+			return evaluateConstraints(ctx, c.constraints, relation, req.Object, req.Subject)
+		}
 	}
 
 	return NewPermissionDeniedError(req.Object, relation, req.Subject, result.Reason)
@@ -154,7 +180,7 @@ func (c *TenancyAccessChecker) Check(ctx context.Context, permission string) err
 	}
 
 	if result.Allowed {
-		return nil
+		return evaluateConstraints(ctx, c.constraints, permission, req.Object, req.Subject)
 	}
 
 	if c.onTenancyAccessDenied != nil {
@@ -167,10 +193,9 @@ func (c *TenancyAccessChecker) Check(ctx context.Context, permission string) err
 		if err != nil {
 			return err
 		}
-		if !result.Allowed {
-			return NewPermissionDeniedError(req.Object, permission, req.Subject, result.Reason)
+		if result.Allowed {
+			return evaluateConstraints(ctx, c.constraints, permission, req.Object, req.Subject)
 		}
-		return nil
 	}
 
 	return NewPermissionDeniedError(req.Object, permission, req.Subject, result.Reason)

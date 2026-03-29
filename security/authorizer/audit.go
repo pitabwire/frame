@@ -2,9 +2,7 @@ package authorizer
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/binary"
-	"math"
+	"math/rand/v2"
 
 	"github.com/pitabwire/util"
 
@@ -19,6 +17,9 @@ type auditLogger struct {
 
 // AuditLoggerConfig holds configuration for the audit logger.
 type AuditLoggerConfig struct {
+	// Enabled controls whether the audit logger actually logs decisions.
+	// Default is false (disabled).
+	Enabled bool
 	// SampleRate is the fraction of decisions to log (0.0 to 1.0).
 	SampleRate float64
 }
@@ -34,6 +35,7 @@ func NewAuditLogger(config AuditLoggerConfig) security.AuditLogger {
 
 	return &auditLogger{
 		sampleRate: config.SampleRate,
+		enabled:    config.Enabled,
 	}
 }
 
@@ -48,15 +50,8 @@ func (a *auditLogger) LogDecision(
 		return nil
 	}
 
-	// Sample rate check using crypto/rand
-	if a.sampleRate < 1.0 {
-		var b [8]byte
-		if _, err := rand.Read(b[:]); err == nil {
-			f := float64(binary.BigEndian.Uint64(b[:])) / float64(math.MaxUint64)
-			if f > a.sampleRate {
-				return nil
-			}
-		}
+	if a.sampleRate < 1.0 && rand.Float64() > a.sampleRate { //nolint:gosec // statistical sampling, not security
+		return nil
 	}
 
 	fields := map[string]any{

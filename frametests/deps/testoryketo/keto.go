@@ -39,12 +39,151 @@ log:
 	// NamespacesOPL defines all OPL namespaces used by the authorizer tests.
 	// All namespaces and relations that tests reference must be declared here
 	// so that Keto's namespace validation accepts the relation tuples.
+	//
+	// The namespaces model a three-plane authorization structure:
+	//   Plane 1 — Data Access:       tenancy_access
+	//   Plane 2 — Functional Perms:  service_tenancy, service_profile
+	//   Plane 3 — Resource Access:   chat_room, file
 	NamespacesOPL = `import { Namespace, Context } from "@ory/keto-namespace-types"
 
 class User implements Namespace {}
 class profile_user implements Namespace {}
 class profile implements Namespace {}
 class custom implements Namespace {}
+
+// ===== Plane 1: Data Access =====
+
+class tenancy_access implements Namespace {
+  related: {
+    member: (User | profile_user | SubjectSet<tenancy_access, "member">)[]
+    service: (User | profile_user | SubjectSet<tenancy_access, "service">)[]
+  }
+}
+
+// ===== Plane 2: Functional Permissions =====
+
+class service_tenancy implements Namespace {
+  related: {
+    owner: (User | profile_user)[]
+    admin: (User | profile_user)[]
+    member: (User | profile_user)[]
+    granted_create: (User | profile_user)[]
+    granted_read: (User | profile_user)[]
+    granted_update: (User | profile_user)[]
+    granted_delete: (User | profile_user)[]
+    granted_list: (User | profile_user)[]
+  }
+
+  permits = {
+    create: (ctx: Context): boolean =>
+      this.related.owner.includes(ctx.subject) ||
+      this.related.admin.includes(ctx.subject) ||
+      this.related.granted_create.includes(ctx.subject),
+    read: (ctx: Context): boolean =>
+      this.related.owner.includes(ctx.subject) ||
+      this.related.admin.includes(ctx.subject) ||
+      this.related.member.includes(ctx.subject) ||
+      this.related.granted_read.includes(ctx.subject),
+    update: (ctx: Context): boolean =>
+      this.related.owner.includes(ctx.subject) ||
+      this.related.admin.includes(ctx.subject) ||
+      this.related.granted_update.includes(ctx.subject),
+    delete: (ctx: Context): boolean =>
+      this.related.owner.includes(ctx.subject) ||
+      this.related.granted_delete.includes(ctx.subject),
+    list: (ctx: Context): boolean =>
+      this.related.owner.includes(ctx.subject) ||
+      this.related.admin.includes(ctx.subject) ||
+      this.related.member.includes(ctx.subject) ||
+      this.related.granted_list.includes(ctx.subject),
+  }
+}
+
+class service_profile implements Namespace {
+  related: {
+    owner: (User | profile_user)[]
+    admin: (User | profile_user)[]
+    member: (User | profile_user)[]
+    granted_create: (User | profile_user)[]
+    granted_read: (User | profile_user)[]
+    granted_update: (User | profile_user)[]
+    granted_delete: (User | profile_user)[]
+  }
+
+  permits = {
+    create: (ctx: Context): boolean =>
+      this.related.owner.includes(ctx.subject) ||
+      this.related.admin.includes(ctx.subject) ||
+      this.related.granted_create.includes(ctx.subject),
+    read: (ctx: Context): boolean =>
+      this.related.owner.includes(ctx.subject) ||
+      this.related.admin.includes(ctx.subject) ||
+      this.related.member.includes(ctx.subject) ||
+      this.related.granted_read.includes(ctx.subject),
+    update: (ctx: Context): boolean =>
+      this.related.owner.includes(ctx.subject) ||
+      this.related.admin.includes(ctx.subject) ||
+      this.related.granted_update.includes(ctx.subject),
+    delete: (ctx: Context): boolean =>
+      this.related.owner.includes(ctx.subject) ||
+      this.related.granted_delete.includes(ctx.subject),
+  }
+}
+
+// ===== Plane 3: Resource Access =====
+
+class chat_room implements Namespace {
+  related: {
+    owner: (User | profile_user)[]
+    admin: (User | profile_user)[]
+    member: (User | profile_user)[]
+    viewer: (User | profile_user)[]
+  }
+
+  permits = {
+    send_message: (ctx: Context): boolean =>
+      this.related.owner.includes(ctx.subject) ||
+      this.related.admin.includes(ctx.subject) ||
+      this.related.member.includes(ctx.subject),
+    read: (ctx: Context): boolean =>
+      this.related.owner.includes(ctx.subject) ||
+      this.related.admin.includes(ctx.subject) ||
+      this.related.member.includes(ctx.subject) ||
+      this.related.viewer.includes(ctx.subject),
+    manage: (ctx: Context): boolean =>
+      this.related.owner.includes(ctx.subject) ||
+      this.related.admin.includes(ctx.subject),
+    delete: (ctx: Context): boolean =>
+      this.related.owner.includes(ctx.subject),
+    invite: (ctx: Context): boolean =>
+      this.related.owner.includes(ctx.subject) ||
+      this.related.admin.includes(ctx.subject),
+  }
+}
+
+class file implements Namespace {
+  related: {
+    owner: (User | profile_user)[]
+    editor: (User | profile_user)[]
+    viewer: (User | profile_user)[]
+  }
+
+  permits = {
+    read: (ctx: Context): boolean =>
+      this.related.owner.includes(ctx.subject) ||
+      this.related.editor.includes(ctx.subject) ||
+      this.related.viewer.includes(ctx.subject),
+    write: (ctx: Context): boolean =>
+      this.related.owner.includes(ctx.subject) ||
+      this.related.editor.includes(ctx.subject),
+    delete: (ctx: Context): boolean =>
+      this.related.owner.includes(ctx.subject),
+    share: (ctx: Context): boolean =>
+      this.related.owner.includes(ctx.subject),
+  }
+}
+
+// ===== Existing test namespaces (backward-compatible) =====
 
 class resource implements Namespace {
   related: {

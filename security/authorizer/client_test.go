@@ -101,12 +101,12 @@ func (s *AuthorizerTestSuite) newAdapter(auditLogger security.AuditLogger) secur
 		AuthorizationServiceReadURI:  s.readURI,
 		AuthorizationServiceWriteURI: s.writeURI,
 	}
-	return authorizer.NewKetoAdapter(cfg, auditLogger)
+	return authorizer.NewKetoAdapter(cfg, auditLogger, nil)
 }
 
 func (s *AuthorizerTestSuite) permissiveAdapter() security.Authorizer {
 	cfg := &config.ConfigurationDefault{}
-	return authorizer.NewKetoAdapter(cfg, nil)
+	return authorizer.NewKetoAdapter(cfg, nil, nil)
 }
 
 // ---------------------------------------------------------------------------
@@ -796,7 +796,7 @@ func (s *AuthorizerTestSuite) TestNewKetoAdapterNilAuditLogger() {
 	cfg := &config.ConfigurationDefault{
 		AuthorizationServiceReadURI: s.readURI,
 	}
-	adapter := authorizer.NewKetoAdapter(cfg, nil)
+	adapter := authorizer.NewKetoAdapter(cfg, nil, nil)
 	s.Require().NotNil(adapter)
 
 	// Should not panic — nil logger replaced by NoOp

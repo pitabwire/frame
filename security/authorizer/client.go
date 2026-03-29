@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"sync"
 	"time"
 
 	rts "github.com/ory/keto/proto/ory/keto/relation_tuples/v1alpha2"
@@ -14,6 +15,7 @@ import (
 
 	"github.com/pitabwire/frame/config"
 	"github.com/pitabwire/frame/security"
+	"github.com/pitabwire/frame/workerpool"
 )
 
 const defaultExpandMaxDepth = 3
@@ -28,12 +30,15 @@ type ketoAdapter struct {
 	expandClient rts.ExpandServiceClient
 	config       config.ConfigurationAuthorization
 	auditLogger  security.AuditLogger
+	pool         workerpool.WorkerPool
 }
 
 // NewKetoAdapter creates a new Keto adapter with the given configuration.
+// The pool parameter is optional — if nil, BatchCheck falls back to sequential checks.
 func NewKetoAdapter(
 	cfg config.ConfigurationAuthorization,
 	auditLogger security.AuditLogger,
+	pool workerpool.WorkerPool,
 ) security.Authorizer {
 	if auditLogger == nil {
 		auditLogger = NewNoOpAuditLogger()
@@ -42,6 +47,7 @@ func NewKetoAdapter(
 	adapter := &ketoAdapter{
 		config:      cfg,
 		auditLogger: auditLogger,
+		pool:        pool,
 	}
 
 	if cfg.AuthorizationServiceCanRead() {
@@ -91,9 +97,19 @@ func (k *ketoAdapter) Close() {
 	}
 }
 
+// canRead returns true when the read clients were successfully initialized.
+func (k *ketoAdapter) canRead() bool {
+	return k.checkClient != nil && k.readClient != nil
+}
+
+// canWrite returns true when the write client was successfully initialized.
+func (k *ketoAdapter) canWrite() bool {
+	return k.writeClient != nil
+}
+
 // Check verifies if a subject has permission on an object.
 func (k *ketoAdapter) Check(ctx context.Context, req security.CheckRequest) (security.CheckResult, error) {
-	if !k.config.AuthorizationServiceCanRead() {
+	if !k.canRead() {
 		return security.CheckResult{
 			Allowed:   true,
 			Reason:    "keto disabled - permissive mode",
@@ -136,7 +152,7 @@ func (k *ketoAdapter) BatchCheck(
 	ctx context.Context,
 	requests []security.CheckRequest,
 ) ([]security.CheckResult, error) {
-	if !k.config.AuthorizationServiceCanRead() {
+	if !k.canRead() {
 		results := make([]security.CheckResult, len(requests))
 		for i := range results {
 			results[i] = security.CheckResult{
@@ -148,22 +164,62 @@ func (k *ketoAdapter) BatchCheck(
 		return results, nil
 	}
 
-	// Use individual checks since BatchCheck may not be available in all Keto versions
+	// Keto proto v0.13.0-alpha.0 has no native BatchCheck RPC.
+	// Fan out individual checks concurrently via the frame worker pool.
 	results := make([]security.CheckResult, len(requests))
-	for i, req := range requests {
-		result, err := k.Check(ctx, req)
-		if err != nil {
-			// On error, deny access (fail closed)
-			results[i] = security.CheckResult{
-				Allowed:   false,
-				Reason:    fmt.Sprintf("check failed: %v", err),
-				CheckedAt: time.Now().Unix(),
+
+	if k.pool == nil {
+		// No pool available — sequential fallback.
+		for i, req := range requests {
+			result, err := k.Check(ctx, req)
+			if err != nil {
+				results[i] = security.CheckResult{
+					Allowed:   false,
+					Reason:    fmt.Sprintf("check failed: %v", err),
+					CheckedAt: time.Now().Unix(),
+				}
+				continue
 			}
-			continue
+			results[i] = result
 		}
-		results[i] = result
+		return results, nil
 	}
 
+	var wg sync.WaitGroup
+	wg.Add(len(requests))
+
+	for i, req := range requests {
+		idx, r := i, req
+		submitErr := k.pool.Submit(ctx, func() {
+			defer wg.Done()
+			result, err := k.Check(ctx, r)
+			if err != nil {
+				results[idx] = security.CheckResult{
+					Allowed:   false,
+					Reason:    fmt.Sprintf("check failed: %v", err),
+					CheckedAt: time.Now().Unix(),
+				}
+				return
+			}
+			results[idx] = result
+		})
+		if submitErr != nil {
+			// Pool rejected the task — run inline and count down.
+			wg.Done()
+			result, err := k.Check(ctx, r)
+			if err != nil {
+				results[idx] = security.CheckResult{
+					Allowed:   false,
+					Reason:    fmt.Sprintf("check failed: %v", err),
+					CheckedAt: time.Now().Unix(),
+				}
+			} else {
+				results[idx] = result
+			}
+		}
+	}
+
+	wg.Wait()
 	return results, nil
 }
 
@@ -175,7 +231,7 @@ func (k *ketoAdapter) WriteTuple(ctx context.Context, tuple security.RelationTup
 // WriteTuples idempotently creates multiple relationship tuples in a single
 // transaction. Tuples that already exist are skipped to prevent duplicates.
 func (k *ketoAdapter) WriteTuples(ctx context.Context, tuples []security.RelationTuple) error {
-	if !k.config.AuthorizationServiceCanWrite() {
+	if !k.canWrite() {
 		return nil
 	}
 
@@ -241,7 +297,7 @@ func (k *ketoAdapter) DeleteTuple(ctx context.Context, tuple security.RelationTu
 
 // DeleteTuples removes multiple relationship tuples in a single transaction.
 func (k *ketoAdapter) DeleteTuples(ctx context.Context, tuples []security.RelationTuple) error {
-	if !k.config.AuthorizationServiceCanWrite() {
+	if !k.canWrite() {
 		return nil
 	}
 
@@ -269,7 +325,7 @@ func (k *ketoAdapter) DeleteTuples(ctx context.Context, tuples []security.Relati
 
 // ListRelations returns all relations for an object.
 func (k *ketoAdapter) ListRelations(ctx context.Context, object security.ObjectRef) ([]security.RelationTuple, error) {
-	if !k.config.AuthorizationServiceCanRead() {
+	if !k.canRead() {
 		return []security.RelationTuple{}, nil
 	}
 
@@ -297,7 +353,7 @@ func (k *ketoAdapter) ListSubjectRelations(
 	subject security.SubjectRef,
 	namespace string,
 ) ([]security.RelationTuple, error) {
-	if !k.config.AuthorizationServiceCanRead() {
+	if !k.canRead() {
 		return []security.RelationTuple{}, nil
 	}
 
@@ -329,7 +385,7 @@ func (k *ketoAdapter) Expand(
 	object security.ObjectRef,
 	relation string,
 ) ([]security.SubjectRef, error) {
-	if !k.config.AuthorizationServiceCanRead() {
+	if !k.canRead() {
 		return []security.SubjectRef{}, nil
 	}
 
@@ -341,13 +397,14 @@ func (k *ketoAdapter) Expand(
 		return nil, NewAuthzServiceError("expand", err)
 	}
 
-	subjects := collectSubjects(resp.GetTree())
+	subjects := collectSubjects(resp.GetTree(), 0)
 	return subjects, nil
 }
 
 // collectSubjects recursively walks a SubjectTree and returns a flat list of SubjectRef.
-func collectSubjects(tree *rts.SubjectTree) []security.SubjectRef {
-	if tree == nil {
+// The depth parameter prevents unbounded recursion on malformed trees.
+func collectSubjects(tree *rts.SubjectTree, depth int) []security.SubjectRef {
+	if tree == nil || depth > defaultExpandMaxDepth {
 		return nil
 	}
 
@@ -370,7 +427,7 @@ func collectSubjects(tree *rts.SubjectTree) []security.SubjectRef {
 	}
 
 	for _, child := range tree.GetChildren() {
-		subjects = append(subjects, collectSubjects(child)...)
+		subjects = append(subjects, collectSubjects(child, depth+1)...)
 	}
 
 	return subjects

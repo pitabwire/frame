@@ -17,6 +17,25 @@ func WithFunctionSubjectNamespace(ns string) FunctionCheckerOption {
 	}
 }
 
+// WithFunctionConstraints adds contextual constraints evaluated after the
+// Keto relation check passes.
+func WithFunctionConstraints(constraints ...AccessConstraint) FunctionCheckerOption {
+	return func(c *FunctionChecker) {
+		c.constraints = append(c.constraints, constraints...)
+	}
+}
+
+// WithFunctionPermissionConstraints adds constraints that apply only when
+// checking a specific permission.
+func WithFunctionPermissionConstraints(permission string, constraints ...AccessConstraint) FunctionCheckerOption {
+	return func(c *FunctionChecker) {
+		if c.permConstraints == nil {
+			c.permConstraints = make(map[string][]AccessConstraint)
+		}
+		c.permConstraints[permission] = append(c.permConstraints[permission], constraints...)
+	}
+}
+
 // FunctionChecker verifies functional permissions in application-specific
 // namespaces (e.g., service_tenancy, service_payment). It extracts tenant and
 // partition from the caller's claims and checks whether the caller has a
@@ -29,6 +48,8 @@ type FunctionChecker struct {
 	authorizer       security.Authorizer
 	objectNamespace  string
 	subjectNamespace string
+	constraints      []AccessConstraint
+	permConstraints  map[string][]AccessConstraint
 }
 
 // NewFunctionChecker creates a checker that verifies functional permissions
@@ -86,7 +107,9 @@ func (c *FunctionChecker) Check(ctx context.Context, permission string) error {
 	}
 
 	if result.Allowed {
-		return nil
+		return evaluateConstraintsForPermission(
+			ctx, c.constraints, c.permConstraints, permission, req.Object, req.Subject,
+		)
 	}
 
 	return NewPermissionDeniedError(req.Object, permission, req.Subject, result.Reason)

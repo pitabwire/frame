@@ -79,9 +79,11 @@ func NewTenancyAccessChecker(
 
 // CheckAccess verifies that the caller has data access to the partition
 // identified in their claims. For regular users it checks the "member"
-// relation against Keto. Internal system callers (service accounts with
-// the "internal" role) are trusted and bypass the Keto check entirely —
-// they can operate on any partition without needing per-partition tuples.
+// relation; for internal system callers it checks the "service" relation.
+// Service accounts are expected to have a "service" tuple on the root
+// partition, with child partitions inheriting access via SubjectSet chains.
+// If denied and a self-healing callback is set, it invokes the callback
+// and retries once.
 func (c *TenancyAccessChecker) CheckAccess(ctx context.Context) error {
 	claims := security.ClaimsFromContext(ctx)
 	if claims == nil {
@@ -103,15 +105,12 @@ func (c *TenancyAccessChecker) CheckAccess(ctx context.Context) error {
 		return ErrInvalidObject
 	}
 
-	// Internal system callers are trusted service accounts — they can
-	// operate on any partition without per-partition Keto tuples.
-	if claims.IsInternalSystem() {
-		return nil
-	}
-
 	tenancyPath := fmt.Sprintf("%s/%s", tenantID, partitionID)
 
 	relation := "member"
+	if claims.IsInternalSystem() {
+		relation = "service"
+	}
 
 	req := security.CheckRequest{
 		Object:     security.ObjectRef{Namespace: c.objectNamespace, ID: tenancyPath},

@@ -9,7 +9,6 @@ import (
 	"github.com/pitabwire/frame/security/authorizer"
 	"github.com/pitabwire/frame/security/openid"
 	"github.com/pitabwire/frame/security/workloadapi"
-	"github.com/pitabwire/frame/workerpool"
 )
 
 // SecurityConfiguration combines all configuration interfaces needed by the security manager.
@@ -30,7 +29,6 @@ type managerImpl struct {
 // NewManager creates and returns a new security Manager.
 func NewManager(_ context.Context, _, _ string,
 	cfg SecurityConfiguration, _ client.Manager,
-	pool workerpool.WorkerPool,
 ) security.Manager {
 	return &managerImpl{
 		workloadAPI:   workloadapi.NewWorkloadAPI(cfg),
@@ -38,7 +36,6 @@ func NewManager(_ context.Context, _, _ string,
 		authorizer: authorizer.NewKetoAdapter(
 			cfg,
 			authorizer.NewAuditLogger(authorizer.AuditLoggerConfig{}),
-			pool,
 		),
 	}
 }

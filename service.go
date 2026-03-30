@@ -154,26 +154,12 @@ func NewServiceWithContext(ctx context.Context, opts ...Option) (context.Context
 
 	svc.Init(ctx, opts...) // Apply all options, using the signal-aware context
 
-	// Initialize workers before security manager so the pool is available for BatchCheck.
-	svc.initWorkersAndQueues(ctx, &cfg)
-
 	// Create security manager AFTER options are applied so it gets the correct config.
 	smCfg, ok := svc.Config().(securityManager.SecurityConfiguration)
 	if !ok {
 		smCfg = &cfg
 	}
-	var workerPool workerpool.WorkerPool
-	if svc.workerPoolManager != nil {
-		workerPool, _ = svc.workerPoolManager.GetPool()
-	}
-	svc.securityManager = securityManager.NewManager(
-		ctx,
-		svc.name,
-		svc.environment,
-		smCfg,
-		svc.clientManager,
-		workerPool,
-	)
+	svc.securityManager = securityManager.NewManager(ctx, svc.name, svc.environment, smCfg, svc.clientManager)
 	svc.registerPlugin("security")
 	// Register cleanup for the security manager to stop background goroutines (e.g., JWKS refresh)
 	svc.AddCleanupMethod(func(_ context.Context) {
@@ -181,6 +167,8 @@ func NewServiceWithContext(ctx context.Context, opts ...Option) (context.Context
 			svc.securityManager.Close()
 		}
 	})
+
+	svc.initWorkersAndQueues(ctx, &cfg)
 
 	// Execute pre-start methods now that queue manager is initialized
 	// This ensures queue registrations from options are applied

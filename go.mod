@@ -17,7 +17,7 @@ require (
 	github.com/lmittmann/tint v1.1.3
 	github.com/nats-io/nats.go v1.49.0
 	github.com/nicksnyder/go-i18n/v2 v2.6.1
-	github.com/ory/keto/proto v0.13.0-alpha.0
+	github.com/ory/keto/proto v0.13.0-alpha.0.0.20260327085200-c0e5fcbbbce1
 	github.com/panjf2000/ants/v2 v2.12.0
 	github.com/pitabwire/natspubsub v0.8.0
 	github.com/pitabwire/util v0.7.0

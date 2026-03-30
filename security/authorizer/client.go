@@ -3,9 +3,7 @@ package authorizer
 
 import (
 	"context"
-	"fmt"
 	"net/url"
-	"sync"
 	"time"
 
 	rts "github.com/ory/keto/proto/ory/keto/relation_tuples/v1alpha2"
@@ -15,7 +13,6 @@ import (
 
 	"github.com/pitabwire/frame/config"
 	"github.com/pitabwire/frame/security"
-	"github.com/pitabwire/frame/workerpool"
 )
 
 const defaultExpandMaxDepth = 3
@@ -30,15 +27,12 @@ type ketoAdapter struct {
 	expandClient rts.ExpandServiceClient
 	config       config.ConfigurationAuthorization
 	auditLogger  security.AuditLogger
-	pool         workerpool.WorkerPool
 }
 
 // NewKetoAdapter creates a new Keto adapter with the given configuration.
-// The pool parameter is optional — if nil, BatchCheck falls back to sequential checks.
 func NewKetoAdapter(
 	cfg config.ConfigurationAuthorization,
 	auditLogger security.AuditLogger,
-	pool workerpool.WorkerPool,
 ) security.Authorizer {
 	if auditLogger == nil {
 		auditLogger = NewNoOpAuditLogger()
@@ -47,7 +41,6 @@ func NewKetoAdapter(
 	adapter := &ketoAdapter{
 		config:      cfg,
 		auditLogger: auditLogger,
-		pool:        pool,
 	}
 
 	if cfg.AuthorizationServiceCanRead() {
@@ -147,7 +140,8 @@ func (k *ketoAdapter) Check(ctx context.Context, req security.CheckRequest) (sec
 	return result, nil
 }
 
-// BatchCheck verifies multiple permissions in one call.
+// BatchCheck verifies multiple permissions in a single Keto round-trip
+// using the native BatchCheck RPC (Keto v26+).
 func (k *ketoAdapter) BatchCheck(
 	ctx context.Context,
 	requests []security.CheckRequest,
@@ -164,62 +158,39 @@ func (k *ketoAdapter) BatchCheck(
 		return results, nil
 	}
 
-	// Keto proto v0.13.0-alpha.0 has no native BatchCheck RPC.
-	// Fan out individual checks concurrently via the frame worker pool.
-	results := make([]security.CheckResult, len(requests))
-
-	if k.pool == nil {
-		// No pool available — sequential fallback.
-		for i, req := range requests {
-			result, err := k.Check(ctx, req)
-			if err != nil {
-				results[i] = security.CheckResult{
-					Allowed:   false,
-					Reason:    fmt.Sprintf("check failed: %v", err),
-					CheckedAt: time.Now().Unix(),
-				}
-				continue
-			}
-			results[i] = result
-		}
-		return results, nil
-	}
-
-	var wg sync.WaitGroup
-	wg.Add(len(requests))
-
+	tuples := make([]*rts.RelationTuple, len(requests))
 	for i, req := range requests {
-		idx, r := i, req
-		submitErr := k.pool.Submit(ctx, func() {
-			defer wg.Done()
-			result, err := k.Check(ctx, r)
-			if err != nil {
-				results[idx] = security.CheckResult{
-					Allowed:   false,
-					Reason:    fmt.Sprintf("check failed: %v", err),
-					CheckedAt: time.Now().Unix(),
-				}
-				return
-			}
-			results[idx] = result
-		})
-		if submitErr != nil {
-			// Pool rejected the task — run inline and count down.
-			wg.Done()
-			result, err := k.Check(ctx, r)
-			if err != nil {
-				results[idx] = security.CheckResult{
-					Allowed:   false,
-					Reason:    fmt.Sprintf("check failed: %v", err),
-					CheckedAt: time.Now().Unix(),
-				}
-			} else {
-				results[idx] = result
-			}
+		tuples[i] = &rts.RelationTuple{
+			Namespace: req.Object.Namespace,
+			Object:    req.Object.ID,
+			Relation:  req.Permission,
+			Subject:   toKetoSubject(req.Subject),
 		}
 	}
 
-	wg.Wait()
+	resp, err := k.checkClient.BatchCheck(ctx, &rts.BatchCheckRequest{
+		Tuples: tuples,
+	})
+	if err != nil {
+		return nil, NewAuthzServiceError("batch_check", err)
+	}
+
+	now := time.Now().Unix()
+	results := make([]security.CheckResult, len(requests))
+	for i, r := range resp.GetResults() {
+		results[i] = security.CheckResult{
+			Allowed:   r.GetAllowed(),
+			CheckedAt: now,
+		}
+		if r.GetError() != "" {
+			results[i].Reason = r.GetError()
+		} else if !r.GetAllowed() {
+			results[i].Reason = "no matching relation found"
+		}
+
+		_ = k.auditLogger.LogDecision(ctx, requests[i], results[i], nil)
+	}
+
 	return results, nil
 }
 

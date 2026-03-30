@@ -187,23 +187,15 @@ func (s *AuthorizerTestSuite) TestPlane1_TenancyAccessChecker_Member() {
 	s.Require().NoError(err, "member should pass CheckAccess")
 }
 
-func (s *AuthorizerTestSuite) TestPlane1_TenancyAccessChecker_Service() {
-	ctx := s.T().Context()
+func (s *AuthorizerTestSuite) TestPlane1_TenancyAccessChecker_Service_BypassesKetoCheck() {
 	adapter := s.newAdapter(nil)
 
-	tp := tenancyPath("p1-svc-t", "p1-svc-p")
-	err := adapter.WriteTuple(ctx, security.RelationTuple{
-		Object:   security.ObjectRef{Namespace: "tenancy_access", ID: tp},
-		Relation: "service",
-		Subject:  security.SubjectRef{Namespace: security.NamespaceProfile, ID: "svc-p1-chk"},
-	})
-	s.Require().NoError(err)
-
 	checker := authorizer.NewTenancyAccessChecker(adapter, "tenancy_access")
-	// "internal" role triggers IsInternalSystem() → checks "service" relation
+	// Internal system callers bypass Keto entirely — no tuple needed.
+	// They can operate on ANY partition without per-partition service tuples.
 	claimsCtxVal := claimsCtx("svc-p1-chk", "p1-svc-t", "p1-svc-p", "internal")
-	err = checker.CheckAccess(claimsCtxVal)
-	s.Require().NoError(err, "service account should pass CheckAccess with service relation")
+	err := checker.CheckAccess(claimsCtxVal)
+	s.Require().NoError(err, "internal service should bypass tenancy check without Keto tuple")
 }
 
 func (s *AuthorizerTestSuite) TestPlane1_TenancyAccessChecker_ServiceDeniedAsMember() {
@@ -2328,16 +2320,10 @@ func (s *AuthorizerTestSuite) TestCrossPlane_ServiceAccount() {
 	svcID := "svc-xp-bot"
 	tp := tenancyPath(tenantID, partitionID)
 
-	// Plane 1: Service access
-	err := adapter.WriteTuple(ctx, security.RelationTuple{
-		Object:   security.ObjectRef{Namespace: "tenancy_access", ID: tp},
-		Relation: "service",
-		Subject:  security.SubjectRef{Namespace: security.NamespaceProfile, ID: svcID},
-	})
-	s.Require().NoError(err)
+	// Plane 1: Internal services bypass tenancy check — no tuple needed.
 
 	// Plane 2: Explicit grants only (no role, least privilege)
-	err = adapter.WriteTuple(ctx, security.RelationTuple{
+	err := adapter.WriteTuple(ctx, security.RelationTuple{
 		Object:   security.ObjectRef{Namespace: "service_tenancy", ID: tp},
 		Relation: "granted_read",
 		Subject:  security.SubjectRef{Namespace: security.NamespaceProfile, ID: svcID},

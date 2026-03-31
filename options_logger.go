@@ -7,6 +7,7 @@ import (
 	"github.com/pitabwire/util"
 
 	config2 "github.com/pitabwire/frame/config"
+	"github.com/pitabwire/frame/telemetry"
 )
 
 // WithLogger Option that helps with initialization of our internal dbLogger.
@@ -20,6 +21,9 @@ func WithLogger(opts ...util.Option) Option {
 		if s.telemetryManager != nil {
 			configOpts = append(configOpts, util.WithLogHandler(s.telemetryManager.LogHandler()))
 		}
+
+		// Inject trace_id/span_id into stdout logs for trace correlation
+		configOpts = append(configOpts, util.WithLogHandlerWrapper(telemetry.TraceContextHandlerWrapper()))
 
 		// Early return if no config is available
 		if s.Config() == nil {
@@ -39,6 +43,9 @@ func WithLogger(opts ...util.Option) Option {
 		if logLevel, err := util.ParseLevel(config.LoggingLevel()); err == nil {
 			configOpts = append(configOpts, util.WithLogLevel(logLevel))
 		}
+
+		// Wire LOG_FORMAT to select JSON or text output
+		configOpts = append(configOpts, util.WithLogFormat(config.LoggingFormat()))
 
 		// Add standard config options
 		configOpts = append(configOpts,

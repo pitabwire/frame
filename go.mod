@@ -20,7 +20,7 @@ require (
 	github.com/ory/keto/proto v0.13.0-alpha.0.0.20260327085200-c0e5fcbbbce1
 	github.com/panjf2000/ants/v2 v2.12.0
 	github.com/pitabwire/natspubsub v0.8.0
-	github.com/pitabwire/util v0.7.0
+	github.com/pitabwire/util v0.8.0
 	github.com/redis/go-redis/v9 v9.18.0
 	github.com/rs/xid v1.6.0
 	github.com/spiffe/go-spiffe/v2 v2.6.0

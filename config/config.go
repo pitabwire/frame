@@ -218,7 +218,7 @@ func (c *OAuth2PrivateJWTKeyConfig) ToPrivateKeyJWTConfig() *PrivateKeyJWTConfig
 //nolint:golines // config tags intentionally stay inline for readability and env/yaml parity
 type ConfigurationDefault struct {
 	LogLevel      string `envDefault:"info"                      env:"LOG_LEVEL"       yaml:"log_level"`
-	LogFormat     string `envDefault:"info"                      env:"LOG_FORMAT"      yaml:"log_format"`
+	LogFormat     string `envDefault:"text"                      env:"LOG_FORMAT"      yaml:"log_format"`
 	LogTimeFormat string `envDefault:"2006-01-02T15:04:05Z07:00" env:"LOG_TIME_FORMAT" yaml:"log_time_format"`
 	LogColored    bool   `envDefault:"true"                      env:"LOG_COLORED"     yaml:"log_colored"`
 

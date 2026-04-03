@@ -79,7 +79,9 @@ func NewTenancyAccessChecker(
 
 // CheckAccess verifies that the caller has data access to the partition
 // identified in their claims. For regular users it checks the "member"
-// relation; for system_internal callers it checks the "service" relation.
+// relation; for internal system callers it checks the "service" relation.
+// Service accounts are expected to have a "service" tuple on the root
+// partition, with child partitions inheriting access via SubjectSet chains.
 // If denied and a self-healing callback is set, it invokes the callback
 // and retries once.
 func (c *TenancyAccessChecker) CheckAccess(ctx context.Context) error {

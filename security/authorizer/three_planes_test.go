@@ -200,10 +200,46 @@ func (s *AuthorizerTestSuite) TestPlane1_TenancyAccessChecker_Service() {
 	s.Require().NoError(err)
 
 	checker := authorizer.NewTenancyAccessChecker(adapter, "tenancy_access")
-	// "internal" role triggers IsInternalSystem() → checks "service" relation
 	claimsCtxVal := claimsCtx("svc-p1-chk", "p1-svc-t", "p1-svc-p", "internal")
 	err = checker.CheckAccess(claimsCtxVal)
-	s.Require().NoError(err, "service account should pass CheckAccess with service relation")
+	s.Require().NoError(err, "service account should pass CheckAccess via service tuple")
+}
+
+func (s *AuthorizerTestSuite) TestPlane1_TenancyAccessChecker_Service_InheritsFromParent() {
+	ctx := s.T().Context()
+	adapter := s.newAdapter(nil)
+
+	tenant := "p1-svc-inh-t"
+	parentTP := tenancyPath(tenant, "root")
+	childTP := tenancyPath(tenant, "child")
+
+	// Service tuple on parent only
+	err := adapter.WriteTuple(ctx, security.RelationTuple{
+		Object:   security.ObjectRef{Namespace: "tenancy_access", ID: parentTP},
+		Relation: "service",
+		Subject:  security.SubjectRef{Namespace: security.NamespaceProfile, ID: "svc-p1-inh"},
+	})
+	s.Require().NoError(err)
+
+	// Inheritance: child#service ← parent#service
+	err = adapter.WriteTuple(ctx, security.RelationTuple{
+		Object:   security.ObjectRef{Namespace: "tenancy_access", ID: childTP},
+		Relation: "service",
+		Subject:  security.SubjectRef{Namespace: "tenancy_access", ID: parentTP, Relation: "service"},
+	})
+	s.Require().NoError(err)
+
+	checker := authorizer.NewTenancyAccessChecker(adapter, "tenancy_access")
+
+	// Service accesses child via inheritance from parent
+	childCtx := claimsCtx("svc-p1-inh", tenant, "child", "internal")
+	err = checker.CheckAccess(childCtx)
+	s.Require().NoError(err, "service should access child via inheritance from parent")
+
+	// Service accesses parent directly
+	parentCtx := claimsCtx("svc-p1-inh", tenant, "root", "internal")
+	err = checker.CheckAccess(parentCtx)
+	s.Require().NoError(err, "service should access parent directly")
 }
 
 func (s *AuthorizerTestSuite) TestPlane1_TenancyAccessChecker_ServiceDeniedAsMember() {
@@ -2328,7 +2364,7 @@ func (s *AuthorizerTestSuite) TestCrossPlane_ServiceAccount() {
 	svcID := "svc-xp-bot"
 	tp := tenancyPath(tenantID, partitionID)
 
-	// Plane 1: Service access
+	// Plane 1: Service tuple on this partition
 	err := adapter.WriteTuple(ctx, security.RelationTuple{
 		Object:   security.ObjectRef{Namespace: "tenancy_access", ID: tp},
 		Relation: "service",

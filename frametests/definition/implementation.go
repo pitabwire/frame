@@ -6,7 +6,6 @@ import (
 	"net"
 	"strings"
 
-	"github.com/docker/go-connections/nat"
 	"github.com/pitabwire/util"
 	"github.com/testcontainers/testcontainers-go"
 
@@ -18,7 +17,7 @@ type DefaultImpl struct {
 	container testcontainers.Container
 
 	DefaultScheme string
-	DefaultPort   nat.Port
+	DefaultPort   string
 }
 
 func NewDefaultImpl(opts ContainerOpts, scheme string, containerOpts ...ContainerOption) *DefaultImpl {
@@ -27,7 +26,7 @@ func NewDefaultImpl(opts ContainerOpts, scheme string, containerOpts ...Containe
 	defaultImpl := DefaultImpl{
 		opts:          opts,
 		DefaultScheme: scheme,
-		DefaultPort:   nat.Port(opts.Ports[0]),
+		DefaultPort:   opts.Ports[0],
 	}
 
 	return &defaultImpl
@@ -66,7 +65,7 @@ func (d *DefaultImpl) SetContainer(container testcontainers.Container) {
 }
 
 func (d *DefaultImpl) PortMapping(ctx context.Context, port string) (string, error) {
-	mappedPort, err := d.container.MappedPort(ctx, nat.Port(port))
+	mappedPort, err := d.container.MappedPort(ctx, port)
 	if err != nil {
 		return "", err
 	}
@@ -74,7 +73,7 @@ func (d *DefaultImpl) PortMapping(ctx context.Context, port string) (string, err
 }
 
 func (d *DefaultImpl) Endpoint(ctx context.Context, scheme string, port string) (data.DSN, error) {
-	conn, err := d.container.PortEndpoint(ctx, nat.Port(port), scheme)
+	conn, err := d.container.PortEndpoint(ctx, port, scheme)
 	if err != nil {
 		return "", err
 	}
@@ -109,7 +108,7 @@ func (d *DefaultImpl) InternalEndpoint(ctx context.Context, scheme string, port 
 }
 
 func (d *DefaultImpl) GetDS(ctx context.Context) data.DSN {
-	ds, err := d.Endpoint(ctx, d.DefaultScheme, d.DefaultPort.Port())
+	ds, err := d.Endpoint(ctx, d.DefaultScheme, d.DefaultPort)
 	if err != nil {
 		logger := util.Log(ctx).WithField("image", d.opts.ImageName)
 		logger.WithError(err).Error("failed to get default connection for Container")
@@ -119,7 +118,7 @@ func (d *DefaultImpl) GetDS(ctx context.Context) data.DSN {
 }
 
 func (d *DefaultImpl) GetInternalDS(ctx context.Context) data.DSN {
-	ds, err := d.InternalEndpoint(ctx, d.DefaultScheme, d.DefaultPort.Port())
+	ds, err := d.InternalEndpoint(ctx, d.DefaultScheme, d.DefaultPort)
 	if err != nil {
 		logger := util.Log(ctx).WithField("image", d.opts.ImageName)
 		logger.WithError(err).Error("failed to get default internal connection for Container")

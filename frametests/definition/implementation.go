@@ -100,7 +100,9 @@ func (d *DefaultImpl) InternalEndpoint(ctx context.Context, scheme string, port 
 		internalIP = "127.0.0.1"
 	}
 
-	hostPort := net.JoinHostPort(internalIP, port)
+	// Strip protocol suffix (e.g. "5432/tcp" → "5432") for use in host:port.
+	portNum, _, _ := strings.Cut(port, "/")
+	hostPort := net.JoinHostPort(internalIP, portNum)
 	if scheme == "" {
 		return data.DSN(hostPort), nil
 	}

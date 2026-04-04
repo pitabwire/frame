@@ -57,9 +57,12 @@ func (model *BaseModel) GenID(ctx context.Context) {
 		model.TenantID = authClaim.GetTenantID()
 	}
 
-	// Set CreatedBy from the active actor's subject/profile ID.
-	if model.CreatedBy == "" && authClaim.Subject != "" {
-		model.CreatedBy = authClaim.Subject
+	// Set CreatedBy and ModifiedBy from the active actor's subject/profile ID.
+	if authClaim.Subject != "" {
+		if model.CreatedBy == "" {
+			model.CreatedBy = authClaim.Subject
+		}
+		model.ModifiedBy = authClaim.Subject
 	}
 }
 

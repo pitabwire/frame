@@ -207,8 +207,10 @@ func (a *AuthenticationClaims) GetServiceName() string {
 
 func (a *AuthenticationClaims) isInternalSystem() bool {
 	roles := a.GetRoles()
-	if len(roles) == 1 {
-		return strings.EqualFold(ConstantSystemInternalRole, roles[0])
+	for _, role := range roles {
+		if strings.EqualFold(ConstantSystemInternalRole, role) {
+			return true
+		}
 	}
 	return false
 }

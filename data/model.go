@@ -21,6 +21,8 @@ type BaseModel struct {
 	ID          string `gorm:"type:varchar(50);primary_key"`
 	CreatedAt   time.Time
 	ModifiedAt  time.Time
+	CreatedBy   string         `gorm:"type:varchar(50)"`
+	ModifiedBy  string         `gorm:"type:varchar(50)"`
 	Version     uint           `gorm:"DEFAULT 0"`
 	TenantID    string         `gorm:"type:varchar(50);index:,composite:base_tenancy"`
 	PartitionID string         `gorm:"type:varchar(50);index:,composite:base_tenancy"`
@@ -53,6 +55,11 @@ func (model *BaseModel) GenID(ctx context.Context) {
 
 	if model.TenantID == "" && authClaim.GetTenantID() != "" {
 		model.TenantID = authClaim.GetTenantID()
+	}
+
+	// Set CreatedBy from the active actor's subject/profile ID.
+	if model.CreatedBy == "" && authClaim.Subject != "" {
+		model.CreatedBy = authClaim.Subject
 	}
 }
 
@@ -99,9 +106,16 @@ func (model *BaseModel) BeforeCreate(db *gorm.DB) error {
 }
 
 // BeforeUpdate Updates time stamp every time we update status of a migration.
-func (model *BaseModel) BeforeUpdate(_ *gorm.DB) error {
+func (model *BaseModel) BeforeUpdate(db *gorm.DB) error {
 	model.ModifiedAt = time.Now()
 	model.Version++
+
+	// Set ModifiedBy from the active actor's subject/profile ID.
+	authClaim := security.ClaimsFromContext(db.Statement.Context)
+	if authClaim != nil && authClaim.Subject != "" {
+		model.ModifiedBy = authClaim.Subject
+	}
+
 	return nil
 }
 

@@ -13,7 +13,7 @@ require (
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/jackc/pgx/v5 v5.9.1
 	github.com/lmittmann/tint v1.1.3
-	github.com/moby/moby/api v1.54.1-0.20260401134807-948d5691a093
+	github.com/moby/moby/api v1.54.1
 	github.com/nats-io/nats.go v1.50.0
 	github.com/nicksnyder/go-i18n/v2 v2.6.1
 	github.com/ory/keto/proto v0.13.0-alpha.0.0.20260327085200-c0e5fcbbbce1

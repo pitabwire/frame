@@ -13,24 +13,15 @@ import (
 	"google.golang.org/protobuf/reflect/protoreflect"
 )
 
-// PermissionManifest is the payload sent to the authorization service to
-// register a service's permission namespace, available permissions, and
-// role-to-permission mappings.
-type PermissionManifest struct {
-	Namespace    string              `json:"namespace"`
-	Permissions  []string            `json:"permissions"`
-	RoleBindings map[string][]string `json:"role_bindings"`
-	RegisteredAt time.Time           `json:"registered_at"`
-}
-
 // manifestRegistrationURLEnvVar is the environment variable that provides
 // the full URL for permission manifest registration.
 const manifestRegistrationURLEnvVar = "PERMISSIONS_REGISTRATION_URL"
 
-// ManifestBuilder builds a PermissionManifest from a proto service descriptor.
-// Frame uses this interface to avoid importing the common/permissions package
-// directly, keeping the dependency flow clean.
-type ManifestBuilder func(sd protoreflect.ServiceDescriptor) PermissionManifest
+// ManifestBuilder builds a JSON-serializable permission manifest from a proto
+// service descriptor. The returned value must have a "namespace" field (used
+// for logging) and be JSON-marshalable. Callers typically pass
+// permissions.BuildManifest from the common/permissions package.
+type ManifestBuilder func(sd protoreflect.ServiceDescriptor) any
 
 // WithPermissionRegistration registers a service's permission manifest with the
 // authorization service at startup. The manifest is extracted from the proto
@@ -54,17 +45,13 @@ func WithPermissionRegistration(sd protoreflect.ServiceDescriptor, builder Manif
 
 		s.AddPreStartMethod(func(ctx context.Context, _ *Service) {
 			manifest := builder(sd)
-			if manifest.Namespace == "" {
-				return
-			}
-
 			go publishManifest(ctx, registrationURL, manifest)
 		})
 	}
 }
 
-func publishManifest(ctx context.Context, url string, manifest PermissionManifest) {
-	logger := util.Log(ctx).WithField("namespace", manifest.Namespace)
+func publishManifest(ctx context.Context, registrationURL string, manifest any) {
+	logger := util.Log(ctx)
 
 	body, err := json.Marshal(manifest)
 	if err != nil {
@@ -72,7 +59,7 @@ func publishManifest(ctx context.Context, url string, manifest PermissionManifes
 		return
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, registrationURL, bytes.NewReader(body))
 	if err != nil {
 		logger.WithError(err).Warn("failed to create permission manifest request")
 		return

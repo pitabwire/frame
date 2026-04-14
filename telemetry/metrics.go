@@ -74,7 +74,8 @@ func Views(pkg string) []sdkmetric.View {
 							Boundaries: defaultMillisecondsBoundaries,
 						},
 						AttributeFilter: func(kv attribute.KeyValue) bool {
-							return kv.Key == AttrPackageKey || kv.Key == AttrMethodKey
+							return kv.Key == AttrPackageKey || kv.Key == AttrMethodKey ||
+								kv.Key == AttrTenantKey || kv.Key == AttrPartitionKey
 						},
 					}, true
 				}
@@ -92,7 +93,8 @@ func Views(pkg string) []sdkmetric.View {
 						Description: "Count of method calls by provider, method and status.",
 						Aggregation: sdkmetric.DefaultAggregationSelector(sdkmetric.InstrumentKindCounter),
 						AttributeFilter: func(kv attribute.KeyValue) bool {
-							return kv.Key == AttrMethodKey || kv.Key == AttrStatusKey
+							return kv.Key == AttrMethodKey || kv.Key == AttrStatusKey ||
+								kv.Key == AttrTenantKey || kv.Key == AttrPartitionKey
 						},
 					}, true
 				}

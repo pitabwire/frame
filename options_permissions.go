@@ -1,10 +1,9 @@
 package frame
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
-	"io"
+	"fmt"
 	"net/http"
 	"os"
 	"strings"
@@ -33,15 +32,6 @@ const (
 	fieldRoleBindings protoreflect.FieldNumber = 3
 )
 
-// initialBackoff is the initial retry delay for permission manifest registration.
-const initialBackoff = 2 * time.Second
-
-// maxBackoff is the maximum retry delay for permission manifest registration.
-const maxBackoff = 30 * time.Second
-
-// backoffMultiplier is the factor by which the backoff delay increases on each retry.
-const backoffMultiplier = 2
-
 // ManifestRegistrationPath is the default HTTP path for the internal
 // permission manifest registration endpoint on the tenancy service.
 const ManifestRegistrationPath = "/_internal/register/permissions"
@@ -52,10 +42,8 @@ const ManifestRegistrationPath = "/_internal/register/permissions"
 // service_permissions annotation using proto reflection.
 //
 // Registration only runs when DO_MIGRATION=true or the "migrate" argument is
-// passed — the same condition that triggers database migrations. It blocks
-// with exponential backoff until the tenancy service accepts the manifest,
-// ensuring the service's authorization namespace is configured before any
-// requests are served.
+// passed — the same condition that triggers database migrations. If
+// registration fails, the migration fails and Kubernetes retries the job.
 //
 // The tenancy service URL is read from PERMISSIONS_REGISTRATION_URL.
 //
@@ -76,12 +64,15 @@ func WithPermissionRegistration(sd protoreflect.ServiceDescriptor) Option {
 			return
 		}
 
-		s.AddPreStartMethod(func(ctx context.Context, _ *Service) {
+		s.AddPreStartMethod(func(ctx context.Context, svc *Service) {
 			manifest := buildManifestFromDescriptor(sd)
 			if manifest == nil {
 				return
 			}
-			publishManifestUntilSuccess(ctx, registrationURL, manifest)
+
+			if err := publishManifest(ctx, svc, registrationURL, manifest); err != nil {
+				util.Log(ctx).WithError(err).Fatal("permission manifest registration failed")
+			}
 		})
 	}
 }
@@ -183,69 +174,37 @@ func standardRoleName(v int32) string {
 	return standardRoleNames[v]
 }
 
-// publishManifestUntilSuccess blocks until the permission manifest is
-// successfully registered. It retries indefinitely with exponential backoff
-// because the service cannot enforce authorization without its namespace
-// registered — starting without it would silently break all permission checks.
-func publishManifestUntilSuccess(ctx context.Context, registrationURL string, manifest any) {
+// publishManifest registers the permission manifest using the service's
+// internal HTTP client. Returns an error if registration fails — the caller
+// should treat this as a fatal migration failure.
+func publishManifest(ctx context.Context, svc *Service, registrationURL string, manifest any) error {
 	logger := util.Log(ctx)
 
 	body, err := json.Marshal(manifest)
 	if err != nil {
-		logger.WithError(err).Fatal("failed to marshal permission manifest")
-		return
+		return fmt.Errorf("failed to marshal permission manifest: %w", err)
 	}
 
+	namespace := ""
 	if m, ok := manifest.(map[string]any); ok {
-		if ns, nsOK := m["namespace"].(string); nsOK {
-			logger = logger.WithField("namespace", ns)
-		}
+		namespace, _ = m["namespace"].(string)
 	}
 
-	backoff := initialBackoff
-	for {
-		if ctx.Err() != nil {
-			logger.WithError(ctx.Err()).Fatal("context cancelled while waiting for permission manifest registration")
-			return
-		}
-
-		if tryPublishManifest(ctx, registrationURL, body, logger) {
-			return
-		}
-
-		logger.WithField("retry_in", backoff).Warn("permission manifest registration failed, retrying")
-		time.Sleep(backoff)
-		backoff = min(backoff*backoffMultiplier, maxBackoff)
-	}
-}
-
-// tryPublishManifest attempts a single registration POST. Returns true on success.
-func tryPublishManifest(ctx context.Context, registrationURL string, body []byte, logger *util.LogEntry) bool {
-	const httpTimeout = 10 * time.Second
-	client := &http.Client{Timeout: httpTimeout}
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, registrationURL, bytes.NewReader(body))
+	resp, err := svc.HTTPClientManager().Invoke(ctx, http.MethodPost, registrationURL, body, nil)
 	if err != nil {
-		logger.WithError(err).Warn("failed to create permission manifest request")
-		return false
-	}
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := client.Do(req)
-	if err != nil {
-		logger.WithError(err).Warn("permission manifest request failed")
-		return false
-	}
-	_, _ = io.Copy(io.Discard, resp.Body)
-	_ = resp.Body.Close()
-
-	if resp.StatusCode < http.StatusMultipleChoices {
-		logger.Debug("permission manifest registered")
-		return true
+		return fmt.Errorf("permission manifest registration request failed for %s: %w", namespace, err)
 	}
 
-	logger.WithField("status", resp.StatusCode).Warn("permission manifest registration returned non-success status")
-	return false
+	if resp.Body != nil {
+		defer util.CloseAndLogOnError(ctx, resp.Body)
+	}
+
+	if resp.StatusCode >= http.StatusMultipleChoices {
+		return fmt.Errorf("permission manifest registration for %s returned status %d", namespace, resp.StatusCode)
+	}
+
+	logger.WithField("namespace", namespace).Debug("permission manifest registered")
+	return nil
 }
 
 // FormatNamespaceDisplay returns a human-readable name from a service

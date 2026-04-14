@@ -114,12 +114,10 @@ func (t *tracer) End(ctx context.Context, span trace.Span, err error, options ..
 		return
 	}
 
-	metricAttrs := make([]attribute.KeyValue, 0, 2+len(tenantAttrs))
-	metricAttrs = append(metricAttrs,
+	metricAttrs := append([]attribute.KeyValue{
 		AttrStatusKey.String(ErrorCode(err)),
 		AttrMethodKey.String(methodName),
-	)
-	metricAttrs = append(metricAttrs, tenantAttrs...)
+	}, tenantAttrs...)
 
 	t.latencyMeasure.Record(ctx,
 		float64(elapsed.Milliseconds()),

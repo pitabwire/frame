@@ -7,10 +7,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"strconv"
+	"strings"
 	"sync/atomic"
 	"syscall"
 	"testing"
@@ -918,9 +920,16 @@ func TestService_H2CSupport(t *testing.T) {
 
 			ctx, svc := frame.NewServiceWithContext(t.Context(), opts...)
 			defer svc.Stop(ctx)
+
+			// Use a random available port to avoid conflicts
+			ln, errLn := net.Listen("tcp", "127.0.0.1:0")
+			require.NoError(t, errLn)
+			addr := ln.Addr().String()
+			require.NoError(t, ln.Close())
+
 			go func() {
-				// Start the service
-				_ = svc.Run(ctx, ":8080")
+				// Start the service on the random port
+				_ = svc.Run(ctx, ":"+addr[strings.LastIndex(addr, ":")+1:])
 			}()
 			// Wait a moment for server to start
 			time.Sleep(100 * time.Millisecond)
@@ -931,7 +940,7 @@ func TestService_H2CSupport(t *testing.T) {
 			httpClient := client.NewHTTPClient(ctx, clientOpts...)
 
 			// Make a request to the test endpoint
-			resp, err := httpClient.Get("http://localhost:8080/test")
+			resp, err := httpClient.Get("http://" + addr + "/test")
 			if err != nil {
 				svc.Stop(ctx)
 				t.Fatalf("Failed to make request: %v", err)

@@ -68,6 +68,8 @@ func (t *tracer) Start(
 }
 
 // End completes a span with error information if applicable.
+// When security claims are present in the context, tenant_id and partition_id
+// are automatically added to both the span attributes and the latency metric.
 func (t *tracer) End(ctx context.Context, span trace.Span, err error, options ...trace.SpanEndOption) {
 	startTimeValue := ctx.Value(startTimeContextKey)
 	startTime, ok := startTimeValue.(time.Time)
@@ -79,6 +81,9 @@ func (t *tracer) End(ctx context.Context, span trace.Span, err error, options ..
 		return
 	}
 	elapsed := time.Since(startTime)
+
+	// Extract tenant attributes from context claims (nil-safe).
+	tenantAttrs := TenantAttributes(ctx)
 
 	if err != nil {
 		options = append(options, trace.WithStackTrace(true))
@@ -93,6 +98,10 @@ func (t *tracer) End(ctx context.Context, span trace.Span, err error, options ..
 		span.SetStatus(codes.Ok, "")
 	}
 
+	if len(tenantAttrs) > 0 {
+		span.SetAttributes(tenantAttrs...)
+	}
+
 	span.End(options...)
 
 	methodNameValue := ctx.Value(methodNameContextKey)
@@ -105,12 +114,16 @@ func (t *tracer) End(ctx context.Context, span trace.Span, err error, options ..
 		return
 	}
 
+	metricAttrs := make([]attribute.KeyValue, 0, 2+len(tenantAttrs))
+	metricAttrs = append(metricAttrs,
+		AttrStatusKey.String(ErrorCode(err)),
+		AttrMethodKey.String(methodName),
+	)
+	metricAttrs = append(metricAttrs, tenantAttrs...)
+
 	t.latencyMeasure.Record(ctx,
 		float64(elapsed.Milliseconds()),
-
-		metric.WithAttributes(
-			AttrStatusKey.String(ErrorCode(err)),
-			AttrMethodKey.String(methodName)),
+		metric.WithAttributes(metricAttrs...),
 	)
 }
 

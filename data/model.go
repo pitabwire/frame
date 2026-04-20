@@ -2,6 +2,7 @@ package data
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/pitabwire/util"
@@ -98,14 +99,31 @@ func (model *BaseModel) BeforeSave(db *gorm.DB) error {
 }
 
 func (model *BaseModel) BeforeCreate(db *gorm.DB) error {
+	// Generate the ID first so CreatedAt can be derived from its embedded
+	// xid timestamp, keeping sort-by-id ≡ sort-by-created_at.
+	model.GenID(db.Statement.Context)
+
 	if model.Version <= 0 {
-		model.CreatedAt = time.Now()
-		model.ModifiedAt = time.Now()
+		created, err := createdAtFromID(model.ID)
+		if err != nil {
+			return err
+		}
+		model.CreatedAt = created
+		model.ModifiedAt = created
 		model.Version = 1
 	}
-
-	model.GenID(db.Statement.Context)
 	return nil
+}
+
+// createdAtFromID returns the time component embedded in a generated xid.
+// All BaseModel IDs must be valid xids so sort-by-id ≡ sort-by-created_at
+// and hypertable promotions retain monotonic time ordering.
+func createdAtFromID(id string) (time.Time, error) {
+	parsed, err := xid.FromString(id)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("BaseModel.ID %q is not a valid xid: %w", id, err)
+	}
+	return parsed.Time(), nil
 }
 
 // BeforeUpdate Updates time stamp every time we update status of a migration.

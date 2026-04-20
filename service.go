@@ -68,7 +68,10 @@ type Service struct {
 
 	backGroundClient func(ctx context.Context) error
 
-	driver server.Driver
+	// driverMu guards driver so Stop() can safely observe it while
+	// initializeServerDrivers() or startServerDriver() are still running.
+	driverMu sync.Mutex
+	driver   server.Driver
 
 	healthCheckers  []Checker
 	healthCheckPath string
@@ -513,7 +516,7 @@ func (s *Service) openAPIHandler(base string) http.HandlerFunc {
 }
 
 func (s *Service) initializeServerDrivers(ctx context.Context, httpPort string) error {
-	if s.driver != nil {
+	if s.getDriver() != nil {
 		return nil
 	}
 
@@ -530,15 +533,28 @@ func (s *Service) initializeServerDrivers(ctx context.Context, httpPort string) 
 		tlsConfig = nil
 	}
 
-	s.driver = implementation.NewDefaultDriverWithTLS(
+	driver := implementation.NewDefaultDriverWithTLS(
 		ctx,
 		httpCfg,
 		s.handler,
 		httpPort,
 		tlsConfig,
 	)
+	s.setDriver(driver)
 
 	return nil
+}
+
+func (s *Service) getDriver() server.Driver {
+	s.driverMu.Lock()
+	defer s.driverMu.Unlock()
+	return s.driver
+}
+
+func (s *Service) setDriver(d server.Driver) {
+	s.driverMu.Lock()
+	defer s.driverMu.Unlock()
+	s.driver = d
 }
 
 func (s *Service) setupWorkloadAPITLS(ctx context.Context) (*tls.Config, bool, error) {
@@ -616,19 +632,24 @@ func (s *Service) executeStartupMethods(ctx context.Context) {
 func (s *Service) startServerDriver(ctx context.Context, httpPort string) error {
 	util.Log(ctx).WithField("port", httpPort).Info("Initiating server operations")
 
+	driver := s.getDriver()
+	if driver == nil {
+		return errors.New("server driver is not initialised")
+	}
+
 	if s.TLSEnabled() {
 		cfg, ok := s.Config().(config.ConfigurationTLS)
 		if !ok {
 			return errors.New("TLS is enabled but configuration does not implement ConfigurationTLS")
 		}
-		err := s.driver.ListenAndServeTLS(httpPort, cfg.TLSCertPath(), cfg.TLSCertKeyPath(), s.handler)
+		err := driver.ListenAndServeTLS(httpPort, cfg.TLSCertPath(), cfg.TLSCertKeyPath(), s.handler)
 		if errors.Is(err, http.ErrServerClosed) {
 			return nil
 		}
 		return err
 	}
 
-	err := s.driver.ListenAndServe(httpPort, s.handler)
+	err := driver.ListenAndServe(httpPort, s.handler)
 	if errors.Is(err, http.ErrServerClosed) {
 		return nil
 	}
@@ -691,8 +712,8 @@ func (s *Service) Stop(ctx context.Context) {
 
 	log.Info("service stopping")
 
-	if s.driver != nil {
-		if err := s.driver.Shutdown(ctx); err != nil && !errors.Is(err, context.Canceled) {
+	if driver := s.getDriver(); driver != nil {
+		if err := driver.Shutdown(ctx); err != nil && !errors.Is(err, context.Canceled) {
 			log.WithError(err).Error("failed to shutdown HTTP server")
 		}
 	}

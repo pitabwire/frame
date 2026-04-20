@@ -7,7 +7,7 @@ import (
 	"gocloud.dev/pubsub"
 )
 
-type SubscriberState int
+type SubscriberState int32
 
 const (
 	SubscriberStateWaiting SubscriberState = iota

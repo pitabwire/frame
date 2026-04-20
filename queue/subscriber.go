@@ -181,6 +181,7 @@ func (s *subscriber) recreateSubscription(ctx context.Context) {
 
 	if !s.isInit.Load() {
 		log.Error("only initialised subscriptions can be recreated")
+		return
 	}
 
 	log.Warn("recreating subscription")
@@ -200,6 +201,19 @@ func (s *subscriber) recreateSubscription(ctx context.Context) {
 	if err := s.createSubscription(ctx); err != nil {
 		log.WithError(err).Error("could not recreate subscription, stopping listener")
 		s.workManager.StopError(ctx, err)
+		return
+	}
+
+	// If Stop() ran while we were recreating, drop the new subscription so we
+	// don't leak it past the shutdown boundary.
+	if !s.isInit.Load() {
+		s.mu.Lock()
+		orphan := s.subscription
+		s.subscription = nil
+		s.mu.Unlock()
+		if orphan != nil {
+			_ = orphan.Shutdown(ctx)
+		}
 	}
 }
 

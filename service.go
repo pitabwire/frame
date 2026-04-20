@@ -540,8 +540,15 @@ func (s *Service) initializeServerDrivers(ctx context.Context, httpPort string) 
 		httpPort,
 		tlsConfig,
 	)
-	s.setDriver(driver)
 
+	// Double-check under lock: if a concurrent caller beat us to it, discard
+	// our driver to avoid leaking the underlying http.Server listener.
+	s.driverMu.Lock()
+	defer s.driverMu.Unlock()
+	if s.driver != nil {
+		return nil
+	}
+	s.driver = driver
 	return nil
 }
 
@@ -549,12 +556,6 @@ func (s *Service) getDriver() server.Driver {
 	s.driverMu.Lock()
 	defer s.driverMu.Unlock()
 	return s.driver
-}
-
-func (s *Service) setDriver(d server.Driver) {
-	s.driverMu.Lock()
-	defer s.driverMu.Unlock()
-	s.driver = d
 }
 
 func (s *Service) setupWorkloadAPITLS(ctx context.Context) (*tls.Config, bool, error) {

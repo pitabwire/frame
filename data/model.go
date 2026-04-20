@@ -21,11 +21,12 @@ type BaseModelI interface {
 type BaseModel struct {
 	ID string `gorm:"type:varchar(50);primary_key"`
 	// CreatedAt and ModifiedAt are NOT NULL because BeforeCreate always
-	// populates them. Tagging them here keeps AutoMigrate from trying to
-	// relax the columns on tables that promote CreatedAt into a composite
-	// primary key (e.g. TimescaleDB hypertables).
-	CreatedAt   time.Time      `gorm:"not null"`
-	ModifiedAt  time.Time      `gorm:"not null"`
+	// populates them through GORM. The default CURRENT_TIMESTAMP keeps
+	// raw SQL seed INSERTs that omit these columns working, and keeps
+	// AutoMigrate from trying to relax the columns on tables that promote
+	// CreatedAt into a composite primary key (e.g. TimescaleDB hypertables).
+	CreatedAt   time.Time      `gorm:"not null;default:CURRENT_TIMESTAMP"`
+	ModifiedAt  time.Time      `gorm:"not null;default:CURRENT_TIMESTAMP"`
 	CreatedBy   string         `gorm:"type:varchar(50)"`
 	ModifiedBy  string         `gorm:"type:varchar(50)"`
 	Version     uint           `gorm:"DEFAULT 0"`

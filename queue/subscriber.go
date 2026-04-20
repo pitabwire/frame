@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -27,16 +28,36 @@ const (
 )
 
 type subscriber struct {
-	reference    string
-	url          string
-	handlers     []SubscribeWorker
+	reference string
+	url       string
+	handlers  []SubscribeWorker
+
+	// mu guards subscription lifecycle transitions (create/recreate/shutdown).
+	// Holding it serialises Stop() against listen()'s context-cancel path and
+	// external Close() callers so the field is never written by two goroutines.
+	mu           sync.Mutex
 	subscription *pubsub.Subscription
-	isInit       atomic.Bool
-	state        SubscriberState
-	metrics      *subscriberMetrics
-	tracer       telemetry.Tracer
+
+	isInit  atomic.Bool
+	state   atomic.Int32
+	metrics *subscriberMetrics
+	tracer  telemetry.Tracer
 
 	workManager workerpool.Manager
+}
+
+func (s *subscriber) loadSubscription() *pubsub.Subscription {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.subscription
+}
+
+func (s *subscriber) storeState(st SubscriberState) {
+	s.state.Store(int32(st))
+}
+
+func (s *subscriber) loadState() SubscriberState {
+	return SubscriberState(s.state.Load())
 }
 
 func subscriberReceiveErrorBackoffDelay(consecutiveErrors int) time.Duration {
@@ -80,50 +101,63 @@ func (s *subscriber) URI() string {
 }
 
 func (s *subscriber) Receive(ctx context.Context) (*pubsub.Message, error) {
-	if s.subscription == nil {
+	sub := s.loadSubscription()
+	if sub == nil {
 		return nil, errors.New("only initialised subscriptions can pull messages")
 	}
 
-	s.state = SubscriberStateWaiting
+	s.storeState(SubscriberStateWaiting)
 	s.metrics.LastActivity.Store(time.Now().UnixNano())
 
-	msg, err := s.subscription.Receive(ctx)
+	msg, err := sub.Receive(ctx)
 	if err != nil {
 		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 			return nil, err
 		}
-		s.state = SubscriberStateInError
+		s.storeState(SubscriberStateInError)
 		s.metrics.ErrorCount.Add(1)
 		return nil, err
 	}
-	s.state = SubscriberStateProcessing
+	s.storeState(SubscriberStateProcessing)
 	s.metrics.ActiveMessages.Add(1)
 	return msg, nil
 }
 
 func (s *subscriber) createSubscription(ctx context.Context) error {
+	s.mu.Lock()
 	if s.subscription != nil {
+		s.mu.Unlock()
 		return nil
 	}
+	s.mu.Unlock()
 
 	// Validate URL before attempting to open subscription
 	if strings.TrimSpace(s.url) == "" {
 		return errors.New("subscriber URL cannot be empty")
 	}
 
-	if !strings.HasPrefix(s.url, "http") {
-		subs, err := pubsub.OpenSubscription(ctx, s.url)
-		if err != nil {
-			return fmt.Errorf("could not open topic subscription: %w", err)
-		}
-		s.subscription = subs
+	if strings.HasPrefix(s.url, "http") {
+		return nil
 	}
 
+	subs, err := pubsub.OpenSubscription(ctx, s.url)
+	if err != nil {
+		return fmt.Errorf("could not open topic subscription: %w", err)
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.subscription != nil {
+		// A concurrent caller won the race; discard ours to avoid leaking it.
+		_ = subs.Shutdown(ctx)
+		return nil
+	}
+	s.subscription = subs
 	return nil
 }
 
 func (s *subscriber) Init(ctx context.Context) error {
-	if s.isInit.Load() && s.subscription != nil {
+	if s.isInit.Load() && s.loadSubscription() != nil {
 		return nil
 	}
 
@@ -147,23 +181,39 @@ func (s *subscriber) recreateSubscription(ctx context.Context) {
 
 	if !s.isInit.Load() {
 		log.Error("only initialised subscriptions can be recreated")
+		return
 	}
 
 	log.Warn("recreating subscription")
 
-	if s.subscription != nil {
-		err := s.subscription.Shutdown(ctx)
-		if err != nil {
+	s.mu.Lock()
+	sub := s.subscription
+	s.subscription = nil
+	s.mu.Unlock()
+
+	if sub != nil {
+		if err := sub.Shutdown(ctx); err != nil && !isSubscriptionAlreadyShutdownErr(err) {
 			log.WithError(err).Error("could not recreate subscription, stopping listener")
 			s.workManager.StopError(ctx, err)
 		}
-		s.subscription = nil
 	}
 
-	err := s.createSubscription(ctx)
-	if err != nil {
+	if err := s.createSubscription(ctx); err != nil {
 		log.WithError(err).Error("could not recreate subscription, stopping listener")
 		s.workManager.StopError(ctx, err)
+		return
+	}
+
+	// If Stop() ran while we were recreating, drop the new subscription so we
+	// don't leak it past the shutdown boundary.
+	if !s.isInit.Load() {
+		s.mu.Lock()
+		orphan := s.subscription
+		s.subscription = nil
+		s.mu.Unlock()
+		if orphan != nil {
+			_ = orphan.Shutdown(ctx)
+		}
 	}
 }
 
@@ -172,7 +222,7 @@ func (s *subscriber) Initiated() bool {
 }
 
 func (s *subscriber) State() SubscriberState {
-	return s.state
+	return s.loadState()
 }
 
 func (s *subscriber) Metrics() SubscriberMetrics {
@@ -180,7 +230,7 @@ func (s *subscriber) Metrics() SubscriberMetrics {
 }
 
 func (s *subscriber) IsIdle() bool {
-	return s.metrics.IsIdle(s.state)
+	return s.metrics.IsIdle(s.loadState())
 }
 
 func (s *subscriber) Stop(ctx context.Context) error {
@@ -200,23 +250,32 @@ func (s *subscriber) Stop(ctx context.Context) error {
 
 	s.isInit.Store(false)
 
-	if s.subscription != nil {
-		err := s.subscription.Shutdown(sctx)
-		if err != nil {
-			if isSubscriptionAlreadyShutdownErr(err) {
-				s.subscription = nil
-				return nil
-			}
-			return err
-		}
-		s.subscription = nil
+	// Detach the subscription under lock so concurrent Stop() / listen() callers
+	// each get either the live pointer (exactly once) or nil.
+	s.mu.Lock()
+	sub := s.subscription
+	s.subscription = nil
+	s.mu.Unlock()
+
+	if sub == nil {
+		return nil
 	}
 
+	if err := sub.Shutdown(sctx); err != nil {
+		if isSubscriptionAlreadyShutdownErr(err) {
+			return nil
+		}
+		return err
+	}
 	return nil
 }
 
 func (s *subscriber) As(i any) bool {
-	return s.subscription.As(i)
+	sub := s.loadSubscription()
+	if sub == nil {
+		return false
+	}
+	return sub.As(i)
 }
 
 func (s *subscriber) processReceivedMessage(ctx context.Context, msg *pubsub.Message) error {

@@ -367,16 +367,29 @@ func (s *RepositoryTestSuite) TestCreate() {
 			expectError: false,
 		},
 		{
-			name: "create entity with pre-set ID",
+			name: "create entity with pre-set xid",
 			setupEntity: func(_ context.Context) *TestEntity {
 				entity := &TestEntity{
 					Name: "Entity with ID",
 				}
-				// Use unique timestamp-based ID to avoid conflicts between test runs
-				entity.ID = fmt.Sprintf("custom-id-%d", time.Now().UnixNano())
+				// Caller-supplied IDs must be valid xids so CreatedAt can be
+				// derived deterministically from the embedded timestamp.
+				entity.ID = util.IDString()
 				return entity
 			},
 			expectError: false,
+		},
+		{
+			name: "create entity with non-xid ID should fail",
+			setupEntity: func(_ context.Context) *TestEntity {
+				entity := &TestEntity{
+					Name: "Entity with legacy id",
+				}
+				entity.ID = fmt.Sprintf("custom-id-%d", time.Now().UnixNano())
+				return entity
+			},
+			expectError: true,
+			errorMsg:    "is not a valid xid",
 		},
 		{
 			name: "create entity with version > 0 should fail",

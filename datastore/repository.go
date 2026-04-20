@@ -41,6 +41,30 @@ type BaseRepository[T any] interface {
 	DeleteBatch(ctx context.Context, ids []string) error
 }
 
+// BaseRepositoryOption configures optional behaviour on NewBaseRepository.
+type BaseRepositoryOption func(*baseRepositoryConfig)
+
+type baseRepositoryConfig struct {
+	// bulkCreateConflictColumns is the explicit ON CONFLICT target used by
+	// BulkCreate. Empty means "bare ON CONFLICT DO NOTHING" — portable across
+	// plain-PK and composite-PK (hypertable) tables. Set this when the caller
+	// depends on conflict inference against a specific unique index, e.g.
+	// (id, created_at) for hypertables or a domain-unique column.
+	bulkCreateConflictColumns []clause.Column
+}
+
+// WithBulkCreateConflictColumns sets the ON CONFLICT target columns for
+// BulkCreate. Columns must match an existing unique index on the target
+// table, otherwise Postgres rejects the insert.
+func WithBulkCreateConflictColumns(columns ...string) BaseRepositoryOption {
+	return func(c *baseRepositoryConfig) {
+		c.bulkCreateConflictColumns = c.bulkCreateConflictColumns[:0]
+		for _, col := range columns {
+			c.bulkCreateConflictColumns = append(c.bulkCreateConflictColumns, clause.Column{Name: col})
+		}
+	}
+}
+
 // baseRepository is the concrete implementation of BaseRepository.
 type baseRepository[T data.BaseModelI] struct {
 	dbPool  pool.Pool
@@ -55,6 +79,10 @@ type baseRepository[T data.BaseModelI] struct {
 
 	// allowedFields whitelist for safe column access (set during initialization)
 	allowedFields map[string]struct{}
+
+	// bulkCreateConflictColumns is the optional explicit ON CONFLICT target
+	// for BulkCreate. See WithBulkCreateConflictColumns.
+	bulkCreateConflictColumns []clause.Column
 }
 
 // NewBaseRepository creates a new base repository instance.
@@ -64,14 +92,21 @@ func NewBaseRepository[T data.BaseModelI](
 	dbPool pool.Pool,
 	workMan workerpool.Manager,
 	modelFactory func() T,
+	opts ...BaseRepositoryOption,
 ) BaseRepository[T] {
+	cfg := &baseRepositoryConfig{}
+	for _, opt := range opts {
+		opt(cfg)
+	}
+
 	repo := &baseRepository[T]{
-		dbPool:          dbPool,
-		workMan:         workMan,
-		modelFactory:    modelFactory,
-		batchSize:       751, //nolint:mnd // default batch size
-		immutableFields: []string{"id", "created_at", "tenant_id", "partition_id"},
-		allowedFields:   make(map[string]struct{}),
+		dbPool:                    dbPool,
+		workMan:                   workMan,
+		modelFactory:              modelFactory,
+		batchSize:                 751, //nolint:mnd // default batch size
+		immutableFields:           []string{"id", "created_at", "tenant_id", "partition_id"},
+		allowedFields:             make(map[string]struct{}),
+		bulkCreateConflictColumns: cfg.bulkCreateConflictColumns,
 	}
 
 	db := dbPool.DB(ctx, true)
@@ -176,16 +211,24 @@ func (br *baseRepository[T]) BatchSize() int {
 }
 
 // BulkCreate inserts multiple entities efficiently in a single transaction.
+// The conflict target defaults to bare ON CONFLICT DO NOTHING so the same
+// repository works for plain-PK and composite-PK (hypertable) tables.
+// Callers that need inference against a specific unique index set it via
+// WithBulkCreateConflictColumns at construction.
 func (br *baseRepository[T]) BulkCreate(ctx context.Context, entities []T) error {
 	if len(entities) == 0 {
 		return nil
 	}
 
-	// CreateInBatches uses GORM's batch insert which is more efficient
-	// The batch size is configured in pool options (InsertBatchSize)
-	return br.Pool().DB(ctx, false).Clauses(clause.OnConflict{
-		DoNothing: true,
-	}).CreateInBatches(entities, br.BatchSize()).Error
+	onConflict := clause.OnConflict{DoNothing: true}
+	if len(br.bulkCreateConflictColumns) > 0 {
+		onConflict.Columns = br.bulkCreateConflictColumns
+	}
+
+	// CreateInBatches uses GORM's batch insert which is more efficient;
+	// the batch size is configured in pool options (InsertBatchSize).
+	return br.Pool().DB(ctx, false).Clauses(onConflict).
+		CreateInBatches(entities, br.BatchSize()).Error
 }
 
 // validateAffectedColumns checks if all columns are valid and allowed.

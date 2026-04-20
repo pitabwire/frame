@@ -19,9 +19,13 @@ type BaseModelI interface {
 
 // BaseModel base table struct to be extended by other models.
 type BaseModel struct {
-	ID          string `gorm:"type:varchar(50);primary_key"`
-	CreatedAt   time.Time
-	ModifiedAt  time.Time
+	ID string `gorm:"type:varchar(50);primary_key"`
+	// CreatedAt and ModifiedAt are NOT NULL because BeforeCreate always
+	// populates them. Tagging them here keeps AutoMigrate from trying to
+	// relax the columns on tables that promote CreatedAt into a composite
+	// primary key (e.g. TimescaleDB hypertables).
+	CreatedAt   time.Time      `gorm:"not null"`
+	ModifiedAt  time.Time      `gorm:"not null"`
 	CreatedBy   string         `gorm:"type:varchar(50)"`
 	ModifiedBy  string         `gorm:"type:varchar(50)"`
 	Version     uint           `gorm:"DEFAULT 0"`

@@ -13,35 +13,12 @@ jobs:
     steps:
       - name: Fetch Dependabot metadata
         id: metadata
-        uses: dependabot/fetch-metadata@v3
+        uses: dependabot/fetch-metadata@v2
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Wait for CI checks
-        uses: fountainhead/action-wait-for-check@v1.2.0
-        id: wait-for-tests
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          ref: ${{ github.event.pull_request.head.sha }}
-          checkName: build
-          timeoutSeconds: 600
-          intervalSeconds: 30
-
-      - name: Wait for lint check
-        uses: fountainhead/action-wait-for-check@v1.2.0
-        id: wait-for-lint
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          ref: ${{ github.event.pull_request.head.sha }}
-          checkName: lint
-          timeoutSeconds: 600
-          intervalSeconds: 30
-
-      - name: Approve and merge PR
-        if: steps.wait-for-tests.outputs.conclusion == 'success' && steps.wait-for-lint.outputs.conclusion == 'success'
-        run: |
-          gh pr review --approve "$PR_URL"
-          gh pr merge --auto --squash "$PR_URL"
+      - name: Enable auto-merge
+        run: gh pr merge --auto --squash "$PR_URL"
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

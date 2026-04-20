@@ -106,7 +106,15 @@ func (model *BaseModel) BeforeCreate(db *gorm.DB) error {
 	if model.Version <= 0 {
 		created, err := createdAtFromID(model.ID)
 		if err != nil {
-			return err
+			// Caller-supplied non-xid IDs — typically from test fixtures or
+			// legacy migrations — cannot derive a deterministic timestamp.
+			// Fall back to time.Now() and warn so the invariant violation is
+			// visible without blocking the insert.
+			util.Log(db.Statement.Context).
+				WithError(err).
+				WithField("id", model.ID).
+				Warn("BaseModel.ID is not a valid xid; falling back to time.Now() for CreatedAt")
+			created = time.Now()
 		}
 		model.CreatedAt = created
 		model.ModifiedAt = created
@@ -116,8 +124,9 @@ func (model *BaseModel) BeforeCreate(db *gorm.DB) error {
 }
 
 // createdAtFromID returns the time component embedded in a generated xid.
-// All BaseModel IDs must be valid xids so sort-by-id ≡ sort-by-created_at
-// and hypertable promotions retain monotonic time ordering.
+// Production IDs are always xids (via util.IDString), so this is the hot
+// path. Non-xid IDs return an error so callers — e.g. BeforeCreate — can
+// decide whether to bail out or fall back.
 func createdAtFromID(id string) (time.Time, error) {
 	parsed, err := xid.FromString(id)
 	if err != nil {

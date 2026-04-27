@@ -3,8 +3,8 @@ module github.com/pitabwire/frame
 go 1.26
 
 require (
-	buf.build/go/protovalidate v1.1.3
-	connectrpc.com/connect v1.19.1
+	buf.build/go/protovalidate v1.2.0
+	connectrpc.com/connect v1.19.2
 	connectrpc.com/otelconnect v0.9.0
 	github.com/BurntSushi/toml v1.6.0
 	github.com/caarlos0/env/v11 v11.4.0

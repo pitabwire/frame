@@ -15,6 +15,12 @@ import (
 	"github.com/pitabwire/util"
 )
 
+// HTTP header names and well-known content types used by this client.
+const (
+	headerContentType = "Content-Type"
+	mimeJSON          = "application/json"
+)
+
 // resilientTransport is an http.RoundTripper that adds retry logic around an
 // inner transport. Requests get automatic retries on transient failures
 // (502, 503, 504, and transport errors).
@@ -216,8 +222,8 @@ func (s *invoker) Invoke(ctx context.Context,
 	headers http.Header, opts ...HTTPOption) (*InvokeResponse, error) {
 	if headers == nil {
 		headers = http.Header{
-			"Content-Type": {"application/json"},
-			"Accept":       {"application/json"},
+			headerContentType: {mimeJSON},
+			"Accept":          {mimeJSON},
 		}
 	}
 
@@ -247,7 +253,7 @@ func (s *invoker) InvokeWithURLEncoded(ctx context.Context,
 	headers http.Header, opts ...HTTPOption) (*InvokeResponse, error) {
 	if headers == nil {
 		headers = http.Header{
-			"Content-Type": []string{"application/x-www-form-urlencoded"},
+			headerContentType: []string{"application/x-www-form-urlencoded"},
 		}
 	}
 

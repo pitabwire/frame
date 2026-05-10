@@ -9,6 +9,10 @@ import (
 	"github.com/pitabwire/frame/security"
 )
 
+// fieldSubjectID is the structured-log key used for the subject identifier
+// across audit, ResourceAccessChecker, and TenancyPermissionChecker.
+const fieldSubjectID = "subject_id"
+
 // auditLogger implements the AuditLogger interface.
 type auditLogger struct {
 	sampleRate float64
@@ -59,7 +63,7 @@ func (a *auditLogger) LogDecision(
 		"object_id":        req.Object.ID,
 		"permission":       req.Permission,
 		"subject_ns":       req.Subject.Namespace,
-		"subject_id":       req.Subject.ID,
+		fieldSubjectID:     req.Subject.ID,
 		"allowed":          result.Allowed,
 		"checked_at":       result.CheckedAt,
 	}

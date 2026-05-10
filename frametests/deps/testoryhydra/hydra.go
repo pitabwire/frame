@@ -17,6 +17,10 @@ const (
 	// OryHydraImage is the Ory Hydra Image.
 	OryHydraImage = "oryd/hydra:latest"
 
+	// hydraContainerConfigPath is the in-container path to the hydra.yml
+	// config bind-mounted into the test container.
+	hydraContainerConfigPath = "/etc/config/hydra.yml"
+
 	HydraConfiguration = `
 ## ORY Hydra Configuration
 #
@@ -127,7 +131,7 @@ func (d *dependancy) migrateContainer(
 ) error {
 	containerRequest := testcontainers.ContainerRequest{
 		Image: d.Name(),
-		Cmd:   []string{"migrate", "sql", "up", "--read-from-env", "--yes", "--config", "/etc/config/hydra.yml"},
+		Cmd:   []string{"migrate", "sql", "up", "--read-from-env", "--yes", "--config", hydraContainerConfigPath},
 		Env: map[string]string{
 			"LOG_LEVEL": "debug",
 			"DSN":       databaseURL,
@@ -135,7 +139,7 @@ func (d *dependancy) migrateContainer(
 		Files: []testcontainers.ContainerFile{
 			{
 				Reader:            strings.NewReader(d.configuration),
-				ContainerFilePath: "/etc/config/hydra.yml",
+				ContainerFilePath: hydraContainerConfigPath,
 				FileMode:          definition.ContainerFileMode,
 			},
 		},
@@ -177,7 +181,7 @@ func (d *dependancy) Setup(ctx context.Context, ntwk *testcontainers.DockerNetwo
 
 	containerRequest := testcontainers.ContainerRequest{
 		Image: d.Name(),
-		Cmd:   []string{"serve", "all", "--config", "/etc/config/hydra.yml", "--dev"},
+		Cmd:   []string{"serve", "all", "--config", hydraContainerConfigPath, "--dev"},
 		Env: d.Opts().Env(map[string]string{
 			"LOG_LEVEL":                 "debug",
 			"LOG_LEAK_SENSITIVE_VALUES": "true",
@@ -186,7 +190,7 @@ func (d *dependancy) Setup(ctx context.Context, ntwk *testcontainers.DockerNetwo
 		Files: []testcontainers.ContainerFile{
 			{
 				Reader:            strings.NewReader(d.configuration),
-				ContainerFilePath: "/etc/config/hydra.yml",
+				ContainerFilePath: hydraContainerConfigPath,
 				FileMode:          definition.ContainerFileMode,
 			},
 		},

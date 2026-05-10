@@ -45,7 +45,7 @@ func Unmarshal(data []byte, holder any) error {
 
 	// Fast path: reflect to get real value and type
 	rv := reflect.ValueOf(holder)
-	if rv.Kind() != reflect.Ptr || rv.IsNil() {
+	if rv.Kind() != reflect.Pointer || rv.IsNil() {
 		return errNonPointerOrNil
 	}
 	rv = rv.Elem()
@@ -65,7 +65,7 @@ func Unmarshal(data []byte, holder any) error {
 		return nil
 
 	default:
-		if rv.Kind() == reflect.Ptr && !rv.IsNil() {
+		if rv.Kind() == reflect.Pointer && !rv.IsNil() {
 			if pm, ok := rv.Interface().(proto.Message); ok {
 				// Reset + UnmarshalMerge is faster than Clone + Unmarshal
 				proto.Reset(pm)

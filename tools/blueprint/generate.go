@@ -9,6 +9,10 @@ import (
 	"strings"
 )
 
+// monolithRuntimeMode is the FRAME_RUNTIME_MODE / blueprint label used for
+// services rendered as a single binary instead of one binary per service.
+const monolithRuntimeMode = "monolith"
+
 type GenerateOptions struct {
 	OutDir string
 }
@@ -31,7 +35,7 @@ func (bp *Blueprint) Generate(opts GenerateOptions) error {
 	modulePath, _ := moduleFromGoMod(outDir)
 
 	mode := bp.runtimeMode()
-	if len(services) == 1 && mode != "monolith" {
+	if len(services) == 1 && mode != monolithRuntimeMode {
 		return generatePolylith(outDir, modulePath, services[0])
 	}
 
@@ -306,7 +310,7 @@ func renderMainMonolith(monolith ServiceSpec, services []ServiceSpec, servicePkg
 
 func resolveMonolithSpec(bp *Blueprint, services []ServiceSpec) ServiceSpec {
 	spec := ServiceSpec{
-		Name: "monolith",
+		Name: monolithRuntimeMode,
 		Port: ":8080",
 	}
 	if bp != nil && bp.Service != nil {
@@ -362,7 +366,7 @@ func resolveMonolithQueueOptions(services []ServiceSpec) []string {
 
 func defaultMonolithName(name string) string {
 	if strings.TrimSpace(name) == "" {
-		return "monolith"
+		return monolithRuntimeMode
 	}
 	return name
 }

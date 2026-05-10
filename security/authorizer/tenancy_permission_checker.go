@@ -65,8 +65,8 @@ func NewTenancyAccessChecker(
 		subjectNamespace: security.NamespaceProfile,
 		onTenancyAccessDenied: func(ctx context.Context, _ security.Authorizer, tenancyPath, subjectID string) error {
 			util.Log(ctx).WithFields(map[string]any{
-				"tenant_id":  tenancyPath,
-				"subject_id": subjectID,
+				"tenant_id":    tenancyPath,
+				fieldSubjectID: subjectID,
 			}).Error("PERMISSION DENIED: tenancy access denied")
 			return nil
 		},

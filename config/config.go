@@ -430,11 +430,17 @@ func (c *ConfigurationDefault) ProfilerEnabled() bool {
 	return c.ProfilerEnable
 }
 
+// defaultProfilerPort is the fallback profiler bind address when none is set.
+const defaultProfilerPort = ":6060"
+
+// defaultHTTPPort is the fallback HTTP server bind address when none is set.
+const defaultHTTPPort = ":8080"
+
 func (c *ConfigurationDefault) ProfilerPort() string {
 	if c.ProfilerPortAddr != "" {
 		return c.ProfilerPortAddr
 	}
-	return ":6060"
+	return defaultProfilerPort
 }
 
 type ConfigurationPorts interface {
@@ -465,7 +471,7 @@ func (c *ConfigurationDefault) HTTPPort() string {
 		return c.HTTPServerPort
 	}
 
-	return ":8080"
+	return defaultHTTPPort
 }
 
 type ConfigurationTelemetry interface {

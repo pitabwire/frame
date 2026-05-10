@@ -99,12 +99,15 @@ func (m *JSONMap) GormDataType() string {
 	return "jsonmap"
 }
 
+// dialectMySQL is the gorm dialector name for MySQL/MariaDB.
+const dialectMySQL = "mysql"
+
 // GormDBDataType returns the dialect-specific database column type.
 func (m *JSONMap) GormDBDataType(db *gorm.DB, _ *schema.Field) string {
 	switch db.Dialector.Name() {
 	case "postgres":
 		return "JSONB"
-	case "mysql", "sqlite":
+	case dialectMySQL, "sqlite":
 		return "JSON"
 	case "sqlserver":
 		return "NVARCHAR(MAX)"
@@ -125,7 +128,7 @@ func (m *JSONMap) GormValue(_ context.Context, db *gorm.DB) clause.Expr {
 	}
 
 	switch db.Dialector.Name() {
-	case "mysql":
+	case dialectMySQL:
 		return gorm.Expr("CAST(? AS JSON)", data)
 	default:
 		return gorm.Expr("?", data)

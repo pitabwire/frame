@@ -15,7 +15,12 @@ import (
 //   - If no claims in context: returns unscoped db (for cross-tenant services)
 //   - If skip tenancy enabled: returns unscoped db (for backend services processing across tenants)
 //   - For internal systems: claims are auto-enriched with secondary claims tenancy data
-//   - Empty tenant_id/partition_id will match only records with empty values (no cross-tenant leakage)
+//   - tenant_id is a single value; partition_id may be a list (claim.GetPartitionIDs())
+//     so principals that legitimately span multiple partitions (a SACCO operator with
+//     access to several branches, an analyst aggregating across groups) see rows from
+//     every partition they belong to. Single-partition callers behave as before — the
+//     list has one element and the SQL becomes a degenerate IN (?).
+//   - Empty tenant_id will match only records with empty tenant_id (no cross-tenant leakage)
 func TenancyPartition(ctx context.Context) func(db *gorm.DB) *gorm.DB {
 	return func(db *gorm.DB) *gorm.DB {
 		authClaim := security.ClaimsFromContext(ctx)
@@ -35,12 +40,17 @@ func TenancyPartition(ctx context.Context) func(db *gorm.DB) *gorm.DB {
 			table += "."
 		}
 
-		// Apply tenancy filter with actual values from claims
-		// Empty string values will match only empty records in DB (no cross-tenant leakage)
+		partitions := authClaim.GetPartitionIDs()
+		if len(partitions) == 0 {
+			// Match the previous behaviour: empty partition matches only
+			// rows with empty partition_id, never leaks across partitions.
+			partitions = []string{""}
+		}
+
 		return db.Where(
-			fmt.Sprintf("%stenant_id = ? AND %spartition_id = ?", table, table),
+			fmt.Sprintf("%stenant_id = ? AND %spartition_id IN ?", table, table),
 			authClaim.GetTenantID(),
-			authClaim.GetPartitionID(),
+			partitions,
 		)
 	}
 }

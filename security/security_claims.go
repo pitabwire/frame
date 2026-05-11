@@ -88,6 +88,66 @@ func (a *AuthenticationClaims) GetPartitionID() string {
 	return result
 }
 
+// GetPartitionIDs returns every partition this principal can access:
+// the primary PartitionID plus any extras carried in Ext["partition_ids"]
+// (as a []string, []any, or comma-separated string). The list is
+// deduplicated and the primary id appears first. Returns an empty slice
+// when no partitions are set.
+//
+// Use this when callers may legitimately span multiple partitions —
+// e.g. a SACCO operator with access to several branches, or a
+// reporting analyst aggregating across groups. Single-partition
+// callers continue to work: the returned slice has one element.
+func (a *AuthenticationClaims) GetPartitionIDs() []string {
+	primary := a.GetPartitionID()
+	additional := extractAdditionalPartitionIDs(a.Ext["partition_ids"])
+
+	result := make([]string, 0, len(additional)+1)
+	seen := make(map[string]struct{}, len(additional)+1)
+	if primary != "" {
+		result = append(result, primary)
+		seen[primary] = struct{}{}
+	}
+	for _, p := range additional {
+		if p == "" {
+			continue
+		}
+		if _, dup := seen[p]; dup {
+			continue
+		}
+		result = append(result, p)
+		seen[p] = struct{}{}
+	}
+	return result
+}
+
+// extractAdditionalPartitionIDs normalises the Ext["partition_ids"]
+// payload (which may arrive as []string, []any, or a comma-separated
+// string thanks to JWT marshallers) into a plain []string slice.
+func extractAdditionalPartitionIDs(raw any) []string {
+	switch v := raw.(type) {
+	case []string:
+		return v
+	case []any:
+		out := make([]string, 0, len(v))
+		for _, item := range v {
+			if s, isStr := item.(string); isStr {
+				out = append(out, s)
+			}
+		}
+		return out
+	case string:
+		out := make([]string, 0)
+		for _, s := range strings.Split(v, ",") {
+			if trimmed := strings.TrimSpace(s); trimmed != "" {
+				out = append(out, trimmed)
+			}
+		}
+		return out
+	}
+	return nil
+}
+
 func (a *AuthenticationClaims) GetProfileID() string {
 	result, _ := a.RegisteredClaims.GetSubject()
 	return result

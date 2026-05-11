@@ -64,6 +64,19 @@ type Pool interface {
 	// this helper is unnecessary.
 	WithTenancy(ctx context.Context, readOnly bool, fn func(tx *gorm.DB) error) error
 
+	// WithRequestTx is the per-request middleware primitive. It opens a
+	// tenancy-scoped transaction the same way WithTenancy does, then
+	// binds the transaction to a child context (via ContextWithTx) and
+	// invokes fn with the bound context. Inside fn, callers can use
+	// pool.DB(ctx, _) and receive the bound transaction transparently —
+	// application code never references tenant_id or partition_id and
+	// never wraps individual queries in WithTenancy.
+	//
+	// Commits when fn returns nil, rolls back on error. Nesting is
+	// safe: a nested WithRequestTx reuses the outer transaction
+	// instead of opening a new one.
+	WithRequestTx(ctx context.Context, fn func(ctx context.Context) error) error
+
 	AddConnection(ctx context.Context, opts ...Option) error
 
 	CanMigrate() bool

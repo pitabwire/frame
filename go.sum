@@ -186,8 +186,8 @@ github.com/panjf2000/ants/v2 v2.12.0 h1:u9JhESo83i/GkZnhfTNuFMMWcNt7mnV1bGJ6FT4w
 github.com/panjf2000/ants/v2 v2.12.0/go.mod h1:tSQuaNQ6r6NRhPt+IZVUevvDyFMTs+eS4ztZc52uJTY=
 github.com/pitabwire/natspubsub v0.8.3 h1:VFc73S+qBgxKDgD1ZW6Hz/wKu/8ao/uA1JG38a7MWfc=
 github.com/pitabwire/natspubsub v0.8.3/go.mod h1:W5FT+Am26dmKAKYtMsKQfEeqEUi7O16bpl0UTFlQEA0=
-github.com/pitabwire/util v0.8.0 h1:LNKCTMmfurjk4ShG1peTuMFGsOAR5o5jIZ84lHNvwlU=
-github.com/pitabwire/util v0.8.0/go.mod h1:JrLiS3K4VXsLZE38LLvq1N0X2j0fs33QLz/zMXf3zc4=
+github.com/pitabwire/util v0.9.0 h1:fnlTAuWKqAjc6GalO+a7hMeo6g3fAv5yjmaP237ChP4=
+github.com/pitabwire/util v0.9.0/go.mod h1:JrLiS3K4VXsLZE38LLvq1N0X2j0fs33QLz/zMXf3zc4=
 github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZbAQM=
 github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
 github.com/power-devops/perfstat v0.0.0-20240221224432-82ca36839d55 h1:o4JXh1EVt9k/+g42oCprj/FisM4qX9L3sZB3upGN2ZU=

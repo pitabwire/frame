@@ -93,7 +93,6 @@ func TestWithClaimsNilIsNoOp(t *testing.T) {
 	ctx := context.Background()
 	result := tenancy.WithClaims(ctx, nil)
 	// Verify that the returned context is the same as the input (no wrapping).
-	require.Equal(t, ctx, result)
 	require.Equal(t, ctx, result, "WithClaims(ctx, nil) should return ctx unchanged")
 }
 

@@ -55,3 +55,19 @@ func TestExtendPartitionsIgnoresEmpty(t *testing.T) {
 	extended := base.ExtendPartitions("", "p2", "")
 	require.Equal(t, []string{"p1", "p2"}, extended.PartitionIDs)
 }
+
+func TestIsEmptyOnNilReceiver(t *testing.T) {
+	t.Parallel()
+	var c *tenancy.Claims
+	require.True(t, c.IsEmpty())
+}
+
+func TestExtendPartitionsOnNilReceiver(t *testing.T) {
+	t.Parallel()
+	var c *tenancy.Claims
+	extended := c.ExtendPartitions("p1", "", "p2", "p1")
+	require.NotNil(t, extended)
+	require.Equal(t, []string{"p1", "p2"}, extended.PartitionIDs)
+	require.Empty(t, extended.TenantID)
+	require.False(t, extended.Skip)
+}

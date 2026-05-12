@@ -37,6 +37,10 @@ func (c *Claims) IsEmpty() bool {
 // merged in. Preserves TenantID, AccessID, and Skip unchanged. Empty
 // strings are ignored; duplicates are removed; existing order is kept
 // and new IDs appended after.
+//
+// A nil receiver yields a fresh Claims carrying only the deduplicated
+// non-empty partition IDs; TenantID, AccessID, and Skip default to
+// zero values in that path.
 func (c *Claims) ExtendPartitions(partitionIDs ...string) *Claims {
 	if c == nil {
 		return &Claims{PartitionIDs: dedupedNonEmpty(partitionIDs)}

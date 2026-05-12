@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"gorm.io/gorm"
-	gormlogger "gorm.io/gorm/logger"
 )
 
 // DialectAdapter abstracts every database-specific concern in the
@@ -100,5 +99,4 @@ type ConnectionOptions struct {
 	SkipDefaultTransaction bool
 	InsertBatchSize        int
 	PreparedStatements     bool
-	Logger                 gormlogger.Interface
 }

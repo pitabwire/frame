@@ -52,16 +52,21 @@ type Capabilities struct {
 // ModelInfo describes one tenancy-enrolled model for Install. Built by
 // the tenancy package via reflective enrollment; providers don't
 // reimplement detection.
+//
+// All fields are required. The conventional values are "tenant_id" /
+// "partition_id"; the tenancy package's enrollment code populates them
+// from those conventions, and providers MUST NOT assume defaults if a
+// caller hand-builds a ModelInfo.
 type ModelInfo struct {
 	// Table is the SQL table name resolved through GORM's naming
 	// strategy.
 	Table string
 
-	// TenantColumn is the SQL column carrying the tenant identifier.
-	// Default "tenant_id".
+	// TenantColumn is the SQL column carrying the tenant identifier
+	// (conventionally "tenant_id").
 	TenantColumn string
 
 	// PartitionColumn is the SQL column carrying the partition
-	// identifier. Default "partition_id".
+	// identifier (conventionally "partition_id").
 	PartitionColumn string
 }

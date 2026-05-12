@@ -37,13 +37,20 @@ type fakeUnscoped struct {
 	tenancy.UnscopedMarker
 }
 
+// newMinimalDB creates a minimal but properly initialized gorm.DB
+// suitable for statement parsing. No real database driver is used.
+func newMinimalDB(t *testing.T) *gorm.DB {
+	// gorm.Open with nil dialector still initializes config.cacheStore
+	// and all required fields for statement parsing to work.
+	db, err := gorm.Open(nil)
+	require.NoError(t, err)
+	return db
+}
+
 func TestEnrolledModelsPicksTenanted(t *testing.T) {
 	t.Parallel()
 
-	// tenancy.EnrolledModels uses GORM's statement parser, which works
-	// without a real driver as long as we supply a *gorm.DB with a
-	// naming strategy. Build a bare-bones DB just for table-name resolution.
-	db := &gorm.DB{}
+	db := newMinimalDB(t)
 
 	enrolled, err := tenancy.EnrolledModels(db, []any{
 		&fakeTenanted{},
@@ -59,7 +66,7 @@ func TestEnrolledModelsPicksTenanted(t *testing.T) {
 
 func TestEnrolledModelsEmptyInput(t *testing.T) {
 	t.Parallel()
-	db := &gorm.DB{}
+	db := newMinimalDB(t)
 	enrolled, err := tenancy.EnrolledModels(db, nil)
 	require.NoError(t, err)
 	require.Empty(t, enrolled)
@@ -67,8 +74,43 @@ func TestEnrolledModelsEmptyInput(t *testing.T) {
 
 func TestEnrolledModelsSkipsNil(t *testing.T) {
 	t.Parallel()
-	db := &gorm.DB{}
+	db := newMinimalDB(t)
 	enrolled, err := tenancy.EnrolledModels(db, []any{nil, &fakeTenanted{}, nil})
 	require.NoError(t, err)
 	require.Len(t, enrolled, 1)
+}
+
+// modelWithTableNameOverride demonstrates a Tenanted model that overrides
+// TableName() to use a non-default table name.
+type modelWithTableNameOverride struct {
+	ID          string `gorm:"primaryKey"`
+	TenantID    string
+	PartitionID string
+	AccessID    string
+}
+
+func (m *modelWithTableNameOverride) GetTenantID() string     { return m.TenantID }
+func (m *modelWithTableNameOverride) GetPartitionID() string  { return m.PartitionID }
+func (m *modelWithTableNameOverride) GetAccessID() string     { return m.AccessID }
+func (m *modelWithTableNameOverride) SetTenantID(v string)    { m.TenantID = v }
+func (m *modelWithTableNameOverride) SetPartitionID(v string) { m.PartitionID = v }
+func (m *modelWithTableNameOverride) SetAccessID(v string)    { m.AccessID = v }
+
+// TableName overrides the default table name that GORM would infer.
+func (m *modelWithTableNameOverride) TableName() string {
+	return "weird_table"
+}
+
+func TestEnrolledModelsHonoursTableNameOverride(t *testing.T) {
+	t.Parallel()
+	db := newMinimalDB(t)
+
+	enrolled, err := tenancy.EnrolledModels(db, []any{
+		&modelWithTableNameOverride{},
+	})
+	require.NoError(t, err)
+	require.Len(t, enrolled, 1)
+	// Verify that the custom TableName() override is respected, not the
+	// default snake_case plural derivation.
+	require.Equal(t, "weird_table", enrolled[0].Table)
 }

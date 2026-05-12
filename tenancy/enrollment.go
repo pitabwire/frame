@@ -1,10 +1,9 @@
 package tenancy
 
 import (
-	"reflect"
+	"fmt"
 
 	"gorm.io/gorm"
-	"gorm.io/gorm/schema"
 )
 
 // EnrolledModels filters the supplied migration models, returning
@@ -13,9 +12,11 @@ import (
 // conventional "tenant_id" / "partition_id"; future overrides can come
 // from per-model tags but are not required today.
 //
-// The supplied *gorm.DB is currently unused; it is retained for a
-// future extension to support per-model column name overrides via tags.
-func EnrolledModels(_ *gorm.DB, models []any) ([]ModelInfo, error) {
+// The supplied *gorm.DB is used only as a statement context for table
+// name resolution — no queries are executed. GORM's statement parser
+// honours any TableName() string method or gorm struct tags on the
+// model, so custom table-name overrides are respected.
+func EnrolledModels(db *gorm.DB, models []any) ([]ModelInfo, error) {
 	if len(models) == 0 {
 		return nil, nil
 	}
@@ -30,7 +31,10 @@ func EnrolledModels(_ *gorm.DB, models []any) ([]ModelInfo, error) {
 		if _, isTenanted := m.(Tenanted); !isTenanted {
 			continue
 		}
-		table := tableNameFor(m)
+		table, err := tableNameFor(db, m)
+		if err != nil {
+			return nil, err
+		}
 		if table == "" {
 			continue
 		}
@@ -43,22 +47,14 @@ func EnrolledModels(_ *gorm.DB, models []any) ([]ModelInfo, error) {
 	return enrolled, nil
 }
 
-// tableNameFor resolves the SQL table name from the model type
-// using GORM's default naming conventions (snake_case plural).
-func tableNameFor(m any) string {
-	t := reflect.TypeOf(m)
-	if t == nil {
-		return ""
+// tableNameFor resolves the SQL table name GORM uses for the supplied
+// model, honouring TableName() methods, gorm struct tags, and the db's
+// configured naming strategy — exactly the same resolution path GORM
+// uses internally when running queries or AutoMigrate against the model.
+func tableNameFor(db *gorm.DB, m any) (string, error) {
+	stmt := &gorm.Statement{DB: db}
+	if err := stmt.Parse(m); err != nil {
+		return "", fmt.Errorf("tenancy: parse model: %w", err)
 	}
-	if t.Kind() == reflect.Pointer {
-		t = t.Elem()
-	}
-	if t.Kind() != reflect.Struct {
-		return ""
-	}
-
-	// Use GORM's naming strategy to convert type name to table name.
-	// Default is snake_case plural (e.g. FakeTenanted -> fake_tenanteds).
-	ns := schema.NamingStrategy{}
-	return ns.TableName(t.Name())
+	return stmt.Table, nil
 }

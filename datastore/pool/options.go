@@ -4,6 +4,8 @@ import (
 	"time"
 
 	"github.com/pitabwire/frame/config"
+	"github.com/pitabwire/frame/datastore/dialect"
+	"github.com/pitabwire/frame/tenancy"
 )
 
 // Option configures database connection settings.
@@ -24,6 +26,13 @@ type Options struct {
 	InsertBatchSize int
 
 	PreparedStatements bool
+
+	// DialectAdapter and TenancyProvider are resolved by NewPool with
+	// Postgres defaults when unset. TenancyProviderSet distinguishes
+	// "use default" from "explicitly disabled (nil)".
+	DialectAdapter     dialect.DialectAdapter
+	TenancyProvider    tenancy.Provider
+	TenancyProviderSet bool
 }
 
 // WithConnection returns an Option to configure the database connection dsn.
@@ -98,5 +107,24 @@ func WithInsertBatchSize(insertBatchSize int) Option {
 func WithPreparedStatements(enabled bool) Option {
 	return func(o *Options) {
 		o.PreparedStatements = enabled
+	}
+}
+
+// WithDialectAdapter sets the database driver adapter for this pool.
+// When omitted, the pool uses the Postgres adapter.
+func WithDialectAdapter(adapter dialect.DialectAdapter) Option {
+	return func(o *Options) {
+		o.DialectAdapter = adapter
+	}
+}
+
+// WithTenancyProvider sets the tenancy provider for this pool. When
+// omitted, the pool uses the Postgres-RLS provider. Pass nil to
+// disable tenancy enforcement (useful in unit tests that want raw
+// database access).
+func WithTenancyProvider(prov tenancy.Provider) Option {
+	return func(o *Options) {
+		o.TenancyProvider = prov
+		o.TenancyProviderSet = true
 	}
 }

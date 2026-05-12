@@ -2,13 +2,13 @@ package postgres
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
-	"gorm.io/gorm"
-
 	"github.com/pitabwire/frame/datastore/dialect"
 	"github.com/pitabwire/frame/tenancy"
+	"gorm.io/gorm"
 )
 
 // Provider is the Postgres concrete tenancy.Provider. It installs RLS
@@ -34,7 +34,7 @@ func (*Provider) Capabilities() tenancy.Capabilities {
 //     no-ops if already enabled).
 func (*Provider) Install(_ context.Context, db *gorm.DB, models []tenancy.ModelInfo) error {
 	if db == nil {
-		return fmt.Errorf("tenancy/postgres: nil db")
+		return errors.New("tenancy/postgres: nil db")
 	}
 	if err := db.Exec(appTenancyMatchesFn).Error; err != nil {
 		return fmt.Errorf("install app_tenancy_matches: %w", err)
@@ -78,7 +78,7 @@ func pgQuoteIdent(name string) string {
 // to the pool clean.
 func (p *Provider) WireAdapter(adapter dialect.DialectAdapter) error {
 	if adapter == nil {
-		return fmt.Errorf("tenancy/postgres: nil adapter")
+		return errors.New("tenancy/postgres: nil adapter")
 	}
 	if err := adapter.RegisterAcquireHook(p.beforeAcquire); err != nil {
 		return fmt.Errorf("register acquire hook: %w", err)

@@ -19,7 +19,7 @@ package postgres
 //     rows from every partition they belong to without any application
 //     code awareness.
 //
-//nolint:unused // used by Provider in Task 11
+
 const appTenancyMatchesFn = `
 CREATE OR REPLACE FUNCTION app_tenancy_matches(
     row_tenant_id text,
@@ -45,7 +45,7 @@ $$ LANGUAGE plpgsql STABLE;
 // pgQuoteIdent helper) — these strings receive pre-quoted table and
 // column names.
 //
-//nolint:unused // used by Provider in Task 11
+
 const (
 	alterEnableRLS = "ALTER TABLE %s ENABLE ROW LEVEL SECURITY"
 	alterForceRLS  = "ALTER TABLE %s FORCE ROW LEVEL SECURITY"

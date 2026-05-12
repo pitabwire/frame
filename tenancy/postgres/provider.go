@@ -6,9 +6,10 @@ import (
 	"fmt"
 	"strings"
 
+	"gorm.io/gorm"
+
 	"github.com/pitabwire/frame/datastore/dialect"
 	"github.com/pitabwire/frame/tenancy"
-	"gorm.io/gorm"
 )
 
 // Provider is the Postgres concrete tenancy.Provider. It installs RLS

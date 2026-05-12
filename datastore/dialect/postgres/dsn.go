@@ -9,10 +9,18 @@ import (
 
 // NormalizeDSN converts a postgres:// or postgresql:// URI into the
 // libpq keyword=value DSN form. If the input already looks like libpq
-// form (contains '=' and no postgres scheme prefix) it is returned
-// unchanged.
+// form — heuristically, contains '=' and does not start with a postgres
+// scheme — it is returned unchanged.
 //
 // Returns an error if the URI scheme is not postgres / postgresql.
+//
+// Caveats inherited from the legacy implementation (preserved here for
+// behavioural parity; tracked as follow-up):
+//   - IPv6 host literals lose their square brackets.
+//   - Query parameter values containing spaces or '=' are emitted
+//     verbatim and may break the libpq parser.
+//   - Empty input returns an "invalid scheme" error rather than a
+//     specific empty-DSN error.
 func NormalizeDSN(pgString string) (string, error) {
 	trimmed := strings.TrimSpace(pgString)
 	lower := strings.ToLower(trimmed)

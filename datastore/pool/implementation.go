@@ -61,8 +61,9 @@ func NewPool(_ context.Context, opts ...Option) Pool {
 
 	if provider != nil {
 		if err := provider.WireAdapter(adapter); err != nil {
-			// Cannot return error from NewPool without changing many
-			// callers; fall back to a panic that is loud at boot.
+			// WireAdapter only errors for a nil-hook contract violation
+			// (concrete providers don't pass nil hooks). Panicking is
+			// loud at boot for what is purely a programming bug.
 			panic("pool: tenancy provider WireAdapter: " + err.Error())
 		}
 	}

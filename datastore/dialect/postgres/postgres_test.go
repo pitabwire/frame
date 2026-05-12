@@ -86,6 +86,28 @@ func (s *AdapterTestSuite) TestAcquireHookFailureDropsConn() {
 	})
 }
 
+func (s *AdapterTestSuite) TestOpenConnectionForcesMaxIdleConnsZero() {
+	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependencyOption) {
+		ctx := t.Context()
+		dsn := dep.ByIsDatabase(ctx).GetDS(ctx).String()
+
+		a := postgres.New()
+		_, sqlDB, closeFn, err := a.OpenConnection(ctx, dsn, dialect.ConnectionOptions{MaxOpen: 4})
+		require.NoError(t, err)
+		defer func() { _ = closeFn() }()
+
+		// Run a query so the pool has at least seen one acquire/release cycle.
+		var got int
+		require.NoError(t, sqlDB.QueryRowContext(ctx, "SELECT 1").Scan(&got))
+
+		// MaxIdleConns=0 means no idle conns are cached at the *sql.DB layer.
+		// All releases flow through pgxpool — this is the invariant the
+		// tenancy hook chain relies on.
+		require.Equal(t, 0, sqlDB.Stats().Idle,
+			"adapter must force MaxIdleConns=0 so every release flows through pgxpool")
+	})
+}
+
 func (s *AdapterTestSuite) TestAdvisoryLockAcquireAndRelease() {
 	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependencyOption) {
 		ctx := t.Context()

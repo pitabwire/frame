@@ -276,6 +276,12 @@ func (a *Adapter) OpenConnection(
 // and pg_advisory_unlock run against the same Postgres session.
 // Retries every migrationLockRetryInterval until ctx is cancelled or
 // the lock is acquired.
+//
+// The pinned conn is acquired through pgxpool, so any registered
+// acquire hooks fire (e.g., the tenancy provider's beforeAcquire).
+// This is safe: migrations typically run without tenancy claims, so
+// the hook is a no-op. When the pinned conn is closed, AfterRelease
+// runs and clears any session state it may have set.
 func (a *Adapter) AdvisoryLock(ctx context.Context, db *gorm.DB, id int64) (func(), error) {
 	if db == nil {
 		return nil, errors.New("dialect/postgres: nil db")

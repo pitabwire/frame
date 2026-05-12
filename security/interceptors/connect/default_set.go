@@ -7,8 +7,16 @@ import (
 	"connectrpc.com/otelconnect"
 
 	"github.com/pitabwire/frame/security"
+	"github.com/pitabwire/frame/tenancy"
 )
 
+// DefaultList returns the standard chain of Connect interceptors used
+// by frame services. Order matters: otel → validation → auth → tenancy
+// claims. The tenancy interceptor binds tenancy.Claims derived from the
+// authenticated principal so downstream pool.DB(ctx, _) queries are
+// transparently RLS-scoped without any additional wiring.
+//
+// Caller-supplied moreInterceptors are appended after this chain.
 func DefaultList(
 	_ context.Context,
 	authI security.Authenticator,
@@ -26,6 +34,7 @@ func DefaultList(
 		otelInterceptor,
 		NewValidationInterceptor(),
 		NewAuthInterceptor(authI),
+		tenancy.NewClaimsInterceptor(),
 	)
 	interceptorList = append(interceptorList, moreInterceptors...)
 

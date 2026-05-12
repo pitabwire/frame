@@ -39,3 +39,5 @@ type UnscopedMarker struct{}
 
 // TenancyUnscoped implements Unscoped.
 func (UnscopedMarker) TenancyUnscoped() {}
+
+var _ Unscoped = UnscopedMarker{}

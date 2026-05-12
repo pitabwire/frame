@@ -15,6 +15,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/stdlib"
+	"github.com/pitabwire/util"
 	gormpostgres "gorm.io/driver/postgres"
 	"gorm.io/gorm"
 
@@ -28,6 +29,13 @@ const releaseHookTimeout = 5 * time.Second
 // Adapter is the Postgres concrete implementation of
 // dialect.DialectAdapter. Construct with New; hook registration must
 // happen BEFORE OpenConnection.
+//
+// Hook dispatch design: at OpenConnection time the current hook chain
+// is captured into per-pool closures (see makeAcquireDispatcher /
+// makeReleaseDispatcher). Each pool runs against its own immutable
+// snapshot — no lock taken on the hot path, no allocation per
+// acquire/release, and a second OpenConnection on the same adapter
+// cannot mutate state observed by an in-flight first pool's hooks.
 type Adapter struct {
 	mu           sync.RWMutex
 	acquireHooks []dialect.AcquireHook
@@ -85,19 +93,6 @@ func (a *Adapter) RegisterReleaseHook(fn dialect.ReleaseHook) error {
 	return nil
 }
 
-// snapshotHooks returns copies of the hook slices under a read lock
-// so callbacks invoked by pgxpool observe a stable chain. Per the
-// Adapter contract, RegisterX must run BEFORE OpenConnection; the
-// RLock is therefore only protecting against concurrent registrations
-// during the construction phase, not late-running register calls.
-func (a *Adapter) snapshotHooks() ([]dialect.AcquireHook, []dialect.ReleaseHook) {
-	a.mu.RLock()
-	defer a.mu.RUnlock()
-	acq := append([]dialect.AcquireHook(nil), a.acquireHooks...)
-	rel := append([]dialect.ReleaseHook(nil), a.releaseHooks...)
-	return acq, rel
-}
-
 // pgxDialectConn wraps a *pgx.Conn (the underlying connection passed by
 // pgxpool's PrepareConn / AfterRelease callbacks) so it satisfies
 // dialect.DialectConn without leaking pgx types past the boundary.
@@ -110,9 +105,13 @@ func (w *pgxDialectConn) Exec(ctx context.Context, query string, args ...any) er
 	return err
 }
 
-// runAcquireHooks is wired into pgxpool.PrepareConn. It invokes every
-// registered acquire hook in registration order. pgxpool semantics of
-// the (bool, error) return value:
+// makeAcquireDispatcher captures a stable snapshot of the registered
+// acquire hooks and returns a pgxpool.PrepareConn callback that closes
+// over it. Each pool opened from this adapter receives its own snapshot,
+// so concurrent OpenConnection calls on the same adapter cannot mutate
+// state observed by an in-flight pool's hook dispatch.
+//
+// pgxpool semantics of the (bool, error) return value:
 //   - (true,  nil): conn accepted, used by caller.
 //   - (true,  err): conn accepted, err returned to caller anyway.
 //   - (false, nil): conn destroyed, transparent retry on a new conn.
@@ -121,43 +120,55 @@ func (w *pgxDialectConn) Exec(ctx context.Context, query string, args ...any) er
 // Tenancy session-binding failures must surface to the caller — we
 // therefore return (false, hookErr) on any hook error so the query
 // fails fast rather than running on an unscoped conn.
-func (a *Adapter) runAcquireHooks(ctx context.Context, conn *pgx.Conn) (bool, error) {
-	acq, _ := a.snapshotHooks()
-	if len(acq) == 0 {
+func (a *Adapter) makeAcquireDispatcher() func(context.Context, *pgx.Conn) (bool, error) {
+	a.mu.RLock()
+	hooks := append([]dialect.AcquireHook(nil), a.acquireHooks...)
+	a.mu.RUnlock()
+	if len(hooks) == 0 {
+		return func(context.Context, *pgx.Conn) (bool, error) { return true, nil }
+	}
+	return func(ctx context.Context, conn *pgx.Conn) (bool, error) {
+		wrapped := &pgxDialectConn{c: conn}
+		for _, h := range hooks {
+			if err := h(ctx, wrapped); err != nil {
+				util.Log(ctx).WithError(err).Warn("dialect/postgres: acquire hook failed; dropping conn")
+				return false, err
+			}
+		}
 		return true, nil
 	}
-	wrapped := &pgxDialectConn{c: conn}
-	for _, h := range acq {
-		if err := h(ctx, wrapped); err != nil {
-			return false, err
-		}
-	}
-	return true, nil
 }
 
-// runReleaseHooks dispatches all registered release hooks. pgxpool's
+// makeReleaseDispatcher captures a stable snapshot of the registered
+// release hooks and returns a pgxpool.AfterRelease callback. pgxpool's
 // AfterRelease has no ctx; use context.Background so reset SQL is not
 // cancelled by an already-cancelled request ctx. Hooks must remain
 // cheap. Returning false destroys the connection instead of returning
 // it to the pool.
-func (a *Adapter) runReleaseHooks(conn *pgx.Conn) bool {
-	_, rel := a.snapshotHooks()
-	if len(rel) == 0 {
+func (a *Adapter) makeReleaseDispatcher() func(*pgx.Conn) bool {
+	a.mu.RLock()
+	hooks := append([]dialect.ReleaseHook(nil), a.releaseHooks...)
+	a.mu.RUnlock()
+	if len(hooks) == 0 {
+		return func(*pgx.Conn) bool { return true }
+	}
+	return func(conn *pgx.Conn) bool {
+		wrapped := &pgxDialectConn{c: conn}
+		// Use a bounded background ctx — pgxpool's AfterRelease has no
+		// ctx, and a hung release hook would block the pool slot
+		// indefinitely. 5s is generous for the only currently expected
+		// workload (RESET session vars) but long enough that legitimate
+		// slow queries finish.
+		hookCtx, cancel := context.WithTimeout(context.Background(), releaseHookTimeout)
+		defer cancel()
+		for _, h := range hooks {
+			if err := h(hookCtx, wrapped); err != nil {
+				util.Log(hookCtx).WithError(err).Warn("dialect/postgres: release hook failed; destroying conn")
+				return false
+			}
+		}
 		return true
 	}
-	wrapped := &pgxDialectConn{c: conn}
-	// Use a bounded background ctx — pgxpool's AfterRelease has no ctx,
-	// and a hung release hook would block the pool slot indefinitely.
-	// 5s is generous for the only currently expected workload (RESET
-	// session vars) but long enough that legitimate slow queries finish.
-	hookCtx, cancel := context.WithTimeout(context.Background(), releaseHookTimeout)
-	defer cancel()
-	for _, h := range rel {
-		if err := h(hookCtx, wrapped); err != nil {
-			return false
-		}
-	}
-	return true
 }
 
 // applyPoolSizing copies pool tuning from ConnectionOptions onto the
@@ -217,13 +228,13 @@ func (a *Adapter) OpenConnection(
 	applyPoolSizing(cfg, opts)
 	cfg.ConnConfig.Tracer = otelpgx.NewTracer()
 
-	// Wire PrepareConn / AfterRelease to dispatch through registered
-	// hooks. Hooks see a stable snapshot — concurrent RegisterX after
-	// construction won't disturb in-flight callbacks. PrepareConn
-	// supersedes the deprecated BeforeAcquire and propagates hook
-	// errors back to the acquirer.
-	cfg.PrepareConn = a.runAcquireHooks
-	cfg.AfterRelease = a.runReleaseHooks
+	// Wire PrepareConn / AfterRelease to dispatchers that close over a
+	// per-pool snapshot of the hook chain. The snapshot is taken once
+	// here (under RLock); the hot path runs without any lock or per-call
+	// allocation. PrepareConn supersedes the deprecated BeforeAcquire
+	// and propagates hook errors back to the acquirer.
+	cfg.PrepareConn = a.makeAcquireDispatcher()
+	cfg.AfterRelease = a.makeReleaseDispatcher()
 
 	pgxPool, err := pgxpool.NewWithConfig(ctx, cfg)
 	if err != nil {

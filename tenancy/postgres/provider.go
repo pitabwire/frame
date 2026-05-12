@@ -95,10 +95,11 @@ func (p *Provider) WireAdapter(adapter dialect.DialectAdapter) error {
 func (*Provider) WireGorm(_ *gorm.DB) error { return nil }
 
 // beforeAcquire pulls the tenancy.Claims from ctx and pushes them onto
-// the pgx connection as session variables. is_local=false means the
-// vars persist for the conn's lifetime (not just one tx); afterRelease
-// resets them. If claims are empty or Skip is set, no vars are pushed
-// — the RLS policy's empty-match-all branch applies.
+// the pgx connection as session variables in a single round trip.
+// is_local=false means the vars persist for the conn's lifetime (not
+// just one tx); afterRelease resets them. If claims are empty or Skip
+// is set, no vars are pushed — the RLS policy's empty-match-all branch
+// applies.
 func (*Provider) beforeAcquire(ctx context.Context, conn dialect.DialectConn) error {
 	claims := tenancy.ClaimsFromContext(ctx)
 	if claims == nil || claims.IsEmpty() || claims.Skip {
@@ -106,28 +107,25 @@ func (*Provider) beforeAcquire(ctx context.Context, conn dialect.DialectConn) er
 	}
 	if err := conn.Exec(
 		ctx,
-		"SELECT set_config('app.tenant_id', $1, false)",
+		"SELECT set_config('app.tenant_id', $1, false), set_config('app.partition_id', $2, false)",
 		claims.TenantID,
-	); err != nil {
-		return fmt.Errorf("set app.tenant_id: %w", err)
-	}
-	if err := conn.Exec(
-		ctx,
-		"SELECT set_config('app.partition_id', $1, false)",
 		strings.Join(claims.PartitionIDs, ","),
 	); err != nil {
-		return fmt.Errorf("set app.partition_id: %w", err)
+		return fmt.Errorf("set tenancy session vars: %w", err)
 	}
 	return nil
 }
 
-// afterRelease resets the session vars so subsequent acquires that
-// don't carry tenancy claims see clean defaults.
+// afterRelease resets the session vars in a single round trip so
+// subsequent acquires that don't carry tenancy claims see clean
+// defaults. Setting to empty string is equivalent to RESET for the
+// RLS policy's empty-match-all branch, and it lets us combine both
+// resets into one statement.
 func (*Provider) afterRelease(ctx context.Context, conn dialect.DialectConn) error {
-	if err := conn.Exec(ctx, "RESET app.tenant_id"); err != nil {
-		return err
-	}
-	return conn.Exec(ctx, "RESET app.partition_id")
+	return conn.Exec(
+		ctx,
+		"SELECT set_config('app.tenant_id', '', false), set_config('app.partition_id', '', false)",
+	)
 }
 
 var _ tenancy.Provider = (*Provider)(nil)

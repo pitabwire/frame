@@ -15,7 +15,9 @@ import (
 // Provider is the Postgres concrete tenancy.Provider. It installs RLS
 // policies during Migrate and binds per-request tenancy state via
 // pgxpool acquire/release hooks (no transactions required).
-type Provider struct{}
+type Provider struct {
+	adapter dialect.DialectAdapter
+}
 
 // New returns a fresh Postgres tenancy provider.
 func New() *Provider { return &Provider{} }
@@ -33,7 +35,7 @@ func (*Provider) Capabilities() tenancy.Capabilities {
 //   - DROP POLICY IF EXISTS / CREATE POLICY pair per table
 //   - ALTER TABLE … ENABLE / FORCE ROW LEVEL SECURITY (Postgres
 //     no-ops if already enabled).
-func (*Provider) Install(_ context.Context, db *gorm.DB, models []tenancy.ModelInfo) error {
+func (p *Provider) Install(_ context.Context, db *gorm.DB, models []tenancy.ModelInfo) error {
 	if db == nil {
 		return errors.New("tenancy/postgres: nil db")
 	}
@@ -41,7 +43,7 @@ func (*Provider) Install(_ context.Context, db *gorm.DB, models []tenancy.ModelI
 		return fmt.Errorf("install app_tenancy_matches: %w", err)
 	}
 	for _, m := range models {
-		if applyErr := applyTenancyPolicy(db, m); applyErr != nil {
+		if applyErr := p.applyTenancyPolicy(db, m); applyErr != nil {
 			return fmt.Errorf("enable RLS on %s: %w", m.Table, applyErr)
 		}
 	}
@@ -49,10 +51,19 @@ func (*Provider) Install(_ context.Context, db *gorm.DB, models []tenancy.ModelI
 }
 
 // applyTenancyPolicy emits the four idempotent statements for one table.
-func applyTenancyPolicy(db *gorm.DB, m tenancy.ModelInfo) error {
-	quoted := pgQuoteIdent(m.Table)
-	tenantCol := pgQuoteIdent(m.TenantColumn)
-	partitionCol := pgQuoteIdent(m.PartitionColumn)
+// Identifiers are quoted through the wired adapter (so dialect-specific
+// rules apply) with a fallback to the canonical Postgres quoting when
+// the provider has not been wired (e.g. tests that call Install directly).
+func (p *Provider) applyTenancyPolicy(db *gorm.DB, m tenancy.ModelInfo) error {
+	quote := func(s string) string {
+		if p.adapter != nil {
+			return p.adapter.QuoteIdentifier(s)
+		}
+		return `"` + strings.ReplaceAll(s, `"`, `""`) + `"`
+	}
+	quoted := quote(m.Table)
+	tenantCol := quote(m.TenantColumn)
+	partitionCol := quote(m.PartitionColumn)
 
 	stmts := []string{
 		fmt.Sprintf(alterEnableRLS, quoted),
@@ -68,19 +79,16 @@ func applyTenancyPolicy(db *gorm.DB, m tenancy.ModelInfo) error {
 	return nil
 }
 
-// pgQuoteIdent double-quotes a Postgres identifier, escaping embedded quotes.
-func pgQuoteIdent(name string) string {
-	return `"` + strings.ReplaceAll(name, `"`, `""`) + `"`
-}
-
-// WireAdapter implements tenancy.Provider. Registers a BeforeAcquire
-// hook that pushes Claims-derived session vars onto the connection,
-// and an AfterRelease hook that resets them so connections are returned
-// to the pool clean.
+// WireAdapter implements tenancy.Provider. Stashes the adapter (for
+// identifier quoting in Install), then registers a BeforeAcquire hook
+// that pushes Claims-derived session vars onto the connection and an
+// AfterRelease hook that resets them so connections are returned to
+// the pool clean.
 func (p *Provider) WireAdapter(adapter dialect.DialectAdapter) error {
 	if adapter == nil {
 		return errors.New("tenancy/postgres: nil adapter")
 	}
+	p.adapter = adapter
 	if err := adapter.RegisterAcquireHook(p.beforeAcquire); err != nil {
 		return fmt.Errorf("register acquire hook: %w", err)
 	}

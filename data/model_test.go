@@ -15,6 +15,7 @@ import (
 
 	"github.com/pitabwire/frame"
 	"github.com/pitabwire/frame/config"
+	"github.com/pitabwire/frame/data"
 	"github.com/pitabwire/frame/frametests/definition"
 	"github.com/pitabwire/frame/tests"
 )
@@ -241,4 +242,18 @@ func (s *CommonTestSuite) TestErrIsNotFound() {
 			})
 		}
 	})
+}
+
+// TestBaseModelSettersRoundTrip verifies that BaseModel setters and getters
+// round-trip correctly and satisfy the tenancy.Tenanted interface contract.
+func TestBaseModelSettersRoundTrip(t *testing.T) {
+	t.Parallel()
+
+	m := &data.BaseModel{}
+	m.SetTenantID("t1")
+	m.SetPartitionID("p1")
+	m.SetAccessID("a1")
+	require.Equal(t, "t1", m.GetTenantID())
+	require.Equal(t, "p1", m.GetPartitionID())
+	require.Equal(t, "a1", m.GetAccessID())
 }

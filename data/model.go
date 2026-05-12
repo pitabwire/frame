@@ -96,7 +96,37 @@ func (model *BaseModel) GetAccessID() string {
 	return model.AccessID
 }
 
+// SetTenantID assigns the tenant identifier. Satisfies tenancy.Tenanted.
+func (model *BaseModel) SetTenantID(v string) {
+	model.TenantID = v
+}
+
+// SetPartitionID assigns the partition identifier. Satisfies tenancy.Tenanted.
+func (model *BaseModel) SetPartitionID(v string) {
+	model.PartitionID = v
+}
+
+// SetAccessID assigns the access identifier. Satisfies tenancy.Tenanted.
+func (model *BaseModel) SetAccessID(v string) {
+	model.AccessID = v
+}
+
 var _ util.TenancyInfo = (*BaseModel)(nil)
+
+// tenancyTenantedMirror mirrors tenancy.Tenanted's method set so we can
+// assert BaseModel satisfies it without importing the tenancy package
+// (which would create an import cycle: tenancy depends on security,
+// data depends on security, future code may have tenancy depend on data).
+type tenancyTenantedMirror interface {
+	GetTenantID() string
+	GetPartitionID() string
+	GetAccessID() string
+	SetTenantID(string)
+	SetPartitionID(string)
+	SetAccessID(string)
+}
+
+var _ tenancyTenantedMirror = (*BaseModel)(nil)
 
 // BeforeSave Ensures we update a migrations time stamps.
 func (model *BaseModel) BeforeSave(db *gorm.DB) error {

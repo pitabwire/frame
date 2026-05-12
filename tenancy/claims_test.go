@@ -143,3 +143,25 @@ func TestWithExtraPartitionsNoOpWithoutClaims(t *testing.T) {
 	ctx := tenancy.WithExtraPartitions(context.Background(), "p1")
 	require.Nil(t, tenancy.ClaimsFromContext(ctx))
 }
+
+func TestWithSkipEnforcement(t *testing.T) {
+	t.Parallel()
+
+	ctx := tenancy.WithSkipEnforcement(context.Background())
+	got := tenancy.ClaimsFromContext(ctx)
+	require.NotNil(t, got)
+	require.True(t, got.Skip)
+	require.True(t, got.IsEmpty(), "Skip-only claims still count as empty for the provider")
+}
+
+func TestWithSkipEnforcementOverridesAuthClaims(t *testing.T) {
+	t.Parallel()
+
+	auth := &security.AuthenticationClaims{TenantID: "T1", PartitionID: "P1"}
+	ctx := auth.ClaimsToContext(context.Background())
+	ctx = tenancy.WithSkipEnforcement(ctx)
+
+	got := tenancy.ClaimsFromContext(ctx)
+	require.NotNil(t, got)
+	require.True(t, got.Skip, "explicit Skip must win over derived auth claims")
+}

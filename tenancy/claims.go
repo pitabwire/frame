@@ -172,3 +172,16 @@ func WithExtraPartitions(ctx context.Context, partitionIDs ...string) context.Co
 	extended := current.ExtendPartitions(partitionIDs...)
 	return WithClaims(ctx, extended)
 }
+
+// WithSkipEnforcement returns a context that bypasses tenancy
+// enforcement for any database query made through it. Use for
+// migration scripts, admin tools, or system-level operations that
+// legitimately need full-table access.
+//
+// Internally this binds a Claims value with Skip=true. Providers
+// honour Skip by performing no session binding for the connection,
+// which makes the database-side policy's empty-match-all branch fire
+// — i.e. every row is visible.
+func WithSkipEnforcement(ctx context.Context) context.Context {
+	return WithClaims(ctx, &Claims{Skip: true})
+}

@@ -98,6 +98,61 @@ ctx = tenancy.WithClaims(ctx, &tenancy.Claims{
     PartitionIDs: []string{"P1"},
     AccessID:     "A1",
 })
+
+// For admin scripts or migrations that legitimately need full-table
+// access, bypass enforcement explicitly:
+ctx = tenancy.WithSkipEnforcement(ctx)
+```
+
+### Performance: prefer the interceptor over auth-claim fallback
+
+`tenancy.ClaimsFromContext` has a three-tier fallback:
+1. Explicit `*tenancy.Claims` bound via `tenancy.WithClaims` (fastest — no allocation).
+2. Derived from `security.AuthenticationClaims` if present (allocates a fresh `*Claims` every call).
+3. `nil` if neither is bound.
+
+The Postgres tenancy provider's connection-acquire hook calls
+`ClaimsFromContext` on every connection acquired from the pool. For
+high-throughput services, register `tenancy.NewClaimsInterceptor()`
+after your authentication interceptor so the derived claims are bound
+once per request:
+
+```go
+options := connect.WithInterceptors(
+    authInterceptor,
+    tenancy.NewClaimsInterceptor(),  // pre-binds Claims so the hot path is path 1
+)
+```
+
+Without the interceptor, requests with auth claims still work
+correctly — they just pay an extra allocation per connection acquire.
+
+### Job workers: write-path tenancy
+
+`data.BaseModel.BeforeCreate` reads from `security.AuthenticationClaims`
+(via `security.ClaimsFromContext`) to populate `TenantID`,
+`PartitionID`, and `AccessID` automatically. Job workers that build
+`tenancy.Claims` from queue metadata without also pushing
+`security.AuthenticationClaims` into the context must populate those
+fields manually before calling `repo.Create`:
+
+```go
+entity := &MyModel{
+    BaseModel: data.BaseModel{TenantID: msg.TenantID, PartitionID: msg.PartitionID},
+    // ... other fields
+}
+err := repo.Create(ctx, entity)
+```
+
+Alternatively, push an `AuthenticationClaims` into the context so the
+`BaseModel` hook fires automatically:
+
+```go
+auth := &security.AuthenticationClaims{
+    TenantID: msg.TenantID, PartitionID: msg.PartitionID,
+}
+ctx := auth.ClaimsToContext(ctx)
+// repo.Create(ctx, entity) now picks up TenantID/PartitionID from auth.
 ```
 
 ### One-shot calls are the encouraged path

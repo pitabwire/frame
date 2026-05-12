@@ -90,6 +90,7 @@ type Service struct {
 	eventsManager       events.Manager
 	datastoreManager    datastore.Manager
 	tenancyProvider     tenancy.Provider
+	tenancyProviderSet  bool
 
 	telemetryManager telemetry.Manager
 

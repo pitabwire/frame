@@ -59,7 +59,9 @@ func WithDatastoreConnectionWithOptions(name string, opts ...pool.Option) Option
 
 		dbPool := s.datastoreManager.GetPool(ctx, name)
 		if dbPool == nil {
-			dbPool = pool.NewPool(ctx)
+			// Forward all opts so adapter/provider overrides reach NewPool —
+			// NewPool reads DialectAdapter and TenancyProvider, ignores the rest.
+			dbPool = pool.NewPool(ctx, opts...)
 			s.datastoreManager.AddPool(ctx, name, dbPool)
 		}
 
@@ -109,8 +111,9 @@ func WithDatastore(opts ...pool.Option) Option {
 	return func(ctx context.Context, s *Service) {
 		enrichedOpts, doMigrate := datastoreOptsFromConfig(s, opts)
 
-		// Default to Postgres-RLS if no provider was explicitly set.
-		if s.tenancyProvider == nil {
+		// Default to Postgres-RLS only if WithTenancyProvider was never
+		// called. WithTenancyProvider(nil) explicitly disables enforcement.
+		if !s.tenancyProviderSet {
 			s.tenancyProvider = tenpg.New()
 		}
 		// Forward the provider through to the pool so it wires hooks before
@@ -138,12 +141,13 @@ func WithDatastore(opts ...pool.Option) Option {
 // provider that WithDatastore wires by default. Pass nil to disable
 // tenancy enforcement entirely (useful for tests).
 //
-// Order matters: WithTenancyProvider must appear BEFORE WithDatastore
-// in the option list, because WithDatastore reads s.tenancyProvider to
-// forward it through to the pool.
+// May be passed before or after WithDatastore in the option list —
+// WithDatastore resolves s.tenancyProvider at construction time, and
+// the resolved provider flows through to pool.NewPool via opts.
 func WithTenancyProvider(prov tenancy.Provider) Option {
 	return func(_ context.Context, s *Service) {
 		s.tenancyProvider = prov
+		s.tenancyProviderSet = true
 	}
 }
 

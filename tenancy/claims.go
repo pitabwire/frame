@@ -1,5 +1,11 @@
 package tenancy
 
+import (
+	"context"
+
+	"github.com/pitabwire/frame/security"
+)
+
 // Claims is the storage-layer view of a principal's tenancy. Treat as
 // immutable: every transformation returns a new instance.
 type Claims struct {
@@ -94,4 +100,75 @@ func dedupedNonEmpty(in []string) []string {
 		out = append(out, s)
 	}
 	return out
+}
+
+// claimsKey is the unexported context key under which Claims are
+// stored. Using an unexported empty struct prevents collisions with
+// other packages' context values.
+type claimsKey struct{}
+
+// WithClaims binds Claims to ctx. Returns the parent ctx unchanged
+// when c is nil to avoid hiding a "no claims" signal behind a
+// non-empty context.
+func WithClaims(ctx context.Context, c *Claims) context.Context {
+	if c == nil {
+		return ctx
+	}
+	return context.WithValue(ctx, claimsKey{}, c)
+}
+
+// ClaimsFromContext returns the bound Claims with graceful fallback:
+//
+//  1. Explicit Claims bound via WithClaims (fastest path).
+//  2. Derived from security.AuthenticationClaims if present in ctx
+//     (job workers / services that haven't run the tenancy interceptor
+//     still get correct enforcement).
+//  3. nil — caller is unscoped (system services, migrations).
+func ClaimsFromContext(ctx context.Context) *Claims {
+	if v, ok := ctx.Value(claimsKey{}).(*Claims); ok {
+		return v
+	}
+	if auth := security.ClaimsFromContext(ctx); auth != nil {
+		return ClaimsFromAuth(ctx, auth)
+	}
+	return nil
+}
+
+// ClaimsFromAuth derives Claims from auth claims using the frame
+// default mapping:
+//
+//	TenantID     = auth.GetTenantID()
+//	PartitionIDs = auth.GetPartitionIDs()
+//	AccessID     = auth.GetAccessID()
+//	Skip         = auth.IsInternalSystem() || security.IsTenancyChecksOnClaimSkipped(ctx)
+//
+// Not overridable — callers needing different semantics build Claims
+// directly and bind via WithClaims.
+func ClaimsFromAuth(ctx context.Context, auth *security.AuthenticationClaims) *Claims {
+	if auth == nil {
+		return nil
+	}
+	return &Claims{
+		TenantID:     auth.GetTenantID(),
+		PartitionIDs: auth.GetPartitionIDs(),
+		AccessID:     auth.GetAccessID(),
+		Skip:         auth.IsInternalSystem() || security.IsTenancyChecksOnClaimSkipped(ctx),
+	}
+}
+
+// WithExtraPartitions reads the current Claims from ctx, extends them
+// with the supplied partition IDs (preserving TenantID, AccessID, Skip),
+// and binds the extended Claims to a child ctx. Returns ctx unchanged
+// when no claims are present.
+//
+// Use for service-on-behalf-of flows, cross-branch reporting, or any
+// case where a principal legitimately needs visibility over additional
+// partitions without changing tenant.
+func WithExtraPartitions(ctx context.Context, partitionIDs ...string) context.Context {
+	current := ClaimsFromContext(ctx)
+	if current == nil {
+		return ctx
+	}
+	extended := current.ExtendPartitions(partitionIDs...)
+	return WithClaims(ctx, extended)
 }

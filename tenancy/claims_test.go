@@ -1,10 +1,12 @@
 package tenancy_test
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/pitabwire/frame/security"
 	"github.com/pitabwire/frame/tenancy"
 )
 
@@ -70,4 +72,75 @@ func TestExtendPartitionsOnNilReceiver(t *testing.T) {
 	require.Equal(t, []string{"p1", "p2"}, extended.PartitionIDs)
 	require.Empty(t, extended.TenantID)
 	require.False(t, extended.Skip)
+}
+
+func TestWithClaimsAndClaimsFromContext(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	require.Nil(t, tenancy.ClaimsFromContext(ctx))
+
+	c := &tenancy.Claims{TenantID: "t1", PartitionIDs: []string{"p1"}}
+	ctx2 := tenancy.WithClaims(ctx, c)
+	got := tenancy.ClaimsFromContext(ctx2)
+	require.NotNil(t, got)
+	require.Equal(t, "t1", got.TenantID)
+	require.Equal(t, []string{"p1"}, got.PartitionIDs)
+}
+
+func TestWithClaimsNilIsNoOp(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	result := tenancy.WithClaims(ctx, nil)
+	// Verify that the returned context is the same as the input (no wrapping).
+	require.Equal(t, ctx, result)
+	require.Equal(t, ctx, result, "WithClaims(ctx, nil) should return ctx unchanged")
+}
+
+func TestClaimsFromContextFallsBackToAuth(t *testing.T) {
+	t.Parallel()
+
+	auth := &security.AuthenticationClaims{TenantID: "t1", PartitionID: "p1", AccessID: "a1"}
+	ctx := auth.ClaimsToContext(context.Background())
+
+	got := tenancy.ClaimsFromContext(ctx)
+	require.NotNil(t, got)
+	require.Equal(t, "t1", got.TenantID)
+	require.Equal(t, []string{"p1"}, got.PartitionIDs)
+	require.Equal(t, "a1", got.AccessID)
+	require.False(t, got.Skip)
+}
+
+func TestClaimsFromAuthSkipForInternalSystem(t *testing.T) {
+	t.Parallel()
+
+	auth := &security.AuthenticationClaims{
+		TenantID:    "t1",
+		PartitionID: "p1",
+		Roles:       []string{security.ConstantSystemInternalRole},
+	}
+	ctx := auth.ClaimsToContext(context.Background())
+	got := tenancy.ClaimsFromContext(ctx)
+	require.NotNil(t, got)
+	require.True(t, got.Skip, "internal system caller should yield Skip=true")
+}
+
+func TestWithExtraPartitionsExtendsCurrent(t *testing.T) {
+	t.Parallel()
+
+	auth := &security.AuthenticationClaims{TenantID: "t1", PartitionID: "p1"}
+	ctx := auth.ClaimsToContext(context.Background())
+	ctx = tenancy.WithExtraPartitions(ctx, "p2", "p3")
+
+	got := tenancy.ClaimsFromContext(ctx)
+	require.NotNil(t, got)
+	require.Equal(t, "t1", got.TenantID)
+	require.Equal(t, []string{"p1", "p2", "p3"}, got.PartitionIDs)
+}
+
+func TestWithExtraPartitionsNoOpWithoutClaims(t *testing.T) {
+	t.Parallel()
+
+	ctx := tenancy.WithExtraPartitions(context.Background(), "p1")
+	require.Nil(t, tenancy.ClaimsFromContext(ctx))
 }

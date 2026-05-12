@@ -35,11 +35,16 @@ type DialectAdapter interface {
 	// observability (e.g. otelpgx) and tuning (pool sizes, lifetimes).
 	// Registered hooks (RegisterAcquireHook / RegisterReleaseHook) must
 	// be attached to the connection that is opened.
+	//
+	// Returns a close function that the caller MUST invoke to release
+	// adapter-owned resources (e.g. the pgxpool that *sql.DB.Close does
+	// not reach). Calling the returned close function is the only way
+	// to fully tear down the underlying driver pool.
 	OpenConnection(
 		ctx context.Context,
 		dsn string,
 		opts ConnectionOptions,
-	) (gorm.Dialector, *sql.DB, error)
+	) (gorm.Dialector, *sql.DB, func() error, error)
 
 	// AdvisoryLock acquires a cooperative lock for serializing
 	// migrations. Returns a release function (nil release means lock

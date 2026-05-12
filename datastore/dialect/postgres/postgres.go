@@ -203,15 +203,15 @@ func (a *Adapter) OpenConnection(
 	ctx context.Context,
 	dsn string,
 	opts dialect.ConnectionOptions,
-) (gorm.Dialector, *sql.DB, error) {
+) (gorm.Dialector, *sql.DB, func() error, error) {
 	cleanDSN, err := a.NormalizeDSN(dsn)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	cfg, err := pgxpool.ParseConfig(cleanDSN)
 	if err != nil {
-		return nil, nil, fmt.Errorf("create connection pool: %w", err)
+		return nil, nil, nil, fmt.Errorf("create connection pool: %w", err)
 	}
 
 	applyPoolSizing(cfg, opts)
@@ -227,10 +227,11 @@ func (a *Adapter) OpenConnection(
 
 	pgxPool, err := pgxpool.NewWithConfig(ctx, cfg)
 	if err != nil {
-		return nil, nil, fmt.Errorf("connect to database: %w", err)
+		return nil, nil, nil, fmt.Errorf("connect to database: %w", err)
 	}
 	if statErr := otelpgx.RecordStats(pgxPool); statErr != nil {
-		return nil, nil, fmt.Errorf("unable to record database stats: %w", statErr)
+		pgxPool.Close()
+		return nil, nil, nil, fmt.Errorf("unable to record database stats: %w", statErr)
 	}
 
 	connector := stdlib.GetPoolConnector(pgxPool)
@@ -242,7 +243,20 @@ func (a *Adapter) OpenConnection(
 		PreferSimpleProtocol: opts.PreferSimpleProtocol,
 	})
 
-	return dialector, sqlDB, nil
+	// closeFn fully tears down both layers. stdlib.GetPoolConnector
+	// documents that closing the returned *sql.DB does NOT close the
+	// underlying *pgxpool.Pool — the pool's goroutines and idle conns
+	// stay alive (and any session-level state, e.g. advisory locks,
+	// remains held). Close sqlDB first so no new acquires can be
+	// issued via the connector, then close the pgxpool which is
+	// synchronous and blocks until conns are released.
+	closeFn := func() error {
+		sqlDBErr := sqlDB.Close()
+		pgxPool.Close()
+		return sqlDBErr
+	}
+
+	return dialector, sqlDB, closeFn, nil
 }
 
 // AdvisoryLock implements dialect.DialectAdapter using Postgres

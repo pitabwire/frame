@@ -2,146 +2,44 @@ package pool
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
-	"math"
-	"net/url"
-	"strings"
 
-	"github.com/exaring/otelpgx"
-	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/jackc/pgx/v5/stdlib"
-	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
+
+	"github.com/pitabwire/frame/datastore/dialect"
 )
 
-const idleTimeToMaxLifeTimeDivisor = 2
-
-func (s *pool) createConnection(ctx context.Context, dsn string, poolOpts *Options) (*gorm.DB, error) {
-	cleanedPostgresqlDSN, err := cleanPostgresDSN(dsn)
+// createConnection asks the adapter to open a *gorm.DB. The adapter
+// owns all driver-specific concerns (DSN parsing, pgxpool tuning,
+// otel wiring, hook attachment). Returns the gorm DB plus a close
+// function the pool must invoke on shutdown.
+func (s *pool) createConnection(ctx context.Context, dsn string, poolOpts *Options) (*gorm.DB, func() error, error) {
+	cleanDSN, err := s.adapter.NormalizeDSN(dsn)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	cfg, err := pgxpool.ParseConfig(cleanedPostgresqlDSN)
+	dialector, _, closeFn, err := s.adapter.OpenConnection(ctx, cleanDSN, dialect.ConnectionOptions{
+		MaxOpen:                poolOpts.MaxOpen,
+		MaxLifetime:            poolOpts.MaxLifetime,
+		PreferSimpleProtocol:   poolOpts.PreferSimpleProtocol,
+		SkipDefaultTransaction: poolOpts.SkipDefaultTransaction,
+		InsertBatchSize:        poolOpts.InsertBatchSize,
+		PreparedStatements:     poolOpts.PreparedStatements,
+	})
 	if err != nil {
-		return nil, fmt.Errorf("create connection pool: %w", err)
+		return nil, nil, err
 	}
 
-	// Configure pgxpool settings from Options
-	if poolOpts.MaxOpen > 0 {
-		maxConns := poolOpts.MaxOpen
-		if maxConns > math.MaxInt32 {
-			maxConns = math.MaxInt32
-		}
-		cfg.MaxConns = int32(maxConns)
-	}
-	if poolOpts.MaxLifetime > 0 {
-		cfg.MaxConnLifetime = poolOpts.MaxLifetime
-		cfg.MaxConnIdleTime = poolOpts.MaxLifetime / idleTimeToMaxLifeTimeDivisor // Set idle time to half of max lifetime
-	}
-
-	// Add OpenTelemetry tracing
-	cfg.ConnConfig.Tracer = otelpgx.NewTracer()
-
-	// Create the pgxpool with configured settings
-	pgxPool, err := pgxpool.NewWithConfig(ctx, cfg)
+	gormDB, err := gorm.Open(dialector, &gorm.Config{
+		Logger:                 datastoreLogger(ctx, poolOpts.TraceConfig),
+		SkipDefaultTransaction: poolOpts.SkipDefaultTransaction,
+		PrepareStmt:            poolOpts.PreparedStatements,
+		CreateBatchSize:        poolOpts.InsertBatchSize,
+	})
 	if err != nil {
-		return nil, fmt.Errorf("connect to database: %w", err)
+		_ = closeFn()
+		return nil, nil, fmt.Errorf("failed to open GORM connection: %w", err)
 	}
-
-	// Record pool statistics for observability
-	err = otelpgx.RecordStats(pgxPool)
-	if err != nil {
-		return nil, fmt.Errorf("unable to record database stats: %w", err)
-	}
-
-	// Use stdlib connector to expose pgxpool as database/sql compatible interface
-	// This maintains the pool semantics while providing sql.DB interface for GORM
-	connector := stdlib.GetPoolConnector(pgxPool)
-	sqlDB := sql.OpenDB(connector)
-
-	// CRITICAL: Set MaxIdleConns to 0 as per GetPoolConnector documentation
-	// The pgxpool manages all connections internally. Setting idle connections on sql.DB
-	// would cause it to hold connections outside the pool, starving direct pgxpool users.
-	sqlDB.SetMaxIdleConns(0)
-
-	// Set MaxOpenConns to match pgxpool's MaxConns to prevent sql.DB from trying
-	// to open more connections than the pool allows
-	if poolOpts.MaxOpen > 0 {
-		sqlDB.SetMaxOpenConns(poolOpts.MaxOpen)
-	}
-
-	// Connection lifetime is managed by pgxpool, but we set it on sql.DB as well
-	// to ensure consistency in connection recycling behavior
-	if poolOpts.MaxLifetime > 0 {
-		sqlDB.SetConnMaxLifetime(poolOpts.MaxLifetime)
-	}
-
-	// Open GORM with the properly configured sql.DB backed by pgxpool
-	gormDB, err := gorm.Open(
-		postgres.New(postgres.Config{
-			Conn:                 sqlDB,
-			PreferSimpleProtocol: poolOpts.PreferSimpleProtocol,
-		}),
-		&gorm.Config{
-			Logger:                 datastoreLogger(ctx, poolOpts.TraceConfig),
-			SkipDefaultTransaction: poolOpts.SkipDefaultTransaction,
-			PrepareStmt:            poolOpts.PreparedStatements, // Controls prepared statement caching.
-			CreateBatchSize:        poolOpts.InsertBatchSize,
-		},
-	)
-
-	if err != nil {
-		return nil, fmt.Errorf("failed to open GORM connection: %w", err)
-	}
-
-	return gormDB, nil
-}
-
-// cleanPostgresDSN checks if the input is already a DSN, otherwise converts a PostgreSQL URL to DSN.
-func cleanPostgresDSN(pgString string) (string, error) {
-	trimmed := strings.TrimSpace(pgString)
-	// Heuristic: if it contains '=' and does not start with postgres:// or postgresql://, treat as DSN
-	lower := strings.ToLower(trimmed)
-	if strings.Contains(trimmed, "=") && !strings.HasPrefix(lower, "postgres://") &&
-		!strings.HasPrefix(lower, "postgresql://") {
-		return trimmed, nil
-	}
-
-	u, err := url.Parse(trimmed)
-	if err != nil {
-		return "", err
-	}
-
-	if u.Scheme != "postgres" && u.Scheme != "postgresql" {
-		return "", fmt.Errorf("invalid scheme: %s", u.Scheme)
-	}
-
-	user := ""
-	password := ""
-	if u.User != nil {
-		user = u.User.Username()
-		password, _ = u.User.Password()
-	}
-	host := u.Hostname()
-	port := u.Port()
-	if port == "" {
-		port = "5432"
-	}
-	dbname := strings.TrimPrefix(u.Path, "/")
-
-	dsn := []string{
-		"host=" + host,
-		"port=" + port,
-		"user=" + user,
-		"password=" + password,
-		"dbname=" + dbname,
-	}
-	for k, vals := range u.Query() {
-		for _, v := range vals {
-			dsn = append(dsn, fmt.Sprintf("%s=%s", k, v))
-		}
-	}
-	return strings.Join(dsn, " "), nil
+	return gormDB, closeFn, nil
 }

@@ -220,12 +220,11 @@ func (s *RepositoryTestSuite) TestServiceDatastoreRead() {
 
 				rd, _ := r.DB()
 				wd, _ := w.DB()
-				require.NotEqual(
-					t,
-					wd,
-					rd,
-					"read and write db services should be different when separate connections are set",
-				)
+				// Identity comparison only — reflect.DeepEqual on *sql.DB
+				// reaches into pgxpool's mutable state and races with
+				// background acquire/release goroutines.
+				require.NotSame(t, wd, rd,
+					"read and write db services should be different instances when separate connections are set")
 			})
 		}
 	})

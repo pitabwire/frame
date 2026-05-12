@@ -94,9 +94,8 @@ func datastoreOptsFromConfig(s *Service, opts []pool.Option) ([]pool.Option, boo
 		if cfg.GetMaxOpenConnections() > 0 {
 			opts = append(opts, pool.WithMaxOpen(cfg.GetMaxOpenConnections()))
 		}
-		if cfg.GetMaxIdleConnections() > 0 {
-			opts = append(opts, pool.WithMaxIdle(cfg.GetMaxIdleConnections()))
-		}
+		// MaxIdle is intentionally not forwarded — the adapter forces idle=0
+		// for tenancy hook correctness. See pool.WithMaxIdle's doc comment.
 		if cfg.GetMaxConnectionLifeTimeInSeconds() > 0 {
 			opts = append(opts, pool.WithMaxLifetime(cfg.GetMaxConnectionLifeTimeInSeconds()))
 		}

@@ -16,7 +16,6 @@ type Options struct {
 	Connections []Connection
 
 	MaxOpen     int
-	MaxIdle     int
 	MaxLifetime time.Duration
 
 	PreferSimpleProtocol   bool
@@ -61,11 +60,15 @@ func WithMaxOpen(maxOpen int) Option {
 	}
 }
 
-// WithMaxIdle returns an Option to configure the database connection max idle connections.
-func WithMaxIdle(maxIdle int) Option {
-	return func(o *Options) {
-		o.MaxIdle = maxIdle
-	}
+// WithMaxIdle is intentionally a no-op. The dialect adapter forces
+// MaxIdleConns=0 on the sql.DB so every connection release flows
+// through the per-acquire / per-release hook chain (which the tenancy
+// provider relies on for session-state cleanup). The option is kept
+// to avoid breaking callers that still set it.
+//
+// Deprecated: setting MaxIdle has no effect.
+func WithMaxIdle(_ int) Option {
+	return func(*Options) {}
 }
 
 // WithMaxLifetime returns an Option to configure the database connection max lifetime.

@@ -250,10 +250,28 @@ func TestBaseModelSettersRoundTrip(t *testing.T) {
 	t.Parallel()
 
 	m := &data.BaseModel{}
+
+	// Initial round-trip
 	m.SetTenantID("t1")
 	m.SetPartitionID("p1")
 	m.SetAccessID("a1")
 	require.Equal(t, "t1", m.GetTenantID())
 	require.Equal(t, "p1", m.GetPartitionID())
 	require.Equal(t, "a1", m.GetAccessID())
+
+	// Overwrite: setters must unconditionally replace, not guard-no-op
+	m.SetTenantID("t2")
+	m.SetPartitionID("p2")
+	m.SetAccessID("a2")
+	require.Equal(t, "t2", m.GetTenantID())
+	require.Equal(t, "p2", m.GetPartitionID())
+	require.Equal(t, "a2", m.GetAccessID())
+
+	// Clear to empty: setters must accept ""
+	m.SetTenantID("")
+	m.SetPartitionID("")
+	m.SetAccessID("")
+	require.Empty(t, m.GetTenantID())
+	require.Empty(t, m.GetPartitionID())
+	require.Empty(t, m.GetAccessID())
 }

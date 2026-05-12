@@ -117,6 +117,11 @@ var _ util.TenancyInfo = (*BaseModel)(nil)
 // assert BaseModel satisfies it without importing the tenancy package
 // (which would create an import cycle: tenancy depends on security,
 // data depends on security, future code may have tenancy depend on data).
+//
+// Keep this interface in sync with tenancy.Tenanted — adding a method
+// there without updating the mirror here will not break the compile-time
+// assertion below, but it will surface as a build failure at every call
+// site in the tenancy package that uses *BaseModel as tenancy.Tenanted.
 type tenancyTenantedMirror interface {
 	GetTenantID() string
 	GetPartitionID() string

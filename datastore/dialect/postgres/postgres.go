@@ -260,11 +260,24 @@ func (a *Adapter) OpenConnection(
 }
 
 // AdvisoryLock implements dialect.DialectAdapter using Postgres
-// pg_try_advisory_lock semantics. Retries every migrationLockRetryInterval
-// until the supplied ctx is cancelled or the lock is acquired.
+// pg_try_advisory_lock semantics. Pins a single *sql.Conn for the
+// duration of the lock so that pg_try_advisory_lock (session-level)
+// and pg_advisory_unlock run against the same Postgres session.
+// Retries every migrationLockRetryInterval until ctx is cancelled or
+// the lock is acquired.
 func (a *Adapter) AdvisoryLock(ctx context.Context, db *gorm.DB, id int64) (func(), error) {
 	if db == nil {
 		return nil, errors.New("dialect/postgres: nil db")
+	}
+
+	sqlDB, err := db.DB()
+	if err != nil {
+		return nil, fmt.Errorf("dialect/postgres: resolve sql.DB: %w", err)
+	}
+
+	conn, err := sqlDB.Conn(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("dialect/postgres: pin connection: %w", err)
 	}
 
 	ticker := time.NewTicker(migrationLockRetryInterval)
@@ -272,22 +285,24 @@ func (a *Adapter) AdvisoryLock(ctx context.Context, db *gorm.DB, id int64) (func
 
 	for {
 		var acquired bool
-		err := db.WithContext(ctx).
-			Raw("SELECT pg_try_advisory_lock(?)", id).
-			Scan(&acquired).Error
-		if err != nil {
-			return nil, fmt.Errorf("dialect/postgres: advisory lock %d: %w", id, err)
+		row := conn.QueryRowContext(ctx, "SELECT pg_try_advisory_lock($1)", id)
+		if scanErr := row.Scan(&acquired); scanErr != nil {
+			_ = conn.Close()
+			return nil, fmt.Errorf("dialect/postgres: advisory lock %d: %w", id, scanErr)
 		}
 		if acquired {
 			return func() {
 				unlockCtx, cancel := context.WithTimeout(context.Background(), time.Second)
 				defer cancel()
-				_ = db.WithContext(unlockCtx).
-					Exec("SELECT pg_advisory_unlock(?)", id).Error
+				_, _ = conn.ExecContext(unlockCtx, "SELECT pg_advisory_unlock($1)", id)
+				// Return the pinned conn to the pool. Postgres releases
+				// any session-level state when the conn is recycled.
+				_ = conn.Close()
 			}, nil
 		}
 		select {
 		case <-ctx.Done():
+			_ = conn.Close()
 			return nil, ctx.Err()
 		case <-ticker.C:
 		}

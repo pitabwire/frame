@@ -23,6 +23,7 @@ import (
 
 const idleTimeToMaxLifeTimeDivisor = 2
 const migrationLockRetryInterval = 200 * time.Millisecond
+const releaseHookTimeout = 5 * time.Second
 
 // Adapter is the Postgres concrete implementation of
 // dialect.DialectAdapter. Construct with New; hook registration must
@@ -84,9 +85,11 @@ func (a *Adapter) RegisterReleaseHook(fn dialect.ReleaseHook) error {
 	return nil
 }
 
-// snapshotHooks returns immutable copies under read-lock so callbacks
-// invoked from pgxpool see a stable hook chain even if RegisterX is
-// called concurrently (which is rare but legal).
+// snapshotHooks returns copies of the hook slices under a read lock
+// so callbacks invoked by pgxpool observe a stable chain. Per the
+// Adapter contract, RegisterX must run BEFORE OpenConnection; the
+// RLock is therefore only protecting against concurrent registrations
+// during the construction phase, not late-running register calls.
 func (a *Adapter) snapshotHooks() ([]dialect.AcquireHook, []dialect.ReleaseHook) {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
@@ -96,7 +99,7 @@ func (a *Adapter) snapshotHooks() ([]dialect.AcquireHook, []dialect.ReleaseHook)
 }
 
 // pgxDialectConn wraps a *pgx.Conn (the underlying connection passed by
-// pgxpool's BeforeAcquire / AfterRelease callbacks) so it satisfies
+// pgxpool's PrepareConn / AfterRelease callbacks) so it satisfies
 // dialect.DialectConn without leaking pgx types past the boundary.
 type pgxDialectConn struct {
 	c *pgx.Conn
@@ -107,9 +110,17 @@ func (w *pgxDialectConn) Exec(ctx context.Context, query string, args ...any) er
 	return err
 }
 
-// runAcquireHooks dispatches all registered acquire hooks. Used by
-// pgxpool.PrepareConn — returning (true, nil) accepts the conn,
-// (false, err) rejects it.
+// runAcquireHooks is wired into pgxpool.PrepareConn. It invokes every
+// registered acquire hook in registration order. pgxpool semantics of
+// the (bool, error) return value:
+//   - (true,  nil): conn accepted, used by caller.
+//   - (true,  err): conn accepted, err returned to caller anyway.
+//   - (false, nil): conn destroyed, transparent retry on a new conn.
+//   - (false, err): conn destroyed, err returned to caller (no retry).
+//
+// Tenancy session-binding failures must surface to the caller — we
+// therefore return (false, hookErr) on any hook error so the query
+// fails fast rather than running on an unscoped conn.
 func (a *Adapter) runAcquireHooks(ctx context.Context, conn *pgx.Conn) (bool, error) {
 	acq, _ := a.snapshotHooks()
 	if len(acq) == 0 {
@@ -135,7 +146,12 @@ func (a *Adapter) runReleaseHooks(conn *pgx.Conn) bool {
 		return true
 	}
 	wrapped := &pgxDialectConn{c: conn}
-	hookCtx := context.Background()
+	// Use a bounded background ctx — pgxpool's AfterRelease has no ctx,
+	// and a hung release hook would block the pool slot indefinitely.
+	// 5s is generous for the only currently expected workload (RESET
+	// session vars) but long enough that legitimate slow queries finish.
+	hookCtx, cancel := context.WithTimeout(context.Background(), releaseHookTimeout)
+	defer cancel()
 	for _, h := range rel {
 		if err := h(hookCtx, wrapped); err != nil {
 			return false
@@ -179,7 +195,7 @@ func configureSQLDB(db *sql.DB, opts dialect.ConnectionOptions) {
 // Pool sizing notes:
 //   - MaxIdleConns is forced to 0 on the *sql.DB so every release goes
 //     through pgxpool — this is the property the hook chain relies on
-//     to guarantee BeforeAcquire fires per query, never leaking
+//     to guarantee PrepareConn fires per query, never leaking
 //     session state between requests.
 //   - MaxOpenConns mirrors pgxpool.MaxConns so sql.DB never tries to
 //     open more conns than the pool allows.
@@ -246,7 +262,7 @@ func (a *Adapter) AdvisoryLock(ctx context.Context, db *gorm.DB, id int64) (func
 			Raw("SELECT pg_try_advisory_lock(?)", id).
 			Scan(&acquired).Error
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("dialect/postgres: advisory lock %d: %w", id, err)
 		}
 		if acquired {
 			return func() {

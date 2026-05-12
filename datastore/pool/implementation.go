@@ -202,21 +202,8 @@ func (s *pool) Migrate(ctx context.Context, migrationsDirPath string, migrations
 		return err
 	}
 
-	if len(migrations) > 0 {
-		if err := migrator.AutoMigrate(migrations...); err != nil {
-			util.Log(ctx).WithError(err).Error("MigrateDatastore -- couldn't auto migrate")
-			return err
-		}
-		if s.provider != nil {
-			enrolled, enrollErr := tenancy.EnrolledModels(db, migrations)
-			if enrollErr != nil {
-				return enrollErr
-			}
-			if installErr := s.provider.Install(ctx, db, enrolled); installErr != nil {
-				util.Log(ctx).WithError(installErr).Error("MigrateDatastore -- tenancy install failed")
-				return installErr
-			}
-		}
+	if err := s.applyAutoMigrations(ctx, db, migrator, migrations); err != nil {
+		return err
 	}
 
 	executor := migration.NewMigrator(ctx, func(ctx context.Context) *gorm.DB { return s.DB(ctx, false) })
@@ -237,6 +224,36 @@ func (s *pool) ensureMigrationTable(migrator gorm.Migrator) error {
 	}
 	err := migrator.CreateTable(&migration.Migration{})
 	if err != nil && !s.adapter.IsRelationAlreadyExistsErr(err) {
+		return err
+	}
+	return nil
+}
+
+// applyAutoMigrations runs GORM AutoMigrate for the supplied models and, if a
+// tenancy provider is configured, installs tenancy artefacts (RLS policies,
+// etc.) on the models that opted in.
+func (s *pool) applyAutoMigrations(
+	ctx context.Context,
+	db *gorm.DB,
+	migrator gorm.Migrator,
+	migrations []any,
+) error {
+	if len(migrations) == 0 {
+		return nil
+	}
+	if err := migrator.AutoMigrate(migrations...); err != nil {
+		util.Log(ctx).WithError(err).Error("MigrateDatastore -- couldn't auto migrate")
+		return err
+	}
+	if s.provider == nil {
+		return nil
+	}
+	enrolled, err := tenancy.EnrolledModels(db, migrations)
+	if err != nil {
+		return err
+	}
+	if err = s.provider.Install(ctx, db, enrolled); err != nil {
+		util.Log(ctx).WithError(err).Error("MigrateDatastore -- tenancy install failed")
 		return err
 	}
 	return nil

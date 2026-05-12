@@ -30,6 +30,7 @@ import (
 	securityManager "github.com/pitabwire/frame/security/manager"
 	"github.com/pitabwire/frame/server"
 	"github.com/pitabwire/frame/server/implementation"
+	"github.com/pitabwire/frame/tenancy"
 	"github.com/pitabwire/frame/telemetry"
 	"github.com/pitabwire/frame/version"
 	"github.com/pitabwire/frame/workerpool"
@@ -88,6 +89,7 @@ type Service struct {
 	queueManager        queue.Manager
 	eventsManager       events.Manager
 	datastoreManager    datastore.Manager
+	tenancyProvider     tenancy.Provider
 
 	telemetryManager telemetry.Manager
 

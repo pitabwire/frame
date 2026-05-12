@@ -7,6 +7,8 @@ import (
 	"github.com/pitabwire/frame/datastore"
 	"github.com/pitabwire/frame/datastore/manager"
 	"github.com/pitabwire/frame/datastore/pool"
+	"github.com/pitabwire/frame/tenancy"
+	tenpg "github.com/pitabwire/frame/tenancy/postgres"
 )
 
 // WithDatastoreManager creates and initializes a datastore manager with the given options.
@@ -107,6 +109,15 @@ func WithDatastore(opts ...pool.Option) Option {
 	return func(ctx context.Context, s *Service) {
 		enrichedOpts, doMigrate := datastoreOptsFromConfig(s, opts)
 
+		// Default to Postgres-RLS if no provider was explicitly set.
+		if s.tenancyProvider == nil {
+			s.tenancyProvider = tenpg.New()
+		}
+		// Forward the provider through to the pool so it wires hooks before
+		// any connection is opened. The pool also defaults internally, but
+		// passing it explicitly makes the wiring visible.
+		enrichedOpts = append(enrichedOpts, pool.WithTenancyProvider(s.tenancyProvider))
+
 		// Create the manager if it doesn't exist
 		dbManager := WithDatastoreManager()
 		dbManager(ctx, s)
@@ -123,7 +134,27 @@ func WithDatastore(opts ...pool.Option) Option {
 	}
 }
 
+// WithTenancyProvider overrides the default Postgres-RLS tenancy
+// provider that WithDatastore wires by default. Pass nil to disable
+// tenancy enforcement entirely (useful for tests).
+//
+// Order matters: WithTenancyProvider must appear BEFORE WithDatastore
+// in the option list, because WithDatastore reads s.tenancyProvider to
+// forward it through to the pool.
+func WithTenancyProvider(prov tenancy.Provider) Option {
+	return func(_ context.Context, s *Service) {
+		s.tenancyProvider = prov
+	}
+}
+
 // DatastoreManager returns the service's datastore manager.
 func (s *Service) DatastoreManager() datastore.Manager {
 	return s.datastoreManager
+}
+
+// TenancyProvider returns the tenancy provider wired for the default
+// pool. Used by tests and diagnostics. May be nil when tenancy has
+// been explicitly disabled via WithTenancyProvider(nil).
+func (s *Service) TenancyProvider() tenancy.Provider {
+	return s.tenancyProvider
 }

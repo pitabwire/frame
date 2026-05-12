@@ -1,0 +1,267 @@
+package postgres
+
+import (
+	"context"
+	"database/sql"
+	"errors"
+	"fmt"
+	"math"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/exaring/otelpgx"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jackc/pgx/v5/stdlib"
+	gormpostgres "gorm.io/driver/postgres"
+	"gorm.io/gorm"
+
+	"github.com/pitabwire/frame/datastore/dialect"
+)
+
+const idleTimeToMaxLifeTimeDivisor = 2
+const migrationLockRetryInterval = 200 * time.Millisecond
+
+// Adapter is the Postgres concrete implementation of
+// dialect.DialectAdapter. Construct with New; hook registration must
+// happen BEFORE OpenConnection.
+type Adapter struct {
+	mu           sync.RWMutex
+	acquireHooks []dialect.AcquireHook
+	releaseHooks []dialect.ReleaseHook
+}
+
+// New returns a fresh Adapter with no registered hooks.
+func New() *Adapter {
+	return &Adapter{}
+}
+
+// Name implements dialect.DialectAdapter.
+func (*Adapter) Name() string { return "postgres" }
+
+// NormalizeDSN implements dialect.DialectAdapter.
+func (*Adapter) NormalizeDSN(raw string) (string, error) {
+	return NormalizeDSN(raw)
+}
+
+// QuoteIdentifier implements dialect.DialectAdapter.
+func (*Adapter) QuoteIdentifier(name string) string {
+	return `"` + strings.ReplaceAll(name, `"`, `""`) + `"`
+}
+
+// IsRelationAlreadyExistsErr implements dialect.DialectAdapter.
+// Detects SQLSTATE 42P07 ("relation already exists"), used to gracefully
+// handle concurrent migration startup races.
+func (*Adapter) IsRelationAlreadyExistsErr(err error) bool {
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) {
+		return pgErr.Code == "42P07"
+	}
+	return err != nil && strings.Contains(strings.ToLower(err.Error()), "already exists")
+}
+
+// RegisterAcquireHook implements dialect.DialectAdapter.
+func (a *Adapter) RegisterAcquireHook(fn dialect.AcquireHook) error {
+	if fn == nil {
+		return errors.New("dialect/postgres: nil acquire hook")
+	}
+	a.mu.Lock()
+	a.acquireHooks = append(a.acquireHooks, fn)
+	a.mu.Unlock()
+	return nil
+}
+
+// RegisterReleaseHook implements dialect.DialectAdapter.
+func (a *Adapter) RegisterReleaseHook(fn dialect.ReleaseHook) error {
+	if fn == nil {
+		return errors.New("dialect/postgres: nil release hook")
+	}
+	a.mu.Lock()
+	a.releaseHooks = append(a.releaseHooks, fn)
+	a.mu.Unlock()
+	return nil
+}
+
+// snapshotHooks returns immutable copies under read-lock so callbacks
+// invoked from pgxpool see a stable hook chain even if RegisterX is
+// called concurrently (which is rare but legal).
+func (a *Adapter) snapshotHooks() ([]dialect.AcquireHook, []dialect.ReleaseHook) {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	acq := append([]dialect.AcquireHook(nil), a.acquireHooks...)
+	rel := append([]dialect.ReleaseHook(nil), a.releaseHooks...)
+	return acq, rel
+}
+
+// pgxDialectConn wraps a *pgx.Conn (the underlying connection passed by
+// pgxpool's BeforeAcquire / AfterRelease callbacks) so it satisfies
+// dialect.DialectConn without leaking pgx types past the boundary.
+type pgxDialectConn struct {
+	c *pgx.Conn
+}
+
+func (w *pgxDialectConn) Exec(ctx context.Context, query string, args ...any) error {
+	_, err := w.c.Exec(ctx, query, args...)
+	return err
+}
+
+// runAcquireHooks dispatches all registered acquire hooks. Used by
+// pgxpool.PrepareConn — returning (true, nil) accepts the conn,
+// (false, err) rejects it.
+func (a *Adapter) runAcquireHooks(ctx context.Context, conn *pgx.Conn) (bool, error) {
+	acq, _ := a.snapshotHooks()
+	if len(acq) == 0 {
+		return true, nil
+	}
+	wrapped := &pgxDialectConn{c: conn}
+	for _, h := range acq {
+		if err := h(ctx, wrapped); err != nil {
+			return false, err
+		}
+	}
+	return true, nil
+}
+
+// runReleaseHooks dispatches all registered release hooks. pgxpool's
+// AfterRelease has no ctx; use context.Background so reset SQL is not
+// cancelled by an already-cancelled request ctx. Hooks must remain
+// cheap. Returning false destroys the connection instead of returning
+// it to the pool.
+func (a *Adapter) runReleaseHooks(conn *pgx.Conn) bool {
+	_, rel := a.snapshotHooks()
+	if len(rel) == 0 {
+		return true
+	}
+	wrapped := &pgxDialectConn{c: conn}
+	hookCtx := context.Background()
+	for _, h := range rel {
+		if err := h(hookCtx, wrapped); err != nil {
+			return false
+		}
+	}
+	return true
+}
+
+// applyPoolSizing copies pool tuning from ConnectionOptions onto the
+// pgxpool.Config. Pulled out of OpenConnection to keep that function
+// below the cognitive-complexity threshold.
+func applyPoolSizing(cfg *pgxpool.Config, opts dialect.ConnectionOptions) {
+	if opts.MaxOpen > 0 {
+		maxConns := opts.MaxOpen
+		if maxConns > math.MaxInt32 {
+			maxConns = math.MaxInt32
+		}
+		cfg.MaxConns = int32(maxConns)
+	}
+	if opts.MaxLifetime > 0 {
+		cfg.MaxConnLifetime = opts.MaxLifetime
+		cfg.MaxConnIdleTime = opts.MaxLifetime / idleTimeToMaxLifeTimeDivisor
+	}
+}
+
+// configureSQLDB applies *sql.DB pool sizing. MaxIdleConns is forced
+// to 0 so every release flows through pgxpool, which is the property
+// the hook chain relies on for tenancy hook correctness.
+func configureSQLDB(db *sql.DB, opts dialect.ConnectionOptions) {
+	db.SetMaxIdleConns(0)
+	if opts.MaxOpen > 0 {
+		db.SetMaxOpenConns(opts.MaxOpen)
+	}
+	if opts.MaxLifetime > 0 {
+		db.SetConnMaxLifetime(opts.MaxLifetime)
+	}
+}
+
+// OpenConnection implements dialect.DialectAdapter.
+//
+// Pool sizing notes:
+//   - MaxIdleConns is forced to 0 on the *sql.DB so every release goes
+//     through pgxpool — this is the property the hook chain relies on
+//     to guarantee BeforeAcquire fires per query, never leaking
+//     session state between requests.
+//   - MaxOpenConns mirrors pgxpool.MaxConns so sql.DB never tries to
+//     open more conns than the pool allows.
+func (a *Adapter) OpenConnection(
+	ctx context.Context,
+	dsn string,
+	opts dialect.ConnectionOptions,
+) (gorm.Dialector, *sql.DB, error) {
+	cleanDSN, err := a.NormalizeDSN(dsn)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	cfg, err := pgxpool.ParseConfig(cleanDSN)
+	if err != nil {
+		return nil, nil, fmt.Errorf("create connection pool: %w", err)
+	}
+
+	applyPoolSizing(cfg, opts)
+	cfg.ConnConfig.Tracer = otelpgx.NewTracer()
+
+	// Wire PrepareConn / AfterRelease to dispatch through registered
+	// hooks. Hooks see a stable snapshot — concurrent RegisterX after
+	// construction won't disturb in-flight callbacks. PrepareConn
+	// supersedes the deprecated BeforeAcquire and propagates hook
+	// errors back to the acquirer.
+	cfg.PrepareConn = a.runAcquireHooks
+	cfg.AfterRelease = a.runReleaseHooks
+
+	pgxPool, err := pgxpool.NewWithConfig(ctx, cfg)
+	if err != nil {
+		return nil, nil, fmt.Errorf("connect to database: %w", err)
+	}
+	if statErr := otelpgx.RecordStats(pgxPool); statErr != nil {
+		return nil, nil, fmt.Errorf("unable to record database stats: %w", statErr)
+	}
+
+	connector := stdlib.GetPoolConnector(pgxPool)
+	sqlDB := sql.OpenDB(connector)
+	configureSQLDB(sqlDB, opts)
+
+	dialector := gormpostgres.New(gormpostgres.Config{
+		Conn:                 sqlDB,
+		PreferSimpleProtocol: opts.PreferSimpleProtocol,
+	})
+
+	return dialector, sqlDB, nil
+}
+
+// AdvisoryLock implements dialect.DialectAdapter using Postgres
+// pg_try_advisory_lock semantics. Retries every migrationLockRetryInterval
+// until the supplied ctx is cancelled or the lock is acquired.
+func (a *Adapter) AdvisoryLock(ctx context.Context, db *gorm.DB, id int64) (func(), error) {
+	if db == nil {
+		return nil, errors.New("dialect/postgres: nil db")
+	}
+
+	ticker := time.NewTicker(migrationLockRetryInterval)
+	defer ticker.Stop()
+
+	for {
+		var acquired bool
+		err := db.WithContext(ctx).
+			Raw("SELECT pg_try_advisory_lock(?)", id).
+			Scan(&acquired).Error
+		if err != nil {
+			return nil, err
+		}
+		if acquired {
+			return func() {
+				unlockCtx, cancel := context.WithTimeout(context.Background(), time.Second)
+				defer cancel()
+				_ = db.WithContext(unlockCtx).
+					Exec("SELECT pg_advisory_unlock(?)", id).Error
+			}, nil
+		}
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-ticker.C:
+		}
+	}
+}
+
+var _ dialect.DialectAdapter = (*Adapter)(nil)

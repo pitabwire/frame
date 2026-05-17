@@ -108,6 +108,15 @@ func (h httpClientTimeoutCfg) GetHTTPClientIdleTimeout() time.Duration {
 	return h.idleTimeout
 }
 
+// contextWithHTTPClientTimeout is a tiny helper for tests that need a
+// context carrying a ConfigurationHTTPClient with the given timeout
+// (idle timeout left at its default).
+func contextWithHTTPClientTimeout(timeout time.Duration) context.Context {
+	return config.ToContext(context.Background(), httpClientTimeoutCfg{
+		timeout: timeout,
+	})
+}
+
 func (s *OptionsSuite) TestNewHTTPClientTakesTimeoutFromContextConfig() {
 	ctx := config.ToContext(context.Background(), httpClientTimeoutCfg{
 		timeout:     5 * time.Minute,

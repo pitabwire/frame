@@ -602,3 +602,46 @@ func (s *InvokerSuite) TestClientGetSet() {
 	inv.SetClient(context.Background(), replacement)
 	s.Same(replacement, inv.Client(context.Background()))
 }
+
+// TestClientReturnsSharedWhenNoOptions asserts the cheap path: no opts
+// yields the same shared client pointer on every call. Services that
+// never need a per-target timeout keep the existing semantics.
+func (s *InvokerSuite) TestClientReturnsSharedWhenNoOptions() {
+	inv := newTestInvoker(http.DefaultTransport, noRetry())
+	c1 := inv.Client(context.Background())
+	c2 := inv.Client(context.Background())
+	s.Same(c1, c2, "two no-opt Client calls must return the same shared client")
+}
+
+// TestClientPerCallTimeoutBuildsScopedClient asserts the new
+// per-downstream knob: passing WithHTTPTimeout from a call site yields
+// a fresh client whose Timeout matches the override, leaving the shared
+// client untouched. This is what lets an inference client (5m) coexist
+// with an identity-API client (5s) in the same binary.
+func (s *InvokerSuite) TestClientPerCallTimeoutBuildsScopedClient() {
+	inv := newTestInvoker(http.DefaultTransport, noRetry())
+	shared := inv.Client(context.Background())
+
+	scoped := inv.Client(context.Background(), WithHTTPTimeout(5*time.Minute))
+	s.NotNil(scoped)
+	s.NotSame(shared, scoped, "options must produce a request-scoped client")
+	s.Equal(5*time.Minute, scoped.Timeout)
+	s.Equal(shared.Timeout, inv.Client(context.Background()).Timeout,
+		"shared client timeout must be untouched by a per-call override")
+}
+
+// TestClientPerCallTimeoutWinsOverContextConfig asserts the precedence
+// chain: env-var / context config sets the service-wide default, but a
+// per-call WithHTTPTimeout option still wins. Critical because the
+// service may be configured with HTTP_CLIENT_TIMEOUT=5m for inference,
+// yet still need to talk to a fast identity API with a 3s ceiling.
+func (s *InvokerSuite) TestClientPerCallTimeoutWinsOverContextConfig() {
+	inv := newTestInvoker(http.DefaultTransport, noRetry())
+	// httpClientTimeoutCfg lives in options_test.go; both files compile
+	// into the same package so it is reachable here.
+	ctx := contextWithHTTPClientTimeout(5 * time.Minute)
+
+	scoped := inv.Client(ctx, WithHTTPTimeout(3*time.Second))
+	s.Equal(3*time.Second, scoped.Timeout,
+		"per-call WithHTTPTimeout must override the in-context config default")
+}

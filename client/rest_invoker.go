@@ -102,7 +102,21 @@ const defaultMaxResponseBodyLen = 100 << 20 // 100MB default safety cap
 var ErrResponseTooLarge = errors.New("response body truncated, it exceeds configured limit")
 
 type Manager interface {
-	Client(ctx context.Context) *http.Client
+	// Client returns the HTTP client used by the manager.
+	//
+	// Calling with no options returns the manager's shared client — cheap,
+	// reused across requests, and not owned by the caller. Calling with
+	// one or more HTTPOption (typically WithHTTPTimeout for a per-target
+	// deadline) returns a request-scoped client built from the manager's
+	// base options merged with the supplied overrides; the caller owns its
+	// idle-connection lifecycle and should call CloseIdleConnections when
+	// finished with it (or cache it on the call-site if the same overrides
+	// are reused).
+	//
+	// This is the per-client knob for services that talk to multiple
+	// downstreams with different latency profiles: a long inference timeout
+	// can coexist with a short identity-API timeout in the same binary.
+	Client(ctx context.Context, opts ...HTTPOption) *http.Client
 	SetClient(ctx context.Context, cl *http.Client)
 	Close()
 
@@ -197,9 +211,21 @@ func (s *invoker) Close() {
 	}
 }
 
-// Client returns the HTTP client used by the invoker.
-func (s *invoker) Client(_ context.Context) *http.Client {
-	return s.client
+// Client returns the HTTP client used by the invoker. With no opts the
+// shared client is returned; with opts a request-scoped client is built
+// fresh from the manager's base options merged with the overrides. See
+// the Manager interface doc for lifecycle ownership.
+func (s *invoker) Client(ctx context.Context, opts ...HTTPOption) *http.Client {
+	if len(opts) == 0 {
+		return s.client
+	}
+
+	scoped, err := s.requestScopedClient(ctx, opts...)
+	if err != nil {
+		util.Log(ctx).WithError(err).Error("failed to build request-scoped HTTP client; falling back to shared client")
+		return s.client
+	}
+	return scoped
 }
 
 // SetClient sets the HTTP client used by the invoker.

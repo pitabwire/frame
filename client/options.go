@@ -226,6 +226,21 @@ func newHTTPClient(ctx context.Context, opts ...HTTPOption) (*http.Client, error
 		transport:   http.DefaultTransport,
 	}
 
+	// Seed defaults from the in-context configuration when it implements
+	// ConfigurationHTTPClient. This is what lets services tune the
+	// outbound timeout via HTTP_CLIENT_TIMEOUT without writing code —
+	// critical for inference clients whose downstream latency exceeds
+	// the 30s default. Explicit WithHTTPTimeout / WithHTTPIdleTimeout
+	// options still win because cfg.process(...) applies them next.
+	if httpCfg, ok := config.FromContext[any](ctx).(config.ConfigurationHTTPClient); ok {
+		if t := httpCfg.GetHTTPClientTimeout(); t > 0 {
+			cfg.timeout = t
+		}
+		if t := httpCfg.GetHTTPClientIdleTimeout(); t > 0 {
+			cfg.idleTimeout = t
+		}
+	}
+
 	cfg.process(ctx, opts...)
 
 	base, closeIdleFn, err := prepareBaseTransport(ctx, cfg)

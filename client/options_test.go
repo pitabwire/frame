@@ -93,6 +93,54 @@ func (s *OptionsSuite) TestNewHTTPClient() {
 	s.Nil(tr.Protocols)
 }
 
+// httpClientTimeoutCfg satisfies config.ConfigurationHTTPClient for tests
+// that exercise the in-context timeout seeding path in newHTTPClient.
+type httpClientTimeoutCfg struct {
+	timeout     time.Duration
+	idleTimeout time.Duration
+}
+
+func (h httpClientTimeoutCfg) GetHTTPClientTimeout() time.Duration {
+	return h.timeout
+}
+
+func (h httpClientTimeoutCfg) GetHTTPClientIdleTimeout() time.Duration {
+	return h.idleTimeout
+}
+
+func (s *OptionsSuite) TestNewHTTPClientTakesTimeoutFromContextConfig() {
+	ctx := config.ToContext(context.Background(), httpClientTimeoutCfg{
+		timeout:     5 * time.Minute,
+		idleTimeout: 2 * time.Minute,
+	})
+
+	client := NewHTTPClient(ctx)
+
+	s.NotNil(client)
+	s.Equal(5*time.Minute, client.Timeout)
+}
+
+func (s *OptionsSuite) TestNewHTTPClientExplicitOptionWinsOverConfig() {
+	ctx := config.ToContext(context.Background(), httpClientTimeoutCfg{
+		timeout:     5 * time.Minute,
+		idleTimeout: 2 * time.Minute,
+	})
+
+	// Explicit WithHTTPTimeout must take precedence over the config-seeded
+	// value so callers that have a specific deadline are honoured.
+	client := NewHTTPClient(ctx, WithHTTPTimeout(7*time.Second))
+
+	s.NotNil(client)
+	s.Equal(7*time.Second, client.Timeout)
+}
+
+func (s *OptionsSuite) TestNewHTTPClientFallsBackToDefaultWithoutConfig() {
+	client := NewHTTPClient(context.Background())
+
+	s.NotNil(client)
+	s.Equal(time.Duration(defaultHTTPTimeoutSeconds)*time.Second, client.Timeout)
+}
+
 func (s *OptionsSuite) TestProcessPicksWorkloadAPITrustDomainFromContext() {
 	ctx := config.ToContext(context.Background(), workloadAPIConfig{
 		trustDomain: "example.org",

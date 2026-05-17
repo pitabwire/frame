@@ -183,6 +183,23 @@ func (s *ConfigSuite) TestHTTPServerSettings() {
 	s.Equal(1024*1024, cfg.HTTPMaxHeaderBytes())
 }
 
+func (s *ConfigSuite) TestHTTPClientSettings() {
+	cfg := &ConfigurationDefault{
+		HTTPClientTimeout:     "5m",
+		HTTPClientIdleTimeout: "120s",
+	}
+
+	s.Equal(5*time.Minute, cfg.GetHTTPClientTimeout())
+	s.Equal(120*time.Second, cfg.GetHTTPClientIdleTimeout())
+
+	// Unparseable values fall back to the package defaults.
+	cfg.HTTPClientTimeout = "not-a-duration"
+	cfg.HTTPClientIdleTimeout = ""
+
+	s.Equal(30*time.Second, cfg.GetHTTPClientTimeout())
+	s.Equal(90*time.Second, cfg.GetHTTPClientIdleTimeout())
+}
+
 func (s *ConfigSuite) TestDatabaseAndEventConfig() {
 	cfg := &ConfigurationDefault{
 		DatabasePrimaryURL:                   []string{"postgres://primary"},

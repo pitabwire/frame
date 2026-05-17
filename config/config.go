@@ -36,6 +36,8 @@ const (
 	defaultHTTPShutdownTimeout    = 15 * time.Second
 	defaultHTTPMaxHeaderKilobytes = 1024
 	defaultHTTPMaxHeaderBytes     = defaultHTTPMaxHeaderKilobytes * bytesPerKiB
+	defaultHTTPClientTimeout      = 30 * time.Second
+	defaultHTTPClientIdleTimeout  = 90 * time.Second
 
 	//nolint:gosec // configuration key, not a credential
 	TokenEndpointAuthMethodPrivateKeyJWT = "private_key_jwt"
@@ -254,6 +256,17 @@ type ConfigurationDefault struct {
 	HTTPServerIdleTimeout       string `envDefault:"90s"  env:"HTTP_SERVER_IDLE_TIMEOUT"        yaml:"http_server_idle_timeout"`
 	HTTPServerShutdownTimeout   string `envDefault:"15s"  env:"HTTP_SERVER_SHUTDOWN_TIMEOUT"    yaml:"http_server_shutdown_timeout"`
 	HTTPServerMaxHeaderBytes    int    `envDefault:"1024" env:"HTTP_SERVER_MAX_HEADER_KB"       yaml:"http_server_max_header_kb"`
+
+	// HTTPClientTimeout is the per-request timeout applied to outbound
+	// http.Client.Do calls performed by the Frame-instrumented HTTP client.
+	// Doubles as a downstream backpressure valve: setting it longer than
+	// a slow upstream's worst-case response time lets clients wait
+	// rather than retry-storm; setting it shorter sheds load when a
+	// downstream is unhealthy. Default 30s.
+	HTTPClientTimeout string `envDefault:"30s" env:"HTTP_CLIENT_TIMEOUT"      yaml:"http_client_timeout"`
+	// HTTPClientIdleTimeout is the connection idle timeout for outbound
+	// http.Transport keep-alive pools. Default 90s.
+	HTTPClientIdleTimeout string `envDefault:"90s" env:"HTTP_CLIENT_IDLE_TIMEOUT" yaml:"http_client_idle_timeout"`
 
 	// Worker pool settings
 	WorkerPoolCPUFactorForWorkerCount int    `envDefault:"10"  env:"WORKER_POOL_CPU_FACTOR_FOR_WORKER_COUNT" yaml:"worker_pool_cpu_factor_for_worker_count"`
@@ -558,6 +571,32 @@ func (c *ConfigurationDefault) HTTPMaxHeaderBytes() int {
 	}
 
 	return defaultHTTPMaxHeaderBytes
+}
+
+// ConfigurationHTTPClient surfaces outbound HTTP-client tunables to the
+// `frame/client` package, which consults the in-context configuration to
+// derive sensible defaults before user-supplied options are applied.
+//
+// Both methods must return strictly positive durations; non-positive or
+// unparseable values fall back to the package defaults.
+type ConfigurationHTTPClient interface {
+	GetHTTPClientTimeout() time.Duration
+	GetHTTPClientIdleTimeout() time.Duration
+}
+
+var _ ConfigurationHTTPClient = new(ConfigurationDefault)
+
+// GetHTTPClientTimeout returns the configured outbound HTTP request timeout
+// (env HTTP_CLIENT_TIMEOUT), falling back to defaultHTTPClientTimeout when
+// unset or unparseable.
+func (c *ConfigurationDefault) GetHTTPClientTimeout() time.Duration {
+	return parseDurationOrDefault(c.HTTPClientTimeout, defaultHTTPClientTimeout)
+}
+
+// GetHTTPClientIdleTimeout returns the configured outbound HTTP idle-conn
+// timeout (env HTTP_CLIENT_IDLE_TIMEOUT), falling back to the default.
+func (c *ConfigurationDefault) GetHTTPClientIdleTimeout() time.Duration {
+	return parseDurationOrDefault(c.HTTPClientIdleTimeout, defaultHTTPClientIdleTimeout)
 }
 
 type ConfigurationOAUTH2 interface {

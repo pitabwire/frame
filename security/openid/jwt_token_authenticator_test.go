@@ -143,8 +143,12 @@ func (s *JwtAuthenticatorTestSuite) createRSAJWK() JWK {
 	}
 }
 func (s *JwtAuthenticatorTestSuite) createECJWK() JWK {
-	xBytes := s.ecKey.PublicKey.X.Bytes() //nolint:staticcheck // test fixture uses deprecated fields for JWKS test data
-	yBytes := s.ecKey.PublicKey.Y.Bytes() //nolint:staticcheck // test fixture uses deprecated fields for JWKS test data
+	// The X/Y direct accessors were deprecated in Go 1.26; this is test
+	// fixture code building a JWK from the existing test key pair, so
+	// the deprecation is a non-issue here. crypto/ecdh would require a
+	// broader rewrite of the test setup.
+	xBytes := s.ecKey.PublicKey.X.Bytes() //nolint:staticcheck // SA1019: test fixture
+	yBytes := s.ecKey.PublicKey.Y.Bytes() //nolint:staticcheck // SA1019: test fixture
 
 	return JWK{
 		Kty: "EC",

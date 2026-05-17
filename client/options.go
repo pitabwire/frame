@@ -30,6 +30,16 @@ const (
 
 	defaultMaxRetryAttempts = 3
 	defaultMinRetryDuration = 100 * time.Millisecond
+
+	// http.DefaultTransport ships with MaxIdleConnsPerHost=2 which forces
+	// every concurrent caller past the second to negotiate a fresh TCP
+	// connection per request. At any real service-to-service load that
+	// floods the upstream's accept queue and produces "connection reset
+	// by peer" on most requests. These defaults are tuned for a busy
+	// worker pool (the materializer / writer fan-outs in production)
+	// without holding pathologically many idle sockets per host.
+	defaultMaxIdleConnsPerHost = 64
+	defaultMaxIdleConns        = 256
 )
 
 var (
@@ -363,6 +373,24 @@ func prepareBaseTransport(ctx context.Context, cfg *httpConfig) (http.RoundTripp
 	}
 
 	transport = transport.Clone()
+
+	// http.DefaultTransport sets MaxIdleConnsPerHost=2 which is far too
+	// low for service-to-service traffic at any meaningful concurrency:
+	// past 2 in-flight requests to the same host every additional caller
+	// opens (and tears down) a fresh TCP connection, eventually flooding
+	// the upstream's accept queue with TIME_WAITs and producing "read:
+	// connection reset by peer" on every request. Production materializer
+	// → Manticore traffic hit exactly this. Bump to a value that lets a
+	// busy worker keep its keep-alive pool warm without holding pathologically
+	// many idle connections. Callers that hand-craft a Transport via
+	// WithHTTPTransport keep their explicit settings — we only raise the
+	// pool when the caller is using a near-default transport.
+	if transport.MaxIdleConnsPerHost <= http.DefaultMaxIdleConnsPerHost {
+		transport.MaxIdleConnsPerHost = defaultMaxIdleConnsPerHost
+	}
+	if transport.MaxIdleConns < defaultMaxIdleConns {
+		transport.MaxIdleConns = defaultMaxIdleConns
+	}
 
 	if cfg.workloadAPIRequested {
 		if cfg.enableH2C {

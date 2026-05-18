@@ -2,7 +2,6 @@ package events
 
 import (
 	"context"
-	"errors"
 	"sync"
 
 	"github.com/pitabwire/util"
@@ -17,6 +16,7 @@ type manager struct {
 
 	mu            sync.RWMutex
 	eventRegistry map[string]EventI
+	strict        bool
 }
 
 func (m *manager) Add(evt EventI) {
@@ -25,12 +25,29 @@ func (m *manager) Add(evt EventI) {
 	m.eventRegistry[evt.Name()] = evt
 }
 
+// SetStrict toggles the unknown-event behaviour. Defaults to true
+// (legacy fail-loud). Calling SetStrict(false) makes the queue handler
+// ack-and-skip events whose name isn't in the registry, which the
+// shared-stream consumer pattern needs to avoid wedging on sibling-
+// consumer events.
+func (m *manager) SetStrict(s bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.strict = s
+}
+
+func (m *manager) Strict() bool {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.strict
+}
+
 func (m *manager) Get(eventName string) (EventI, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	evt, ok := m.eventRegistry[eventName]
 	if !ok {
-		return nil, errors.New("event not found in registry: " + eventName)
+		return nil, ErrUnregisteredEvent
 	}
 
 	return evt, nil
@@ -60,5 +77,9 @@ func NewManager(_ context.Context, qm queue.Manager, cfg config.ConfigurationEve
 		qm:            qm,
 		cfg:           cfg,
 		eventRegistry: make(map[string]EventI),
+		// Default to strict — failing loud on unknown events is the
+		// right safety net for any service with a closed handler set.
+		// Catch-all-subject consumers opt out via SetStrict(false).
+		strict: true,
 	}
 }

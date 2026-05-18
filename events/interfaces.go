@@ -28,4 +28,21 @@ type Manager interface {
 	Get(name string) (EventI, error)
 	Emit(ctx context.Context, name string, payload any) error
 	Handler() queue.SubscribeWorker
+	// Strict reports whether the manager should fail loud when the
+	// underlying queue delivers an event whose name is not registered.
+	// Strict=true (legacy default) returns ErrUnregisteredEvent so the
+	// message stays unacked and Nack-retries forever; this matches a
+	// closed-handler-set service where an unknown event is a bug.
+	// Strict=false silently acks unknown events so a service whose
+	// consumer subscribes to a catch-all subject (e.g. svc.X.events.>)
+	// does not need per-topic Noop handlers for events meant for
+	// sibling consumers on the same stream — that pattern silently
+	// invites mis-routing because adding a real handler later
+	// requires removing the Noop entry; loose mode is failure-mode-
+	// agnostic and works whether or not the topic ever becomes
+	// interesting to this consumer.
+	Strict() bool
+	// SetStrict toggles the strict-vs-loose unknown-event behaviour.
+	// Call once during service initialisation before subscriptions start.
+	SetStrict(strict bool)
 }

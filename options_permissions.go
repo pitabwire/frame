@@ -11,8 +11,6 @@ import (
 
 	"github.com/pitabwire/util"
 	"google.golang.org/protobuf/reflect/protoreflect"
-
-	"github.com/pitabwire/frame/config"
 )
 
 // ManifestRegistrationURLEnvVar is the environment variable that provides
@@ -37,15 +35,29 @@ const (
 const ManifestRegistrationPath = "/_internal/register/permissions"
 
 // WithPermissionRegistration registers a service's permission manifest with
-// the tenancy service during the migration phase. The manifest (namespace,
-// permissions, role bindings) is extracted from the proto service descriptor's
-// service_permissions annotation using proto reflection.
+// the tenancy service. The manifest (namespace, permissions, role bindings)
+// is extracted from the proto service descriptor's service_permissions
+// annotation using proto reflection.
 //
-// Registration only runs when DO_MIGRATION=true or the "migrate" argument is
-// passed — the same condition that triggers database migrations. If
-// registration fails, the migration fails and Kubernetes retries the job.
+// Registration runs as a PreStartMethod whenever PERMISSIONS_REGISTRATION_URL
+// is set and the proto descriptor carries a service_permissions extension.
+// It fires once per process start, before the service begins serving
+// traffic. The tenancy registration endpoint is an idempotent upsert keyed
+// on namespace, so repeat registrations across pod restarts are safe and
+// keep the tenancy.service_namespaces table in sync with whatever the
+// running binary declares.
 //
-// The tenancy service URL is read from PERMISSIONS_REGISTRATION_URL.
+// Earlier versions gated registration on DO_MIGRATION=true so that only the
+// migration job published manifests. That coupling broke whenever a
+// service's cmd/main.go short-circuited before svc.Run (typical pattern):
+// the migration pod never reached the PreStartMethod, the regular pod was
+// locked out by the gate, and the namespace was never registered. Decoupling
+// from migration mode fixes that without forcing every consumer to invent
+// glue around svc.Run.
+//
+// The tenancy service URL is read from PERMISSIONS_REGISTRATION_URL. When
+// unset, the option is a no-op — services that don't want to register can
+// leave it unset in their environment.
 //
 // Usage:
 //
@@ -55,12 +67,6 @@ func WithPermissionRegistration(sd protoreflect.ServiceDescriptor) Option {
 	return func(_ context.Context, s *Service) {
 		registrationURL := os.Getenv(ManifestRegistrationURLEnvVar)
 		if registrationURL == "" {
-			return
-		}
-
-		cfg := s.Config()
-		migrateCfg, ok := cfg.(config.ConfigurationDatabase)
-		if !ok || !migrateCfg.DoDatabaseMigrate() {
 			return
 		}
 

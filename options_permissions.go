@@ -75,9 +75,16 @@ func WithPermissionRegistration(sd protoreflect.ServiceDescriptor) Option {
 				return
 			}
 
-			if err := publishManifest(ctx, svc, registrationURL, manifest); err != nil {
-				util.Log(ctx).WithError(err).Fatal("permission manifest registration failed")
-			}
+			// Retry the manifest POST in a small backoff loop. A pod that is
+			// also its own OAuth2 token-signing endpoint (the auth service)
+			// can't sign assertions until at least one replica is ready, so
+			// the first few attempts during a cold-start roll may legitimately
+			// see connection-refused / token-endpoint-unavailable. Logging at
+			// Warn (rather than Fatal-ing the process) keeps the pod alive
+			// long enough for the signer to come up; once registration
+			// succeeds the loop exits. Registration is an idempotent upsert,
+			// so retrying is safe.
+			go publishManifestWithRetry(ctx, svc, registrationURL, manifest)
 		})
 	}
 }
@@ -179,9 +186,58 @@ func standardRoleName(v int32) string {
 	return standardRoleNames[v]
 }
 
+// publishManifestWithRetry runs publishManifest in a bounded backoff loop.
+// It logs failures at Warn level instead of crashing the process so a pod
+// that depends on its own OAuth2 token-signing endpoint (the auth service)
+// can survive the brief window during a cold rollout when no replica is
+// available to sign assertions. The endpoint is an idempotent upsert keyed
+// on namespace, so retried POSTs after success are harmless.
+func publishManifestWithRetry(ctx context.Context, svc *Service, registrationURL string, manifest any) {
+	logger := util.Log(ctx)
+	namespace := ""
+	if m, ok := manifest.(map[string]any); ok {
+		namespace, _ = m["namespace"].(string)
+	}
+
+	delays := []time.Duration{
+		1 * time.Second, 2 * time.Second, 5 * time.Second, 10 * time.Second,
+		20 * time.Second, 30 * time.Second, 60 * time.Second,
+	}
+	for attempt := 0; ; attempt++ {
+		err := publishManifest(ctx, svc, registrationURL, manifest)
+		if err == nil {
+			if attempt > 0 {
+				logger.WithField("namespace", namespace).WithField("attempts", attempt+1).
+					Info("permission manifest registered after retries")
+			}
+			return
+		}
+		if ctx.Err() != nil {
+			logger.WithError(err).WithField("namespace", namespace).
+				Warn("permission manifest registration abandoned: context cancelled")
+			return
+		}
+		delay := delays[len(delays)-1]
+		if attempt < len(delays) {
+			delay = delays[attempt]
+		}
+		logger.WithError(err).WithField("namespace", namespace).
+			WithField("retry_in", delay.String()).
+			Warn("permission manifest registration failed, retrying")
+
+		t := time.NewTimer(delay)
+		select {
+		case <-ctx.Done():
+			t.Stop()
+			return
+		case <-t.C:
+		}
+	}
+}
+
 // publishManifest registers the permission manifest using the service's
-// internal HTTP client. Returns an error if registration fails — the caller
-// should treat this as a fatal migration failure.
+// internal HTTP client. Returns an error if registration fails — used by
+// publishManifestWithRetry.
 func publishManifest(ctx context.Context, svc *Service, registrationURL string, manifest any) error {
 	logger := util.Log(ctx)
 

@@ -2,7 +2,6 @@ package frame
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
@@ -186,17 +185,15 @@ func standardRoleName(v int32) string {
 func publishManifest(ctx context.Context, svc *Service, registrationURL string, manifest any) error {
 	logger := util.Log(ctx)
 
-	body, err := json.Marshal(manifest)
-	if err != nil {
-		return fmt.Errorf("failed to marshal permission manifest: %w", err)
-	}
-
 	namespace := ""
 	if m, ok := manifest.(map[string]any); ok {
 		namespace, _ = m["namespace"].(string)
 	}
 
-	resp, err := svc.HTTPClientManager().Invoke(ctx, http.MethodPost, registrationURL, body, nil)
+	// Pass the manifest directly — Invoke marshals JSON internally. Passing a
+	// pre-marshalled []byte would be re-marshalled, producing a base64-encoded
+	// string that the tenancy registration endpoint cannot decode.
+	resp, err := svc.HTTPClientManager().Invoke(ctx, http.MethodPost, registrationURL, manifest, nil)
 	if err != nil {
 		return fmt.Errorf("permission manifest registration request failed for %s: %w", namespace, err)
 	}

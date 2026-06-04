@@ -93,6 +93,38 @@ func (s *OptionsSuite) TestNewHTTPClient() {
 	s.Nil(tr.Protocols)
 }
 
+func (s *OptionsSuite) TestWithHTTPNoAuthSetsFlag() {
+	cfg := &httpConfig{}
+	cfg.process(context.Background(), WithHTTPNoAuth())
+	s.True(cfg.noAuth)
+}
+
+// TestWithHTTPNoAuthSkipsOAuth proves the no-auth client bypasses all outbound
+// OAuth: even with client credentials configured (whose token fetch would fail
+// against an unreachable token URL), the request goes through unwrapped and the
+// caller's own Authorization header survives — the external-API-key use case.
+func (s *OptionsSuite) TestWithHTTPNoAuthSkipsOAuth() {
+	var gotAuth string
+	server := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		gotAuth = r.Header.Get("Authorization")
+	}))
+	defer server.Close()
+
+	client, err := newHTTPClient(context.Background(),
+		WithHTTPClientCredentials(&clientcredentials.Config{TokenURL: "http://127.0.0.1:1/token"}),
+		WithHTTPNoAuth(),
+	)
+	s.Require().NoError(err)
+
+	req, err := http.NewRequest(http.MethodGet, server.URL, nil)
+	s.Require().NoError(err)
+	req.Header.Set("Authorization", "Bearer external-api-key")
+	resp, err := client.Do(req)
+	s.Require().NoError(err) // would fail the token fetch if OAuth weren't skipped
+	_ = resp.Body.Close()
+	s.Equal("Bearer external-api-key", gotAuth)
+}
+
 // httpClientTimeoutCfg satisfies config.ConfigurationHTTPClient for tests
 // that exercise the in-context timeout seeding path in newHTTPClient.
 type httpClientTimeoutCfg struct {

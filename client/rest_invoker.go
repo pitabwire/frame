@@ -440,7 +440,8 @@ func shouldCreateRequestScopedClient(cfg *httpConfig) bool {
 		cfg.traceRequests ||
 		cfg.traceRequestHeaders ||
 		cfg.retryPolicyConfigured ||
-		cfg.workloadAPIRequested
+		cfg.workloadAPIRequested ||
+		cfg.noAuth
 }
 
 // enableBodyRewind sets GetBody on req so the HTTP client can replay the body

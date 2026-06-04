@@ -74,6 +74,7 @@ type httpConfig struct {
 
 	cliCredCfg  *clientcredentials.Config
 	tokenSource oauth2.TokenSource
+	noAuth      bool
 
 	traceRequests       bool
 	traceRequestHeaders bool
@@ -171,6 +172,18 @@ func WithHTTPEnableH2C() HTTPOption {
 func WithHTTPClientCredentials(cfg *clientcredentials.Config) HTTPOption {
 	return func(c *httpConfig) {
 		c.cliCredCfg = cfg
+	}
+}
+
+// WithHTTPNoAuth returns a client with NO outbound OAuth/bearer auth, even
+// when the service is configured for client-credentials/private-key-JWT. Use
+// it for calls to EXTERNAL APIs that authenticate with their own scheme (e.g.
+// an API key in the Authorization header) — the service's OAuth bearer would
+// otherwise be auto-attached and clobber that header. The client keeps every
+// other manager benefit (OTEL tracing, retry, connection pooling).
+func WithHTTPNoAuth() HTTPOption {
+	return func(c *httpConfig) {
+		c.noAuth = true
 	}
 }
 
@@ -293,11 +306,35 @@ func newHTTPClient(ctx context.Context, opts ...HTTPOption) (*http.Client, error
 		CheckRedirect: cfg.checkRedirect,
 	}
 
-	if cfg.tokenSource == nil && cfg.cliCredCfg == nil {
-		cfg.tokenSource, err = resolveConfiguredTokenSource(ctx, tokenClient)
+	// WithHTTPNoAuth opts out of all outbound OAuth: keep the base transport
+	// (OTEL/retry/logging) but attach no bearer, so an external API's own
+	// Authorization header (e.g. an API key) survives.
+	if !cfg.noAuth {
+		client, err = applyOutboundOAuth(ctx, cfg, client, tokenClient, base)
 		if err != nil {
 			return newErrorHTTPClient(cfg, err), err
 		}
+	}
+
+	return client, nil
+}
+
+// applyOutboundOAuth resolves the configured service token source (when no
+// explicit token source / client credentials were supplied) and wraps the
+// client with the appropriate OAuth transport. Split out of newHTTPClient so
+// the WithHTTPNoAuth guard stays flat.
+func applyOutboundOAuth(
+	ctx context.Context,
+	cfg *httpConfig,
+	client, tokenClient *http.Client,
+	base http.RoundTripper,
+) (*http.Client, error) {
+	if cfg.tokenSource == nil && cfg.cliCredCfg == nil {
+		ts, err := resolveConfiguredTokenSource(ctx, tokenClient)
+		if err != nil {
+			return nil, err
+		}
+		cfg.tokenSource = ts
 	}
 
 	if cfg.tokenSource != nil {

@@ -17,7 +17,7 @@ import (
 	sdkmetrics "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
-	semconv "go.opentelemetry.io/otel/semconv/v1.40.0"
+	semconv "go.opentelemetry.io/otel/semconv/v1.41.0"
 
 	"github.com/pitabwire/frame/config"
 	"github.com/pitabwire/frame/version"
@@ -102,7 +102,7 @@ func (m *manager) setupResource() (*resource.Resource, error) {
 		semconv.ServiceName(m.serviceName),
 		semconv.ServiceVersion(m.serviceVersion),
 		semconv.ServiceNamespace(m.serviceEnvironment),
-		semconv.DeploymentEnvironmentName(m.serviceEnvironment),
+		semconv.DeploymentEnvironmentNameKey.String(m.serviceEnvironment),
 		semconv.ProcessPID(os.Getpid()),
 		semconv.ProcessRuntimeName("go"),
 		semconv.ProcessRuntimeVersion(runtime.Version()),

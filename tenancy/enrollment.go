@@ -2,6 +2,7 @@ package tenancy
 
 import (
 	"fmt"
+	"reflect"
 
 	"gorm.io/gorm"
 )
@@ -25,6 +26,13 @@ func EnrolledModels(db *gorm.DB, models []any) ([]ModelInfo, error) {
 		if m == nil {
 			continue
 		}
+		// Tenanted/Unscoped are declared with pointer receivers, so a
+		// model registered BY VALUE silently failed both assertions and
+		// was skipped — leaving its table without RLS while everything
+		// else worked. Four services shipped that way (2026-06 audit).
+		// Promote values to pointers before checking so registration
+		// style cannot change enforcement.
+		m = asPointer(m)
 		if _, isUnscoped := m.(Unscoped); isUnscoped {
 			continue
 		}
@@ -57,4 +65,17 @@ func tableNameFor(db *gorm.DB, m any) (string, error) {
 		return "", fmt.Errorf("tenancy: parse model: %w", err)
 	}
 	return stmt.Table, nil
+}
+
+// asPointer returns m unchanged when it is already a pointer (or not a
+// struct); for struct values it returns a pointer to an addressable
+// copy so pointer-receiver interface checks see the full method set.
+func asPointer(m any) any {
+	v := reflect.ValueOf(m)
+	if v.Kind() != reflect.Struct {
+		return m
+	}
+	p := reflect.New(v.Type())
+	p.Elem().Set(v)
+	return p.Interface()
 }

@@ -19,7 +19,7 @@ require (
 	github.com/ory/keto/proto v0.13.0-alpha.0.0.20260420082854-eb334a7a5cf0
 	github.com/panjf2000/ants/v2 v2.12.1
 	github.com/pitabwire/natspubsub v0.8.4
-	github.com/pitabwire/util v0.9.0
+	github.com/pitabwire/util v0.9.1
 	github.com/redis/go-redis/v9 v9.20.0
 	github.com/rs/xid v1.6.0
 	github.com/spiffe/go-spiffe/v2 v2.7.0
@@ -144,3 +144,8 @@ require (
 	google.golang.org/genproto/googleapis/api v0.0.0-20260526163538-3dc84a4a5aaa // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260526163538-3dc84a4a5aaa // indirect
 )
+
+// v1.94.12 was published accidentally on 2026-06-10 from a stale release
+// draft: the tag pointed at post-v1.98.0 main, not v1.94.x-era code, and
+// the Go module proxy had already cached it before the tag was deleted.
+retract v1.94.12

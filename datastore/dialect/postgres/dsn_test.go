@@ -5,7 +5,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/pitabwire/frame/datastore/dialect/postgres"
+	"github.com/pitabwire/frame/v2/datastore/dialect/postgres"
 )
 
 func TestNormalizeDSNLibpqPassthrough(t *testing.T) {

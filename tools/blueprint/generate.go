@@ -195,7 +195,7 @@ func renderQueueHandlers(svc ServiceSpec, pkgName string) string {
 	b.WriteString("package ")
 	b.WriteString(pkgName)
 	b.WriteString("\n\n")
-	b.WriteString("import (\n\t\"context\"\n\t\"log\"\n\t\"github.com/pitabwire/frame/queue\"\n)\n\n")
+	b.WriteString("import (\n\t\"context\"\n\t\"log\"\n\t\"github.com/pitabwire/frame/v2/queue\"\n)\n\n")
 
 	seen := map[string]bool{}
 	for _, q := range svc.Queues {
@@ -241,7 +241,7 @@ func renderMainPolylith(svc ServiceSpec, handlersPath, queuesPath string) string
 
 	var b strings.Builder
 	b.WriteString("package main\n\n")
-	b.WriteString("import (\n\t\"log\"\n\t\"net/http\"\n\n\t\"github.com/pitabwire/frame\"\n")
+	b.WriteString("import (\n\t\"log\"\n\t\"net/http\"\n\n\t\"github.com/pitabwire/frame/v2\"\n")
 	fmt.Fprintf(&b, "\t%q\n", handlersPath)
 	if queueOpts != "" {
 		fmt.Fprintf(&b, "\t%q\n", queuesPath)
@@ -271,7 +271,7 @@ func renderMainPolylith(svc ServiceSpec, handlersPath, queuesPath string) string
 func renderMainMonolith(monolith ServiceSpec, services []ServiceSpec, servicePkgs []string, queuePkgs []string) string {
 	var b strings.Builder
 	b.WriteString("package main\n\n")
-	b.WriteString("import (\n\t\"log\"\n\t\"net/http\"\n\n\t\"github.com/pitabwire/frame\"\n")
+	b.WriteString("import (\n\t\"log\"\n\t\"net/http\"\n\n\t\"github.com/pitabwire/frame/v2\"\n")
 
 	for i, pkg := range servicePkgs {
 		fmt.Fprintf(&b, "\t%[1]s %q\n", serviceAlias(services[i].Name), pkg)

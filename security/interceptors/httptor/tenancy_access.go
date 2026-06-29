@@ -3,7 +3,7 @@ package httptor
 import (
 	"net/http"
 
-	"github.com/pitabwire/frame/security/authorizer"
+	"github.com/pitabwire/frame/v2/security/authorizer"
 )
 
 // TenancyAccessMiddleware is an HTTP middleware that verifies the caller

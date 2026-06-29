@@ -17,8 +17,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/pitabwire/frame/client/oauth2/signer"
-	"github.com/pitabwire/frame/config"
+	"github.com/pitabwire/frame/v2/client/oauth2/signer"
+	"github.com/pitabwire/frame/v2/config"
 )
 
 const testClientAssertionTypeJWTBearer = "urn:ietf:params:oauth:client-assertion-type:jwt-bearer"

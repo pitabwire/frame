@@ -9,9 +9,9 @@ import (
 	"github.com/stretchr/testify/suite"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
-	"github.com/pitabwire/frame/security"
-	"github.com/pitabwire/frame/tenancy"
-	"github.com/pitabwire/frame/tests"
+	"github.com/pitabwire/frame/v2/security"
+	"github.com/pitabwire/frame/v2/tenancy"
+	"github.com/pitabwire/frame/v2/tests"
 )
 
 // okResponse returns a non-nil connect response used by tests so the

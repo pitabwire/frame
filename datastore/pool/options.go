@@ -3,9 +3,9 @@ package pool
 import (
 	"time"
 
-	"github.com/pitabwire/frame/config"
-	"github.com/pitabwire/frame/datastore/dialect"
-	"github.com/pitabwire/frame/tenancy"
+	"github.com/pitabwire/frame/v2/config"
+	"github.com/pitabwire/frame/v2/datastore/dialect"
+	"github.com/pitabwire/frame/v2/tenancy"
 )
 
 // Option configures database connection settings.

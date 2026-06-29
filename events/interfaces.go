@@ -3,7 +3,7 @@ package events
 import (
 	"context"
 
-	"github.com/pitabwire/frame/queue"
+	"github.com/pitabwire/frame/v2/queue"
 )
 
 // EventI an interface to represent a system event. All logic of an event is handled in the execute task

@@ -8,8 +8,8 @@ import (
 	tcNats "github.com/testcontainers/testcontainers-go/modules/nats"
 	"github.com/testcontainers/testcontainers-go/wait"
 
-	"github.com/pitabwire/frame/data"
-	"github.com/pitabwire/frame/frametests/definition"
+	"github.com/pitabwire/frame/v2/data"
+	"github.com/pitabwire/frame/v2/frametests/definition"
 )
 
 const (

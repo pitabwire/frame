@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pitabwire/frame/cache"
+	"github.com/pitabwire/frame/v2/cache"
 )
 
 const (

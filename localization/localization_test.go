@@ -11,11 +11,11 @@ import (
 	"github.com/stretchr/testify/suite"
 	"google.golang.org/grpc/metadata"
 
-	"github.com/pitabwire/frame"
-	"github.com/pitabwire/frame/localization"
-	lgrpc "github.com/pitabwire/frame/localization/interceptors/grpc"
-	lhttp "github.com/pitabwire/frame/localization/interceptors/httpi"
-	"github.com/pitabwire/frame/tests"
+	"github.com/pitabwire/frame/v2"
+	"github.com/pitabwire/frame/v2/localization"
+	lgrpc "github.com/pitabwire/frame/v2/localization/interceptors/grpc"
+	lhttp "github.com/pitabwire/frame/v2/localization/interceptors/httpi"
+	"github.com/pitabwire/frame/v2/tests"
 )
 
 // LocalizationTestSuite extends BaseTestSuite for comprehensive localization testing.

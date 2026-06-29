@@ -7,8 +7,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/attribute"
 
-	"github.com/pitabwire/frame/security"
-	"github.com/pitabwire/frame/telemetry"
+	"github.com/pitabwire/frame/v2/security"
+	"github.com/pitabwire/frame/v2/telemetry"
 )
 
 func TestTenantAttributes_NoClaims(t *testing.T) {

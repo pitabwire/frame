@@ -119,7 +119,7 @@ func writeEmbedFile(embedDir, pkg, protoDir, outDir string) error {
 	goGenerate := ""
 	if protoOk && outOk {
 		goGenerate = fmt.Sprintf(
-			"//go:generate go run github.com/pitabwire/frame/cmd/frame@latest openapi --proto-dir %s --out %s --embed-dir . --package %s\n",
+			"//go:generate go run github.com/pitabwire/frame/v2/cmd/frame@latest openapi --proto-dir %s --out %s --embed-dir . --package %s\n",
 			protoRel,
 			outRel,
 			pkg,
@@ -131,7 +131,7 @@ func writeEmbedFile(embedDir, pkg, protoDir, outDir string) error {
 
 import (
 	"embed"
-	"github.com/pitabwire/frame"
+	"github.com/pitabwire/frame/v2"
 )
 
 //go:embed specs/*.json

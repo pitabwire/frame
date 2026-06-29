@@ -15,7 +15,7 @@ import (
 	"github.com/spiffe/go-spiffe/v2/svid/x509svid"
 	"github.com/spiffe/go-spiffe/v2/workloadapi"
 
-	"github.com/pitabwire/frame/config"
+	"github.com/pitabwire/frame/v2/config"
 )
 
 const defaultOAuth2ClientJWKSPath = "/.well-known/oauth2-client-jwks.json"

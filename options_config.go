@@ -3,7 +3,7 @@ package frame
 import (
 	"context"
 
-	"github.com/pitabwire/frame/config"
+	"github.com/pitabwire/frame/v2/config"
 )
 
 // WithConfig Option that helps to specify or override the configuration object of our service.

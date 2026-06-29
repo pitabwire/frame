@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/pitabwire/frame/security"
+	"github.com/pitabwire/frame/v2/security"
 )
 
 // FunctionCheckerOption configures a FunctionChecker.

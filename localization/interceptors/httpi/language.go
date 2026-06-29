@@ -3,7 +3,7 @@ package httpi
 import (
 	"net/http"
 
-	"github.com/pitabwire/frame/localization"
+	"github.com/pitabwire/frame/v2/localization"
 )
 
 // LanguageHTTPMiddleware is an HTTP middleware that extracts language information and sets it in the context.

@@ -9,8 +9,8 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/structpb"
 
-	"github.com/pitabwire/frame/data"
-	"github.com/pitabwire/frame/internal"
+	"github.com/pitabwire/frame/v2/data"
+	"github.com/pitabwire/frame/v2/internal"
 )
 
 // testStruct is a regular Go struct for JSON fallback testing.

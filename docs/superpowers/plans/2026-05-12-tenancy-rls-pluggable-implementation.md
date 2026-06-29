@@ -145,7 +145,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/pitabwire/frame/tenancy"
+	"github.com/pitabwire/frame/v2/tenancy"
 )
 
 func TestClaimsIsEmpty(t *testing.T) {
@@ -396,7 +396,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/pitabwire/frame/data"
+	"github.com/pitabwire/frame/v2/data"
 )
 ```
 
@@ -429,7 +429,7 @@ import (
 
 	"gorm.io/gorm"
 
-	"github.com/pitabwire/frame/datastore/dialect"
+	"github.com/pitabwire/frame/v2/datastore/dialect"
 )
 
 // Provider installs and enforces tenancy isolation at the storage
@@ -494,7 +494,7 @@ type ModelInfo struct {
 - [ ] **Step 2: Verify compilation fails for the dialect import (no package yet)**
 
 Run: `go build ./tenancy/...`
-Expected: FAIL — `github.com/pitabwire/frame/datastore/dialect` not found.
+Expected: FAIL — `github.com/pitabwire/frame/v2/datastore/dialect` not found.
 
 This is expected. Skip ahead to Task 5 which introduces the dialect package; we'll loop back to compile this.
 
@@ -654,7 +654,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/pitabwire/frame/datastore/dialect/postgres"
+	"github.com/pitabwire/frame/v2/datastore/dialect/postgres"
 )
 
 func TestNormalizeDSNLibpqPassthrough(t *testing.T) {
@@ -821,7 +821,7 @@ import (
 	gormpostgres "gorm.io/driver/postgres"
 	"gorm.io/gorm"
 
-	"github.com/pitabwire/frame/datastore/dialect"
+	"github.com/pitabwire/frame/v2/datastore/dialect"
 )
 
 const idleTimeToMaxLifeTimeDivisor = 2
@@ -1082,10 +1082,10 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
-	"github.com/pitabwire/frame/datastore/dialect"
-	"github.com/pitabwire/frame/datastore/dialect/postgres"
-	"github.com/pitabwire/frame/frametests/definition"
-	"github.com/pitabwire/frame/tests"
+	"github.com/pitabwire/frame/v2/datastore/dialect"
+	"github.com/pitabwire/frame/v2/datastore/dialect/postgres"
+	"github.com/pitabwire/frame/v2/frametests/definition"
+	"github.com/pitabwire/frame/v2/tests"
 )
 
 type AdapterTestSuite struct {
@@ -1237,7 +1237,7 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/schema"
 
-	"github.com/pitabwire/frame/tenancy"
+	"github.com/pitabwire/frame/v2/tenancy"
 )
 
 // fakeTenanted satisfies tenancy.Tenanted minimally for the unit test.
@@ -1470,8 +1470,8 @@ import (
 
 	"gorm.io/gorm"
 
-	"github.com/pitabwire/frame/datastore/dialect"
-	"github.com/pitabwire/frame/tenancy"
+	"github.com/pitabwire/frame/v2/datastore/dialect"
+	"github.com/pitabwire/frame/v2/tenancy"
 )
 
 // Provider is the Postgres concrete tenancy.Provider. It installs RLS
@@ -1627,8 +1627,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/pitabwire/frame/security"
-	"github.com/pitabwire/frame/tenancy"
+	"github.com/pitabwire/frame/v2/security"
+	"github.com/pitabwire/frame/v2/tenancy"
 )
 ```
 
@@ -1711,7 +1711,7 @@ Append to `tenancy/claims.go`:
 import (
 	"context"
 
-	"github.com/pitabwire/frame/security"
+	"github.com/pitabwire/frame/v2/security"
 )
 
 // claimsKey is the unexported context key under which Claims are
@@ -1820,7 +1820,7 @@ import (
 
 	"connectrpc.com/connect"
 
-	"github.com/pitabwire/frame/security"
+	"github.com/pitabwire/frame/v2/security"
 )
 
 // NewClaimsInterceptor returns a Connect interceptor that derives
@@ -1897,13 +1897,13 @@ import (
 	"github.com/stretchr/testify/suite"
 	"gorm.io/gorm"
 
-	"github.com/pitabwire/frame/data"
-	"github.com/pitabwire/frame/datastore/dialect"
-	dialectpg "github.com/pitabwire/frame/datastore/dialect/postgres"
-	"github.com/pitabwire/frame/frametests/definition"
-	"github.com/pitabwire/frame/tenancy"
-	tenpg "github.com/pitabwire/frame/tenancy/postgres"
-	"github.com/pitabwire/frame/tests"
+	"github.com/pitabwire/frame/v2/data"
+	"github.com/pitabwire/frame/v2/datastore/dialect"
+	dialectpg "github.com/pitabwire/frame/v2/datastore/dialect/postgres"
+	"github.com/pitabwire/frame/v2/frametests/definition"
+	"github.com/pitabwire/frame/v2/tenancy"
+	tenpg "github.com/pitabwire/frame/v2/tenancy/postgres"
+	"github.com/pitabwire/frame/v2/tests"
 )
 
 type ProviderTestSuite struct {
@@ -2115,8 +2115,8 @@ Open `datastore/pool/options.go` and add at the end of the file:
 
 ```go
 import (
-	"github.com/pitabwire/frame/datastore/dialect"
-	"github.com/pitabwire/frame/tenancy"
+	"github.com/pitabwire/frame/v2/datastore/dialect"
+	"github.com/pitabwire/frame/v2/tenancy"
 )
 
 // WithDialectAdapter sets the database driver adapter for this pool.
@@ -2202,7 +2202,7 @@ import (
 
 	"gorm.io/gorm"
 
-	"github.com/pitabwire/frame/datastore/migration"
+	"github.com/pitabwire/frame/v2/datastore/migration"
 )
 
 // Connection represents a single database connection configuration.
@@ -2262,11 +2262,11 @@ import (
 	"github.com/pitabwire/util"
 	"gorm.io/gorm"
 
-	"github.com/pitabwire/frame/datastore/dialect"
-	dialectpg "github.com/pitabwire/frame/datastore/dialect/postgres"
-	"github.com/pitabwire/frame/datastore/migration"
-	"github.com/pitabwire/frame/tenancy"
-	tenpg "github.com/pitabwire/frame/tenancy/postgres"
+	"github.com/pitabwire/frame/v2/datastore/dialect"
+	dialectpg "github.com/pitabwire/frame/v2/datastore/dialect/postgres"
+	"github.com/pitabwire/frame/v2/datastore/migration"
+	"github.com/pitabwire/frame/v2/tenancy"
+	tenpg "github.com/pitabwire/frame/v2/tenancy/postgres"
 )
 
 const migrationAdvisoryLockID int64 = 82548391244719
@@ -2511,7 +2511,7 @@ import (
 
 	"gorm.io/gorm"
 
-	"github.com/pitabwire/frame/datastore/dialect"
+	"github.com/pitabwire/frame/v2/datastore/dialect"
 )
 
 // createConnection asks the adapter to open a *gorm.DB. The adapter
@@ -2663,7 +2663,7 @@ func (s *Service) TenancyProvider() tenancy.Provider {
 }
 ```
 
-Add the import `"github.com/pitabwire/frame/tenancy"` to the import block.
+Add the import `"github.com/pitabwire/frame/v2/tenancy"` to the import block.
 
 - [ ] **Step 2: Wire defaults in options_datastore.go**
 
@@ -2671,8 +2671,8 @@ Open `options_datastore.go`. After the existing `WithDatastore` function, add:
 
 ```go
 import (
-	"github.com/pitabwire/frame/tenancy"
-	tenpg "github.com/pitabwire/frame/tenancy/postgres"
+	"github.com/pitabwire/frame/v2/tenancy"
+	tenpg "github.com/pitabwire/frame/v2/tenancy/postgres"
 )
 
 // WithTenancyProvider overrides the default Postgres-RLS tenancy
@@ -2743,15 +2743,15 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
-	"github.com/pitabwire/frame"
-	"github.com/pitabwire/frame/data"
-	"github.com/pitabwire/frame/datastore"
-	"github.com/pitabwire/frame/datastore/pool"
-	"github.com/pitabwire/frame/frametests"
-	"github.com/pitabwire/frame/frametests/definition"
-	"github.com/pitabwire/frame/security"
-	"github.com/pitabwire/frame/tenancy"
-	"github.com/pitabwire/frame/tests"
+	"github.com/pitabwire/frame/v2"
+	"github.com/pitabwire/frame/v2/data"
+	"github.com/pitabwire/frame/v2/datastore"
+	"github.com/pitabwire/frame/v2/datastore/pool"
+	"github.com/pitabwire/frame/v2/frametests"
+	"github.com/pitabwire/frame/v2/frametests/definition"
+	"github.com/pitabwire/frame/v2/security"
+	"github.com/pitabwire/frame/v2/tenancy"
+	"github.com/pitabwire/frame/v2/tests"
 )
 
 type interceptorEntity struct {

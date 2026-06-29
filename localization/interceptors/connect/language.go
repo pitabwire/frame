@@ -5,7 +5,7 @@ import (
 
 	"connectrpc.com/connect"
 
-	"github.com/pitabwire/frame/localization"
+	"github.com/pitabwire/frame/v2/localization"
 )
 
 // LanguageInterceptor implements connect.Interceptor for ensuring language is available in the context.

@@ -9,8 +9,8 @@ import (
 
 	"golang.org/x/oauth2"
 
-	"github.com/pitabwire/frame/client/oauth2/auth"
-	"github.com/pitabwire/frame/config"
+	"github.com/pitabwire/frame/v2/client/oauth2/auth"
+	"github.com/pitabwire/frame/v2/config"
 )
 
 const (

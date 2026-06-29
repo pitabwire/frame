@@ -15,4 +15,4 @@ managed:
   enabled: true
   override:
     - file_option: go_package_prefix
-      value: github.com/pitabwire/frame/frametests/rpcservice
+      value: github.com/pitabwire/frame/v2/frametests/rpcservice

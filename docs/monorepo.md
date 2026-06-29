@@ -69,7 +69,7 @@ The repo-level `cmd/<service>/main.go` gives a consistent top-level build/run en
 ## One-Command Scaffold
 
 ```bash
-go run github.com/pitabwire/frame/cmd/frame@latest init \
+go run github.com/pitabwire/frame/v2/cmd/frame@latest init \
   -root . \
   -services users,billing \
   -module your/module

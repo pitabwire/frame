@@ -20,8 +20,8 @@ import (
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/clientcredentials"
 
-	oauth2source "github.com/pitabwire/frame/client/oauth2"
-	"github.com/pitabwire/frame/config"
+	oauth2source "github.com/pitabwire/frame/v2/client/oauth2"
+	"github.com/pitabwire/frame/v2/config"
 )
 
 const (

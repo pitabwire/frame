@@ -3,7 +3,7 @@ package tenancy
 import (
 	"context"
 
-	"github.com/pitabwire/frame/security"
+	"github.com/pitabwire/frame/v2/security"
 )
 
 // Claims is the storage-layer view of a principal's tenancy. Treat as

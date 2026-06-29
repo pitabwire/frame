@@ -4,7 +4,7 @@ import (
 	"testing"
 	"testing/fstest"
 
-	"github.com/pitabwire/frame/openapi"
+	"github.com/pitabwire/frame/v2/openapi"
 )
 
 func TestRegisterFromFS(t *testing.T) {

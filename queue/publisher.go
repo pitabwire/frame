@@ -12,9 +12,9 @@ import (
 	"go.opentelemetry.io/otel/propagation"
 	"gocloud.dev/pubsub"
 
-	"github.com/pitabwire/frame/internal"
-	"github.com/pitabwire/frame/localization"
-	"github.com/pitabwire/frame/security"
+	"github.com/pitabwire/frame/v2/internal"
+	"github.com/pitabwire/frame/v2/localization"
+	"github.com/pitabwire/frame/v2/security"
 )
 
 type publisher struct {

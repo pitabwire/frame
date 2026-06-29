@@ -3,7 +3,7 @@ package httptor
 import (
 	"net/http"
 
-	"github.com/pitabwire/frame/security/authorizer"
+	"github.com/pitabwire/frame/v2/security/authorizer"
 )
 
 // FunctionAccessMiddleware is an HTTP middleware that enforces functional

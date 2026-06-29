@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	"golang.org/x/oauth2/clientcredentials"
 
-	"github.com/pitabwire/frame/config"
+	"github.com/pitabwire/frame/v2/config"
 )
 
 type OptionsSuite struct {

@@ -14,11 +14,13 @@ Required:
 
 - `OAUTH2_SERVICE_URI`
 - `OAUTH2_WELL_KNOWN_OIDC_PATH` (default `.well-known/openid-configuration`)
-
-Optional:
-
-- `OAUTH2_JWT_VERIFY_AUDIENCE`
+- `OAUTH2_RESOURCE_AUDIENCE`
 - `OAUTH2_JWT_VERIFY_ISSUER`
+
+Outbound OAuth clients additionally use:
+
+- `OAUTH2_REQUESTED_AUDIENCES`
+- `OAUTH2_CLIENT_ASSERTION_AUDIENCE`
 
 ## Authenticate a Token
 

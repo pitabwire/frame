@@ -135,78 +135,21 @@ func (m *mockJWTConfig) GetOauth2WellKnownJwk() string {
 	return m.jwksURL
 }
 
-// TestSimpleAuthenticate tests basic JWT authentication.
+// TestSimpleAuthenticate rejects tokens issued for a non-canonical audience.
 func (s *AuthenticationTestSuite) TestSimpleAuthenticate() {
-	testCases := []struct {
-		name         string
-		accessKey    string
-		audience     string
-		issuer       string
-		expectError  bool
-		expectClaims bool
-	}{
-		{
-			name:         "valid authentication with sample key",
-			accessKey:    sampleAccessKey,
-			audience:     "",
-			issuer:       "",
-			expectError:  false,
-			expectClaims: true,
+	auth := openid.NewJwtTokenAuthenticator(&mockJWTConfig{
+		ConfigurationDefault: config.ConfigurationDefault{
+			Oauth2ResourceAudience: "https://api.example.org/authentication",
+			Oauth2JwtVerifyIssuer:  "http://127.0.0.1:4444/",
 		},
-		{
-			name:         "authentication with specific audience",
-			accessKey:    sampleAccessKey,
-			audience:     "c2f4j7au6s7f91uqnokg",
-			issuer:       "",
-			expectError:  false,
-			expectClaims: true,
-		},
-		{
-			name:         "authentication with specific issuer",
-			accessKey:    sampleAccessKey,
-			audience:     "",
-			issuer:       "http://127.0.0.1:4444/",
-			expectError:  false,
-			expectClaims: true,
-		},
-	}
+		jwksURL: s.jwksURL,
+	})
 
-	for _, tc := range testCases {
-		s.Run(tc.name, func() {
-			// Create authenticator directly with mock config
-			auth := openid.NewJwtTokenAuthenticator(&mockJWTConfig{
-				ConfigurationDefault: config.ConfigurationDefault{
-					Oauth2JwtVerifyAudience: []string{"c2f4j7au6s7f91uqnokg"},
-					Oauth2JwtVerifyIssuer:   "http://127.0.0.1:4444/",
-				},
-				jwksURL: s.jwksURL,
-			})
-
-			ctx := s.T().Context()
-
-			var opts []security.AuthOption
-			if tc.audience != "" {
-				opts = append(opts, security.WithAudience(tc.audience))
-			}
-			if tc.issuer != "" {
-				opts = append(opts, security.WithIssuer(tc.issuer))
-			}
-
-			ctx2, err := auth.Authenticate(ctx, tc.accessKey, opts...)
-
-			if tc.expectError {
-				s.Require().Error(err, "expected authentication to fail")
-				return
-			}
-
-			s.Require().NoError(err, "authentication should succeed")
-
-			if tc.expectClaims {
-				claims := security.ClaimsFromContext(ctx2)
-				s.Require().NotNil(claims, "expected authentication claims in context")
-			}
-		})
-	}
+	ctx := s.T().Context()
+	ctx2, err := auth.Authenticate(ctx, sampleAccessKey)
+	s.Require().Error(err)
+	s.Equal(ctx, ctx2)
+	s.Nil(security.ClaimsFromContext(ctx2))
 }
 
 // TestSimpleAuthenticateWithOIDC tests OIDC configuration loading.
@@ -227,6 +170,7 @@ func (s *AuthenticationTestSuite) TestSimpleAuthenticateWithOIDC() {
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
 				t.Setenv("OAUTH2_SERVICE_URI", tc.serviceURI)
+				t.Setenv("OAUTH2_RESOURCE_AUDIENCE", "https://api.example.org/test-service")
 
 				ctx := t.Context()
 				cfg, err := config.LoadWithOIDC[config.ConfigurationDefault](ctx)

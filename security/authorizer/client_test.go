@@ -8,6 +8,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/suite"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	"github.com/pitabwire/frame/config"
 	"github.com/pitabwire/frame/frametests/definition"
@@ -105,8 +107,20 @@ func (s *AuthorizerTestSuite) newAdapter(auditLogger security.AuditLogger) secur
 }
 
 func (s *AuthorizerTestSuite) permissiveAdapter() security.Authorizer {
-	cfg := &config.ConfigurationDefault{}
+	cfg := &config.ConfigurationDefault{AuthorizationMode: config.AuthorizationModeDisabled}
 	return authorizer.NewKetoAdapter(cfg, nil)
+}
+
+func (s *AuthorizerTestSuite) TestEnforcedModeFailsClosedWithoutKeto() {
+	adapter := authorizer.NewKetoAdapter(&config.ConfigurationDefault{}, nil)
+	result, err := adapter.Check(s.T().Context(), security.CheckRequest{
+		Object:     security.ObjectRef{Namespace: "resource", ID: "obj-1"},
+		Permission: "view",
+		Subject:    security.SubjectRef{ID: "user-1"},
+	})
+	s.Require().Error(err)
+	s.False(result.Allowed)
+	s.Require().Error(adapter.WriteTuple(s.T().Context(), security.RelationTuple{}))
 }
 
 // ---------------------------------------------------------------------------
@@ -746,6 +760,23 @@ func (s *AuthorizerTestSuite) TestAuthzServiceErrorUnwrap() {
 	innerErr := errors.New("timeout")
 	err := authorizer.NewAuthzServiceError("expand", innerErr)
 	s.ErrorIs(err, innerErr)
+}
+
+func (s *AuthorizerTestSuite) TestAuthzServiceErrorClassification() {
+	schemaErr := authorizer.NewAuthzServiceError(
+		"write_tuples",
+		status.Error(codes.NotFound, "namespace is not loaded"),
+	)
+	s.Equal(codes.NotFound, schemaErr.Code)
+	s.True(schemaErr.SchemaReadiness)
+	s.False(schemaErr.Retryable)
+
+	retryErr := authorizer.NewAuthzServiceError(
+		"write_tuples",
+		status.Error(codes.Unavailable, "temporarily unavailable"),
+	)
+	s.True(retryErr.Retryable)
+	s.False(retryErr.SchemaReadiness)
 }
 
 // ---------------------------------------------------------------------------

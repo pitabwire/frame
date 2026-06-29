@@ -3,6 +3,7 @@ package config
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -68,15 +69,21 @@ func LoadWithOIDC[T any](ctx context.Context) (T, error) {
 	}
 
 	oauth2Cfg, ok := any(&cfg).(ConfigurationOAUTH2)
-	if ok {
-		if oauth2Cfg.GetOauth2ServiceURI() == "" {
-			return cfg, nil
-		}
-
-		err = oauth2Cfg.LoadOauth2Config(ctx)
-		if err != nil {
+	if !ok {
+		return cfg, nil
+	}
+	if validator, validatable := any(&cfg).(interface{ ValidateOAuth2Configuration() error }); validatable {
+		if err = validator.ValidateOAuth2Configuration(); err != nil {
 			return cfg, err
 		}
+	}
+	if oauth2Cfg.GetOauth2ServiceURI() == "" {
+		return cfg, nil
+	}
+
+	err = oauth2Cfg.LoadOauth2Config(ctx)
+	if err != nil {
+		return cfg, err
 	}
 
 	return cfg, nil
@@ -113,23 +120,22 @@ type OAuth2PrivateJWTKeyConfig struct {
 	SPIFFEID       string `json:"spiffe_id" yaml:"spiffe_id"`
 	Hint           string `json:"hint" yaml:"hint"`
 	KeyID          string `json:"key_id" yaml:"key_id"`
-	Audience       string `json:"audience" yaml:"audience"`
 	Issuer         string `json:"issuer" yaml:"issuer"`
 	Subject        string `json:"subject" yaml:"subject"`
 }
 
 type PrivateKeyJWTConfig struct {
-	PrivateKeyPEM  []byte
-	PrivateKeyPath string
-	Source         string
-	SignerURL      string
-	SignerAPIKey   string
-	SPIFFEID       string
-	Hint           string
-	KeyID          string
-	Audience       string
-	Issuer         string
-	Subject        string
+	PrivateKeyPEM           []byte
+	PrivateKeyPath          string
+	Source                  string
+	SignerURL               string
+	SignerAPIKey            string
+	SPIFFEID                string
+	Hint                    string
+	KeyID                   string
+	ClientAssertionAudience string
+	Issuer                  string
+	Subject                 string
 }
 
 func (c *OAuth2PrivateJWTKeyConfig) UnmarshalText(text []byte) error {
@@ -170,7 +176,6 @@ func (c *OAuth2PrivateJWTKeyConfig) IsZero() bool {
 		strings.TrimSpace(c.SPIFFEID) == "" &&
 		strings.TrimSpace(c.Hint) == "" &&
 		strings.TrimSpace(c.KeyID) == "" &&
-		strings.TrimSpace(c.Audience) == "" &&
 		strings.TrimSpace(c.Issuer) == "" &&
 		strings.TrimSpace(c.Subject) == ""
 }
@@ -183,7 +188,6 @@ func (c PrivateKeyJWTConfig) IsZero() bool {
 		strings.TrimSpace(c.SPIFFEID) == "" &&
 		strings.TrimSpace(c.Hint) == "" &&
 		strings.TrimSpace(c.KeyID) == "" &&
-		strings.TrimSpace(c.Audience) == "" &&
 		strings.TrimSpace(c.Issuer) == "" &&
 		strings.TrimSpace(c.Subject) == ""
 }
@@ -201,7 +205,6 @@ func (c *OAuth2PrivateJWTKeyConfig) ToPrivateKeyJWTConfig() *PrivateKeyJWTConfig
 		SPIFFEID:       strings.TrimSpace(c.SPIFFEID),
 		Hint:           strings.TrimSpace(c.Hint),
 		KeyID:          strings.TrimSpace(c.KeyID),
-		Audience:       strings.TrimSpace(c.Audience),
 		Issuer:         strings.TrimSpace(c.Issuer),
 		Subject:        strings.TrimSpace(c.Subject),
 	}
@@ -282,19 +285,22 @@ type ConfigurationDefault struct {
 	Oauth2ServiceURI              string                    `env:"OAUTH2_SERVICE_URI"           yaml:"oauth2_service_uri"`
 	Oauth2ServiceAdminURI         string                    `env:"OAUTH2_SERVICE_ADMIN_URI"     yaml:"oauth2_service_admin_uri"`
 	Oauth2WellKnownOIDCPath       string                    `env:"OAUTH2_WELL_KNOWN_OIDC_PATH"  yaml:"oauth2_well_known_oidc_path"  envDefault:".well-known/openid-configuration"`
-	Oauth2ServiceAudience         []string                  `env:"OAUTH2_SERVICE_AUDIENCE"      yaml:"oauth2_service_audience"`
+	Oauth2RequestedAudiences      []string                  `env:"OAUTH2_REQUESTED_AUDIENCES"  yaml:"oauth2_requested_audiences"`
+	Oauth2AudienceBaseURL         string                    `env:"OAUTH2_AUDIENCE_BASE_URL"    yaml:"oauth2_audience_base_url"`
+	Oauth2ClientAssertionAudience string                    `env:"OAUTH2_CLIENT_ASSERTION_AUDIENCE" yaml:"oauth2_client_assertion_audience"`
 	Oauth2ServiceClientID         string                    `env:"OAUTH2_SERVICE_CLIENT_ID"     yaml:"oauth2_service_client_id"`
 	Oauth2ServiceClientSecret     string                    `env:"OAUTH2_SERVICE_CLIENT_SECRET" yaml:"oauth2_service_client_secret"`
 	Oauth2TokenEndpointAuthMethod string                    `env:"OAUTH2_TOKEN_ENDPOINT_AUTH_METHOD" yaml:"oauth2_token_endpoint_auth_method"`
 	Oauth2PrivateJwtKey           OAuth2PrivateJWTKeyConfig `env:"OAUTH2_PRIVATE_JWT_KEY" yaml:"oauth2_private_jwt_key"`
 	Oauth2SignerAPIKey            string                    `env:"OAUTH2_SIGNER_API_KEY" yaml:"oauth2_signer_api_key"`
 
-	Oauth2WellKnownJwkData  string   `env:"OAUTH2_WELL_KNOWN_JWK_DATA" yaml:"oauth2_well_known_jwk_data"`
-	Oauth2JwtVerifyAudience []string `env:"OAUTH2_JWT_VERIFY_AUDIENCE" yaml:"oauth2_jwt_verify_audience"`
-	Oauth2JwtVerifyIssuer   string   `env:"OAUTH2_JWT_VERIFY_ISSUER"   yaml:"oauth2_jwt_verify_issuer"`
+	Oauth2WellKnownJwkData string `env:"OAUTH2_WELL_KNOWN_JWK_DATA" yaml:"oauth2_well_known_jwk_data"`
+	Oauth2ResourceAudience string `env:"OAUTH2_RESOURCE_AUDIENCE" yaml:"oauth2_resource_audience"`
+	Oauth2JwtVerifyIssuer  string `env:"OAUTH2_JWT_VERIFY_ISSUER" yaml:"oauth2_jwt_verify_issuer"`
 
 	AuthorizationServiceReadURI  string `env:"AUTHORIZATION_SERVICE_READ_URI"  yaml:"authorization_service_read_uri"`
 	AuthorizationServiceWriteURI string `env:"AUTHORIZATION_SERVICE_WRITE_URI" yaml:"authorization_service_write_uri"`
+	AuthorizationMode            string `env:"AUTHORIZATION_MODE" yaml:"authorization_mode" envDefault:"enforced"`
 
 	DatabasePrimaryURL             []string `env:"DATABASE_URL"             yaml:"database_url"`
 	DatabaseReplicaURL             []string `env:"REPLICA_DATABASE_URL"     yaml:"replica_database_url"`
@@ -616,7 +622,8 @@ type ConfigurationOAUTH2 interface {
 	GetOauth2ServiceClientSecret() string
 	GetOauth2TokenEndpointAuthMethod() string
 	GetOauth2PrivateKeyJWTConfig() *PrivateKeyJWTConfig
-	GetOauth2ServiceAudience() []string
+	GetOauth2RequestedAudiences() []string
+	GetOauth2ClientAssertionAudience() string
 	GetOauth2ServiceAdminURI() string
 }
 
@@ -638,6 +645,47 @@ func (c *ConfigurationDefault) LoadOauth2Config(ctx context.Context) error {
 			return err
 		}
 	}
+	if strings.TrimSpace(c.Oauth2JwtVerifyIssuer) == "" {
+		c.Oauth2JwtVerifyIssuer = strings.TrimSpace(c.GetOauth2Issuer())
+	}
+	return c.ValidateOAuth2Configuration()
+}
+
+func (c *ConfigurationDefault) ValidateOAuth2Configuration() error {
+	if strings.TrimSpace(c.Oauth2AudienceBaseURL) != "" {
+		baseURL, err := ParseAudienceBaseURL(c.Oauth2AudienceBaseURL)
+		if err != nil {
+			return err
+		}
+		c.Oauth2AudienceBaseURL = string(baseURL)
+	}
+
+	if strings.TrimSpace(c.Oauth2ResourceAudience) != "" {
+		audience, err := ParseResourceAudience(c.Oauth2ResourceAudience)
+		if err != nil {
+			return err
+		}
+		c.Oauth2ResourceAudience = string(audience)
+	}
+
+	requested, err := ParseResourceAudiences(c.Oauth2RequestedAudiences)
+	if err != nil {
+		return fmt.Errorf("requested audiences: %w", err)
+	}
+	c.Oauth2RequestedAudiences = ResourceAudienceStrings(requested)
+
+	if strings.TrimSpace(c.Oauth2ClientAssertionAudience) != "" {
+		audience, assertionErr := ParseClientAssertionAudience(c.Oauth2ClientAssertionAudience)
+		if assertionErr != nil {
+			return assertionErr
+		}
+		c.Oauth2ClientAssertionAudience = string(audience)
+	}
+
+	if strings.TrimSpace(c.Oauth2JwtVerifyIssuer) != "" && strings.TrimSpace(c.Oauth2ResourceAudience) == "" {
+		return errors.New("oauth2 resource audience is required when JWT issuer verification is configured")
+	}
+
 	return nil
 }
 func (c *ConfigurationDefault) GetOauth2WellKnownOIDC() string {
@@ -768,11 +816,20 @@ func (c *ConfigurationDefault) GetOauth2PrivateKeyJWTConfig() *PrivateKeyJWTConf
 	if cfg != nil && cfg.SignerAPIKey == "" {
 		cfg.SignerAPIKey = strings.TrimSpace(c.Oauth2SignerAPIKey)
 	}
+	if cfg != nil {
+		cfg.ClientAssertionAudience = strings.TrimSpace(c.Oauth2ClientAssertionAudience)
+	}
 
 	return cfg
 }
-func (c *ConfigurationDefault) GetOauth2ServiceAudience() []string {
-	return c.Oauth2ServiceAudience
+func (c *ConfigurationDefault) GetOauth2RequestedAudiences() []string {
+	return c.Oauth2RequestedAudiences
+}
+func (c *ConfigurationDefault) GetOauth2AudienceBaseURL() string {
+	return strings.TrimSuffix(strings.TrimSpace(c.Oauth2AudienceBaseURL), "/")
+}
+func (c *ConfigurationDefault) GetOauth2ClientAssertionAudience() string {
+	return c.Oauth2ClientAssertionAudience
 }
 func (c *ConfigurationDefault) GetOauth2ServiceAdminURI() string {
 	return c.Oauth2ServiceAdminURI
@@ -781,14 +838,14 @@ func (c *ConfigurationDefault) GetOauth2ServiceAdminURI() string {
 type ConfigurationJWTVerification interface {
 	GetOauth2WellKnownJwk() string
 	GetOauth2WellKnownJwkData() string
-	GetVerificationAudience() []string
+	GetResourceAudience() string
 	GetVerificationIssuer() string
 }
 
 var _ ConfigurationJWTVerification = new(ConfigurationDefault)
 
-func (c *ConfigurationDefault) GetVerificationAudience() []string {
-	return c.Oauth2JwtVerifyAudience
+func (c *ConfigurationDefault) GetResourceAudience() string {
+	return c.Oauth2ResourceAudience
 }
 func (c *ConfigurationDefault) GetVerificationIssuer() string {
 	return c.Oauth2JwtVerifyIssuer
@@ -807,6 +864,7 @@ func (c *ConfigurationDefault) GetTrustedDomain() string {
 type ConfigurationAuthorization interface {
 	GetAuthorizationServiceReadURI() string
 	GetAuthorizationServiceWriteURI() string
+	GetAuthorizationMode() string
 	AuthorizationServiceCanRead() bool
 	AuthorizationServiceCanWrite() bool
 }
@@ -820,6 +878,19 @@ func (c *ConfigurationDefault) GetAuthorizationServiceReadURI() string {
 func (c *ConfigurationDefault) GetAuthorizationServiceWriteURI() string {
 	return c.AuthorizationServiceWriteURI
 }
+
+func (c *ConfigurationDefault) GetAuthorizationMode() string {
+	if c.AuthorizationMode == AuthorizationModeDisabled {
+		return AuthorizationModeDisabled
+	}
+	return AuthorizationModeEnforced
+}
+
+const (
+	AuthorizationModeEnforced = "enforced"
+	AuthorizationModeDisabled = "disabled"
+)
+
 func (c *ConfigurationDefault) AuthorizationServiceCanRead() bool {
 	return c.AuthorizationServiceReadURI != ""
 }

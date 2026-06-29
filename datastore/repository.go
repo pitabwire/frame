@@ -12,9 +12,9 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
-	"github.com/pitabwire/frame/data"
-	"github.com/pitabwire/frame/datastore/pool"
-	"github.com/pitabwire/frame/workerpool"
+	"github.com/pitabwire/frame/v2/data"
+	"github.com/pitabwire/frame/v2/datastore/pool"
+	"github.com/pitabwire/frame/v2/workerpool"
 )
 
 // BaseRepository provides generic CRUD operations for any model type.

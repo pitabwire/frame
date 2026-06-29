@@ -8,10 +8,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/pitabwire/frame"
-	"github.com/pitabwire/frame/cache"
-	"github.com/pitabwire/frame/frametests"
-	"github.com/pitabwire/frame/ratelimiter"
+	"github.com/pitabwire/frame/v2"
+	"github.com/pitabwire/frame/v2/cache"
+	"github.com/pitabwire/frame/v2/frametests"
+	"github.com/pitabwire/frame/v2/ratelimiter"
 )
 
 func TestWithHTTPMiddlewareOrder(t *testing.T) {

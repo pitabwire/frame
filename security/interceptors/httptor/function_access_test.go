@@ -7,7 +7,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/pitabwire/frame/security/interceptors/httptor"
+	"github.com/pitabwire/frame/v2/security/interceptors/httptor"
 )
 
 func TestFunctionAccessMiddleware_BoundaryRespected(t *testing.T) {

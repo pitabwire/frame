@@ -5,7 +5,7 @@ import (
 
 	"gorm.io/gorm"
 
-	"github.com/pitabwire/frame/datastore/dialect"
+	"github.com/pitabwire/frame/v2/datastore/dialect"
 )
 
 // Provider installs and enforces tenancy isolation at the storage

@@ -5,7 +5,7 @@ import (
 
 	"google.golang.org/grpc"
 
-	"github.com/pitabwire/frame/localization"
+	"github.com/pitabwire/frame/v2/localization"
 )
 
 // LanguageUnaryInterceptor Simple grpc interceptor to extract the language supplied via metadata.

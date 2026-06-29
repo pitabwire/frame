@@ -8,11 +8,11 @@ import (
 	"github.com/nats-io/nats.go"
 	"github.com/stretchr/testify/suite"
 
-	"github.com/pitabwire/frame/cache"
-	"github.com/pitabwire/frame/data"
-	"github.com/pitabwire/frame/frametests"
-	"github.com/pitabwire/frame/frametests/definition"
-	"github.com/pitabwire/frame/frametests/deps/testnats"
+	"github.com/pitabwire/frame/v2/cache"
+	"github.com/pitabwire/frame/v2/data"
+	"github.com/pitabwire/frame/v2/frametests"
+	"github.com/pitabwire/frame/v2/frametests/definition"
+	"github.com/pitabwire/frame/v2/frametests/deps/testnats"
 )
 
 type JetstreamSuite struct {

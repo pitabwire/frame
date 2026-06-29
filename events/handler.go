@@ -6,7 +6,7 @@ import (
 
 	"github.com/pitabwire/util"
 
-	"github.com/pitabwire/frame/internal"
+	"github.com/pitabwire/frame/v2/internal"
 )
 
 const EventHeaderName = "frame._internal.event.header"

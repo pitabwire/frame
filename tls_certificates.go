@@ -3,7 +3,7 @@ package frame
 import (
 	"os"
 
-	config2 "github.com/pitabwire/frame/config"
+	config2 "github.com/pitabwire/frame/v2/config"
 )
 
 func (s *Service) TLSEnabled() bool {

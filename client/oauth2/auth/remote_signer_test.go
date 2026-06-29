@@ -10,8 +10,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/pitabwire/frame/client/oauth2/auth"
-	"github.com/pitabwire/frame/config"
+	"github.com/pitabwire/frame/v2/client/oauth2/auth"
+	"github.com/pitabwire/frame/v2/config"
 )
 
 func TestRemoteSignerTokenSource(t *testing.T) {

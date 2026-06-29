@@ -7,8 +7,8 @@ import (
 	"connectrpc.com/connect"
 	"github.com/stretchr/testify/assert"
 
-	"github.com/pitabwire/frame/security"
-	"github.com/pitabwire/frame/security/authorizer"
+	"github.com/pitabwire/frame/v2/security"
+	"github.com/pitabwire/frame/v2/security/authorizer"
 )
 
 func TestToConnectError_Nil(t *testing.T) {

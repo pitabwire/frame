@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/pitabwire/frame"
+	"github.com/pitabwire/frame/v2"
 )
 
 // msgHandler is a simple test handler.

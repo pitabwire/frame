@@ -1,7 +1,7 @@
 package authorizer_test
 
 import (
-	"github.com/pitabwire/frame/security"
+	"github.com/pitabwire/frame/v2/security"
 )
 
 // ---------------------------------------------------------------------------

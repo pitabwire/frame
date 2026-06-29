@@ -12,8 +12,8 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
-	"github.com/pitabwire/frame/config"
-	"github.com/pitabwire/frame/security"
+	"github.com/pitabwire/frame/v2/config"
+	"github.com/pitabwire/frame/v2/security"
 )
 
 const defaultExpandMaxDepth = 3

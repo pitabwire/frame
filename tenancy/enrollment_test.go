@@ -6,7 +6,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
 
-	"github.com/pitabwire/frame/tenancy"
+	"github.com/pitabwire/frame/v2/tenancy"
 )
 
 // fakeTenanted satisfies tenancy.Tenanted minimally for the unit test.

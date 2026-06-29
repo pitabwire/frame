@@ -11,8 +11,8 @@ import (
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/network"
 
-	"github.com/pitabwire/frame/frametests/definition"
-	"github.com/pitabwire/frame/security"
+	"github.com/pitabwire/frame/v2/frametests/definition"
+	"github.com/pitabwire/frame/v2/security"
 )
 
 // FrameBaseTestSuite provides a base test suite with all necessary test components.

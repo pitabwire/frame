@@ -8,10 +8,10 @@ package queue_test
 // 	"testing"
 // 	"time"
 //
-// 	"github.com/pitabwire/frame"
-// 	"github.com/pitabwire/frame/frametests/definition"
-// 	"github.com/pitabwire/frame/queueManager"
-// 	"github.com/pitabwire/frame/tests"
+// 	"github.com/pitabwire/frame/v2"
+// 	"github.com/pitabwire/frame/v2/frametests/definition"
+// 	"github.com/pitabwire/frame/v2/queueManager"
+// 	"github.com/pitabwire/frame/v2/tests"
 // 	"github.com/stretchr/testify/require"
 // 	"github.com/stretchr/testify/suite"
 // )

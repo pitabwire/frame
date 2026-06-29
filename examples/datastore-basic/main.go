@@ -8,8 +8,8 @@ import (
 
 	"github.com/pitabwire/util"
 
-	"github.com/pitabwire/frame"
-	"github.com/pitabwire/frame/datastore"
+	"github.com/pitabwire/frame/v2"
+	"github.com/pitabwire/frame/v2/datastore"
 )
 
 func main() {

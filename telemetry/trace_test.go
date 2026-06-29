@@ -10,8 +10,8 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 
-	"github.com/pitabwire/frame/security"
-	"github.com/pitabwire/frame/telemetry"
+	"github.com/pitabwire/frame/v2/security"
+	"github.com/pitabwire/frame/v2/telemetry"
 )
 
 func setupTracerWithRecorder(t *testing.T) (telemetry.Tracer, *tracetest.SpanRecorder) {

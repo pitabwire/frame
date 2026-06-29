@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/pitabwire/frame"
+	"github.com/pitabwire/frame/v2"
 )
 
 // WaitForConditionWithResult polls a condition function until it returns a non-nil result or timeout occurs

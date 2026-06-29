@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/pitabwire/frame/ratelimiter"
+	"github.com/pitabwire/frame/v2/ratelimiter"
 )
 
 func TestConcurrencyLimiterTryAcquireAndRelease(t *testing.T) {

@@ -1,4 +1,4 @@
-module github.com/pitabwire/frame
+module github.com/pitabwire/frame/v2
 
 go 1.26
 
@@ -144,8 +144,3 @@ require (
 	google.golang.org/genproto/googleapis/api v0.0.0-20260526163538-3dc84a4a5aaa // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260610212136-7ab31c22f7ad // indirect
 )
-
-// v1.94.12 was published accidentally on 2026-06-10 from a stale release
-// draft: the tag pointed at post-v1.98.0 main, not v1.94.x-era code, and
-// the Go module proxy had already cached it before the tag was deleted.
-retract v1.94.12

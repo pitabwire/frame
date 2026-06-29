@@ -3,7 +3,7 @@ package blueprint_test
 import (
 	"testing"
 
-	"github.com/pitabwire/frame/tools/blueprint"
+	"github.com/pitabwire/frame/v2/tools/blueprint"
 )
 
 func TestMerge_Additive(t *testing.T) {

@@ -3,8 +3,8 @@ package security
 import (
 	"context"
 
-	"github.com/pitabwire/frame/client"
-	"github.com/pitabwire/frame/config"
+	"github.com/pitabwire/frame/v2/client"
+	"github.com/pitabwire/frame/v2/config"
 )
 
 // Options contains configuration for security manager.

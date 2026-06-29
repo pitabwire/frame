@@ -19,8 +19,8 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/pitabwire/util"
 
-	"github.com/pitabwire/frame/config"
-	"github.com/pitabwire/frame/security"
+	"github.com/pitabwire/frame/v2/config"
+	"github.com/pitabwire/frame/v2/security"
 )
 
 const (

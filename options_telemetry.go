@@ -5,8 +5,8 @@ import (
 
 	"github.com/pitabwire/util"
 
-	"github.com/pitabwire/frame/config"
-	"github.com/pitabwire/frame/telemetry"
+	"github.com/pitabwire/frame/v2/config"
+	"github.com/pitabwire/frame/v2/telemetry"
 )
 
 // WithTelemetry adds required telemetry config options to the service.

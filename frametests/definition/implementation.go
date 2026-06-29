@@ -9,7 +9,7 @@ import (
 	"github.com/pitabwire/util"
 	"github.com/testcontainers/testcontainers-go"
 
-	"github.com/pitabwire/frame/data"
+	"github.com/pitabwire/frame/v2/data"
 )
 
 type DefaultImpl struct {

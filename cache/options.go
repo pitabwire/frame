@@ -3,7 +3,7 @@ package cache
 import (
 	"time"
 
-	"github.com/pitabwire/frame/data"
+	"github.com/pitabwire/frame/v2/data"
 )
 
 // Option configures database connection settings.

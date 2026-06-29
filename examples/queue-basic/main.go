@@ -7,7 +7,7 @@ import (
 
 	"github.com/pitabwire/util"
 
-	"github.com/pitabwire/frame"
+	"github.com/pitabwire/frame/v2"
 )
 
 type handler struct{}

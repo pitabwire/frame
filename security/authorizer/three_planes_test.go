@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/pitabwire/frame/security"
-	"github.com/pitabwire/frame/security/authorizer"
+	"github.com/pitabwire/frame/v2/security"
+	"github.com/pitabwire/frame/v2/security/authorizer"
 )
 
 // ===========================================================================

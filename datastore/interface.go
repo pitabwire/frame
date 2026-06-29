@@ -3,8 +3,8 @@ package datastore
 import (
 	"context"
 
-	"github.com/pitabwire/frame/datastore/migration"
-	"github.com/pitabwire/frame/datastore/pool"
+	"github.com/pitabwire/frame/v2/datastore/migration"
+	"github.com/pitabwire/frame/v2/datastore/pool"
 )
 
 const DefaultPoolName = "__default__pool_name__"

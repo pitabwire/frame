@@ -3,6 +3,7 @@ package authorizer
 
 import (
 	"context"
+	"errors"
 	"net/url"
 	"time"
 
@@ -27,6 +28,7 @@ type ketoAdapter struct {
 	expandClient rts.ExpandServiceClient
 	config       config.ConfigurationAuthorization
 	auditLogger  security.AuditLogger
+	disabled     bool
 }
 
 // NewKetoAdapter creates a new Keto adapter with the given configuration.
@@ -41,6 +43,7 @@ func NewKetoAdapter(
 	adapter := &ketoAdapter{
 		config:      cfg,
 		auditLogger: auditLogger,
+		disabled:    cfg.GetAuthorizationMode() == config.AuthorizationModeDisabled,
 	}
 
 	if cfg.AuthorizationServiceCanRead() {
@@ -103,6 +106,9 @@ func (k *ketoAdapter) canWrite() bool {
 // Check verifies if a subject has permission on an object.
 func (k *ketoAdapter) Check(ctx context.Context, req security.CheckRequest) (security.CheckResult, error) {
 	if !k.canRead() {
+		if !k.disabled {
+			return security.CheckResult{}, errors.New("authorization is enforced but the read service is unavailable")
+		}
 		return security.CheckResult{
 			Allowed:   true,
 			Reason:    "keto disabled - permissive mode",
@@ -147,6 +153,9 @@ func (k *ketoAdapter) BatchCheck(
 	requests []security.CheckRequest,
 ) ([]security.CheckResult, error) {
 	if !k.canRead() {
+		if !k.disabled {
+			return nil, errors.New("authorization is enforced but the read service is unavailable")
+		}
 		results := make([]security.CheckResult, len(requests))
 		for i := range results {
 			results[i] = security.CheckResult{
@@ -203,7 +212,10 @@ func (k *ketoAdapter) WriteTuple(ctx context.Context, tuple security.RelationTup
 // transaction. Tuples that already exist are skipped to prevent duplicates.
 func (k *ketoAdapter) WriteTuples(ctx context.Context, tuples []security.RelationTuple) error {
 	if !k.canWrite() {
-		return nil
+		if k.disabled {
+			return nil
+		}
+		return errors.New("authorization is enforced but the write service is unavailable")
 	}
 
 	if len(tuples) == 0 {
@@ -212,7 +224,11 @@ func (k *ketoAdapter) WriteTuples(ctx context.Context, tuples []security.Relatio
 
 	var missing []security.RelationTuple
 	for _, t := range tuples {
-		if k.tupleExists(ctx, t) {
+		exists, err := k.tupleExists(ctx, t)
+		if err != nil {
+			return err
+		}
+		if exists {
 			continue
 		}
 		missing = append(missing, t)
@@ -240,25 +256,44 @@ func (k *ketoAdapter) WriteTuples(ctx context.Context, tuples []security.Relatio
 	return nil
 }
 
-// tupleExists checks whether a relation tuple already exists using the Check API.
-func (k *ketoAdapter) tupleExists(ctx context.Context, t security.RelationTuple) bool {
-	if k.checkClient == nil {
-		return false
+// tupleExists checks direct tuple storage. Authorization Check cannot be used
+// because computed relations may permit access without the requested tuple existing.
+func (k *ketoAdapter) tupleExists(ctx context.Context, t security.RelationTuple) (bool, error) {
+	if k.readClient == nil {
+		return false, errors.New("authorization read client is required for idempotent tuple writes")
 	}
 
-	resp, err := k.checkClient.Check(ctx, &rts.CheckRequest{
-		Tuple: &rts.RelationTuple{
-			Namespace: t.Object.Namespace,
-			Object:    t.Object.ID,
-			Relation:  t.Relation,
+	namespace := t.Object.Namespace
+	object := t.Object.ID
+	relation := t.Relation
+	resp, err := k.readClient.ListRelationTuples(ctx, &rts.ListRelationTuplesRequest{
+		RelationQuery: &rts.RelationQuery{
+			Namespace: &namespace,
+			Object:    &object,
+			Relation:  &relation,
 			Subject:   toKetoSubject(t.Subject),
 		},
 	})
 	if err != nil {
-		return false
+		return false, NewAuthzServiceError("read_exact_tuple", err)
 	}
 
-	return resp.GetAllowed()
+	for _, stored := range resp.GetRelationTuples() {
+		if relationTuplesEqual(fromKetoTuple(stored), t) {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func relationTuplesEqual(left, right security.RelationTuple) bool {
+	return left.Object == right.Object &&
+		left.Relation == right.Relation &&
+		left.Subject.ID == right.Subject.ID &&
+		left.Subject.Relation == right.Subject.Relation &&
+		(left.Subject.Namespace == right.Subject.Namespace ||
+			(left.Subject.Namespace == security.NamespaceProfile && right.Subject.Namespace == "") ||
+			(right.Subject.Namespace == security.NamespaceProfile && left.Subject.Namespace == ""))
 }
 
 // DeleteTuple removes a relationship tuple.
@@ -269,7 +304,10 @@ func (k *ketoAdapter) DeleteTuple(ctx context.Context, tuple security.RelationTu
 // DeleteTuples removes multiple relationship tuples in a single transaction.
 func (k *ketoAdapter) DeleteTuples(ctx context.Context, tuples []security.RelationTuple) error {
 	if !k.canWrite() {
-		return nil
+		if k.disabled {
+			return nil
+		}
+		return errors.New("authorization is enforced but the write service is unavailable")
 	}
 
 	if len(tuples) == 0 {
@@ -297,7 +335,10 @@ func (k *ketoAdapter) DeleteTuples(ctx context.Context, tuples []security.Relati
 // ListRelations returns all relations for an object.
 func (k *ketoAdapter) ListRelations(ctx context.Context, object security.ObjectRef) ([]security.RelationTuple, error) {
 	if !k.canRead() {
-		return []security.RelationTuple{}, nil
+		if k.disabled {
+			return []security.RelationTuple{}, nil
+		}
+		return nil, errors.New("authorization is enforced but the read service is unavailable")
 	}
 
 	resp, err := k.readClient.ListRelationTuples(ctx, &rts.ListRelationTuplesRequest{
@@ -325,7 +366,10 @@ func (k *ketoAdapter) ListSubjectRelations(
 	namespace string,
 ) ([]security.RelationTuple, error) {
 	if !k.canRead() {
-		return []security.RelationTuple{}, nil
+		if k.disabled {
+			return []security.RelationTuple{}, nil
+		}
+		return nil, errors.New("authorization is enforced but the read service is unavailable")
 	}
 
 	query := &rts.RelationQuery{
@@ -357,7 +401,10 @@ func (k *ketoAdapter) Expand(
 	relation string,
 ) ([]security.SubjectRef, error) {
 	if !k.canRead() {
-		return []security.SubjectRef{}, nil
+		if k.disabled {
+			return []security.SubjectRef{}, nil
+		}
+		return nil, errors.New("authorization is enforced but the read service is unavailable")
 	}
 
 	resp, err := k.expandClient.Expand(ctx, &rts.ExpandRequest{

@@ -58,13 +58,22 @@ func NewPrivateKeyJWTTokenSource(
 	if err != nil {
 		return nil, err
 	}
+	audiences, err := resolveRequestedAudiences(cfg)
+	if err != nil {
+		return nil, err
+	}
+	assertionAudience, err := resolveClientAssertionAudience(cfg, tokenURL)
+	if err != nil {
+		return nil, err
+	}
+	pkcfg.ClientAssertionAudience = assertionAudience
 
 	return &privateKeyJWTTokenSource{
 		ctx:          ctx,
 		httpClient:   httpClient,
 		tokenURL:     tokenURL,
 		clientID:     clientID,
-		audiences:    append([]string(nil), cfg.GetOauth2ServiceAudience()...),
+		audiences:    audiences,
 		config:       pkcfg,
 		signer:       jwtSigner,
 		now:          time.Now,
@@ -103,11 +112,6 @@ func (s *privateKeyJWTTokenSource) Token() (*oauth2.Token, error) {
 func (s *privateKeyJWTTokenSource) clientAssertion() (string, error) {
 	now := s.now().UTC()
 
-	audience := strings.TrimSpace(s.config.Audience)
-	if audience == "" {
-		audience = s.tokenURL
-	}
-
 	issuer := strings.TrimSpace(s.config.Issuer)
 	if issuer == "" {
 		issuer = s.clientID
@@ -121,7 +125,7 @@ func (s *privateKeyJWTTokenSource) clientAssertion() (string, error) {
 	claims := jwt.RegisteredClaims{
 		Issuer:    issuer,
 		Subject:   subject,
-		Audience:  jwt.ClaimStrings{audience},
+		Audience:  jwt.ClaimStrings{s.config.ClientAssertionAudience},
 		IssuedAt:  jwt.NewNumericDate(now),
 		NotBefore: jwt.NewNumericDate(now.Add(-time.Minute)),
 		ExpiresAt: jwt.NewNumericDate(now.Add(s.assertionTTL)),

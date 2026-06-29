@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"math/big"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -28,9 +29,10 @@ const (
 )
 
 type jwtTokenAuthenticator struct {
-	jwtVerificationAudience []string
-	jwtVerificationIssuer   string
-	tokenAuthenticator      *TokenAuthenticator
+	resourceAudience      string
+	jwtVerificationIssuer string
+	tokenAuthenticator    *TokenAuthenticator
+	initializationError   error
 }
 
 func (a *jwtTokenAuthenticator) keyFunc(token *jwt.Token) (any, error) {
@@ -49,16 +51,29 @@ func NewJwtTokenAuthenticator(cfg config.ConfigurationJWTVerification) security.
 
 	// If JWK data is pre-loaded (e.g. from OAUTH2_WELL_KNOWN_JWK_DATA env var),
 	// parse it directly so keys are available even without a reachable JWKS URL.
+	var initializationError error
 	if jwkData := cfg.GetOauth2WellKnownJwkData(); jwkData != "" {
-		_ = auth.LoadFromJSON([]byte(jwkData))
+		if err := auth.LoadFromJSON([]byte(jwkData)); err != nil {
+			initializationError = fmt.Errorf("load configured JWKS: %w", err)
+		}
+	}
+
+	resourceAudience, err := config.ParseResourceAudience(cfg.GetResourceAudience())
+	if err != nil {
+		initializationError = errors.Join(initializationError, err)
+	}
+	issuer := strings.TrimSpace(cfg.GetVerificationIssuer())
+	if issuer == "" {
+		initializationError = errors.Join(initializationError, errors.New("JWT verification issuer is required"))
 	}
 
 	auth.Start()
 
 	return &jwtTokenAuthenticator{
-		jwtVerificationAudience: cfg.GetVerificationAudience(),
-		jwtVerificationIssuer:   cfg.GetVerificationIssuer(),
-		tokenAuthenticator:      auth,
+		resourceAudience:      string(resourceAudience),
+		jwtVerificationIssuer: issuer,
+		tokenAuthenticator:    auth,
+		initializationError:   initializationError,
 	}
 }
 
@@ -74,9 +89,10 @@ func (a *jwtTokenAuthenticator) Authenticate(
 	jwtToken string,
 	options ...security.AuthOption,
 ) (context.Context, error) {
+	if a.initializationError != nil {
+		return ctx, a.initializationError
+	}
 	securityOpts := security.AuthOptions{
-		Audience:        a.jwtVerificationAudience,
-		Issuer:          a.jwtVerificationIssuer,
 		DisableSecurity: false,
 	}
 
@@ -86,14 +102,10 @@ func (a *jwtTokenAuthenticator) Authenticate(
 
 	claims := &security.AuthenticationClaims{}
 
-	var parseOptions []jwt.ParserOption
-
-	if len(securityOpts.Audience) > 0 {
-		parseOptions = append(parseOptions, jwt.WithAudience(securityOpts.Audience...))
-	}
-
-	if securityOpts.Issuer != "" {
-		parseOptions = append(parseOptions, jwt.WithIssuer(securityOpts.Issuer))
+	parseOptions := []jwt.ParserOption{
+		jwt.WithAudience(a.resourceAudience),
+		jwt.WithIssuer(a.jwtVerificationIssuer),
+		jwt.WithValidMethods([]string{"RS256", "ES256", "EdDSA"}),
 	}
 
 	token, err := jwt.ParseWithClaims(jwtToken, claims, a.keyFunc, parseOptions...)

@@ -4,6 +4,9 @@ import (
 	"errors"
 	"fmt"
 
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+
 	"github.com/pitabwire/frame/security"
 )
 
@@ -59,8 +62,11 @@ func (e *PermissionDeniedError) Unwrap() error {
 
 // AuthzServiceError wraps authorization service errors with context.
 type AuthzServiceError struct {
-	Operation string
-	Cause     error
+	Operation       string
+	Code            codes.Code
+	Retryable       bool
+	SchemaReadiness bool
+	Cause           error
 }
 
 // Error implements the error interface.
@@ -95,8 +101,24 @@ func NewPermissionDeniedError(
 
 // NewAuthzServiceError creates a new AuthzServiceError.
 func NewAuthzServiceError(operation string, cause error) *AuthzServiceError {
+	code := status.Code(cause)
 	return &AuthzServiceError{
-		Operation: operation,
-		Cause:     cause,
+		Operation:       operation,
+		Code:            code,
+		Retryable:       retryableAuthorizationCode(code),
+		SchemaReadiness: operation == "write_tuples" && (code == codes.NotFound || code == codes.FailedPrecondition),
+		Cause:           cause,
 	}
+}
+
+func retryableAuthorizationCode(code codes.Code) bool {
+	switch code {
+	case codes.Aborted, codes.DeadlineExceeded, codes.Internal, codes.ResourceExhausted, codes.Unavailable:
+		return true
+	case codes.OK, codes.Canceled, codes.Unknown, codes.InvalidArgument, codes.NotFound,
+		codes.AlreadyExists, codes.PermissionDenied, codes.FailedPrecondition, codes.OutOfRange,
+		codes.Unimplemented, codes.DataLoss, codes.Unauthenticated:
+		return false
+	}
+	return false
 }

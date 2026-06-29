@@ -257,6 +257,7 @@ func (s *ConfigSuite) TestTLSAndAuthorizationGetters() {
 	s.Equal("key.pem", cfg.TLSCertKeyPath())
 	s.Equal("http://read", cfg.GetAuthorizationServiceReadURI())
 	s.Equal("http://write", cfg.GetAuthorizationServiceWriteURI())
+	s.Equal(AuthorizationModeEnforced, cfg.GetAuthorizationMode())
 	s.True(cfg.AuthorizationServiceCanRead())
 	s.True(cfg.AuthorizationServiceCanWrite())
 }
@@ -264,14 +265,15 @@ func (s *ConfigSuite) TestTLSAndAuthorizationGetters() {
 func (s *ConfigSuite) TestOIDCLoadAndGetters() {
 	oidcSrv := newTestOIDCServer(s.T(), false, false)
 	cfg := &ConfigurationDefault{
-		Oauth2ServiceURI:          oidcSrv.discoveryURLRoot(),
-		Oauth2WellKnownOIDCPath:   ".well-known/openid-configuration",
-		Oauth2ServiceClientID:     "client-id",
-		Oauth2ServiceClientSecret: "client-secret",
-		Oauth2ServiceAudience:     []string{"aud1"},
-		Oauth2ServiceAdminURI:     "http://admin.local",
-		Oauth2JwtVerifyAudience:   []string{"verifier"},
-		Oauth2JwtVerifyIssuer:     "issuer",
+		Oauth2ServiceURI:              oidcSrv.discoveryURLRoot(),
+		Oauth2WellKnownOIDCPath:       ".well-known/openid-configuration",
+		Oauth2ServiceClientID:         "client-id",
+		Oauth2ServiceClientSecret:     "client-secret",
+		Oauth2RequestedAudiences:      []string{"https://api.example.org/downstream"},
+		Oauth2ClientAssertionAudience: "https://issuer.example.org/oauth2/token",
+		Oauth2ServiceAdminURI:         "http://admin.local",
+		Oauth2ResourceAudience:        "https://api.example.org/service",
+		Oauth2JwtVerifyIssuer:         "issuer",
 	}
 
 	s.Require().NoError(cfg.LoadOauth2Config(context.Background()))
@@ -289,9 +291,10 @@ func (s *ConfigSuite) TestOIDCLoadAndGetters() {
 	s.Equal("client-secret", cfg.GetOauth2ServiceClientSecret())
 	s.Empty(cfg.GetOauth2TokenEndpointAuthMethod())
 	s.Nil(cfg.GetOauth2PrivateKeyJWTConfig())
-	s.Equal([]string{"aud1"}, cfg.GetOauth2ServiceAudience())
+	s.Equal([]string{"https://api.example.org/downstream"}, cfg.GetOauth2RequestedAudiences())
+	s.Equal("https://issuer.example.org/oauth2/token", cfg.GetOauth2ClientAssertionAudience())
 	s.Equal("http://admin.local", cfg.GetOauth2ServiceAdminURI())
-	s.Equal([]string{"verifier"}, cfg.GetVerificationAudience())
+	s.Equal("https://api.example.org/service", cfg.GetResourceAudience())
 	s.Equal("issuer", cfg.GetVerificationIssuer())
 }
 
@@ -299,10 +302,10 @@ func (s *ConfigSuite) TestPrivateKeyJWTGetters() {
 	cfg := &ConfigurationDefault{
 		Oauth2ServiceClientID:         "svc-client",
 		Oauth2TokenEndpointAuthMethod: "private_key_jwt",
+		Oauth2ClientAssertionAudience: "https://issuer.local/oauth2/token",
 		Oauth2PrivateJwtKey: OAuth2PrivateJWTKeyConfig{
 			PrivateKeyPEM: "pem-data",
 			KeyID:         "kid-1",
-			Audience:      "https://issuer.local/oauth2/token",
 			Issuer:        "issuer-id",
 			Subject:       "subject-id",
 		},
@@ -313,7 +316,7 @@ func (s *ConfigSuite) TestPrivateKeyJWTGetters() {
 	s.Equal("private_key_jwt", cfg.GetOauth2TokenEndpointAuthMethod())
 	s.Equal([]byte("pem-data"), privateKeyJWT.PrivateKeyPEM)
 	s.Equal("kid-1", privateKeyJWT.KeyID)
-	s.Equal("https://issuer.local/oauth2/token", privateKeyJWT.Audience)
+	s.Equal("https://issuer.local/oauth2/token", cfg.GetOauth2ClientAssertionAudience())
 	s.Equal("issuer-id", privateKeyJWT.Issuer)
 	s.Equal("subject-id", privateKeyJWT.Subject)
 }
@@ -409,6 +412,7 @@ func (s *ConfigSuite) TestLoadWithOIDC() {
 	oidcSrv := newTestOIDCServer(s.T(), false, false)
 	s.T().Setenv("OAUTH2_SERVICE_URI", oidcSrv.discoveryURLRoot())
 	s.T().Setenv("OAUTH2_WELL_KNOWN_OIDC_PATH", ".well-known/openid-configuration")
+	s.T().Setenv("OAUTH2_RESOURCE_AUDIENCE", "https://api.example.org/test-service")
 
 	loaded, err := LoadWithOIDC[oidcCfg](context.Background())
 	s.Require().NoError(err)

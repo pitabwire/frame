@@ -21,12 +21,13 @@ import (
 )
 
 type stubOAuth2Config struct {
-	tokenEndpoint string
-	clientID      string
-	clientSecret  string
-	authMethod    string
-	privateJWT    *config.PrivateKeyJWTConfig
-	audience      []string
+	tokenEndpoint     string
+	clientID          string
+	clientSecret      string
+	authMethod        string
+	privateJWT        *config.PrivateKeyJWTConfig
+	audience          []string
+	assertionAudience string
 }
 
 func (c *stubOAuth2Config) LoadOauth2Config(context.Context) error   { return nil }
@@ -47,8 +48,14 @@ func (c *stubOAuth2Config) GetOauth2TokenEndpointAuthMethod() string { return c.
 func (c *stubOAuth2Config) GetOauth2PrivateKeyJWTConfig() *config.PrivateKeyJWTConfig {
 	return c.privateJWT
 }
-func (c *stubOAuth2Config) GetOauth2ServiceAudience() []string { return c.audience }
-func (c *stubOAuth2Config) GetOauth2ServiceAdminURI() string   { return "" }
+func (c *stubOAuth2Config) GetOauth2RequestedAudiences() []string { return c.audience }
+func (c *stubOAuth2Config) GetOauth2ClientAssertionAudience() string {
+	if c.assertionAudience != "" {
+		return c.assertionAudience
+	}
+	return "https://issuer.example.org/oauth2/token"
+}
+func (c *stubOAuth2Config) GetOauth2ServiceAdminURI() string { return "" }
 
 func TestNewTokenSourceClientSecretBasicExplicit(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

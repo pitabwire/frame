@@ -118,13 +118,15 @@ Frame reads configuration through narrow interfaces. Implement only what you nee
 | `OAUTH2_SERVICE_URI` | empty | Base URL for OIDC provider.
 | `OAUTH2_SERVICE_ADMIN_URI` | empty | Admin endpoint (if supported).
 | `OAUTH2_WELL_KNOWN_OIDC_PATH` | `.well-known/openid-configuration` | OIDC discovery path.
-| `OAUTH2_SERVICE_AUDIENCE` | empty | Expected audience values.
+| `OAUTH2_REQUESTED_AUDIENCES` | empty | Canonical HTTPS resource audiences requested for outbound tokens.
+| `OAUTH2_AUDIENCE_BASE_URL` | empty | Environment-level canonical audience base used by catalog-backed clients.
+| `OAUTH2_RESOURCE_AUDIENCE` | empty | Single canonical HTTPS audience accepted by this resource server.
+| `OAUTH2_CLIENT_ASSERTION_AUDIENCE` | discovered token endpoint | Token endpoint audience for `private_key_jwt` assertions.
 | `OAUTH2_SERVICE_CLIENT_ID` | empty | Client ID.
 | `OAUTH2_SERVICE_CLIENT_SECRET` | empty | Client secret.
 | `OAUTH2_TOKEN_ENDPOINT_AUTH_METHOD` | empty | OAuth2 token endpoint client authentication method. When omitted, `private_key_jwt` is inferred if `OAUTH2_PRIVATE_JWT_KEY` is set.
-| `OAUTH2_PRIVATE_JWT_KEY` | empty | JSON object for private key JWT client auth. Supports `private_key_pem`, `private_key_path`, `source`, `spiffe_id`, `hint`, `key_id`, `audience`, `issuer`, and `subject`.
+| `OAUTH2_PRIVATE_JWT_KEY` | empty | JSON object for private key JWT client auth. Supports `private_key_pem`, `private_key_path`, `source`, `spiffe_id`, `hint`, `key_id`, `issuer`, and `subject`.
 | `OAUTH2_WELL_KNOWN_JWK_DATA` | empty | Pre-fetched JWKS JSON.
-| `OAUTH2_JWT_VERIFY_AUDIENCE` | empty | JWT audience verification.
 | `OAUTH2_JWT_VERIFY_ISSUER` | empty | JWT issuer verification.
 
 ### Authorization
@@ -133,6 +135,7 @@ Frame reads configuration through narrow interfaces. Implement only what you nee
 | --- | --- | --- |
 | `AUTHORIZATION_SERVICE_READ_URI` | empty | Read API for authorization service.
 | `AUTHORIZATION_SERVICE_WRITE_URI` | empty | Write API for authorization service.
+| `AUTHORIZATION_MODE` | `enforced` | `enforced` fails closed when authorization is unavailable; `disabled` is for explicit local tests only.
 
 ### Datastore
 

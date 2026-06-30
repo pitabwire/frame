@@ -27,12 +27,12 @@ type managerImpl struct {
 }
 
 // NewManager creates and returns a new security Manager.
-func NewManager(_ context.Context, _, _ string,
+func NewManager(ctx context.Context, _, _ string,
 	cfg SecurityConfiguration, _ client.Manager,
 ) security.Manager {
 	return &managerImpl{
 		workloadAPI:   workloadapi.NewWorkloadAPI(cfg),
-		authenticator: openid.NewJwtTokenAuthenticator(cfg),
+		authenticator: openid.NewJwtTokenAuthenticator(ctx, cfg),
 		authorizer: authorizer.NewKetoAdapter(
 			cfg,
 			authorizer.NewAuditLogger(authorizer.AuditLoggerConfig{}),

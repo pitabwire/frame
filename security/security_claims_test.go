@@ -6,9 +6,6 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/stretchr/testify/require"
-	"github.com/stretchr/testify/suite"
-
 	"github.com/pitabwire/frame/config"
 	"github.com/pitabwire/frame/frametests/definition"
 	"github.com/pitabwire/frame/frametests/deps/testnats"
@@ -17,6 +14,8 @@ import (
 	"github.com/pitabwire/frame/security"
 	"github.com/pitabwire/frame/security/openid"
 	"github.com/pitabwire/frame/tests"
+	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 const sampleAccessKey = "eyJhbGciOiJSUzI1NiIsImtpZCI6InB1YmxpYzpmODg2ZDBmNy0zYmY0LTQzMzgtOGU4Yy01ZjhjNmVlNGM3MWQiLCJ0eXAiOiJKV1QifQ.eyJhdF9oYXNoIjoicUdqdV91YnRuUkRyaGZ6WEppVzl3dyIsImF1ZCI6WyJjMmY0ajdhdTZzN2Y5MXVxbm9rZyJdLCJhdXRoX3RpbWUiOjE2MjIzMDk0OTUsImV4cCI6MTgwMjMwOTQ5OSwiaWF0IjoxNjIyMzA5NDk5LCJpc3MiOiJodHRwOi8vMTI3LjAuMC4xOjQ0NDQvIiwianRpIjoiZjM5ZGIzYTEtMmU3Ni00YzQyLWEyMmItMTg5NThiYTg3MjM1Iiwibm9uY2UiOiIiLCJyYXQiOjE2MjIzMDk0ODgsInNpZCI6ImNhNmM2NmE3LTg3MDItNDRjZS1hMTllLWRkZDJkYzQ4Y2E3MiIsInN1YiI6ImMyb2hoYzNuZGJtMGI2Y2g5dGUwIn0.BKh_m7fXaMlqXNLGisQ7vBtubgfws7h-oo9L_HXuUuY9mPs20dZ7HlQp_s-jxbdh1oDFxzRsoklbgmHglHCHBimDT3hkFPiZUmsqHtGM5P2neRBXD5ogWTjPBY_piIxu7JoB_GbFF1mZiy7Q7Lw_NpObvtLT3VC-wMMJ0fZDkyQY0hiFzLaUXVjJ96X0y0Vs0ExrcSQPnuT8CYQlhkO3qaRbKOM8p8C8IzHrmJg3N96IiZc8Vy9H9cbkmCfNlIvHx1zTIZbwyPbTjp43kI_Eo8fMmbdK_XkTnxouGtArVWoW1jjG6t4UgYafm42QJPJJvwIY2uwAg0x6B-1KwC9GgoxCGGWXRiWt9vL9ALxMpDRIxYqo2sh0OcVObvYsCTFKF8ekl5RSrvlAeu8QSkVXLvdBlaCHfvxHm2po32s6j7zvzXeuczxuiAj54Gd_7QWPwHu-2TW2gnG3oa5nbTofcmNb7Qm2QoGptIgx80gMJiCVGLCfv2UUwqZRoLzF9XkWiXKWRCq6dM4QYEIa6dyxT4BRb04W1Qcq_90Y8IsmWsXm3AQptILtDfEok93UIfnT5YnyDhAh4QmVlwCgzwokNlyd9vGtauKUZyIIKLyZ8GPCldou75GD7t4ZByUcRdHStuTvJEqJ98Fe85VolW8rubqIiN_uEzTNq5vWdFT5boo"
@@ -135,78 +134,21 @@ func (m *mockJWTConfig) GetOauth2WellKnownJwk() string {
 	return m.jwksURL
 }
 
-// TestSimpleAuthenticate tests basic JWT authentication.
+// TestSimpleAuthenticate rejects tokens issued for a non-canonical audience.
 func (s *AuthenticationTestSuite) TestSimpleAuthenticate() {
-	testCases := []struct {
-		name         string
-		accessKey    string
-		audience     string
-		issuer       string
-		expectError  bool
-		expectClaims bool
-	}{
-		{
-			name:         "valid authentication with sample key",
-			accessKey:    sampleAccessKey,
-			audience:     "",
-			issuer:       "",
-			expectError:  false,
-			expectClaims: true,
+	auth := openid.NewJwtTokenAuthenticator(s.T().Context(), &mockJWTConfig{
+		ConfigurationDefault: config.ConfigurationDefault{
+			Oauth2ResourceAudience: "https://api.example.org/authentication",
+			Oauth2JwtVerifyIssuer:  "http://127.0.0.1:4444/",
 		},
-		{
-			name:         "authentication with specific audience",
-			accessKey:    sampleAccessKey,
-			audience:     "c2f4j7au6s7f91uqnokg",
-			issuer:       "",
-			expectError:  false,
-			expectClaims: true,
-		},
-		{
-			name:         "authentication with specific issuer",
-			accessKey:    sampleAccessKey,
-			audience:     "",
-			issuer:       "http://127.0.0.1:4444/",
-			expectError:  false,
-			expectClaims: true,
-		},
-	}
+		jwksURL: s.jwksURL,
+	})
 
-	for _, tc := range testCases {
-		s.Run(tc.name, func() {
-			// Create authenticator directly with mock config
-			auth := openid.NewJwtTokenAuthenticator(&mockJWTConfig{
-				ConfigurationDefault: config.ConfigurationDefault{
-					Oauth2JwtVerifyAudience: []string{"c2f4j7au6s7f91uqnokg"},
-					Oauth2JwtVerifyIssuer:   "http://127.0.0.1:4444/",
-				},
-				jwksURL: s.jwksURL,
-			})
-
-			ctx := s.T().Context()
-
-			var opts []security.AuthOption
-			if tc.audience != "" {
-				opts = append(opts, security.WithAudience(tc.audience))
-			}
-			if tc.issuer != "" {
-				opts = append(opts, security.WithIssuer(tc.issuer))
-			}
-
-			ctx2, err := auth.Authenticate(ctx, tc.accessKey, opts...)
-
-			if tc.expectError {
-				s.Require().Error(err, "expected authentication to fail")
-				return
-			}
-
-			s.Require().NoError(err, "authentication should succeed")
-
-			if tc.expectClaims {
-				claims := security.ClaimsFromContext(ctx2)
-				s.Require().NotNil(claims, "expected authentication claims in context")
-			}
-		})
-	}
+	ctx := s.T().Context()
+	ctx2, err := auth.Authenticate(ctx, sampleAccessKey)
+	s.Require().Error(err)
+	s.Equal(ctx, ctx2)
+	s.Nil(security.ClaimsFromContext(ctx2))
 }
 
 // TestSimpleAuthenticateWithOIDC tests OIDC configuration loading.
@@ -227,6 +169,7 @@ func (s *AuthenticationTestSuite) TestSimpleAuthenticateWithOIDC() {
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
 				t.Setenv("OAUTH2_SERVICE_URI", tc.serviceURI)
+				t.Setenv("OAUTH2_RESOURCE_AUDIENCE", "https://api.example.org/test-service")
 
 				ctx := t.Context()
 				cfg, err := config.LoadWithOIDC[config.ConfigurationDefault](ctx)

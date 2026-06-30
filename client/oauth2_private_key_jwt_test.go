@@ -11,14 +11,13 @@ import (
 	"testing"
 
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/pitabwire/frame/client/oauth2/signer"
+	"github.com/pitabwire/frame/config"
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"github.com/spiffe/go-spiffe/v2/svid/x509svid"
 	"github.com/spiffe/go-spiffe/v2/workloadapi"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	"github.com/pitabwire/frame/client/oauth2/signer"
-	"github.com/pitabwire/frame/config"
 )
 
 const testClientAssertionTypeJWTBearer = "urn:ietf:params:oauth:client-assertion-type:jwt-bearer"
@@ -50,8 +49,11 @@ func (c *oauth2AutoConfig) GetOauth2TokenEndpointAuthMethod() string { return c.
 func (c *oauth2AutoConfig) GetOauth2PrivateKeyJWTConfig() *config.PrivateKeyJWTConfig {
 	return c.privateJWT
 }
-func (c *oauth2AutoConfig) GetOauth2ServiceAudience() []string { return c.audience }
-func (c *oauth2AutoConfig) GetOauth2ServiceAdminURI() string   { return "" }
+func (c *oauth2AutoConfig) GetOauth2RequestedAudiences() []string { return c.audience }
+func (c *oauth2AutoConfig) GetOauth2ClientAssertionAudience() string {
+	return "https://issuer.example.org/oauth2/token"
+}
+func (c *oauth2AutoConfig) GetOauth2ServiceAdminURI() string { return "" }
 
 func TestNewHTTPClientPrivateKeyJWT(t *testing.T) {
 	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
@@ -68,14 +70,13 @@ func TestNewHTTPClientPrivateKeyJWT(t *testing.T) {
 	)
 	t.Cleanup(restore)
 
-	var tokenURL string
 	tokenServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, http.MethodPost, r.Method)
 		assert.NoError(t, r.ParseForm())
 		assert.Equal(t, "client_credentials", r.PostForm.Get("grant_type"))
 		assert.Equal(t, testClientAssertionTypeJWTBearer, r.PostForm.Get("client_assertion_type"))
 		assert.Equal(t, "frame-client", r.PostForm.Get("client_id"))
-		assert.Equal(t, []string{"api://payments"}, r.PostForm["audience"])
+		assert.Equal(t, []string{"https://api.example.org/payments"}, r.PostForm["audience"])
 
 		assertion := r.PostForm.Get("client_assertion")
 		assert.NotEmpty(t, assertion)
@@ -104,7 +105,7 @@ func TestNewHTTPClientPrivateKeyJWT(t *testing.T) {
 		}
 		assert.Equal(t, "frame-client", claims.Issuer)
 		assert.Equal(t, "frame-client", claims.Subject)
-		assert.Equal(t, []string{tokenURL}, []string(claims.Audience))
+		assert.Equal(t, []string{"https://issuer.example.org/oauth2/token"}, []string(claims.Audience))
 		assert.NotNil(t, claims.ExpiresAt)
 		assert.NotEmpty(t, claims.ID)
 
@@ -116,7 +117,6 @@ func TestNewHTTPClientPrivateKeyJWT(t *testing.T) {
 		}))
 	}))
 	defer tokenServer.Close()
-	tokenURL = tokenServer.URL
 
 	resourceServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "Bearer access-token-1", r.Header.Get("Authorization"))
@@ -134,7 +134,7 @@ func TestNewHTTPClientPrivateKeyJWT(t *testing.T) {
 			Hint:     "internal",
 			KeyID:    "kid-1",
 		},
-		audience: []string{"api://payments"},
+		audience: []string{"https://api.example.org/payments"},
 	})
 
 	httpClient, err := newHTTPClient(ctx)
@@ -183,7 +183,7 @@ func TestNewHTTPClientPrivateKeyJWTAudiences(t *testing.T) {
 
 		assert.NoError(t, r.ParseForm())
 		assert.Equal(t, url.Values{
-			"audience":              {"api://a", "api://b"},
+			"audience":              {"https://api.example.org/a", "https://api.example.org/b"},
 			"client_assertion":      {r.PostForm.Get("client_assertion")},
 			"client_assertion_type": {testClientAssertionTypeJWTBearer},
 			"client_id":             {"frame-client"},
@@ -202,7 +202,7 @@ func TestNewHTTPClientPrivateKeyJWTAudiences(t *testing.T) {
 		privateJWT: &config.PrivateKeyJWTConfig{
 			Source: config.PrivateKeyJWTSourceWorkloadAPI,
 		},
-		audience: []string{"api://a", "api://b"},
+		audience: []string{"https://api.example.org/a", "https://api.example.org/b"},
 	})
 
 	httpClient, err := newHTTPClient(ctx)

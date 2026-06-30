@@ -7,11 +7,10 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-
 	"github.com/pitabwire/frame/client/oauth2/auth"
 	"github.com/pitabwire/frame/config"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestRemoteSignerTokenSource(t *testing.T) {
@@ -150,8 +149,11 @@ func (c *remoteSignerStubCfg) GetOauth2ServiceURI() string              { return
 func (c *remoteSignerStubCfg) GetOauth2ServiceClientID() string         { return c.clientID }
 func (c *remoteSignerStubCfg) GetOauth2ServiceClientSecret() string     { return "" }
 func (c *remoteSignerStubCfg) GetOauth2TokenEndpointAuthMethod() string { return "" }
-func (c *remoteSignerStubCfg) GetOauth2ServiceAudience() []string       { return nil }
-func (c *remoteSignerStubCfg) GetOauth2ServiceAdminURI() string         { return "" }
+func (c *remoteSignerStubCfg) GetOauth2RequestedAudiences() []string    { return nil }
+func (c *remoteSignerStubCfg) GetOauth2ClientAssertionAudience() string {
+	return "https://issuer.example.org/oauth2/token"
+}
+func (c *remoteSignerStubCfg) GetOauth2ServiceAdminURI() string { return "" }
 
 func (c *remoteSignerStubCfg) GetOauth2PrivateKeyJWTConfig() *config.PrivateKeyJWTConfig {
 	return &config.PrivateKeyJWTConfig{

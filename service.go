@@ -64,8 +64,7 @@ type Service struct {
 	cancelFunc context.CancelFunc
 	httpMW     []func(http.Handler) http.Handler
 
-	errorChannelMutex sync.Mutex
-	errorChannel      chan error
+	errorChannel chan error
 
 	backGroundClient func(ctx context.Context) error
 
@@ -115,6 +114,8 @@ type Service struct {
 	subscriberStartups   []func(ctx context.Context, s *Service)
 	otherStartups        []func(ctx context.Context, s *Service)
 	startupRegistrations sync.Mutex
+	errorOnce            sync.Once
+	shutdownTimeout      time.Duration // Overall shutdown timeout
 }
 
 type Option func(ctx context.Context, service *Service)
@@ -175,32 +176,6 @@ func NewServiceWithContext(ctx context.Context, opts ...Option) (context.Context
 	})
 
 	svc.initWorkersAndQueues(ctx, &cfg)
-
-	// Execute pre-start methods now that queue manager is initialized
-	// This ensures queue registrations from options are applied
-	// Run in order: publishers first, then subscribers, then other startups
-	svc.startupOnce.Do(func() {
-		// Run publisher startups first (to create topics for mem:// driver)
-		for _, startup := range svc.publisherStartups {
-			startup(ctx, svc)
-		}
-		// Run subscriber startups after publishers
-		for _, startup := range svc.subscriberStartups {
-			startup(ctx, svc)
-		}
-		// Run other startups last
-		for _, startup := range svc.otherStartups {
-			startup(ctx, svc)
-		}
-		// Run legacy startup function if set
-		if svc.startup != nil {
-			svc.startup(ctx, svc)
-		}
-		// Mark startup as completed
-		svc.startupRegistrations.Lock()
-		svc.startupCompleted = true
-		svc.startupRegistrations.Unlock()
-	})
 
 	// Prepare context to be returned, embedding svc and config
 	ctx = ToContext(ctx, svc)
@@ -757,8 +732,19 @@ func (s *Service) shutdownContext(_ context.Context) (context.Context, context.C
 		return base, func() {}
 	}
 
-	ctx, cancel := context.WithTimeout(base, httpCfg.HTTPShutdownTimeout())
+	timeout := s.shutdownTimeout
+	if timeout <= 0 {
+		timeout = httpCfg.HTTPShutdownTimeout()
+	}
+
+	ctx, cancel := context.WithTimeout(base, timeout)
 	return ctx, cancel
+}
+
+// SetShutdownTimeout sets the overall shutdown timeout for the service.
+// If not set, defaults to HTTP server shutdown timeout from config.
+func (s *Service) SetShutdownTimeout(timeout time.Duration) {
+	s.shutdownTimeout = timeout
 }
 
 // initWorkersAndQueues sets up the worker pool manager, queue manager, and events queue.
@@ -792,28 +778,17 @@ func (s *Service) initWorkersAndQueues(ctx context.Context, cfg *config.Configur
 }
 
 func (s *Service) sendStopError(ctx context.Context, err error) {
-	s.errorChannelMutex.Lock()
-	defer s.errorChannelMutex.Unlock()
-
-	select {
-	case <-ctx.Done():
+	if err == nil {
 		return
-	default:
 	}
 
-	// Preserve first non-nil error if one is already pending.
-	if err != nil {
+	// Use sync.Once to ensure only the first error is recorded
+	s.errorOnce.Do(func() {
 		select {
-		case pending := <-s.errorChannel:
-			if pending != nil {
-				err = pending
-			}
+		case <-ctx.Done():
+			return
+		case s.errorChannel <- err:
 		default:
 		}
-	}
-
-	select {
-	case s.errorChannel <- err:
-	default:
-	}
+	})
 }

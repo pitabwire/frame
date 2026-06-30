@@ -2,7 +2,12 @@ package data
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"time"
+
+	"github.com/pitabwire/util"
+	"gorm.io/gorm"
 
 	"github.com/pitabwire/frame/workerpool"
 )
@@ -200,4 +205,94 @@ func WithSearchByTimePeriod(period *TimePeriod) SearchOption {
 	return func(query *SearchQuery) {
 		query.TimePeriod = period
 	}
+}
+
+// SearchFunc performs a complex search with pagination and filtering.
+// It accepts a validation function to check column names, allowing flexible validation strategies.
+//
+//nolint:gocognit // complexity is inherent to comprehensive search logic
+func SearchFunc[T any](
+	ctx context.Context,
+	dbConnection *gorm.DB,
+	query *SearchQuery,
+	validateColumn func(string) error,
+) ([]T, error) {
+	var entities []T
+
+	util.Log(ctx).Debug("initiating a search query")
+
+	paginator := query.Pagination
+
+	limit := paginator.BatchSize
+	if limit <= 0 {
+		limit = paginator.Limit
+	}
+	if limit <= 0 {
+		limit = 50
+	}
+
+	db := dbConnection.
+		Limit(limit).
+		Offset(paginator.Offset)
+
+	if query.OrderBy != "" {
+		db = db.Order(query.OrderBy)
+	}
+
+	if query.TimePeriod != nil {
+		// Apply date range filter if range was provided
+		if err := validateColumn(query.TimePeriod.Field); err != nil {
+			return nil, err
+		}
+
+		// Use RFC3339 format for proper timezone handling
+		db = db.Where(
+			fmt.Sprintf("%s BETWEEN ? AND ?", query.TimePeriod.Field),
+			query.TimePeriod.StartDate.Format(time.RFC3339),
+			query.TimePeriod.StopDate.Format(time.RFC3339))
+	}
+
+	if len(query.FiltersAndByValue) > 0 {
+		// Apply field filters with validation
+		for k, v := range query.FiltersAndByValue {
+			// Validate column name before using
+			if err := validateColumn(k); err != nil {
+				return nil, err
+			}
+			if v == "" {
+				db = db.Where(k)
+			} else {
+				db = db.Where(k, v)
+			}
+		}
+	}
+
+	// Apply text search across multiple fields
+	// ---- OR Text Search ----
+	if len(query.FiltersOrByValue) > 0 {
+		var orClauses []string
+		var orValues []any
+
+		for k, v := range query.FiltersOrByValue {
+			if err := validateColumn(k); err != nil {
+				return nil, err
+			}
+
+			orClauses = append(orClauses, k)
+			if strings.Contains(k, "?") {
+				orValues = append(orValues, v)
+			}
+		}
+
+		if len(orClauses) > 0 {
+			// Example: (name ILIKE ? OR topic ILIKE ?)
+			combined := "(" + strings.Join(orClauses, " OR ") + ")"
+			db = db.Where(combined, orValues...)
+		}
+	}
+
+	// Execute query with pointer to slice
+	err := db.Find(&entities).Error
+
+	return entities, err
 }

@@ -19,16 +19,15 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-	"github.com/stretchr/testify/suite"
-
 	"github.com/pitabwire/frame/config"
 	"github.com/pitabwire/frame/frametests"
 	"github.com/pitabwire/frame/frametests/definition"
 	"github.com/pitabwire/frame/frametests/deps/testpostgres"
 	"github.com/pitabwire/frame/security"
 	"github.com/pitabwire/frame/security/openid"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 type JwtAuthenticatorTestSuite struct {
@@ -44,7 +43,7 @@ type JwtAuthenticatorTestSuite struct {
 	ed25519Key ed25519.PrivateKey
 	ed25519Kid string
 	// Test configuration
-	testAudience []string
+	testAudience string
 	testIssuer   string
 }
 
@@ -85,7 +84,7 @@ func (s *JwtAuthenticatorTestSuite) setupTestKeys() {
 	_ = ed25519Pub // We only need the private key for signing
 	s.ed25519Kid = "ed25519-key-1"
 	// Test configuration
-	s.testAudience = []string{"test-audience", "another-audience"}
+	s.testAudience = "https://api.example.org/test-resource"
 	s.testIssuer = "https://test-issuer.example.com"
 }
 
@@ -174,7 +173,7 @@ func (s *JwtAuthenticatorTestSuite) createEd25519JWK() JWK {
 }
 func (s *JwtAuthenticatorTestSuite) createAuthenticator() security.Authenticator {
 	// Create a custom config that returns our mock JWKS URL
-	auth := openid.NewJwtTokenAuthenticator(&mockJWTConfig{
+	auth := openid.NewJwtTokenAuthenticator(s.T().Context(), &mockJWTConfig{
 		jwksURL:  s.jwksURL,
 		audience: s.testAudience,
 		issuer:   s.testIssuer,
@@ -189,7 +188,7 @@ func (s *JwtAuthenticatorTestSuite) createAuthenticator() security.Authenticator
 // mockJWTConfig is a test-specific config that returns our mock JWKS URL.
 type mockJWTConfig struct {
 	jwksURL  string
-	audience []string
+	audience string
 	issuer   string
 }
 
@@ -197,7 +196,7 @@ func (m *mockJWTConfig) GetOauth2WellKnownJwk() string {
 	return m.jwksURL
 }
 
-func (m *mockJWTConfig) GetVerificationAudience() []string {
+func (m *mockJWTConfig) GetResourceAudience() string {
 	return m.audience
 }
 
@@ -319,7 +318,7 @@ func (s *JwtAuthenticatorTestSuite) TestInvalidTokens() {
 		{
 			name:        "missing kid header",
 			token:       "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c",
-			expectError: "token missing kid header",
+			expectError: "signing method HS256 is invalid",
 		},
 		{
 			name:        "expired token",
@@ -353,13 +352,13 @@ func (s *JwtAuthenticatorTestSuite) TestInvalidTokens() {
 func (s *JwtAuthenticatorTestSuite) TestAudienceIssuerValidation() {
 	testCases := []struct {
 		name        string
-		audience    []string
+		audience    string
 		issuer      string
 		expectError string
 	}{
 		{
 			name:        "wrong audience",
-			audience:    []string{"wrong-audience"},
+			audience:    "https://api.example.org/wrong-resource",
 			issuer:      s.testIssuer,
 			expectError: "token has invalid audience",
 		},
@@ -371,7 +370,7 @@ func (s *JwtAuthenticatorTestSuite) TestAudienceIssuerValidation() {
 		},
 		{
 			name:        "both wrong",
-			audience:    []string{"wrong-audience"},
+			audience:    "https://api.example.org/wrong-resource",
 			issuer:      "https://wrong-issuer.com",
 			expectError: "token has invalid audience",
 		},
@@ -384,7 +383,7 @@ func (s *JwtAuthenticatorTestSuite) TestAudienceIssuerValidation() {
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
 				// Create authenticator with wrong config using mock config
-				auth := openid.NewJwtTokenAuthenticator(&mockJWTConfig{
+				auth := openid.NewJwtTokenAuthenticator(ctx, &mockJWTConfig{
 					jwksURL:  s.jwksURL,
 					audience: tc.audience,
 					issuer:   tc.issuer,
@@ -484,9 +483,10 @@ func (s *JwtAuthenticatorTestSuite) TestGoogleJWKSIntegration() {
 		definition.NewDependancyOption("jwt_auth_test", "test", s.Resources()),
 	}
 	frametests.WithTestDependencies(s.T(), depOptions, func(t *testing.T, _ *definition.DependencyOption) {
+		ctx := t.Context()
 		// Test with Google's real JWKS endpoint
 		auth := openid.NewTokenAuthenticator("https://www.googleapis.com/oauth2/v3/certs", 5*time.Minute)
-		auth.Start()
+		auth.Start(ctx)
 		defer auth.Stop()
 
 		// Wait for initial refresh to complete
@@ -509,9 +509,10 @@ func (s *JwtAuthenticatorTestSuite) TestJWKRefresh() {
 		definition.NewDependancyOption("jwt_auth_test", "test", s.Resources()),
 	}
 	frametests.WithTestDependencies(s.T(), depOptions, func(t *testing.T, _ *definition.DependencyOption) {
+		ctx := t.Context()
 		// Test successful refresh
 		auth := openid.NewTokenAuthenticator(s.jwksURL, 100*time.Millisecond)
-		auth.Start()
+		auth.Start(ctx)
 		defer auth.Stop()
 		// Wait for initial refresh
 		time.Sleep(200 * time.Millisecond)
@@ -521,7 +522,7 @@ func (s *JwtAuthenticatorTestSuite) TestJWKRefresh() {
 		assert.NotNil(t, key, "RSA key should not be nil")
 		// Test refresh with network failure
 		auth2 := openid.NewTokenAuthenticator("http://invalid-url-that-does-not-exist", 50*time.Millisecond)
-		auth2.Start()
+		auth2.Start(ctx)
 		defer auth2.Stop()
 		// Wait for failed refresh attempt
 		time.Sleep(100 * time.Millisecond)
@@ -568,8 +569,9 @@ func (s *JwtAuthenticatorTestSuite) TestKeyLookupEdgeCases() {
 		definition.NewDependancyOption("jwt_auth_test", "test", s.Resources()),
 	}
 	frametests.WithTestDependencies(s.T(), depOptions, func(t *testing.T, _ *definition.DependencyOption) {
+		ctx := t.Context()
 		auth := openid.NewTokenAuthenticator(s.jwksURL, time.Minute)
-		auth.Start()
+		auth.Start(ctx)
 		defer auth.Stop()
 		// Wait for initial refresh
 		time.Sleep(100 * time.Millisecond)
@@ -659,14 +661,15 @@ func BenchmarkAuthentication(b *testing.B) {
 	}))
 	defer server.Close()
 	cfg := &config.ConfigurationDefault{
-		Oauth2JwtVerifyAudience: []string{"bench-audience"},
-		Oauth2JwtVerifyIssuer:   "https://bench-issuer.com",
+		Oauth2ResourceAudience: "https://api.example.org/benchmark",
+		Oauth2JwtVerifyIssuer:  "https://bench-issuer.com",
 	}
-	auth := openid.NewJwtTokenAuthenticator(cfg)
+	ctx := context.Background()
+	auth := openid.NewJwtTokenAuthenticator(ctx, cfg)
 	// Create benchmark token
 	claims := jwt.MapClaims{
 		"iss": "https://bench-issuer.com",
-		"aud": []string{"bench-audience"},
+		"aud": []string{"https://api.example.org/benchmark"},
 		"sub": "bench-user",
 		"exp": time.Now().Add(time.Hour).Unix(),
 		"iat": time.Now().Unix(),
@@ -675,7 +678,6 @@ func BenchmarkAuthentication(b *testing.B) {
 	token := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
 	token.Header["kid"] = rsaKid
 	tokenString, _ := token.SignedString(rsaKey)
-	ctx := context.Background()
 	b.ResetTimer()
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {

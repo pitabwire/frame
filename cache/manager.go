@@ -1,6 +1,7 @@
 package cache
 
 import (
+	"context"
 	"fmt"
 	"sync"
 )
@@ -63,7 +64,7 @@ func (cm *manager) RemoveCache(name string) error {
 }
 
 // Close closes all managed caches.
-func (cm *manager) Close() error {
+func (cm *manager) Shutdown(_ context.Context) error {
 	var errs []error
 
 	cm.caches.Range(func(_, value interface{}) bool {

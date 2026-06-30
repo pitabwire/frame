@@ -6,20 +6,20 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-
 	"github.com/pitabwire/frame/client/oauth2/auth"
 	"github.com/pitabwire/frame/config"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 type stubOAuth2Config struct {
-	tokenEndpoint string
-	clientID      string
-	clientSecret  string
-	authMethod    string
-	privateJWT    *config.PrivateKeyJWTConfig
-	audience      []string
+	tokenEndpoint     string
+	clientID          string
+	clientSecret      string
+	authMethod        string
+	privateJWT        *config.PrivateKeyJWTConfig
+	audience          []string
+	assertionAudience string
 }
 
 func (c *stubOAuth2Config) LoadOauth2Config(context.Context) error   { return nil }
@@ -40,8 +40,9 @@ func (c *stubOAuth2Config) GetOauth2TokenEndpointAuthMethod() string { return c.
 func (c *stubOAuth2Config) GetOauth2PrivateKeyJWTConfig() *config.PrivateKeyJWTConfig {
 	return c.privateJWT
 }
-func (c *stubOAuth2Config) GetOauth2ServiceAudience() []string { return c.audience }
-func (c *stubOAuth2Config) GetOauth2ServiceAdminURI() string   { return "" }
+func (c *stubOAuth2Config) GetOauth2RequestedAudiences() []string    { return c.audience }
+func (c *stubOAuth2Config) GetOauth2ClientAssertionAudience() string { return c.assertionAudience }
+func (c *stubOAuth2Config) GetOauth2ServiceAdminURI() string         { return "" }
 
 func TestNewBasicTokenSource(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -110,7 +111,7 @@ func TestNewPostTokenSource(t *testing.T) {
 func TestNewBasicTokenSourceWithAudiences(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.NoError(t, r.ParseForm())
-		assert.Equal(t, []string{"api://a", "api://b"}, r.PostForm["audience"])
+		assert.Equal(t, []string{"https://api.example.org/a", "https://api.example.org/b"}, r.PostForm["audience"])
 
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"access_token":"aud-tok","token_type":"Bearer","expires_in":60}`))
@@ -123,7 +124,7 @@ func TestNewBasicTokenSourceWithAudiences(t *testing.T) {
 		&stubOAuth2Config{
 			clientID:     "my-client",
 			clientSecret: "my-secret",
-			audience:     []string{"api://a", "api://b"},
+			audience:     []string{"https://api.example.org/a", "https://api.example.org/b"},
 		},
 		server.URL,
 	)

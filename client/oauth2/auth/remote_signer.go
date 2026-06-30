@@ -71,9 +71,13 @@ func NewRemoteSignerTokenSource(
 		return nil, errors.New("remote signer requires signer_url")
 	}
 
-	audience := strings.TrimSpace(pkcfg.Audience)
-	if audience == "" {
-		audience = tokenURL
+	audience, err := resolveClientAssertionAudience(cfg, tokenURL)
+	if err != nil {
+		return nil, err
+	}
+	audiences, err := resolveRequestedAudiences(cfg)
+	if err != nil {
+		return nil, err
 	}
 
 	return &remoteSignerTokenSource{
@@ -84,7 +88,7 @@ func NewRemoteSignerTokenSource(
 		signerAPIKey: strings.TrimSpace(pkcfg.SignerAPIKey),
 		clientID:     clientID,
 		keyID:        strings.TrimSpace(pkcfg.KeyID),
-		audiences:    append([]string(nil), cfg.GetOauth2ServiceAudience()...),
+		audiences:    audiences,
 		audience:     audience,
 		now:          time.Now,
 	}, nil

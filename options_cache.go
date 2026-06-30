@@ -15,9 +15,9 @@ func WithCacheManager() Option {
 			s.cacheManager = cache.NewManager()
 
 			// Register cleanup method
-			s.AddCleanupMethod(func(_ context.Context) {
+			s.AddCleanupMethod(func(cleanupCtx context.Context) {
 				if s.cacheManager != nil {
-					_ = s.cacheManager.Close()
+					_ = s.cacheManager.Shutdown(cleanupCtx)
 				}
 			})
 		}

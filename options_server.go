@@ -3,6 +3,7 @@ package frame
 import (
 	"context"
 	"net/http"
+	"time"
 
 	"github.com/pitabwire/frame/server"
 )
@@ -26,6 +27,16 @@ func WithHTTPMiddleware(middleware ...func(http.Handler) http.Handler) Option {
 		}
 
 		c.httpMW = append(c.httpMW, middleware...)
+	}
+}
+
+// WithHTTPRequestTimeout adds a middleware that enforces a per-request timeout.
+// The context will be canceled after the specified duration.
+func WithHTTPRequestTimeout(timeout time.Duration) Option {
+	return func(_ context.Context, c *Service) {
+		c.httpMW = append(c.httpMW, func(next http.Handler) http.Handler {
+			return http.TimeoutHandler(next, timeout, "Request timeout")
+		})
 	}
 }
 

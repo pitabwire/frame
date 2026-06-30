@@ -446,3 +446,4 @@ linters:
           - gosec
           - noctx
           - wrapcheck
+          - goimports

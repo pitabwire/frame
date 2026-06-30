@@ -73,6 +73,18 @@ func (m *manager) Init(ctx context.Context) error {
 		return nil
 	}
 
+	// Set default exporters to "none" if not explicitly configured.
+	// This must be done before calling autoexport functions.
+	if os.Getenv("OTEL_TRACES_EXPORTER") == "" {
+		_ = os.Setenv("OTEL_TRACES_EXPORTER", "none")
+	}
+	if os.Getenv("OTEL_METRICS_EXPORTER") == "" {
+		_ = os.Setenv("OTEL_METRICS_EXPORTER", "none")
+	}
+	if os.Getenv("OTEL_LOGS_EXPORTER") == "" {
+		_ = os.Setenv("OTEL_LOGS_EXPORTER", "none")
+	}
+
 	res, err := m.setupResource()
 	if err != nil {
 		return err
@@ -138,9 +150,6 @@ func (m *manager) setupTraceSampler() {
 // setupTraceExporter initializes the trace exporter if not already set.
 func (m *manager) setupTraceExporter(ctx context.Context) error {
 	if m.traceExporter == nil {
-		if os.Getenv("OTEL_TRACES_EXPORTER") == "" {
-			_ = os.Setenv("OTEL_TRACES_EXPORTER", "none")
-		}
 		var err error
 		m.traceExporter, err = autoexport.NewSpanExporter(ctx)
 		if err != nil {
@@ -153,9 +162,6 @@ func (m *manager) setupTraceExporter(ctx context.Context) error {
 // setupMetricsReader initializes the metrics reader if not already set.
 func (m *manager) setupMetricsReader(ctx context.Context) error {
 	if m.metricsReader == nil {
-		if os.Getenv("OTEL_METRICS_EXPORTER") == "" {
-			_ = os.Setenv("OTEL_METRICS_EXPORTER", "none")
-		}
 		var err error
 		m.metricsReader, err = autoexport.NewMetricReader(ctx)
 		if err != nil {
@@ -168,9 +174,6 @@ func (m *manager) setupMetricsReader(ctx context.Context) error {
 // setupLogsExporter initializes the logs exporter if not already set.
 func (m *manager) setupLogsExporter(ctx context.Context) error {
 	if m.traceLogsExporter == nil {
-		if os.Getenv("OTEL_LOGS_EXPORTER") == "" {
-			_ = os.Setenv("OTEL_LOGS_EXPORTER", "none")
-		}
 		var err error
 		m.traceLogsExporter, err = autoexport.NewLogExporter(ctx)
 		if err != nil {
@@ -179,8 +182,6 @@ func (m *manager) setupLogsExporter(ctx context.Context) error {
 	}
 	return nil
 }
-
-// setupProviders initializes the OpenTelemetry providers and logger.
 func (m *manager) setupProviders(_ context.Context, res *resource.Resource) error {
 	otel.SetTextMapPropagator(m.traceTextMap)
 

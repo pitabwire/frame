@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"math/big"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -25,12 +26,14 @@ import (
 const (
 	defaultJWKSRefreshInterval = 5 * time.Minute
 	defaultHTTPClientTimeout   = 5 * time.Second
+	defaultJWKSFetchTimeout    = 10 * time.Second
 )
 
 type jwtTokenAuthenticator struct {
-	jwtVerificationAudience []string
-	jwtVerificationIssuer   string
-	tokenAuthenticator      *TokenAuthenticator
+	resourceAudience      string
+	jwtVerificationIssuer string
+	tokenAuthenticator    *TokenAuthenticator
+	initializationError   error
 }
 
 func (a *jwtTokenAuthenticator) keyFunc(token *jwt.Token) (any, error) {
@@ -41,7 +44,7 @@ func (a *jwtTokenAuthenticator) keyFunc(token *jwt.Token) (any, error) {
 	return a.tokenAuthenticator.GetKey(token)
 }
 
-func NewJwtTokenAuthenticator(cfg config.ConfigurationJWTVerification) security.Authenticator {
+func NewJwtTokenAuthenticator(ctx context.Context, cfg config.ConfigurationJWTVerification) security.Authenticator {
 	auth := NewTokenAuthenticator(
 		cfg.GetOauth2WellKnownJwk(),
 		defaultJWKSRefreshInterval,
@@ -49,16 +52,29 @@ func NewJwtTokenAuthenticator(cfg config.ConfigurationJWTVerification) security.
 
 	// If JWK data is pre-loaded (e.g. from OAUTH2_WELL_KNOWN_JWK_DATA env var),
 	// parse it directly so keys are available even without a reachable JWKS URL.
+	var initializationError error
 	if jwkData := cfg.GetOauth2WellKnownJwkData(); jwkData != "" {
-		_ = auth.LoadFromJSON([]byte(jwkData))
+		if err := auth.LoadFromJSON([]byte(jwkData)); err != nil {
+			initializationError = fmt.Errorf("load configured JWKS: %w", err)
+		}
 	}
 
-	auth.Start()
+	resourceAudience, err := config.ParseResourceAudience(cfg.GetResourceAudience())
+	if err != nil {
+		initializationError = errors.Join(initializationError, err)
+	}
+	issuer := strings.TrimSpace(cfg.GetVerificationIssuer())
+	if issuer == "" {
+		initializationError = errors.Join(initializationError, errors.New("JWT verification issuer is required"))
+	}
+
+	auth.Start(ctx)
 
 	return &jwtTokenAuthenticator{
-		jwtVerificationAudience: cfg.GetVerificationAudience(),
-		jwtVerificationIssuer:   cfg.GetVerificationIssuer(),
-		tokenAuthenticator:      auth,
+		resourceAudience:      string(resourceAudience),
+		jwtVerificationIssuer: issuer,
+		tokenAuthenticator:    auth,
+		initializationError:   initializationError,
 	}
 }
 
@@ -74,9 +90,10 @@ func (a *jwtTokenAuthenticator) Authenticate(
 	jwtToken string,
 	options ...security.AuthOption,
 ) (context.Context, error) {
+	if a.initializationError != nil {
+		return ctx, a.initializationError
+	}
 	securityOpts := security.AuthOptions{
-		Audience:        a.jwtVerificationAudience,
-		Issuer:          a.jwtVerificationIssuer,
 		DisableSecurity: false,
 	}
 
@@ -86,14 +103,11 @@ func (a *jwtTokenAuthenticator) Authenticate(
 
 	claims := &security.AuthenticationClaims{}
 
-	var parseOptions []jwt.ParserOption
-
-	if len(securityOpts.Audience) > 0 {
-		parseOptions = append(parseOptions, jwt.WithAudience(securityOpts.Audience...))
-	}
-
-	if securityOpts.Issuer != "" {
-		parseOptions = append(parseOptions, jwt.WithIssuer(securityOpts.Issuer))
+	parseOptions := []jwt.ParserOption{
+		jwt.WithAudience(a.resourceAudience),
+		jwt.WithIssuer(a.jwtVerificationIssuer),
+		jwt.WithValidMethods([]string{"RS256", "ES256", "EdDSA"}),
+		jwt.WithExpirationRequired(),
 	}
 
 	token, err := jwt.ParseWithClaims(jwtToken, claims, a.keyFunc, parseOptions...)
@@ -139,14 +153,16 @@ type JWKSet struct {
 }
 
 type TokenAuthenticator struct {
-	jwksURL  string
-	refresh  time.Duration
-	client   *http.Client
-	mu       sync.RWMutex
-	keys     map[string]any
-	lastErr  error
-	stopChan chan struct{}
-	stopOnce sync.Once
+	jwksURL    string
+	refresh    time.Duration
+	client     *http.Client
+	mu         sync.RWMutex
+	keys       map[string]any
+	lastErr    error
+	stopChan   chan struct{}
+	stopOnce   sync.Once
+	refreshCtx context.Context
+	refreshWG  sync.WaitGroup
 }
 
 // ------------------------------
@@ -168,20 +184,32 @@ func NewTokenAuthenticator(jwksURL string, refresh time.Duration) *TokenAuthenti
 // Start / Stop Background Refresh
 // ------------------------------
 
-func (a *TokenAuthenticator) Start() {
-	// Load immediately
-	_ = a.Refresh()
+// Start begins the background JWKS refresh using the provided context.
+// The context controls the lifetime of the background goroutine.
+func (a *TokenAuthenticator) Start(ctx context.Context) {
+	a.refreshCtx = ctx
+
+	// Load immediately with timeout
+	initialCtx, cancel := context.WithTimeout(ctx, defaultJWKSFetchTimeout)
+	_ = a.RefreshWithContext(initialCtx)
+	cancel()
 
 	// Background updater
+	a.refreshWG.Add(1)
 	go func() {
+		defer a.refreshWG.Done()
 		ticker := time.NewTicker(a.refresh)
 		defer ticker.Stop()
 
 		for {
 			select {
 			case <-ticker.C:
-				_ = a.Refresh()
+				tickCtx, tickCancel := context.WithTimeout(a.refreshCtx, defaultJWKSFetchTimeout)
+				_ = a.RefreshWithContext(tickCtx)
+				tickCancel()
 			case <-a.stopChan:
+				return
+			case <-a.refreshCtx.Done():
 				return
 			}
 		}
@@ -192,6 +220,7 @@ func (a *TokenAuthenticator) Stop() {
 	a.stopOnce.Do(func() {
 		close(a.stopChan)
 	})
+	a.refreshWG.Wait()
 }
 
 // GetKeyCount returns the number of currently loaded keys (for testing purposes).
@@ -276,17 +305,14 @@ func (a *TokenAuthenticator) LoadFromJSON(data []byte) error {
 	return nil
 }
 
-// ------------------------------
-// Refresh JWK from Well-Known URL
-// ------------------------------
-
-func (a *TokenAuthenticator) Refresh() error {
+// RefreshWithContext refreshes the JWKS from the well-known URL using the provided context.
+func (a *TokenAuthenticator) RefreshWithContext(ctx context.Context) error {
 	u, err := util.ValidateHTTPURL(a.jwksURL)
 	if err != nil {
 		a.setErr(err)
 		return err
 	}
-	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, u.String(), nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
 	if err != nil {
 		return err
 	}
@@ -338,6 +364,15 @@ func (a *TokenAuthenticator) Refresh() error {
 	a.mu.Unlock()
 
 	return nil
+}
+
+// Refresh refreshes the JWKS from the well-known URL using a default timeout.
+//
+// Deprecated: Use RefreshWithContext instead.
+func (a *TokenAuthenticator) Refresh() error {
+	ctx, cancel := context.WithTimeout(context.Background(), defaultJWKSFetchTimeout)
+	defer cancel()
+	return a.RefreshWithContext(ctx)
 }
 
 // helper.

@@ -50,19 +50,19 @@ func (s *queueManager) AddPublisher(ctx context.Context, reference string, queue
 
 	pub = newPublisher(reference, queueURL)
 
-	// Only initialize immediately if queueManager manager has already been initialized
+	// Initialize immediately if queueManager has already been initialized
+	// Hold lock during check and init to prevent race
 	s.initMutex.Lock()
 	alreadyInitialized := s.initialized
-	s.initMutex.Unlock()
-
 	if alreadyInitialized {
 		err := pub.Init(ctx)
 		if err != nil {
+			s.initMutex.Unlock()
 			return err
 		}
 	}
-
 	s.publishQueueMap.Store(reference, pub)
+	s.initMutex.Unlock()
 	return nil
 }
 
@@ -110,19 +110,19 @@ func (s *queueManager) AddSubscriber(
 
 	subs := newSubscriber(s.workPool, reference, queueURL, handlers...)
 
-	// Only initialize immediately if queueManager manager has already been initialized
+	// Initialize immediately if queueManager has already been initialized
+	// Hold lock during check and init to prevent race
 	s.initMutex.Lock()
 	alreadyInitialized := s.initialized
-	s.initMutex.Unlock()
-
 	if alreadyInitialized {
 		err := s.initSubscriber(ctx, subs)
 		if err != nil {
+			s.initMutex.Unlock()
 			return err
 		}
 	}
-
 	s.subscriptionQueueMap.Store(reference, subs)
+	s.initMutex.Unlock()
 
 	return nil
 }

@@ -21,8 +21,7 @@ const (
 )
 
 var (
-	errRetrySchedulerStopped   = errors.New("retry scheduler stopped")
-	errRetrySchedulerQueueFull = errors.New("retry scheduler queue is full")
+	errRetrySchedulerStopped = errors.New("retry scheduler stopped")
 )
 
 func shouldCloseJob(executionErr error) bool {
@@ -177,10 +176,7 @@ func (m *manager) scheduleRetry(task retryTask) {
 	case <-task.ctx.Done():
 		return
 	case m.retryQueue <- task:
-	default:
-		if task.fail != nil {
-			task.fail(errRetrySchedulerQueueFull)
-		}
+		// Successfully queued for retry
 	}
 }
 

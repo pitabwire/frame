@@ -72,6 +72,10 @@ func newClientSecretTokenSource(
 	if clientSecret == "" {
 		return nil, errors.New("client_secret auth requires client secret")
 	}
+	audiences, err := resolveRequestedAudiences(cfg)
+	if err != nil {
+		return nil, err
+	}
 
 	return &clientSecretTokenSource{
 		ctx:          ctx,
@@ -79,7 +83,7 @@ func newClientSecretTokenSource(
 		tokenURL:     tokenURL,
 		clientID:     clientID,
 		clientSecret: clientSecret,
-		audiences:    append([]string(nil), cfg.GetOauth2ServiceAudience()...),
+		audiences:    audiences,
 		authStyle:    style,
 		now:          time.Now,
 	}, nil

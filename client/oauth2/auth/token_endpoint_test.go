@@ -6,11 +6,10 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-
 	"github.com/pitabwire/frame/client/oauth2/auth"
 	"github.com/pitabwire/frame/config"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestExchangeTokenViaBasicTokenSource(t *testing.T) {
@@ -126,5 +125,6 @@ func (c *stubCfg) GetOauth2ServiceClientID() string                          { r
 func (c *stubCfg) GetOauth2ServiceClientSecret() string                      { return c.clientSecret }
 func (c *stubCfg) GetOauth2TokenEndpointAuthMethod() string                  { return "" }
 func (c *stubCfg) GetOauth2PrivateKeyJWTConfig() *config.PrivateKeyJWTConfig { return nil }
-func (c *stubCfg) GetOauth2ServiceAudience() []string                        { return nil }
+func (c *stubCfg) GetOauth2RequestedAudiences() []string                     { return nil }
+func (c *stubCfg) GetOauth2ClientAssertionAudience() string                  { return "" }
 func (c *stubCfg) GetOauth2ServiceAdminURI() string                          { return "" }

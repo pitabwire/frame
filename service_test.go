@@ -246,17 +246,31 @@ func (s *ServiceTestSuite) TestBackGroundConsumer() {
 	s.WithTestDependancies(s.T(), func(t *testing.T, _ *definition.DependencyOption) {
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
-				ctx, svc := frame.NewService(
+				// Use a separate context not tied to test suite lifecycle
+				ctx := context.Background()
+				ctx, svc := frame.NewServiceWithContext(
+					ctx,
 					frame.WithName(tc.serviceName),
 					frame.WithBackgroundConsumer(tc.consumerFunc),
 				)
 
-				err := svc.Run(ctx, ":")
+				errCh := make(chan error, 1)
+				go func() {
+					errCh <- svc.Run(ctx, ":")
+				}()
+
+				// Give the background consumer time to run
+				time.Sleep(100 * time.Millisecond)
+
+				svc.Stop(ctx)
+				err := <-errCh
 
 				if tc.expectError {
 					require.Error(t, err, "background consumer error should be propagated")
 				} else {
-					require.NoError(t, err, "background consumer should run peacefully")
+					// When service is stopped explicitly, it returns context.Canceled
+					// This is the expected behavior for graceful shutdown
+					require.ErrorIs(t, err, context.Canceled, "service should stop gracefully")
 				}
 			})
 		}

@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/pitabwire/frame/server"
+	"github.com/pitabwire/frame/v2/server"
 )
 
 // WithHTTPHandler specifies an HTTP handlers that can be used to handle inbound HTTP requests.

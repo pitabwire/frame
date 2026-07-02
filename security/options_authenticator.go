@@ -3,7 +3,7 @@ package security
 import (
 	"context"
 
-	"github.com/pitabwire/frame/config"
+	"github.com/pitabwire/frame/v2/config"
 )
 
 // AuthOptions contains configuration for Redis cache.

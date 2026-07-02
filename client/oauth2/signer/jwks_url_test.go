@@ -11,11 +11,10 @@ import (
 	"testing"
 
 	"github.com/go-jose/go-jose/v4"
+	"github.com/pitabwire/frame/v2/client/oauth2/signer"
+	"github.com/pitabwire/frame/v2/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	"github.com/pitabwire/frame/client/oauth2/signer"
-	"github.com/pitabwire/frame/config"
 )
 
 func TestJWKSURLSigner(t *testing.T) {

@@ -10,8 +10,8 @@ import (
 
 	"github.com/pitabwire/util"
 
-	"github.com/pitabwire/frame/cache"
-	"github.com/pitabwire/frame/security"
+	"github.com/pitabwire/frame/v2/cache"
+	"github.com/pitabwire/frame/v2/security"
 )
 
 const (

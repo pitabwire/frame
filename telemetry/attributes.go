@@ -6,7 +6,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 
-	"github.com/pitabwire/frame/security"
+	"github.com/pitabwire/frame/v2/security"
 )
 
 // Attribute keys for multi-tenant context.

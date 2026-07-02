@@ -3,7 +3,7 @@ package frame
 import (
 	"context"
 
-	"github.com/pitabwire/frame/cache"
+	"github.com/pitabwire/frame/v2/cache"
 )
 
 // WithCacheManager adds a cache manager to the service.

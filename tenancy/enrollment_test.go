@@ -3,10 +3,9 @@ package tenancy_test
 import (
 	"testing"
 
+	"github.com/pitabwire/frame/v2/tenancy"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
-
-	"github.com/pitabwire/frame/tenancy"
 )
 
 // fakeTenanted satisfies tenancy.Tenanted minimally for the unit test.

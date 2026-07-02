@@ -7,7 +7,7 @@ import (
 	"github.com/testcontainers/testcontainers-go"
 	tcValKey "github.com/testcontainers/testcontainers-go/modules/valkey"
 
-	"github.com/pitabwire/frame/frametests/definition"
+	"github.com/pitabwire/frame/v2/frametests/definition"
 )
 
 const (

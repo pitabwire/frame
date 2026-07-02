@@ -6,7 +6,7 @@ import (
 
 	"github.com/pitabwire/util"
 
-	"github.com/pitabwire/frame/security"
+	"github.com/pitabwire/frame/v2/security"
 )
 
 // TenancyAccessDeniedFunc is called when a system_internal caller is denied permission.

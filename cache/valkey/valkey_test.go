@@ -5,13 +5,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pitabwire/frame/v2/cache"
+	"github.com/pitabwire/frame/v2/data"
+	"github.com/pitabwire/frame/v2/frametests"
+	"github.com/pitabwire/frame/v2/frametests/definition"
+	testvalkey "github.com/pitabwire/frame/v2/frametests/deps/testvalkey"
 	"github.com/stretchr/testify/suite"
-
-	"github.com/pitabwire/frame/cache"
-	"github.com/pitabwire/frame/data"
-	"github.com/pitabwire/frame/frametests"
-	"github.com/pitabwire/frame/frametests/definition"
-	testvalkey "github.com/pitabwire/frame/frametests/deps/testvalkey"
 )
 
 type ValkeySuite struct {

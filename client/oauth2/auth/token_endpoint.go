@@ -13,7 +13,7 @@ import (
 
 	"golang.org/x/oauth2"
 
-	"github.com/pitabwire/frame/config"
+	"github.com/pitabwire/frame/v2/config"
 )
 
 const maxTokenEndpointErrorBodyBytes = 8 << 10

@@ -18,18 +18,17 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pitabwire/frame/v2"
+	"github.com/pitabwire/frame/v2/client"
+	"github.com/pitabwire/frame/v2/config"
+	"github.com/pitabwire/frame/v2/frametests"
+	"github.com/pitabwire/frame/v2/frametests/definition"
+	frameserver "github.com/pitabwire/frame/v2/server"
+	"github.com/pitabwire/frame/v2/tests"
 	"github.com/pitabwire/util"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-
-	"github.com/pitabwire/frame"
-	"github.com/pitabwire/frame/client"
-	"github.com/pitabwire/frame/config"
-	"github.com/pitabwire/frame/frametests"
-	"github.com/pitabwire/frame/frametests/definition"
-	frameserver "github.com/pitabwire/frame/server"
-	"github.com/pitabwire/frame/tests"
 )
 
 // ServiceTestSuite extends FrameBaseTestSuite for comprehensive service testing.

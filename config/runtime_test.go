@@ -3,7 +3,7 @@ package config_test
 import (
 	"testing"
 
-	"github.com/pitabwire/frame/config"
+	"github.com/pitabwire/frame/v2/config"
 )
 
 func TestNormalizeRuntimeMode(t *testing.T) {

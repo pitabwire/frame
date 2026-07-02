@@ -5,13 +5,12 @@ import (
 	"testing"
 
 	"connectrpc.com/connect"
+	"github.com/pitabwire/frame/v2/security"
+	"github.com/pitabwire/frame/v2/tenancy"
+	"github.com/pitabwire/frame/v2/tests"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"google.golang.org/protobuf/types/known/wrapperspb"
-
-	"github.com/pitabwire/frame/security"
-	"github.com/pitabwire/frame/tenancy"
-	"github.com/pitabwire/frame/tests"
 )
 
 // okResponse returns a non-nil connect response used by tests so the

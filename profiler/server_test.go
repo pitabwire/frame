@@ -6,12 +6,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pitabwire/frame/v2"
+	"github.com/pitabwire/frame/v2/config"
+	"github.com/pitabwire/frame/v2/frametests"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-
-	"github.com/pitabwire/frame"
-	"github.com/pitabwire/frame/config"
-	"github.com/pitabwire/frame/frametests"
 )
 
 type ProfilerServerSuite struct {

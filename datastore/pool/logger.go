@@ -11,8 +11,8 @@ import (
 	"github.com/pitabwire/util"
 	glogger "gorm.io/gorm/logger"
 
-	"github.com/pitabwire/frame/config"
-	"github.com/pitabwire/frame/data"
+	"github.com/pitabwire/frame/v2/config"
+	"github.com/pitabwire/frame/v2/data"
 )
 
 const (

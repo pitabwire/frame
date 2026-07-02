@@ -9,7 +9,7 @@ import (
 
 	"github.com/pitabwire/util"
 
-	"github.com/pitabwire/frame"
+	"github.com/pitabwire/frame/v2"
 )
 
 func GetFreePort(ctx context.Context) (int, error) {

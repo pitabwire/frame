@@ -7,7 +7,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"github.com/pitabwire/frame/security"
+	"github.com/pitabwire/frame/v2/security"
 )
 
 var (
@@ -115,20 +115,10 @@ func retryableAuthorizationCode(code codes.Code) bool {
 	switch code {
 	case codes.Aborted, codes.DeadlineExceeded, codes.Internal, codes.ResourceExhausted, codes.Unavailable:
 		return true
-	case codes.OK,
-		codes.Canceled,
-		codes.Unknown,
-		codes.InvalidArgument,
-		codes.NotFound,
-		codes.AlreadyExists,
-		codes.PermissionDenied,
-		codes.FailedPrecondition,
-		codes.OutOfRange,
-		codes.Unimplemented,
-		codes.DataLoss,
-		codes.Unauthenticated:
-		return false
-	default:
+	case codes.OK, codes.Canceled, codes.Unknown, codes.InvalidArgument, codes.NotFound,
+		codes.AlreadyExists, codes.PermissionDenied, codes.FailedPrecondition, codes.OutOfRange,
+		codes.Unimplemented, codes.DataLoss, codes.Unauthenticated:
 		return false
 	}
+	return false
 }

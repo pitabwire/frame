@@ -9,8 +9,8 @@ import (
 	"github.com/pitabwire/util"
 	"golang.org/x/net/http2"
 
-	"github.com/pitabwire/frame/config"
-	"github.com/pitabwire/frame/server"
+	"github.com/pitabwire/frame/v2/config"
+	"github.com/pitabwire/frame/v2/server"
 )
 
 type defaultDriver struct {

@@ -7,13 +7,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pitabwire/frame/cache"
-	cacheredis "github.com/pitabwire/frame/cache/redis"
-	cachevalkey "github.com/pitabwire/frame/cache/valkey"
-	"github.com/pitabwire/frame/data"
-	"github.com/pitabwire/frame/frametests"
-	"github.com/pitabwire/frame/frametests/definition"
-	testvalkey "github.com/pitabwire/frame/frametests/deps/testvalkey"
+	"github.com/pitabwire/frame/v2/cache"
+	cacheredis "github.com/pitabwire/frame/v2/cache/redis"
+	cachevalkey "github.com/pitabwire/frame/v2/cache/valkey"
+	"github.com/pitabwire/frame/v2/data"
+	"github.com/pitabwire/frame/v2/frametests"
+	"github.com/pitabwire/frame/v2/frametests/definition"
+	testvalkey "github.com/pitabwire/frame/v2/frametests/deps/testvalkey"
 	"github.com/stretchr/testify/suite"
 )
 

@@ -8,7 +8,7 @@ import (
 
 	"github.com/nats-io/nats.go"
 
-	"github.com/pitabwire/frame/cache"
+	"github.com/pitabwire/frame/v2/cache"
 )
 
 // Cache is a JetStream-backed cache implementation using the NATS KeyValue store.

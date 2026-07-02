@@ -5,7 +5,7 @@ import (
 
 	"github.com/pitabwire/util"
 
-	"github.com/pitabwire/frame/security"
+	"github.com/pitabwire/frame/v2/security"
 )
 
 // ResourceCheckerOption configures a ResourceAccessChecker.

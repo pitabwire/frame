@@ -23,7 +23,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/pitabwire/frame/version"
+	"github.com/pitabwire/frame/v2/version"
 )
 
 var ErrHealthCheckFailed = errors.New("health check failed")

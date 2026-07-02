@@ -11,7 +11,7 @@ import (
 	strings "strings"
 
 	connect "connectrpc.com/connect"
-	v1 "github.com/pitabwire/frame/frametests/rpcservice/ping/v1"
+	v1 "github.com/pitabwire/frame/v2/frametests/rpcservice/ping/v1"
 )
 
 // This is a compile-time assertion to ensure that this generated file and the connect package are

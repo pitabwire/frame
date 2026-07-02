@@ -6,8 +6,8 @@ import (
 	"connectrpc.com/connect"
 	"connectrpc.com/otelconnect"
 
-	"github.com/pitabwire/frame/security"
-	"github.com/pitabwire/frame/tenancy"
+	"github.com/pitabwire/frame/v2/security"
+	"github.com/pitabwire/frame/v2/tenancy"
 )
 
 // DefaultList returns the standard chain of Connect interceptors used

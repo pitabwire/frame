@@ -4,13 +4,12 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/pitabwire/frame/v2/data"
+	"github.com/pitabwire/frame/v2/internal"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/structpb"
-
-	"github.com/pitabwire/frame/data"
-	"github.com/pitabwire/frame/internal"
 )
 
 // testStruct is a regular Go struct for JSON fallback testing.

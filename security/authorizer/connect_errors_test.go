@@ -5,10 +5,9 @@ import (
 	"testing"
 
 	"connectrpc.com/connect"
+	"github.com/pitabwire/frame/v2/security"
+	"github.com/pitabwire/frame/v2/security/authorizer"
 	"github.com/stretchr/testify/assert"
-
-	"github.com/pitabwire/frame/security"
-	"github.com/pitabwire/frame/security/authorizer"
 )
 
 func TestToConnectError_Nil(t *testing.T) {

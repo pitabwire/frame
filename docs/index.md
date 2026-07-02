@@ -13,7 +13,7 @@ import (
     "log"
     "net/http"
 
-    "github.com/pitabwire/frame"
+    "github.com/pitabwire/frame/v2"
 )
 
 func main() {

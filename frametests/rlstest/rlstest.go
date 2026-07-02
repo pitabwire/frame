@@ -35,9 +35,9 @@ import (
 
 	"gorm.io/gorm"
 
-	"github.com/pitabwire/frame/datastore/dialect"
-	"github.com/pitabwire/frame/tenancy"
-	tenpg "github.com/pitabwire/frame/tenancy/postgres"
+	"github.com/pitabwire/frame/v2/datastore/dialect"
+	"github.com/pitabwire/frame/v2/tenancy"
+	tenpg "github.com/pitabwire/frame/v2/tenancy/postgres"
 
 	// Pull in the pgx stdlib driver so database/sql can dial postgres
 	// for role bootstrap and post-migration grants.

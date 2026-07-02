@@ -17,8 +17,8 @@ The profiler package provides a clean interface for managing Go's pprof server w
 ```go
 import (
     "context"
-    "github.com/pitabwire/frame/profiler"
-    "github.com/pitabwire/frame/config"
+    "github.com/pitabwire/frame/v2/profiler"
+    "github.com/pitabwire/frame/v2/config"
 )
 
 func main() {
@@ -51,7 +51,7 @@ func main() {
 The profiler package is automatically integrated into the frame service when using the default configuration:
 
 ```go
-import "github.com/pitabwire/frame"
+import "github.com/pitabwire/frame/v2"
 
 func main() {
     // Set PROFILER_ENABLE=true environment variable

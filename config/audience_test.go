@@ -3,9 +3,26 @@ package config_test
 import (
 	"testing"
 
-	"github.com/pitabwire/frame/config"
+	"github.com/pitabwire/frame/v2/config"
 	"github.com/stretchr/testify/require"
 )
+
+func TestParseAudienceBaseURL(t *testing.T) {
+	t.Parallel()
+
+	baseURL, err := config.ParseAudienceBaseURL("https://API.EXAMPLE.ORG/platform/")
+	require.NoError(t, err)
+	require.Equal(t, config.AudienceBaseURL("https://api.example.org/platform"), baseURL)
+
+	for _, value := range []string{
+		"", "http://api.example.org", "https://api.example.org:443",
+		"https://user@api.example.org", "https://api.example.org/a/../b",
+		"https://api.example.org?x=1", "https://api.example.org/%70latform",
+	} {
+		_, parseErr := config.ParseAudienceBaseURL(value)
+		require.Error(t, parseErr, value)
+	}
+}
 
 func TestParseResourceAudience(t *testing.T) {
 	t.Parallel()

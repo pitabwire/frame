@@ -8,10 +8,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pitabwire/frame/v2/config"
 	"github.com/stretchr/testify/suite"
 	"golang.org/x/oauth2/clientcredentials"
-
-	"github.com/pitabwire/frame/config"
 )
 
 type OptionsSuite struct {

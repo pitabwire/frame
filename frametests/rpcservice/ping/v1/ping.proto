@@ -1,7 +1,7 @@
 
 syntax = "proto3";
 
-option go_package = "github.com/pitabwire/frame/frametests/rpcservice/ping/v1;pingv1";
+option go_package = "github.com/pitabwire/frame/v2/frametests/rpcservice/ping/v1;pingv1";
 
 package ping.v1;
 

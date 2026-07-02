@@ -14,7 +14,7 @@ Frame serves OpenAPI specs that are embedded at **compile time** and exposed thr
 Generate specs and wire them automatically:
 
 ```bash
-go run github.com/pitabwire/frame/cmd/frame@latest openapi \
+go run github.com/pitabwire/frame/v2/cmd/frame@latest openapi \
   -proto-dir proto \
   -out pkg/openapi/specs \
   -embed-dir pkg/openapi \
@@ -37,7 +37,7 @@ import (
 	"context"
 	"log"
 
-	"github.com/pitabwire/frame"
+	"github.com/pitabwire/frame/v2"
 	"your/module/pkg/openapi"
 )
 
@@ -94,7 +94,7 @@ frame.WithOpenAPIBasePath("/debug/frame/openapi")
 Recommended pipeline step (example):
 
 ```bash
-go run github.com/pitabwire/frame/cmd/frame@latest openapi --proto-dir proto --out pkg/openapi/specs --embed-dir pkg/openapi --package openapi
+go run github.com/pitabwire/frame/v2/cmd/frame@latest openapi --proto-dir proto --out pkg/openapi/specs --embed-dir pkg/openapi --package openapi
 
 go test ./...
 ```

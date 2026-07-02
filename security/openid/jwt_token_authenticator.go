@@ -19,8 +19,8 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/pitabwire/util"
 
-	"github.com/pitabwire/frame/config"
-	"github.com/pitabwire/frame/security"
+	"github.com/pitabwire/frame/v2/config"
+	"github.com/pitabwire/frame/v2/security"
 )
 
 const (
@@ -106,7 +106,9 @@ func (a *jwtTokenAuthenticator) Authenticate(
 	parseOptions := []jwt.ParserOption{
 		jwt.WithAudience(a.resourceAudience),
 		jwt.WithIssuer(a.jwtVerificationIssuer),
-		jwt.WithValidMethods([]string{"RS256", "ES256", "EdDSA"}),
+		jwt.WithValidMethods(
+			[]string{"RS256", "RS384", "RS512", "ES256", "ES384", "ES512", "PS256", "PS384", "PS512", "EdDSA"},
+		),
 		jwt.WithExpirationRequired(),
 	}
 

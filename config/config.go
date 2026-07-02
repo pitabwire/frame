@@ -73,9 +73,7 @@ func LoadWithOIDC[T any](ctx context.Context) (T, error) {
 	if !ok {
 		return cfg, nil
 	}
-
-	validator, validatable := any(&cfg).(interface{ ValidateOAuth2Configuration() error })
-	if validatable {
+	if validator, validatable := any(&cfg).(interface{ ValidateOAuth2Configuration() error }); validatable {
 		if err = validator.ValidateOAuth2Configuration(); err != nil {
 			return cfg, err
 		}
@@ -655,6 +653,14 @@ func (c *ConfigurationDefault) LoadOauth2Config(ctx context.Context) error {
 }
 
 func (c *ConfigurationDefault) ValidateOAuth2Configuration() error {
+	if strings.TrimSpace(c.Oauth2AudienceBaseURL) != "" {
+		baseURL, err := ParseAudienceBaseURL(c.Oauth2AudienceBaseURL)
+		if err != nil {
+			return err
+		}
+		c.Oauth2AudienceBaseURL = string(baseURL)
+	}
+
 	if strings.TrimSpace(c.Oauth2ResourceAudience) != "" {
 		audience, err := ParseResourceAudience(c.Oauth2ResourceAudience)
 		if err != nil {

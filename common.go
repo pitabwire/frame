@@ -7,7 +7,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"github.com/pitabwire/frame/data"
+	"github.com/pitabwire/frame/v2/data"
 )
 
 // ErrorIsNotFound checks if an error represents a "not found" condition.

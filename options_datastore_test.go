@@ -5,17 +5,16 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/pitabwire/frame/v2"
+	"github.com/pitabwire/frame/v2/datastore/dialect"
+	"github.com/pitabwire/frame/v2/datastore/pool"
+	"github.com/pitabwire/frame/v2/frametests"
+	"github.com/pitabwire/frame/v2/frametests/definition"
+	"github.com/pitabwire/frame/v2/tenancy"
+	"github.com/pitabwire/frame/v2/tests"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"gorm.io/gorm"
-
-	"github.com/pitabwire/frame"
-	"github.com/pitabwire/frame/datastore/dialect"
-	"github.com/pitabwire/frame/datastore/pool"
-	"github.com/pitabwire/frame/frametests"
-	"github.com/pitabwire/frame/frametests/definition"
-	"github.com/pitabwire/frame/tenancy"
-	"github.com/pitabwire/frame/tests"
 )
 
 // fakeProvider is a no-op tenancy.Provider used to confirm that

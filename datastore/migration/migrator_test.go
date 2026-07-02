@@ -5,17 +5,16 @@ import (
 	"os"
 	"testing"
 
+	"github.com/pitabwire/frame/v2"
+	"github.com/pitabwire/frame/v2/config"
+	"github.com/pitabwire/frame/v2/datastore"
+	"github.com/pitabwire/frame/v2/datastore/migration"
+	"github.com/pitabwire/frame/v2/datastore/pool"
+	"github.com/pitabwire/frame/v2/frametests/definition"
+	"github.com/pitabwire/frame/v2/tests"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"gorm.io/gorm"
-
-	"github.com/pitabwire/frame"
-	"github.com/pitabwire/frame/config"
-	"github.com/pitabwire/frame/datastore"
-	"github.com/pitabwire/frame/datastore/migration"
-	"github.com/pitabwire/frame/datastore/pool"
-	"github.com/pitabwire/frame/frametests/definition"
-	"github.com/pitabwire/frame/tests"
 )
 
 // MigratorTestSuite extends BaseTestSuite for comprehensive migrator testing.

@@ -11,8 +11,8 @@ import (
 	"testing"
 
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/pitabwire/frame/client/oauth2/signer"
-	"github.com/pitabwire/frame/config"
+	"github.com/pitabwire/frame/v2/client/oauth2/signer"
+	"github.com/pitabwire/frame/v2/config"
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"github.com/spiffe/go-spiffe/v2/svid/x509svid"
 	"github.com/spiffe/go-spiffe/v2/workloadapi"

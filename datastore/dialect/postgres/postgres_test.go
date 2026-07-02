@@ -7,14 +7,13 @@ import (
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/pitabwire/frame/v2/datastore/dialect"
+	"github.com/pitabwire/frame/v2/datastore/dialect/postgres"
+	"github.com/pitabwire/frame/v2/frametests/definition"
+	"github.com/pitabwire/frame/v2/tests"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"gorm.io/gorm"
-
-	"github.com/pitabwire/frame/datastore/dialect"
-	"github.com/pitabwire/frame/datastore/dialect/postgres"
-	"github.com/pitabwire/frame/frametests/definition"
-	"github.com/pitabwire/frame/tests"
 )
 
 type AdapterTestSuite struct {

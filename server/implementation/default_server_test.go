@@ -17,12 +17,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pitabwire/frame/v2/config"
+	"github.com/pitabwire/frame/v2/server"
+	"github.com/pitabwire/frame/v2/server/implementation"
 	"github.com/stretchr/testify/suite"
 	"golang.org/x/net/http2"
-
-	"github.com/pitabwire/frame/config"
-	"github.com/pitabwire/frame/server"
-	"github.com/pitabwire/frame/server/implementation"
 )
 
 type DefaultDriverSuite struct {

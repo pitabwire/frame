@@ -17,7 +17,7 @@ A powerful, generic cache implementation with automatic serialization and swappa
 ## Quick Start
 
 ```go
-import "github.com/pitabwire/frame/cache"
+import "github.com/pitabwire/frame/v2/cache"
 
 // 1. Create manager
 manager := cache.NewManager()
@@ -97,8 +97,8 @@ Built-in serializers:
 
 ```go
 import (
-    "github.com/pitabwire/frame"
-    "github.com/pitabwire/frame/cache"
+    "github.com/pitabwire/frame/v2"
+    "github.com/pitabwire/frame/v2/cache"
 )
 
 type User struct {
@@ -132,7 +132,7 @@ if found {
 ### Standalone Cache Manager
 
 ```go
-import "github.com/pitabwire/frame/cache"
+import "github.com/pitabwire/frame/v2/cache"
 
 // Create manager
 manager := cache.NewManager()
@@ -159,8 +159,8 @@ productCache.Set(ctx, product.ID, product, 1*time.Hour)
 
 ```go
 import (
-    "github.com/pitabwire/frame/cache"
-    cacheredis "github.com/pitabwire/frame/cache/redis"
+    "github.com/pitabwire/frame/v2/cache"
+    cacheredis "github.com/pitabwire/frame/v2/cache/redis"
 )
 
 // Create Redis cache
@@ -184,8 +184,8 @@ userCache, _ := cache.GetCache[string, User](manager, "redis", nil, nil)
 
 ```go
 import (
-    "github.com/pitabwire/frame/cache"
-    cachevalkey "github.com/pitabwire/frame/cache/valkey"
+    "github.com/pitabwire/frame/v2/cache"
+    cachevalkey "github.com/pitabwire/frame/v2/cache/valkey"
 )
 
 // Create Valkey cache
@@ -264,7 +264,7 @@ The cache package is designed to minimize dependencies:
 If you only use in-memory cache:
 ```go
 require (
-    github.com/pitabwire/frame v1.0.0
+    github.com/pitabwire/frame/v2 v2.0.0
     // No redis dependency needed!
 )
 ```
@@ -272,7 +272,7 @@ require (
 If you use Redis:
 ```go
 require (
-    github.com/pitabwire/frame v1.0.0
+    github.com/pitabwire/frame/v2 v2.0.0
     github.com/redis/go-redis/v9 v9.14.1  // Only included if you import cache/redis
 )
 ```
@@ -280,7 +280,7 @@ require (
 If you use Valkey:
 ```go
 require (
-    github.com/pitabwire/frame v1.0.0
+    github.com/pitabwire/frame/v2 v2.0.0
     github.com/valkey-io/valkey-go v1.0.67  // Only included if you import cache/valkey
 )
 ```

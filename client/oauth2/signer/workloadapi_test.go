@@ -9,14 +9,13 @@ import (
 	"crypto/rsa"
 	"testing"
 
+	"github.com/pitabwire/frame/v2/client/oauth2/signer"
+	"github.com/pitabwire/frame/v2/config"
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"github.com/spiffe/go-spiffe/v2/svid/x509svid"
 	"github.com/spiffe/go-spiffe/v2/workloadapi"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	"github.com/pitabwire/frame/client/oauth2/signer"
-	"github.com/pitabwire/frame/config"
 )
 
 func stubFetchSVIDs(t *testing.T, svids []*x509svid.SVID) {

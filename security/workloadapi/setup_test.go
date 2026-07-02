@@ -4,10 +4,9 @@ import (
 	"context"
 	"testing"
 
+	"github.com/pitabwire/frame/v2/config"
+	frameworkloadapi "github.com/pitabwire/frame/v2/security/workloadapi"
 	"github.com/stretchr/testify/suite"
-
-	"github.com/pitabwire/frame/config"
-	frameworkloadapi "github.com/pitabwire/frame/security/workloadapi"
 )
 
 type SetupSuite struct {

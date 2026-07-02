@@ -9,9 +9,42 @@ import (
 	"strings"
 )
 
+const httpsScheme = "https"
+
 type ResourceAudience string
 
 type ClientAssertionAudience string
+
+type AudienceBaseURL string
+
+func ParseAudienceBaseURL(value string) (AudienceBaseURL, error) {
+	value = strings.TrimSuffix(strings.TrimSpace(value), "/")
+	if value == "" {
+		return "", errors.New("audience base URL is required")
+	}
+	if strings.Contains(value, "%") {
+		return "", errors.New("audience base URL must not be percent encoded")
+	}
+
+	parsed, err := url.Parse(value)
+	if err != nil {
+		return "", fmt.Errorf("parse audience base URL: %w", err)
+	}
+	if parsed.Scheme != httpsScheme || parsed.Host == "" {
+		return "", errors.New("audience base URL must be an absolute HTTPS URL")
+	}
+	if parsed.User != nil || parsed.Port() != "" || parsed.RawQuery != "" || parsed.ForceQuery ||
+		parsed.Fragment != "" {
+		return "", errors.New("audience base URL must not contain user information, a port, query, or fragment")
+	}
+	if parsed.Path != "" && path.Clean(parsed.Path) != parsed.Path {
+		return "", errors.New("audience base URL path must be canonical")
+	}
+
+	parsed.Host = strings.ToLower(parsed.Hostname())
+	parsed.RawPath = ""
+	return AudienceBaseURL(strings.TrimSuffix(parsed.String(), "/")), nil
+}
 
 func ParseResourceAudience(value string) (ResourceAudience, error) {
 	normalized, err := normalizeAudienceURL(value)
@@ -73,7 +106,7 @@ func normalizeAudienceURL(value string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("parse URL: %w", err)
 	}
-	if parsed.Scheme != "https" {
+	if parsed.Scheme != httpsScheme {
 		return "", errors.New("scheme must be https")
 	}
 	if parsed.Host == "" {
@@ -101,7 +134,7 @@ func normalizeAudienceURL(value string) (string, error) {
 		return "", errors.New("path must not contain dot or duplicate-slash segments")
 	}
 
-	parsed.Scheme = "https"
+	parsed.Scheme = httpsScheme
 	parsed.Host = strings.ToLower(parsed.Hostname())
 	parsed.RawPath = ""
 	return parsed.String(), nil

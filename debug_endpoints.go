@@ -6,8 +6,8 @@ import (
 	"net/http"
 	"reflect"
 
-	"github.com/pitabwire/frame/config"
-	"github.com/pitabwire/frame/queue"
+	"github.com/pitabwire/frame/v2/config"
+	"github.com/pitabwire/frame/v2/queue"
 )
 
 type RouteInfo struct {

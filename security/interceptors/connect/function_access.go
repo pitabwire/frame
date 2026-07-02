@@ -5,7 +5,7 @@ import (
 
 	"connectrpc.com/connect"
 
-	"github.com/pitabwire/frame/security/authorizer"
+	"github.com/pitabwire/frame/v2/security/authorizer"
 )
 
 // functionAccessInterceptor is a Connect interceptor that automatically enforces

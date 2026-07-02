@@ -7,12 +7,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pitabwire/frame/v2/cache"
+	"github.com/pitabwire/frame/v2/ratelimiter"
+	"github.com/pitabwire/frame/v2/security"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	"github.com/pitabwire/frame/cache"
-	"github.com/pitabwire/frame/ratelimiter"
-	"github.com/pitabwire/frame/security"
 )
 
 func TestDefaultWindowConfig(t *testing.T) {

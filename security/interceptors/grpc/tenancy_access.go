@@ -5,7 +5,7 @@ import (
 
 	"google.golang.org/grpc"
 
-	"github.com/pitabwire/frame/security/authorizer"
+	"github.com/pitabwire/frame/v2/security/authorizer"
 )
 
 // UnaryTenancyAccessInterceptor is a gRPC unary server interceptor that

@@ -14,17 +14,16 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
+	"github.com/pitabwire/frame/v2"
+	"github.com/pitabwire/frame/v2/config"
+	"github.com/pitabwire/frame/v2/frametests"
+	"github.com/pitabwire/frame/v2/frametests/definition"
+	pingv1 "github.com/pitabwire/frame/v2/frametests/rpcservice/ping/v1"
+	"github.com/pitabwire/frame/v2/frametests/rpcservice/ping/v1/pingv1connect"
+	"github.com/pitabwire/frame/v2/tests"
 	"github.com/pitabwire/util"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-
-	"github.com/pitabwire/frame"
-	"github.com/pitabwire/frame/config"
-	"github.com/pitabwire/frame/frametests"
-	"github.com/pitabwire/frame/frametests/definition"
-	pingv1 "github.com/pitabwire/frame/frametests/rpcservice/ping/v1"
-	"github.com/pitabwire/frame/frametests/rpcservice/ping/v1/pingv1connect"
-	"github.com/pitabwire/frame/tests"
 )
 
 // ConnectServerTestSuite extends FrameBaseTestSuite for comprehensive Connect RPC server testing.

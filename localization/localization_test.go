@@ -8,14 +8,13 @@ import (
 	"testing"
 
 	"github.com/nicksnyder/go-i18n/v2/i18n"
+	"github.com/pitabwire/frame/v2"
+	"github.com/pitabwire/frame/v2/localization"
+	lgrpc "github.com/pitabwire/frame/v2/localization/interceptors/grpc"
+	lhttp "github.com/pitabwire/frame/v2/localization/interceptors/httpi"
+	"github.com/pitabwire/frame/v2/tests"
 	"github.com/stretchr/testify/suite"
 	"google.golang.org/grpc/metadata"
-
-	"github.com/pitabwire/frame"
-	"github.com/pitabwire/frame/localization"
-	lgrpc "github.com/pitabwire/frame/localization/interceptors/grpc"
-	lhttp "github.com/pitabwire/frame/localization/interceptors/httpi"
-	"github.com/pitabwire/frame/tests"
 )
 
 // LocalizationTestSuite extends BaseTestSuite for comprehensive localization testing.

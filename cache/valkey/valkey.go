@@ -6,7 +6,7 @@ import (
 
 	"github.com/valkey-io/valkey-go"
 
-	"github.com/pitabwire/frame/cache"
+	"github.com/pitabwire/frame/v2/cache"
 )
 
 // Cache is a Valkey-backed cache implementation using the official Valkey client.

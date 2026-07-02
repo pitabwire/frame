@@ -4,17 +4,16 @@ import (
 	"context"
 	"testing"
 
+	"github.com/pitabwire/frame/v2/data"
+	"github.com/pitabwire/frame/v2/datastore/dialect"
+	dialectpg "github.com/pitabwire/frame/v2/datastore/dialect/postgres"
+	"github.com/pitabwire/frame/v2/frametests/definition"
+	"github.com/pitabwire/frame/v2/tenancy"
+	tenpg "github.com/pitabwire/frame/v2/tenancy/postgres"
+	"github.com/pitabwire/frame/v2/tests"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"gorm.io/gorm"
-
-	"github.com/pitabwire/frame/data"
-	"github.com/pitabwire/frame/datastore/dialect"
-	dialectpg "github.com/pitabwire/frame/datastore/dialect/postgres"
-	"github.com/pitabwire/frame/frametests/definition"
-	"github.com/pitabwire/frame/tenancy"
-	tenpg "github.com/pitabwire/frame/tenancy/postgres"
-	"github.com/pitabwire/frame/tests"
 )
 
 type ProviderTestSuite struct {

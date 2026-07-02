@@ -19,8 +19,8 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.41.0"
 
-	"github.com/pitabwire/frame/config"
-	"github.com/pitabwire/frame/version"
+	"github.com/pitabwire/frame/v2/config"
+	"github.com/pitabwire/frame/v2/version"
 )
 
 type Manager interface {

@@ -20,12 +20,19 @@ Frame includes test utilities in `frametests` and `tests` to support integration
 ctx, svc := frame.NewService(
     frame.WithName("test"),
     frame.WithHTTPHandler(http.DefaultServeMux),
+    frametests.WithNoopDriver(), // or WithHTTPTestDriver() when you need httptest
 )
+defer svc.Stop(ctx)
 
-// call svc.Run in a goroutine and use a test driver if needed
+// Test drivers return from ListenAndServe once ready (non-blocking).
+// Run completes after startups finish — no goroutine required.
+err := svc.Run(ctx, "")
+require.NoError(t, err)
 ```
 
 ## Tips
 
 - Prefer integration tests for queue, cache, and datastore.
 - Use `mem://` drivers for fast unit tests.
+- Use `frametests.WithNoopDriver()` when HTTP is not under test; use `WithHTTPTestDriver()` when you need a live `httptest.Server`.
+- Do **not** wrap `svc.Run` in a goroutine for test drivers — that is only needed for production-style drivers that block in `ListenAndServe`.

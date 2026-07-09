@@ -9,12 +9,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
+
 	"github.com/pitabwire/frame/v2"
 	"github.com/pitabwire/frame/v2/frametests"
 	"github.com/pitabwire/frame/v2/frametests/definition"
 	"github.com/pitabwire/frame/v2/tests"
-	"github.com/stretchr/testify/require"
-	"github.com/stretchr/testify/suite"
 )
 
 // QueueTestSuite extends BaseTestSuite for comprehensive queueManager testing.
@@ -359,8 +360,15 @@ func (s *QueueTestSuite) TestServiceRegisterSubscriber() {
 				}
 
 				handler := &msgHandler{f: tc.handler}
-				opt := frame.WithRegisterSubscriber(tc.topic, queueURL, handler)
-				ctx, svc := frame.NewService(frame.WithName(tc.serviceName), opt, frametests.WithNoopDriver())
+				// mem:// requires the topic to be created by a publisher first.
+				pubOpt := frame.WithRegisterPublisher(tc.topic, queueURL)
+				subOpt := frame.WithRegisterSubscriber(tc.topic, queueURL, handler)
+				ctx, svc := frame.NewService(
+					frame.WithName(tc.serviceName),
+					pubOpt,
+					subOpt,
+					frametests.WithNoopDriver(),
+				)
 
 				err = svc.Run(ctx, "")
 				require.NoError(t, err, "Service should start successfully")
@@ -636,8 +644,15 @@ func (s *QueueTestSuite) TestServiceRegisterSubscriberWithError() {
 				}
 
 				handler := &handlerWithError{}
-				opt := frame.WithRegisterSubscriber(tc.topic, queueURL, handler)
-				ctx, svc := frame.NewService(frame.WithName(tc.serviceName), opt, frametests.WithNoopDriver())
+				// mem:// requires the topic to be created by a publisher first.
+				pubOpt := frame.WithRegisterPublisher(tc.topic, queueURL)
+				subOpt := frame.WithRegisterSubscriber(tc.topic, queueURL, handler)
+				ctx, svc := frame.NewService(
+					frame.WithName(tc.serviceName),
+					pubOpt,
+					subOpt,
+					frametests.WithNoopDriver(),
+				)
 
 				err = svc.Run(ctx, "")
 				require.NoError(t, err, "Service should start successfully")
@@ -743,8 +758,15 @@ func (s *QueueTestSuite) TestServiceRegisterSubscriberContextCancelWorks() {
 				handler := &msgHandler{f: func(_ context.Context, _ map[string]string, _ []byte) error {
 					return nil
 				}}
-				opt := frame.WithRegisterSubscriber(tc.topic, queueURL, handler)
-				ctx, svc := frame.NewService(frame.WithName(tc.serviceName), opt, frametests.WithNoopDriver())
+				// mem:// requires the topic to be created by a publisher first.
+				pubOpt := frame.WithRegisterPublisher(tc.topic, queueURL)
+				subOpt := frame.WithRegisterSubscriber(tc.topic, queueURL, handler)
+				ctx, svc := frame.NewService(
+					frame.WithName(tc.serviceName),
+					pubOpt,
+					subOpt,
+					frametests.WithNoopDriver(),
+				)
 
 				err = svc.Run(ctx, "")
 				require.NoError(t, err, "Service should start successfully")

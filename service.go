@@ -662,8 +662,15 @@ func (s *Service) initServer(ctx context.Context, httpPort string) error {
 		return err
 	}
 
-	// Execute pre-start methods
+	// Execute pre-start methods (publishers, subscribers, other startups).
 	s.executeStartupMethods(ctx)
+
+	// Startup registrations report failures via AddStartupError rather than
+	// returning from the callbacks. Surface the first one before we mark the
+	// server as running (especially important for non-blocking test drivers).
+	if startupErrs := s.GetStartupErrors(); len(startupErrs) > 0 {
+		return startupErrs[0]
+	}
 
 	return s.startServerDriver(ctx, httpPort)
 }

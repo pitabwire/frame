@@ -1,7 +1,6 @@
 package frame_test
 
 import (
-	"context"
 	"net/http"
 	"testing"
 	"time"
@@ -40,13 +39,12 @@ func TestWithHTTPMiddlewareOrder(t *testing.T) {
 			w.WriteHeader(http.StatusOK)
 		})),
 	)
+	defer svc.Stop(ctx)
 
-	errCh := make(chan error, 1)
-	go func() {
-		errCh <- svc.Run(ctx, "")
-	}()
-
-	time.Sleep(100 * time.Millisecond)
+	// HTTPTestDriver returns from ListenAndServe after httptest starts,
+	// so Run completes once startups finish (no goroutine required).
+	err := svc.Run(ctx, "")
+	require.NoError(t, err)
 
 	ts := tsGetter()
 	require.NotNil(t, ts)
@@ -57,10 +55,6 @@ func TestWithHTTPMiddlewareOrder(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 	assert.Equal(t, "ABH", trace)
-
-	svc.Stop(ctx)
-	err := <-errCh
-	require.ErrorIs(t, err, context.Canceled)
 }
 
 func TestWithHTTPMiddlewareCanShortCircuit(t *testing.T) {
@@ -77,13 +71,10 @@ func TestWithHTTPMiddlewareCanShortCircuit(t *testing.T) {
 			w.WriteHeader(http.StatusOK)
 		})),
 	)
+	defer svc.Stop(ctx)
 
-	errCh := make(chan error, 1)
-	go func() {
-		errCh <- svc.Run(ctx, "")
-	}()
-
-	time.Sleep(100 * time.Millisecond)
+	err := svc.Run(ctx, "")
+	require.NoError(t, err)
 
 	ts := tsGetter()
 	require.NotNil(t, ts)
@@ -93,10 +84,6 @@ func TestWithHTTPMiddlewareCanShortCircuit(t *testing.T) {
 	defer resp.Body.Close()
 
 	assert.Equal(t, http.StatusTooManyRequests, resp.StatusCode)
-
-	svc.Stop(ctx)
-	err := <-errCh
-	require.ErrorIs(t, err, context.Canceled)
 }
 
 func TestWithHTTPMiddlewareRateLimiter(t *testing.T) {
@@ -121,13 +108,10 @@ func TestWithHTTPMiddlewareRateLimiter(t *testing.T) {
 			w.WriteHeader(http.StatusOK)
 		})),
 	)
+	defer svc.Stop(ctx)
 
-	errCh := make(chan error, 1)
-	go func() {
-		errCh <- svc.Run(ctx, "")
-	}()
-
-	time.Sleep(100 * time.Millisecond)
+	err = svc.Run(ctx, "")
+	require.NoError(t, err)
 
 	ts := tsGetter()
 	require.NotNil(t, ts)
@@ -141,8 +125,4 @@ func TestWithHTTPMiddlewareRateLimiter(t *testing.T) {
 	require.NoError(t, reqErr2)
 	defer resp2.Body.Close()
 	assert.Equal(t, http.StatusTooManyRequests, resp2.StatusCode)
-
-	svc.Stop(ctx)
-	err = <-errCh
-	require.ErrorIs(t, err, context.Canceled)
 }

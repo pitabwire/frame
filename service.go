@@ -662,8 +662,15 @@ func (s *Service) initServer(ctx context.Context, httpPort string) error {
 		return err
 	}
 
-	// Execute pre-start methods
+	// Execute pre-start methods (publishers, subscribers, other startups).
 	s.executeStartupMethods(ctx)
+
+	// Startup registrations report failures via AddStartupError rather than
+	// returning from the callbacks. Surface the first one before we mark the
+	// server as running (especially important for non-blocking test drivers).
+	if startupErrs := s.GetStartupErrors(); len(startupErrs) > 0 {
+		return startupErrs[0]
+	}
 
 	return s.startServerDriver(ctx, httpPort)
 }
@@ -777,13 +784,34 @@ func (s *Service) initWorkersAndQueues(ctx context.Context, cfg *config.Configur
 	}
 }
 
+// sendStopError wakes Run with a terminal signal.
+//
+// A nil error is a valid clean exit and must be delivered: test drivers
+// (NoopDriver, HTTPTestDriver) return nil from ListenAndServe once the
+// server is ready without blocking, so Run can return after startups
+// complete. Production drivers return nil after graceful Shutdown
+// (http.ErrServerClosed). Ignoring nil caused Run to hang under
+// WithNoopDriver — callers then needed an ad-hoc goroutine around Run.
+//
+// Non-nil errors use errorOnce and replace a pending nil so the first
+// real failure wins over a concurrent clean-exit signal.
 func (s *Service) sendStopError(ctx context.Context, err error) {
 	if err == nil {
+		select {
+		case <-ctx.Done():
+			return
+		case s.errorChannel <- nil:
+		default:
+		}
 		return
 	}
 
-	// Use sync.Once to ensure only the first error is recorded
 	s.errorOnce.Do(func() {
+		// Prefer a real error over a pending clean-exit nil.
+		select {
+		case <-s.errorChannel:
+		default:
+		}
 		select {
 		case <-ctx.Done():
 			return

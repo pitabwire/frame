@@ -40,24 +40,23 @@ func JwtFromContext(ctx context.Context) string {
 // AuthenticationClaims defines the structure for JWT claims, embedding jwt.StandardClaims
 // to include standard fields like expiry time, and adding custom claims.
 //
-// Identity model (do not conflate these):
+// Platform identity invariant:
 //
-//   - profile_id — the acting principal for authorization. Users and service
-//     accounts both act as profiles. Keto relation subjects are profile_ids.
-//   - sub (RegisteredClaims.Subject) — JWT subject. For user tokens this is the
-//     profile_id. For Hydra client_credentials tokens this is often the OAuth2
-//     client_id (Hydra does not allow the token hook to override sub).
-//   - client_id — OAuth2 client / partition identifier for the token request,
-//     not the authorization actor.
+//	JWT sub === profile_id always.
+//	The acting principal for authorization is the profile. OAuth client_id only
+//	identifies the client/partition at token issuance — never the actor.
 //
-// GetProfileID prefers an explicit profile_id claim so authorization always
-// keys on the profile even when JWT sub is the service client_id.
+// Hydra client_credentials currently writes wire sub=client_id and cannot
+// override sub from the token hook. Token enrichment still sets profile_id in
+// claims; NormalizeIdentity() rewrites RegisteredClaims.Subject to profile_id
+// immediately after authentication so GetSubject() / GetProfileID() and all
+// ReBAC checkers observe sub=profile_id.
 type AuthenticationClaims struct {
 	Ext         map[string]any `json:"ext,omitempty"`
 	TenantID    string         `json:"tenant_id,omitempty"`
 	PartitionID string         `json:"partition_id,omitempty"`
-	// ProfileID is the acting profile when present as a top-level JWT claim.
-	// Prefer GetProfileID() over reading this field directly.
+	// ProfileID is the acting profile (top-level JWT claim). After
+	// NormalizeIdentity, this matches RegisteredClaims.Subject.
 	ProfileID   string   `json:"profile_id,omitempty"`
 	AccessID    string   `json:"access_id,omitempty"`
 	ContactID   string   `json:"contact_id,omitempty"`
@@ -66,6 +65,42 @@ type AuthenticationClaims struct {
 	ServiceName string   `json:"service_name,omitempty"`
 	Roles       []string `json:"roles,omitempty"`
 	jwt.RegisteredClaims
+}
+
+// NormalizeIdentity enforces JWT sub === profile_id.
+//
+// When the wire token has sub=client_id (Hydra client_credentials) but carries
+// profile_id in claims/ext, Subject is rewritten to that profile_id. When only
+// sub is present (user tokens), ProfileID is filled from sub.
+func (a *AuthenticationClaims) NormalizeIdentity() {
+	if a == nil {
+		return
+	}
+	if pid := a.profileIDFromClaims(); pid != "" {
+		a.ProfileID = pid
+		a.Subject = pid
+		return
+	}
+	if sub := strings.TrimSpace(a.Subject); sub != "" {
+		a.ProfileID = sub
+	}
+}
+
+// profileIDFromClaims returns profile_id from top-level or ext claims only
+// (does not fall back to JWT sub).
+func (a *AuthenticationClaims) profileIDFromClaims() string {
+	if a == nil {
+		return ""
+	}
+	if id := strings.TrimSpace(a.ProfileID); id != "" {
+		return id
+	}
+	if a.Ext != nil {
+		if v, ok := a.Ext["profile_id"].(string); ok {
+			return strings.TrimSpace(v)
+		}
+	}
+	return ""
 }
 
 func (a *AuthenticationClaims) GetTenantID() string {
@@ -164,31 +199,19 @@ func extractAdditionalPartitionIDs(raw any) []string {
 	return nil
 }
 
-// GetProfileID returns the acting profile identity used for authorization.
+// GetProfileID returns the acting profile identity (JWT sub after normalize).
 //
-// Resolution order:
-//  1. Top-level profile_id claim (ProfileID field)
-//  2. ext.profile_id (Hydra often nests custom claims under ext)
-//  3. JWT sub — correct for user tokens where sub is the profile_id
-//
-// Service-account tokens may have sub=client_id while profile_id is set in
-// extras; authorization must use profile_id, never client_id as the actor.
+// Platform invariant: sub === profile_id. Prefer an explicit profile_id claim
+// (top-level or ext) when present so machine tokens with wire sub=client_id
+// still resolve to the bot profile; otherwise use JWT sub.
 func (a *AuthenticationClaims) GetProfileID() string {
 	if a == nil {
 		return ""
 	}
-	if id := strings.TrimSpace(a.ProfileID); id != "" {
+	if id := a.profileIDFromClaims(); id != "" {
 		return id
 	}
-	if a.Ext != nil {
-		if v, ok := a.Ext["profile_id"].(string); ok {
-			if id := strings.TrimSpace(v); id != "" {
-				return id
-			}
-		}
-	}
-	result, _ := a.RegisteredClaims.GetSubject()
-	return strings.TrimSpace(result)
+	return strings.TrimSpace(a.Subject)
 }
 
 func (a *AuthenticationClaims) GetAccessID() string {
@@ -332,10 +355,14 @@ func (a *AuthenticationClaims) AsMetadata() map[string]string {
 }
 
 // ClaimsToContext adds authentication claims to the current supplied context.
+// It normalizes identity first so sub === profile_id for all consumers.
 func (a *AuthenticationClaims) ClaimsToContext(ctx context.Context) context.Context {
+	if a != nil {
+		a.NormalizeIdentity()
+	}
 	ctx = context.WithValue(ctx, ctxKeyAuthenticationClaim, a)
 
-	if a.isInternalSystem() {
+	if a != nil && a.isInternalSystem() {
 		ctx = SkipTenancyChecksOnClaims(ctx)
 	}
 
@@ -399,6 +426,8 @@ func ClaimsFromMap(m map[string]string) *AuthenticationClaims {
 
 	for key, val := range m {
 		switch key {
+		case "profile_id":
+			claims.ProfileID = val
 		case "access_id":
 			claims.AccessID = val
 		case "contact_id":
@@ -417,6 +446,7 @@ func ClaimsFromMap(m map[string]string) *AuthenticationClaims {
 		}
 	}
 
+	claims.NormalizeIdentity()
 	return claims
 }
 

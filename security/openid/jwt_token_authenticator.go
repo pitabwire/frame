@@ -121,6 +121,10 @@ func (a *jwtTokenAuthenticator) Authenticate(
 		return ctx, errors.New("supplied token was invalid")
 	}
 
+	// Platform invariant: JWT sub is always profile_id. Hydra may leave wire
+	// sub=client_id for client_credentials while profile_id is in claims.
+	claims.NormalizeIdentity()
+
 	ctx = security.JwtToContext(ctx, jwtToken)
 
 	ctx = claims.ClaimsToContext(ctx)

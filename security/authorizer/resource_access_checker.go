@@ -79,8 +79,9 @@ func (c *ResourceAccessChecker) Check(ctx context.Context, resourceID, permissio
 		return ErrInvalidSubject
 	}
 
-	subjectID, err := claims.GetSubject()
-	if err != nil || subjectID == "" {
+	// Actor for ReBAC is always the profile (see AuthenticationClaims.GetProfileID).
+	subjectID := claims.GetProfileID()
+	if subjectID == "" {
 		return ErrInvalidSubject
 	}
 

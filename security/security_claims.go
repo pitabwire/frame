@@ -39,16 +39,32 @@ func JwtFromContext(ctx context.Context) string {
 
 // AuthenticationClaims defines the structure for JWT claims, embedding jwt.StandardClaims
 // to include standard fields like expiry time, and adding custom claims.
+//
+// Identity model (do not conflate these):
+//
+//   - profile_id — the acting principal for authorization. Users and service
+//     accounts both act as profiles. Keto relation subjects are profile_ids.
+//   - sub (RegisteredClaims.Subject) — JWT subject. For user tokens this is the
+//     profile_id. For Hydra client_credentials tokens this is often the OAuth2
+//     client_id (Hydra does not allow the token hook to override sub).
+//   - client_id — OAuth2 client / partition identifier for the token request,
+//     not the authorization actor.
+//
+// GetProfileID prefers an explicit profile_id claim so authorization always
+// keys on the profile even when JWT sub is the service client_id.
 type AuthenticationClaims struct {
 	Ext         map[string]any `json:"ext,omitempty"`
 	TenantID    string         `json:"tenant_id,omitempty"`
 	PartitionID string         `json:"partition_id,omitempty"`
-	AccessID    string         `json:"access_id,omitempty"`
-	ContactID   string         `json:"contact_id,omitempty"`
-	SessionID   string         `json:"session_id,omitempty"`
-	DeviceID    string         `json:"device_id,omitempty"`
-	ServiceName string         `json:"service_name,omitempty"`
-	Roles       []string       `json:"roles,omitempty"`
+	// ProfileID is the acting profile when present as a top-level JWT claim.
+	// Prefer GetProfileID() over reading this field directly.
+	ProfileID   string   `json:"profile_id,omitempty"`
+	AccessID    string   `json:"access_id,omitempty"`
+	ContactID   string   `json:"contact_id,omitempty"`
+	SessionID   string   `json:"session_id,omitempty"`
+	DeviceID    string   `json:"device_id,omitempty"`
+	ServiceName string   `json:"service_name,omitempty"`
+	Roles       []string `json:"roles,omitempty"`
 	jwt.RegisteredClaims
 }
 
@@ -148,9 +164,31 @@ func extractAdditionalPartitionIDs(raw any) []string {
 	return nil
 }
 
+// GetProfileID returns the acting profile identity used for authorization.
+//
+// Resolution order:
+//  1. Top-level profile_id claim (ProfileID field)
+//  2. ext.profile_id (Hydra often nests custom claims under ext)
+//  3. JWT sub — correct for user tokens where sub is the profile_id
+//
+// Service-account tokens may have sub=client_id while profile_id is set in
+// extras; authorization must use profile_id, never client_id as the actor.
 func (a *AuthenticationClaims) GetProfileID() string {
+	if a == nil {
+		return ""
+	}
+	if id := strings.TrimSpace(a.ProfileID); id != "" {
+		return id
+	}
+	if a.Ext != nil {
+		if v, ok := a.Ext["profile_id"].(string); ok {
+			if id := strings.TrimSpace(v); id != "" {
+				return id
+			}
+		}
+	}
 	result, _ := a.RegisteredClaims.GetSubject()
-	return result
+	return strings.TrimSpace(result)
 }
 
 func (a *AuthenticationClaims) GetAccessID() string {

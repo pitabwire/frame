@@ -90,8 +90,10 @@ func (c *TenancyAccessChecker) CheckAccess(ctx context.Context) error {
 		return ErrInvalidSubject
 	}
 
-	subjectID, err := claims.GetSubject()
-	if err != nil || subjectID == "" {
+	// Actor for ReBAC is always the profile, never the OAuth2 client_id.
+	// JWT sub may be client_id for client_credentials; profile_id claim wins.
+	subjectID := claims.GetProfileID()
+	if subjectID == "" {
 		return ErrInvalidSubject
 	}
 
@@ -153,8 +155,8 @@ func (c *TenancyAccessChecker) Check(ctx context.Context, permission string) err
 		return ErrInvalidSubject
 	}
 
-	subjectID, err := claims.GetSubject()
-	if err != nil || subjectID == "" {
+	subjectID := claims.GetProfileID()
+	if subjectID == "" {
 		return ErrInvalidSubject
 	}
 

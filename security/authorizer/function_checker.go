@@ -78,8 +78,9 @@ func (c *FunctionChecker) Check(ctx context.Context, permission string) error {
 		return ErrInvalidSubject
 	}
 
-	subjectID, err := claims.GetSubject()
-	if err != nil || subjectID == "" {
+	// Actor for ReBAC is always the profile (see AuthenticationClaims.GetProfileID).
+	subjectID := claims.GetProfileID()
+	if subjectID == "" {
 		return ErrInvalidSubject
 	}
 

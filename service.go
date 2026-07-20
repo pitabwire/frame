@@ -15,6 +15,8 @@ import (
 
 	"github.com/pitabwire/util"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"golang.org/x/oauth2"
+	"golang.org/x/oauth2/google"
 
 	"github.com/pitabwire/frame/v2/cache"
 	"github.com/pitabwire/frame/v2/client"
@@ -25,6 +27,7 @@ import (
 	"github.com/pitabwire/frame/v2/openapi"
 	"github.com/pitabwire/frame/v2/profiler"
 	"github.com/pitabwire/frame/v2/queue"
+	"github.com/pitabwire/frame/v2/queue/push"
 	"github.com/pitabwire/frame/v2/security"
 	httpInterceptor "github.com/pitabwire/frame/v2/security/interceptors/httptor"
 	securityManager "github.com/pitabwire/frame/v2/security/manager"
@@ -114,7 +117,6 @@ type Service struct {
 	subscriberStartups   []func(ctx context.Context, s *Service)
 	otherStartups        []func(ctx context.Context, s *Service)
 	startupRegistrations sync.Mutex
-	errorOnce            sync.Once
 	shutdownTimeout      time.Duration // Overall shutdown timeout
 }
 
@@ -377,11 +379,15 @@ func (s *Service) Run(ctx context.Context, address string) error {
 		return pubSubErr
 	}
 
-	// connect the background processor
+	// Background consumers only wake Run on failure. A successful (nil) return is
+	// not a service exit — the HTTP/server lifecycle owns clean shutdown. This
+	// avoids a race where a fast NoopDriver nil exit and a background error
+	// compete on the same buffered channel.
 	if s.backGroundClient != nil {
 		go func() {
-			bgErr := s.backGroundClient(ctx)
-			s.sendStopError(ctx, bgErr)
+			if bgErr := s.backGroundClient(ctx); bgErr != nil {
+				s.sendStopError(ctx, bgErr)
+			}
 		}()
 	}
 
@@ -395,6 +401,15 @@ func (s *Service) Run(ctx context.Context, address string) error {
 		s.stopWithTimeout(ctx)
 		return ctx.Err()
 	case err0 := <-s.errorChannel:
+		// When woken by a clean server exit, allow a racing background failure
+		// a brief window to supersede the nil (test drivers return immediately).
+		if err0 == nil && s.backGroundClient != nil {
+			select {
+			case err1 := <-s.errorChannel:
+				err0 = err1
+			case <-time.After(backgroundErrorGracePeriod):
+			}
+		}
 		if err0 != nil {
 			s.Log(ctx).
 				WithError(err0).
@@ -457,8 +472,77 @@ func (s *Service) createAndConfigureMux(ctx context.Context) *http.ServeMux {
 	mux.HandleFunc(s.healthCheckPath, s.HandleHealth)
 	s.registerOpenAPIRoutes(mux)
 	s.registerOAuth2ClientJWKSRoute(mux)
+	s.registerQueuePushHandler(ctx, mux)
 	mux.Handle("/", applicationHandler)
 	return mux
+}
+
+const backgroundErrorGracePeriod = 25 * time.Millisecond
+
+// registerQueuePushHandler always mounts the live-lookup push mux when a queue
+// manager exists (K5). Unknown refs return 404; pull-only services keep the path reserved.
+func (s *Service) registerQueuePushHandler(ctx context.Context, mux *http.ServeMux) {
+	lookup, isPushLookup := s.queueManager.(queue.PushLookup)
+	if !isPushLookup || s.queueManager == nil {
+		return
+	}
+
+	cfg := push.Config{
+		BasePath:       push.DefaultBasePath,
+		MaxBodyBytes:   config.DefaultQueuePushMaxBodyBytes(),
+		HandlerTimeout: config.DefaultQueuePushHandlerTimeout(),
+		Auth:           push.NoneAuth{},
+	}
+
+	if pushCfg, hasPushCfg := s.Config().(config.ConfigurationQueuePush); hasPushCfg {
+		cfg.BasePath = pushCfg.GetQueuePushBasePath()
+		cfg.TrustClaims = pushCfg.GetQueuePushTrustMetadata()
+		cfg.AckPoison = pushCfg.GetQueuePushAckPoison()
+		cfg.MaxBodyBytes = pushCfg.GetQueuePushMaxBodyBytes()
+		cfg.HandlerTimeout = pushCfg.GetQueuePushHandlerTimeout()
+		cfg.Auth = s.buildPushAuthenticator(ctx, pushCfg)
+	}
+
+	h := push.NewHandler(lookup, cfg)
+	h.Register(mux)
+}
+
+func (s *Service) buildPushAuthenticator(
+	ctx context.Context,
+	pushCfg config.ConfigurationQueuePush,
+) push.Authenticator {
+	mode := push.ParseAuthMode(pushCfg.GetQueuePushAuth())
+	switch mode {
+	case push.AuthBearer:
+		return push.BearerAuth{Token: pushCfg.GetQueuePushBearerToken()}
+	case push.AuthOIDC:
+		return s.buildPushOIDCAuth(ctx, pushCfg)
+	case push.AuthNone:
+		return push.NoneAuth{}
+	default:
+		return push.NoneAuth{}
+	}
+}
+
+func (s *Service) buildPushOIDCAuth(ctx context.Context, pushCfg config.ConfigurationQueuePush) push.Authenticator {
+	issuers := []string{}
+	if raw := strings.TrimSpace(pushCfg.GetQueuePushOIDCIssuers()); raw != "" {
+		for _, part := range strings.Split(raw, ",") {
+			if part = strings.TrimSpace(part); part != "" {
+				issuers = append(issuers, part)
+			}
+		}
+	}
+	oidcCfg := push.GoogleCloudTasksOIDCPreset(pushCfg.GetQueuePushOIDCAudience())
+	if len(issuers) > 0 {
+		oidcCfg.Issuers = issuers
+	}
+	if jwks := pushCfg.GetQueuePushOIDCJWKSURL(); jwks != "" {
+		oidcCfg.JWKSURL = jwks
+	}
+	auth := push.NewOIDCAuth(ctx, oidcCfg)
+	s.AddCleanupMethod(func(_ context.Context) { auth.Stop() })
+	return auth
 }
 
 func (s *Service) registerOpenAPIRoutes(mux *http.ServeMux) {
@@ -672,7 +756,39 @@ func (s *Service) initServer(ctx context.Context, httpPort string) error {
 		return startupErrs[0]
 	}
 
+	if err := s.validateQueuePushAuth(ctx); err != nil {
+		return err
+	}
+
 	return s.startServerDriver(ctx, httpPort)
+}
+
+// validateQueuePushAuth fails startup when push subscribers exist with auth=none
+// while FRAME_QUEUE_PUSH_REQUIRE_AUTH is effective (inherits RUN_SERVICE_SECURELY).
+func (s *Service) validateQueuePushAuth(ctx context.Context) error {
+	lookup, ok := s.queueManager.(queue.PushLookup)
+	if !ok || s.queueManager == nil || !lookup.HasPushSubscribers() {
+		return nil
+	}
+	pushCfg, ok := s.Config().(config.ConfigurationQueuePush)
+	if !ok {
+		return nil
+	}
+	mode := push.ParseAuthMode(pushCfg.GetQueuePushAuth())
+	if mode != push.AuthNone {
+		if mode == push.AuthBearer && strings.TrimSpace(pushCfg.GetQueuePushBearerToken()) == "" {
+			return errors.New("queue: FRAME_QUEUE_PUSH_AUTH=bearer requires FRAME_QUEUE_PUSH_BEARER_TOKEN")
+		}
+		return nil
+	}
+	if !pushCfg.QueuePushRequireAuth() {
+		return nil
+	}
+	util.Log(ctx).Error(
+		"push subscribers registered with FRAME_QUEUE_PUSH_AUTH=none while push auth is required; " +
+			"set bearer or oidc (or FRAME_QUEUE_PUSH_REQUIRE_AUTH=false for local only)",
+	)
+	return errors.New("queue: push auth required when running securely")
 }
 
 // startProfilerIfEnabled checks if profiler is enabled and starts pprof server.
@@ -771,7 +887,20 @@ func (s *Service) initWorkersAndQueues(ctx context.Context, cfg *config.Configur
 		}
 	})
 
-	s.queueManager = queue.NewQueueManager(ctx, s.workerPoolManager)
+	var qmOpts []queue.ManagerOption
+	if s.clientManager != nil {
+		qmOpts = append(qmOpts, queue.WithHTTPClient(s.clientManager.Client(ctx)))
+	}
+	if name := s.Name(); name != "" {
+		qmOpts = append(qmOpts, queue.WithServiceName(name))
+	}
+	// Best-effort ADC for Cloud Tasks publishers; failure is deferred until a
+	// cloudtasks:// publisher is initialized.
+	if ts, tsErr := googleCloudTasksTokenSource(ctx); tsErr == nil && ts != nil {
+		qmOpts = append(qmOpts, queue.WithTokenSource(ts))
+	}
+
+	s.queueManager = queue.NewQueueManager(ctx, s.workerPoolManager, qmOpts...)
 	s.AddCleanupMethod(func(cleanupCtx context.Context) {
 		if s.queueManager != nil {
 			_ = s.queueManager.Close(cleanupCtx)
@@ -784,6 +913,19 @@ func (s *Service) initWorkersAndQueues(ctx context.Context, cfg *config.Configur
 	}
 }
 
+const cloudTasksOAuthScope = "https://www.googleapis.com/auth/cloud-tasks"
+
+func googleCloudTasksTokenSource(ctx context.Context) (oauth2.TokenSource, error) {
+	creds, err := google.FindDefaultCredentials(ctx, cloudTasksOAuthScope)
+	if err != nil {
+		return nil, err
+	}
+	if creds.TokenSource == nil {
+		return nil, errors.New("google credentials missing token source")
+	}
+	return creds.TokenSource, nil
+}
+
 // sendStopError wakes Run with a terminal signal.
 //
 // A nil error is a valid clean exit and must be delivered: test drivers
@@ -793,8 +935,8 @@ func (s *Service) initWorkersAndQueues(ctx context.Context, cfg *config.Configur
 // (http.ErrServerClosed). Ignoring nil caused Run to hang under
 // WithNoopDriver — callers then needed an ad-hoc goroutine around Run.
 //
-// Non-nil errors use errorOnce and replace a pending nil so the first
-// real failure wins over a concurrent clean-exit signal.
+// Non-nil errors drain a pending clean-exit nil and re-send so the failure
+// wins over concurrent NoopDriver/test-driver exits.
 func (s *Service) sendStopError(ctx context.Context, err error) {
 	if err == nil {
 		select {
@@ -802,21 +944,22 @@ func (s *Service) sendStopError(ctx context.Context, err error) {
 			return
 		case s.errorChannel <- nil:
 		default:
+			// Channel already has a signal (likely an error). Do not overwrite.
 		}
 		return
 	}
 
-	s.errorOnce.Do(func() {
-		// Prefer a real error over a pending clean-exit nil.
-		select {
-		case <-s.errorChannel:
-		default:
-		}
-		select {
-		case <-ctx.Done():
-			return
-		case s.errorChannel <- err:
-		default:
-		}
-	})
+	// Prefer a real error over a pending clean-exit nil. May run more than once
+	// if multiple components fail; first non-nil that lands in the channel wins
+	// for Run, subsequent attempts drain and re-send the latest error.
+	select {
+	case <-s.errorChannel:
+	default:
+	}
+	select {
+	case <-ctx.Done():
+		return
+	case s.errorChannel <- err:
+	default:
+	}
 }

@@ -4,10 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"strings"
 	"sync"
 
 	"github.com/pitabwire/util"
+	"golang.org/x/oauth2"
 
 	"github.com/pitabwire/frame/v2/data"
 	"github.com/pitabwire/frame/v2/workerpool"
@@ -20,22 +22,51 @@ type queueManager struct {
 	initialized          bool
 	initMutex            sync.Mutex
 
-	workPool workerpool.Manager
+	workPool    workerpool.Manager
+	httpClient  *http.Client
+	tokenSource oauth2.TokenSource
+	serviceName string
 }
 
-func NewQueueManager(_ context.Context, workPool workerpool.Manager) Manager {
+// ManagerOption configures the queue manager.
+type ManagerOption func(*queueManager)
+
+// WithHTTPClient sets the shared HTTP client for CE / Cloud Tasks publishers.
+func WithHTTPClient(c *http.Client) ManagerOption {
+	return func(m *queueManager) {
+		m.httpClient = c
+	}
+}
+
+// WithTokenSource sets the OAuth2 token source for Cloud Tasks CreateTask API calls.
+func WithTokenSource(ts oauth2.TokenSource) ManagerOption {
+	return func(m *queueManager) {
+		m.tokenSource = ts
+	}
+}
+
+// WithServiceName sets the default CE source host component.
+func WithServiceName(name string) ManagerOption {
+	return func(m *queueManager) {
+		m.serviceName = name
+	}
+}
+
+func NewQueueManager(_ context.Context, workPool workerpool.Manager, opts ...ManagerOption) Manager {
 	q := &queueManager{
 		publishQueueMap:      &sync.Map{},
 		subscriptionQueueMap: &sync.Map{},
-
-		workPool: workPool,
+		workPool:             workPool,
 	}
-
+	for _, opt := range opts {
+		if opt != nil {
+			opt(q)
+		}
+	}
 	return q
 }
 
 func (s *queueManager) AddPublisher(ctx context.Context, reference string, queueURL string) error {
-	// Validate inputs before proceeding
 	if strings.TrimSpace(reference) == "" {
 		return errors.New("publisher reference cannot be empty")
 	}
@@ -48,20 +79,21 @@ func (s *queueManager) AddPublisher(ctx context.Context, reference string, queue
 		return nil
 	}
 
-	pub = newPublisher(reference, queueURL)
+	p := newPublisher(reference, queueURL)
+	p.httpClient = s.httpClient
+	p.tokenSource = s.tokenSource
+	p.serviceName = s.serviceName
 
-	// Initialize immediately if queueManager has already been initialized
-	// Hold lock during check and init to prevent race
 	s.initMutex.Lock()
 	alreadyInitialized := s.initialized
 	if alreadyInitialized {
-		err := pub.Init(ctx)
+		err := p.Init(ctx)
 		if err != nil {
 			s.initMutex.Unlock()
 			return err
 		}
 	}
-	s.publishQueueMap.Store(reference, pub)
+	s.publishQueueMap.Store(reference, p)
 	s.initMutex.Unlock()
 	return nil
 }
@@ -95,7 +127,6 @@ func (s *queueManager) AddSubscriber(
 	queueURL string,
 	handlers ...SubscribeWorker,
 ) error {
-	// Validate inputs before proceeding
 	if strings.TrimSpace(reference) == "" {
 		return errors.New("subscriber reference cannot be empty")
 	}
@@ -110,8 +141,6 @@ func (s *queueManager) AddSubscriber(
 
 	subs := newSubscriber(s.workPool, reference, queueURL, handlers...)
 
-	// Initialize immediately if queueManager has already been initialized
-	// Hold lock during check and init to prevent race
 	s.initMutex.Lock()
 	alreadyInitialized := s.initialized
 	if alreadyInitialized {
@@ -150,7 +179,41 @@ func (s *queueManager) GetSubscriber(reference string) (Subscriber, error) {
 	return sVal, nil
 }
 
-// Publish ByIsQueue method to write a new message into the queueManager pre initialized with the supplied reference.
+func (s *queueManager) HasPushSubscribers() bool {
+	found := false
+	s.subscriptionQueueMap.Range(func(_, value any) bool {
+		sub, ok := value.(*subscriber)
+		if !ok {
+			return true
+		}
+		if sub.isInit.Load() {
+			if sub.Mode() == DeliveryModePush {
+				found = true
+				return false
+			}
+			return true
+		}
+		if mode, _, err := ClassifySubscriberURL(sub.url); err == nil && mode == DeliveryModePush {
+			found = true
+			return false
+		}
+		return true
+	})
+	return found
+}
+
+func (s *queueManager) LookupPush(ref string) (PushTarget, bool) {
+	sub, err := s.GetSubscriber(ref)
+	if err != nil {
+		return nil, false
+	}
+	if sub.Mode() != DeliveryModePush {
+		return nil, false
+	}
+	return sub, true
+}
+
+// Publish writes a new message into the queueManager pre-initialized publisher.
 func (s *queueManager) Publish(ctx context.Context, reference string, payload any, headers ...map[string]string) error {
 	pub, err := s.GetPublisher(reference)
 	if err != nil {
@@ -167,7 +230,6 @@ func (s *queueManager) initSubscriber(ctx context.Context, sub Subscriber) error
 	return sub.Init(ctx)
 }
 
-// initializeRegisteredPublishers iterates over and initializes all registered publishers.
 func (s *queueManager) initializeRegisteredPublishers(ctx context.Context) error {
 	var initErrors []error
 	s.publishQueueMap.Range(func(key, value any) bool {
@@ -176,8 +238,12 @@ func (s *queueManager) initializeRegisteredPublishers(ctx context.Context) error
 			util.Log(ctx).WithField("key", key).
 				WithField("actual_type", fmt.Sprintf("%T", value)).
 				Warn("Item in publishQueueMap is not of type *publisher, skipping initialization.")
-			return true // continue to next item
+			return true
 		}
+		// refresh deps in case options set after construction
+		pub.httpClient = s.httpClient
+		pub.tokenSource = s.tokenSource
+		pub.serviceName = s.serviceName
 		if err := pub.Init(ctx); err != nil {
 			util.Log(ctx).WithError(err).
 				WithField("publisher_ref", pub.Ref()).
@@ -189,14 +255,11 @@ func (s *queueManager) initializeRegisteredPublishers(ctx context.Context) error
 	})
 
 	if len(initErrors) > 0 {
-		// Consider how to aggregate multiple errors. For now, return the first one.
-		// Or use a multierror package if available/preferred.
 		return fmt.Errorf("failed to initialize one or more publishers: %w", initErrors[0])
 	}
 	return nil
 }
 
-// initializeRegisteredSubscribers iterates over and initializes all registered subscribers.
 func (s *queueManager) initializeRegisteredSubscribers(ctx context.Context) error {
 	var initErrors []error
 	s.subscriptionQueueMap.Range(func(key, value any) bool {
@@ -204,8 +267,8 @@ func (s *queueManager) initializeRegisteredSubscribers(ctx context.Context) erro
 		if !ok {
 			util.Log(ctx).WithField("key", key).
 				WithField("actual_type", fmt.Sprintf("%T", value)).
-				Warn("Item in subscriptionQueueMap is not of type *subscriber, skipping initialization.")
-			return true // continue to next item
+				Warn("Item in subscriptionQueueMap is not of type Subscriber, skipping initialization.")
+			return true
 		}
 		if err := s.initSubscriber(ctx, sub); err != nil {
 			util.Log(ctx).WithError(err).
@@ -232,16 +295,13 @@ func (s *queueManager) Init(ctx context.Context) error {
 	}
 
 	if err := s.initializeRegisteredPublishers(ctx); err != nil {
-		// Errors logged by helper
 		return fmt.Errorf("failed during publisher initialization: %w", err)
 	}
 
 	if err := s.initializeRegisteredSubscribers(ctx); err != nil {
-		// Errors logged by helper
 		return fmt.Errorf("failed during subscriber initialization: %w", err)
 	}
 
-	// Mark queueManager as initialized
 	s.initMutex.Lock()
 	s.initialized = true
 	s.initMutex.Unlock()
@@ -292,4 +352,42 @@ func (s *queueManager) Close(ctx context.Context) error {
 	s.initMutex.Unlock()
 
 	return closeErr
+}
+
+// ListPublishers implements Inspector.
+func (s *queueManager) ListPublishers() []PublisherInfo {
+	var out []PublisherInfo
+	s.publishQueueMap.Range(func(_, value any) bool {
+		pub, ok := value.(*publisher)
+		if !ok {
+			return true
+		}
+		out = append(out, PublisherInfo{
+			Reference: pub.Ref(),
+			URL:       pub.url,
+			Initiated: pub.Initiated(),
+		})
+		return true
+	})
+	return out
+}
+
+// ListSubscribers implements Inspector.
+func (s *queueManager) ListSubscribers() []SubscriberInfo {
+	var out []SubscriberInfo
+	s.subscriptionQueueMap.Range(func(_, value any) bool {
+		sub, ok := value.(*subscriber)
+		if !ok {
+			return true
+		}
+		out = append(out, SubscriberInfo{
+			Reference: sub.Ref(),
+			URL:       sub.URI(),
+			State:     sub.State(),
+			Initiated: sub.Initiated(),
+			Mode:      sub.Mode(),
+		})
+		return true
+	})
+	return out
 }

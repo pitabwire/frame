@@ -9,13 +9,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/require"
-	"github.com/stretchr/testify/suite"
-
 	"github.com/pitabwire/frame/v2"
 	"github.com/pitabwire/frame/v2/frametests"
 	"github.com/pitabwire/frame/v2/frametests/definition"
 	"github.com/pitabwire/frame/v2/tests"
+	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 // QueueTestSuite extends BaseTestSuite for comprehensive queueManager testing.

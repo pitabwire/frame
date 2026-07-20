@@ -320,7 +320,113 @@ type ConfigurationDefault struct {
 	EventsQueueName string `envDefault:"frame.events.internal_._queue"       env:"EVENTS_QUEUE_NAME" yaml:"events_queue_name"`
 	EventsQueueURL  string `envDefault:"mem://frame.events.internal_._queue" env:"EVENTS_QUEUE_URL"  yaml:"events_queue_url"`
 
+	// Queue push (HTTP multiplexing) settings
+	QueuePushBasePath       string `envDefault:"/_frame/queue" env:"FRAME_QUEUE_PUSH_BASE_PATH" yaml:"queue_push_base_path"`
+	QueuePushAuth           string `envDefault:"none"          env:"FRAME_QUEUE_PUSH_AUTH"      yaml:"queue_push_auth"`
+	QueuePushRequireAuthRaw *bool  `                           env:"FRAME_QUEUE_PUSH_REQUIRE_AUTH" yaml:"queue_push_require_auth"`
+	QueuePushBearerToken    string `envDefault:""              env:"FRAME_QUEUE_PUSH_BEARER_TOKEN" yaml:"queue_push_bearer_token"`
+	QueuePushOIDCAudience   string `envDefault:""              env:"FRAME_QUEUE_PUSH_OIDC_AUDIENCE" yaml:"queue_push_oidc_audience"`
+	QueuePushOIDCIssuers    string `envDefault:""              env:"FRAME_QUEUE_PUSH_OIDC_ISSUERS" yaml:"queue_push_oidc_issuers"`
+	QueuePushOIDCJWKSURL    string `envDefault:"https://www.googleapis.com/oauth2/v3/certs" env:"FRAME_QUEUE_PUSH_OIDC_JWKS_URL" yaml:"queue_push_oidc_jwks_url"`
+	QueuePushTrustMetadata  bool   `envDefault:"false"         env:"FRAME_QUEUE_PUSH_TRUST_METADATA" yaml:"queue_push_trust_metadata"`
+	QueuePushAckPoison      bool   `envDefault:"false"         env:"FRAME_QUEUE_PUSH_ACK_POISON" yaml:"queue_push_ack_poison"`
+	QueuePushMaxBodyBytes   int64  `envDefault:"1048576"       env:"FRAME_QUEUE_PUSH_MAX_BODY_BYTES" yaml:"queue_push_max_body_bytes"`
+	QueuePushHandlerTimeout string `envDefault:"25s"           env:"FRAME_QUEUE_PUSH_HANDLER_TIMEOUT" yaml:"queue_push_handler_timeout"`
+
 	oidcMap OIDCMap `env:"-" yaml:"-"`
+}
+
+// ConfigurationQueuePush exposes queue push HTTP settings.
+type ConfigurationQueuePush interface {
+	GetQueuePushBasePath() string
+	GetQueuePushAuth() string
+	QueuePushRequireAuth() bool
+	GetQueuePushBearerToken() string
+	GetQueuePushOIDCAudience() string
+	GetQueuePushOIDCIssuers() string
+	GetQueuePushOIDCJWKSURL() string
+	GetQueuePushTrustMetadata() bool
+	GetQueuePushAckPoison() bool
+	GetQueuePushMaxBodyBytes() int64
+	GetQueuePushHandlerTimeout() time.Duration
+}
+
+var _ ConfigurationQueuePush = new(ConfigurationDefault)
+
+func (c *ConfigurationDefault) GetQueuePushBasePath() string {
+	if strings.TrimSpace(c.QueuePushBasePath) == "" {
+		return "/_frame/queue"
+	}
+	return c.QueuePushBasePath
+}
+
+func (c *ConfigurationDefault) GetQueuePushAuth() string {
+	if strings.TrimSpace(c.QueuePushAuth) == "" {
+		return "none"
+	}
+	return c.QueuePushAuth
+}
+
+// QueuePushRequireAuth returns effective require-auth policy.
+// Unset env inherits RUN_SERVICE_SECURELY (IsRunSecurely).
+func (c *ConfigurationDefault) QueuePushRequireAuth() bool {
+	if c.QueuePushRequireAuthRaw != nil {
+		return *c.QueuePushRequireAuthRaw
+	}
+	return c.IsRunSecurely()
+}
+
+func (c *ConfigurationDefault) GetQueuePushBearerToken() string {
+	return c.QueuePushBearerToken
+}
+
+func (c *ConfigurationDefault) GetQueuePushOIDCAudience() string {
+	return c.QueuePushOIDCAudience
+}
+
+func (c *ConfigurationDefault) GetQueuePushOIDCIssuers() string {
+	return c.QueuePushOIDCIssuers
+}
+
+func (c *ConfigurationDefault) GetQueuePushOIDCJWKSURL() string {
+	if strings.TrimSpace(c.QueuePushOIDCJWKSURL) == "" {
+		return "https://www.googleapis.com/oauth2/v3/certs"
+	}
+	return c.QueuePushOIDCJWKSURL
+}
+
+func (c *ConfigurationDefault) GetQueuePushTrustMetadata() bool {
+	return c.QueuePushTrustMetadata
+}
+
+func (c *ConfigurationDefault) GetQueuePushAckPoison() bool {
+	return c.QueuePushAckPoison
+}
+
+const (
+	defaultQueuePushMaxBodyBytes = 1 << 20 // 1 MiB
+	defaultQueuePushHandlerTO    = 25 * time.Second
+)
+
+// DefaultQueuePushMaxBodyBytes is the default max request body for push handlers.
+func DefaultQueuePushMaxBodyBytes() int64 { return defaultQueuePushMaxBodyBytes }
+
+// DefaultQueuePushHandlerTimeout is the default per-request handler timeout for push.
+func DefaultQueuePushHandlerTimeout() time.Duration { return defaultQueuePushHandlerTO }
+
+func (c *ConfigurationDefault) GetQueuePushMaxBodyBytes() int64 {
+	if c.QueuePushMaxBodyBytes <= 0 {
+		return defaultQueuePushMaxBodyBytes
+	}
+	return c.QueuePushMaxBodyBytes
+}
+
+func (c *ConfigurationDefault) GetQueuePushHandlerTimeout() time.Duration {
+	d, err := time.ParseDuration(c.QueuePushHandlerTimeout)
+	if err != nil || d <= 0 {
+		return defaultQueuePushHandlerTO
+	}
+	return d
 }
 
 type ConfigurationService interface {

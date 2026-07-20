@@ -11,6 +11,7 @@ type SubscriberInfo struct {
 	URL       string          `json:"url"`
 	State     SubscriberState `json:"state"`
 	Initiated bool            `json:"initiated"`
+	Mode      DeliveryMode    `json:"mode"`
 }
 
 type Inspector interface {

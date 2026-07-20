@@ -3,7 +3,10 @@ package queue
 import (
 	"context"
 	"errors"
+	"fmt"
+	"io"
 	"maps"
+	"net/http"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -11,20 +14,32 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/propagation"
 	"gocloud.dev/pubsub"
+	"golang.org/x/oauth2"
 
 	"github.com/pitabwire/frame/v2/internal"
 	"github.com/pitabwire/frame/v2/localization"
 	"github.com/pitabwire/frame/v2/security"
 )
 
+const responseDrainLimit = 1 << defaultMaxBodyMiB
+
 type publisher struct {
 	reference string
 	url       string
-	topic     *pubsub.Topic
-	isInit    atomic.Bool
+	kind      PublishKind
+
+	topic  *pubsub.Topic
+	isInit atomic.Bool
+
+	httpClient  *http.Client
+	tokenSource oauth2.TokenSource
+	serviceName string
+
+	ceConfig *cloudEventsPublishConfig
+	ctTarget *CloudTasksTarget
 }
 
-func newPublisher(reference string, queueURL string) Publisher {
+func newPublisher(reference string, queueURL string) *publisher {
 	return &publisher{
 		reference: reference,
 		url:       queueURL,
@@ -58,11 +73,23 @@ func (p *publisher) Publish(ctx context.Context, payload any, headers ...map[str
 		return err
 	}
 
+	switch p.kind {
+	case PublishKindGoCloud:
+		return p.publishGoCloud(ctx, message, metadata)
+	case PublishKindCloudEventsHTTP:
+		return p.publishCloudEvents(ctx, message, metadata)
+	case PublishKindCloudTasks:
+		return p.publishCloudTasks(ctx, message, metadata)
+	default:
+		return fmt.Errorf("queue: unknown publish kind %v", p.kind)
+	}
+}
+
+func (p *publisher) publishGoCloud(ctx context.Context, message []byte, metadata map[string]string) error {
 	topic := p.topic
 	if topic == nil {
 		return errors.New("publisher is not initialized")
 	}
-
 	return topic.Send(ctx, &pubsub.Message{
 		Body:     message,
 		Metadata: metadata,
@@ -70,18 +97,76 @@ func (p *publisher) Publish(ctx context.Context, payload any, headers ...map[str
 }
 
 func (p *publisher) Init(ctx context.Context) error {
-	if p.isInit.Load() && p.topic != nil {
+	if p.alreadyInit() {
 		return nil
 	}
 
-	var err error
-
-	p.topic, err = pubsub.OpenTopic(ctx, p.url)
+	kind, err := ClassifyPublisherURL(p.url)
 	if err != nil {
 		return err
 	}
+	p.kind = kind
+
+	if initErr := p.initByKind(ctx, kind); initErr != nil {
+		return initErr
+	}
 
 	p.isInit.Store(true)
+	return nil
+}
+
+func (p *publisher) alreadyInit() bool {
+	if !p.isInit.Load() {
+		return false
+	}
+	if p.kind == PublishKindGoCloud {
+		return p.topic != nil
+	}
+	return true
+}
+
+func (p *publisher) initByKind(ctx context.Context, kind PublishKind) error {
+	switch kind {
+	case PublishKindGoCloud:
+		topic, err := pubsub.OpenTopic(ctx, p.url)
+		if err != nil {
+			return err
+		}
+		p.topic = topic
+		return nil
+	case PublishKindCloudEventsHTTP:
+		return p.initCloudEvents()
+	case PublishKindCloudTasks:
+		return p.initCloudTasks()
+	default:
+		return fmt.Errorf("queue: unknown publish kind %v", kind)
+	}
+}
+
+func (p *publisher) initCloudEvents() error {
+	cfg, err := parseCloudEventsPublishConfig(p.url, p.reference, p.serviceName)
+	if err != nil {
+		return err
+	}
+	if p.httpClient == nil {
+		return fmt.Errorf("publisher %s: cloudevents: HTTP client not configured", p.reference)
+	}
+	p.ceConfig = cfg
+	return nil
+}
+
+func (p *publisher) initCloudTasks() error {
+	target, err := ParseCloudTasksURL(p.url)
+	if err != nil {
+		return err
+	}
+	if p.tokenSource == nil {
+		return fmt.Errorf("publisher %s: cloudtasks: no credentials configured", p.reference)
+	}
+	if p.httpClient == nil {
+		return fmt.Errorf("publisher %s: cloudtasks: HTTP client not configured", p.reference)
+	}
+	p.ctTarget = target
 	return nil
 }
 
@@ -92,7 +177,6 @@ func (p *publisher) Initiated() bool {
 const defaultPublisherShutdownTimeoutSeconds = 30
 
 func (p *publisher) Stop(ctx context.Context) error {
-	// TODO: incooporate trace information in shutdown context
 	var sctx context.Context
 	var cancelFunc context.CancelFunc
 
@@ -112,8 +196,6 @@ func (p *publisher) Stop(ctx context.Context) error {
 		return nil
 	}
 
-	// mem:// driver is process-local and shared by URL. Shutting it down here can poison
-	// subsequent in-process users of the same topic URL (common in tests).
 	if strings.HasPrefix(strings.ToLower(p.url), "mem://") {
 		p.topic = nil
 		return nil
@@ -143,6 +225,13 @@ func isTopicAlreadyShutdownErr(err error) bool {
 	if err == nil {
 		return false
 	}
-
 	return strings.Contains(strings.ToLower(err.Error()), "topic has been shutdown")
+}
+
+func drainAndClose(resp *http.Response) {
+	if resp == nil || resp.Body == nil {
+		return
+	}
+	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, responseDrainLimit))
+	_ = resp.Body.Close()
 }

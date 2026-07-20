@@ -34,6 +34,23 @@ type Manager interface {
 	Close(ctx context.Context) error
 }
 
+// PushLookup is implemented by the concrete queue manager for HTTP push demux.
+// Kept separate from Manager so application test doubles of Manager stay compatible.
+type PushLookup interface {
+	// HasPushSubscribers reports whether any registered subscriber is push mode.
+	HasPushSubscribers() bool
+	// LookupPush returns a push target by registration reference.
+	LookupPush(ref string) (PushTarget, bool)
+	GetSubscriber(reference string) (Subscriber, error)
+}
+
+// PushTarget is the narrow surface the HTTP multiplexing handler uses.
+type PushTarget interface {
+	Ref() string
+	Mode() DeliveryMode
+	ProcessPush(ctx context.Context, metadata map[string]string, body []byte) error
+}
+
 type Publisher interface {
 	Initiated() bool
 	Ref() string
@@ -52,11 +69,16 @@ type Subscriber interface {
 	State() SubscriberState
 	Metrics() SubscriberMetrics
 	IsIdle() bool
+	// Mode reports pull vs push delivery.
+	Mode() DeliveryMode
 
 	Init(ctx context.Context) error
 	Receive(ctx context.Context) (*pubsub.Message, error)
 	Stop(ctx context.Context) error
 	As(i any) bool
+
+	// ProcessPush delivers one push message synchronously (push mode only).
+	ProcessPush(ctx context.Context, metadata map[string]string, body []byte) error
 }
 
 type SubscribeWorker interface {

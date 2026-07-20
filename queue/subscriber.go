@@ -4,19 +4,16 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/url"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/pitabwire/util"
-	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/trace"
 	"gocloud.dev/pubsub"
 
-	"github.com/pitabwire/frame/v2/localization"
-	"github.com/pitabwire/frame/v2/security"
 	"github.com/pitabwire/frame/v2/telemetry"
 	"github.com/pitabwire/frame/v2/workerpool"
 )
@@ -31,6 +28,7 @@ type subscriber struct {
 	reference string
 	url       string
 	handlers  []SubscribeWorker
+	mode      DeliveryMode
 
 	// mu guards subscription lifecycle transitions (create/recreate/shutdown).
 	// Holding it serialises Stop() against listen()'s context-cancel path and
@@ -123,6 +121,10 @@ func (s *subscriber) Receive(ctx context.Context) (*pubsub.Message, error) {
 	return msg, nil
 }
 
+func (s *subscriber) Mode() DeliveryMode {
+	return s.mode
+}
+
 func (s *subscriber) createSubscription(ctx context.Context) error {
 	s.mu.Lock()
 	if s.subscription != nil {
@@ -136,7 +138,7 @@ func (s *subscriber) createSubscription(ctx context.Context) error {
 		return errors.New("subscriber URL cannot be empty")
 	}
 
-	if strings.HasPrefix(s.url, "http") {
+	if s.mode == DeliveryModePush {
 		return nil
 	}
 
@@ -157,23 +159,49 @@ func (s *subscriber) createSubscription(ctx context.Context) error {
 }
 
 func (s *subscriber) Init(ctx context.Context) error {
-	if s.isInit.Load() && s.loadSubscription() != nil {
+	if s.isInit.Load() {
+		if s.mode == DeliveryModePush || s.loadSubscription() != nil {
+			return nil
+		}
+	}
+
+	mode, query, classErr := ClassifySubscriberURL(s.url)
+	if classErr != nil {
+		return classErr
+	}
+	s.mode = mode
+
+	if mode == DeliveryModePush {
+		// Host on push://ref is documentary; warn if it disagrees with registration ref.
+		if u, perr := parseURLQuiet(
+			s.url,
+		); perr == nil && u.Scheme == schemePush && u.Host != "" &&
+			u.Host != s.reference {
+			util.Log(ctx).
+				WithField("subscriber", s.reference).
+				WithField("url_host", u.Host).
+				Warn("push subscriber URL host differs from registration reference; demux uses reference")
+		}
+		_ = query // protocol query consumed by push handler config at request time if needed
+		s.storeState(SubscriberStateWaiting)
+		s.isInit.Store(true)
 		return nil
 	}
 
-	err := s.createSubscription(ctx)
-	if err != nil {
-		return err
+	if createErr := s.createSubscription(ctx); createErr != nil {
+		return createErr
 	}
 
-	if !strings.HasPrefix(s.url, "http") {
-		if s.handlers != nil {
-			go s.listen(ctx)
-		}
+	if len(s.handlers) > 0 {
+		go s.listen(ctx)
 	}
 
 	s.isInit.Store(true)
 	return nil
+}
+
+func parseURLQuiet(raw string) (*url.URL, error) {
+	return url.Parse(raw)
 }
 
 func (s *subscriber) recreateSubscription(ctx context.Context) {
@@ -276,72 +304,6 @@ func (s *subscriber) As(i any) bool {
 		return false
 	}
 	return sub.As(i)
-}
-
-func (s *subscriber) processReceivedMessage(ctx context.Context, msg *pubsub.Message) error {
-	job := workerpool.NewJob[any](func(jobCtx context.Context, _ workerpool.JobResultPipe[any]) error {
-		var err error
-		defer s.metrics.closeMessage(time.Now(), err)
-
-		var metadata propagation.MapCarrier = msg.Metadata
-
-		pCtx := security.SkipTenancyChecksOnClaims(jobCtx)
-
-		authClaim := security.ClaimsFromMap(metadata)
-		if authClaim != nil {
-			pCtx = authClaim.ClaimsToContext(pCtx)
-			// allows tenancy claim propagation through queues
-			pCtx = util.SetTenancy(pCtx, authClaim)
-		}
-
-		// Extract remote span context for linking, not parenting.
-		// This prevents zombie parent traces from publisher-subscriber propagation.
-		extractedCtx := otel.GetTextMapPropagator().Extract(pCtx, metadata)
-		remoteSpanCtx := trace.SpanContextFromContext(extractedCtx)
-
-		var spanOpts []trace.SpanStartOption
-		spanOpts = append(spanOpts, trace.WithNewRoot())
-		if remoteSpanCtx.IsValid() {
-			spanOpts = append(spanOpts, trace.WithLinks(trace.Link{SpanContext: remoteSpanCtx}))
-		}
-
-		pCtx, span := s.tracer.Start(pCtx, "process", spanOpts...)
-		defer func() { s.tracer.End(pCtx, span, err) }()
-
-		languages := localization.FromMap(metadata)
-		if len(languages) > 0 {
-			pCtx = localization.ToContext(pCtx, languages)
-		}
-
-		for _, worker := range s.handlers {
-			err = worker.Handle(pCtx, metadata, msg.Body)
-			if err != nil {
-				logger := util.Log(pCtx).
-					WithField("name", s.reference).
-					WithField("function", "processReceivedMessage").
-					WithField("url", s.url)
-				logger.WithError(err).Warn("could not handle message")
-				msg.Nack()
-				return err // Propagate handlers error to the job runner
-			}
-		}
-		msg.Ack()
-		return nil
-	})
-
-	submitErr := workerpool.SubmitJob[any](ctx, s.workManager, job)
-	if submitErr != nil {
-		msg.Nack()
-		logger := util.Log(ctx).
-			WithField("name", s.reference).
-			WithField("function", "processReceivedMessage").
-			WithField("url", s.url)
-		logger.WithError(submitErr).Error("could not process message, failed to submit job")
-		s.metrics.closeMessage(time.Now(), submitErr)
-		return submitErr
-	}
-
-	return nil
 }
 
 // detachedTraceContext returns a context with an empty span context,

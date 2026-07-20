@@ -75,6 +75,8 @@ In practice, plugin extension looks like:
 - Provide a URL or DSN in config.
 - Frame managers resolve the correct driver at runtime.
 
+Queue also supports **HTTP push** transports (`push://`, `http(s)://` subscribe; `ce+http(s)://` and `cloudtasks://` publish) via a reserved multiplexing path `POST /_frame/queue/{ref}`. See [queue.md](queue.md).
+
 ## Key Packages
 
 - `frame`: core service, options, server lifecycle.

@@ -23,15 +23,15 @@ type Claims struct {
 	AccessID string
 
 	// Skip is true for internal/system callers that should bypass
-	// tenancy enforcement. Providers honour Skip by performing no
-	// session binding for the conn — the database-side policy's
-	// empty-match-all branch then keeps every row visible.
+	// tenancy enforcement. Providers honour Skip by not binding session
+	// scope — the database-side policy's empty-match-all branch then
+	// keeps every row visible (same as missing claims).
 	Skip bool
 }
 
 // IsEmpty reports whether the claims carry enforceable tenancy. Empty
 // claims behave identically to "no claims attached" from a provider's
-// perspective.
+// perspective (no filtering, no error).
 func (c *Claims) IsEmpty() bool {
 	if c == nil {
 		return true
@@ -123,7 +123,9 @@ func WithClaims(ctx context.Context, c *Claims) context.Context {
 //  2. Derived from security.AuthenticationClaims if present in ctx
 //     (job workers / services that haven't run the tenancy interceptor
 //     still get correct enforcement).
-//  3. nil — caller is unscoped (system services, migrations).
+//  3. nil — no tenancy in context; provider does not filter (and does
+//     not error). Use WithSkipEnforcement or omit claims for full-table
+//     access; bind claims when you want RLS filtering.
 func ClaimsFromContext(ctx context.Context) *Claims {
 	if v, ok := ctx.Value(claimsKey{}).(*Claims); ok {
 		return v
@@ -178,10 +180,10 @@ func WithExtraPartitions(ctx context.Context, partitionIDs ...string) context.Co
 // migration scripts, admin tools, or system-level operations that
 // legitimately need full-table access.
 //
-// Internally this binds a Claims value with Skip=true. Providers
-// honour Skip by performing no session binding for the connection,
-// which makes the database-side policy's empty-match-all branch fire
-// — i.e. every row is visible.
+// Internally this binds a Claims value with Skip=true. Providers do not
+// bind session scope for Skip (same as missing claims): every row is
+// visible. Prefer this over relying on "no claims" when you want the
+// bypass to be explicit in call sites.
 func WithSkipEnforcement(ctx context.Context) context.Context {
 	return WithClaims(ctx, &Claims{Skip: true})
 }

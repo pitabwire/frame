@@ -1,6 +1,6 @@
 // Package postgres provides the Postgres concrete tenancy.Provider.
 // It installs Row-Level Security policies at migration time and binds
-// per-request tenancy state via pgxpool BeforeAcquire / AfterRelease
+// per-request tenancy state via pgxpool PrepareConn / AfterRelease
 // hooks. Combined, application code never references tenant_id or
 // partition_id directly.
 package postgres
@@ -11,15 +11,17 @@ package postgres
 // visible to the current principal.
 //
 //   - tenant_id is single-valued: row matches when the row's tenant
-//     equals the setting, or the setting is empty (system services /
-//     migrations are unscoped — same default as the no-claims path).
+//     equals the setting, or the setting is empty (no claims in
+//     context, system services, migrations, or Skip — same default).
 //   - partition_id is a comma-separated list: row matches when the
 //     row's partition appears in the list, or the setting is empty.
 //     Principals that legitimately span multiple partitions thus see
 //     rows from every partition they belong to without any application
 //     code awareness.
 //
-
+// Intentionally not fail-closed: missing tenancy in context must not
+// error and must not hide rows. Enforcement applies only when claims
+// are bound (unless Skip).
 const appTenancyMatchesFn = `
 CREATE OR REPLACE FUNCTION app_tenancy_matches(
     row_tenant_id text,
@@ -41,11 +43,8 @@ $$ LANGUAGE plpgsql STABLE;
 
 // alterEnableRLS, alterForceRLS, dropPolicy, createPolicy are the per-
 // table statements applied by Install. Quoting is performed by the
-// caller (via the dialect adapter's QuoteIdentifier or the in-file
-// pgQuoteIdent helper) — these strings receive pre-quoted table and
-// column names.
-//
-
+// caller (via the dialect adapter's QuoteIdentifier) — these strings
+// receive pre-quoted table and column names.
 const (
 	alterEnableRLS = "ALTER TABLE %s ENABLE ROW LEVEL SECURITY"
 	alterForceRLS  = "ALTER TABLE %s FORCE ROW LEVEL SECURITY"

@@ -104,7 +104,8 @@ func (s *RLSTestSuite) TestEnableGatesRoleDrop() {
 		require.NoError(t, p.DB(ctxA, false).Find(&own).Error)
 		require.Len(t, own, 1)
 
-		// Claim-less context (system path) keeps match-all semantics.
+		// Claim-less context (system path) keeps match-all semantics —
+		// no tenancy in context must not error and must not filter.
 		var all []rlsWidget
 		require.NoError(t, p.DB(context.Background(), false).Find(&all).Error)
 		require.Len(t, all, 1)

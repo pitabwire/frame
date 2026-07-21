@@ -67,6 +67,32 @@ out of the box), and binds per-request tenancy state to each database
 connection through pgxpool acquire/release hooks. Application code
 never references `tenant_id` or `partition_id` directly.
 
+### When enforcement applies
+
+| Context | Behaviour |
+|---------|-----------|
+| No / empty claims | No session scope, **no error** — all rows visible |
+| `Skip=true` / `WithSkipEnforcement` | Same as missing claims (explicit bypass) |
+| Claims with tenancy set | Session vars bound → RLS filters by default |
+
+So: **if tenancy is not in context, queries still work**. Filtering only
+runs when claims are present (and not skipped).
+
+Partition IDs must not contain `,` (CSV encoding in the session GUC).
+Policies use both `USING` and `WITH CHECK` (reads and writes).
+
+### Connection poolers (PgBouncer)
+
+Session GUCs require **session affinity** to the Postgres backend:
+
+- Direct Postgres: supported
+- PgBouncer `pool_mode=session`: supported
+- PgBouncer `pool_mode=transaction` / `statement`: **not safe** with
+  this provider
+
+Keep Frame's pool small (`DATABASE_MAX_OPEN_CONNECTIONS`) and let
+PgBouncer cap total backends when used.
+
 ### Wiring
 
 ```go
@@ -92,7 +118,7 @@ got := tenancy.ClaimsFromContext(ctx)
 ctx = tenancy.WithExtraPartitions(ctx, "branch-2", "branch-3")
 
 // For job workers reconstructing claims from queue metadata, build
-// Claims explicitly and bind them:
+// Claims explicitly and bind them when you want RLS filtering:
 ctx = tenancy.WithClaims(ctx, &tenancy.Claims{
     TenantID:     "T1",
     PartitionIDs: []string{"P1"},
@@ -100,7 +126,8 @@ ctx = tenancy.WithClaims(ctx, &tenancy.Claims{
 })
 
 // For admin scripts or migrations that legitimately need full-table
-// access, bypass enforcement explicitly:
+// access, bypass enforcement explicitly (optional — missing claims
+// already do not filter):
 ctx = tenancy.WithSkipEnforcement(ctx)
 ```
 

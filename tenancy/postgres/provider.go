@@ -15,6 +15,17 @@ import (
 // Provider is the Postgres concrete tenancy.Provider. It installs RLS
 // policies during Migrate and binds per-request tenancy state via
 // pgxpool acquire/release hooks (no transactions required).
+//
+// Semantics (by design):
+//   - No claims / empty claims / Skip → do not scope the connection
+//     (empty session vars → policy allows all rows; no errors).
+//   - Claims with TenantID (and optional partitions) → bind session
+//     vars so RLS filters by default.
+//   - Every release clears session vars so a later scoped request
+//     cannot inherit another principal's scope.
+//
+// Connection poolers: session-scoped GUCs require session affinity
+// (direct Postgres or PgBouncer pool_mode=session). See docs/datastore.md.
 type Provider struct {
 	adapter dialect.DialectAdapter
 }
@@ -102,16 +113,22 @@ func (p *Provider) WireAdapter(adapter dialect.DialectAdapter) error {
 // the connection-acquire level, so no per-query GORM plugin is needed.
 func (*Provider) WireGorm(_ *gorm.DB) error { return nil }
 
-// beforeAcquire pulls the tenancy.Claims from ctx and pushes them onto
-// the pgx connection as session variables in a single round trip.
-// is_local=false means the vars persist for the conn's lifetime (not
-// just one tx); afterRelease resets them. If claims are empty or Skip
-// is set, no vars are pushed — the RLS policy's empty-match-all branch
-// applies.
+// beforeAcquire pulls tenancy.Claims from ctx.
+//
+//   - nil, empty, or Skip → clear session vars and return (no error,
+//     no filtering — empty GUCs are match-all in app_tenancy_matches).
+//   - otherwise → bind tenant + partitions so RLS filters.
+//
+// Clearing on the unscoped path (instead of a pure no-op) prevents a
+// previous principal's scope from surviving if release cleanup was
+// skipped; behaviour for callers without claims stays "see everything".
 func (*Provider) beforeAcquire(ctx context.Context, conn dialect.DialectConn) error {
 	claims := tenancy.ClaimsFromContext(ctx)
 	if claims == nil || claims.IsEmpty() || claims.Skip {
-		return nil
+		return clearSession(ctx, conn)
+	}
+	if err := validatePartitionIDs(claims.PartitionIDs); err != nil {
+		return err
 	}
 	if err := conn.Exec(
 		ctx,
@@ -124,16 +141,35 @@ func (*Provider) beforeAcquire(ctx context.Context, conn dialect.DialectConn) er
 	return nil
 }
 
-// afterRelease resets the session vars in a single round trip so
-// subsequent acquires that don't carry tenancy claims see clean
-// defaults. Setting to empty string is equivalent to RESET for the
-// RLS policy's empty-match-all branch, and it lets us combine both
-// resets into one statement.
+// afterRelease resets the session vars so subsequent acquires that
+// don't carry tenancy claims see clean defaults (match-all).
 func (*Provider) afterRelease(ctx context.Context, conn dialect.DialectConn) error {
+	return clearSession(ctx, conn)
+}
+
+func clearSession(ctx context.Context, conn dialect.DialectConn) error {
 	return conn.Exec(
 		ctx,
 		"SELECT set_config('app.tenant_id', '', false), set_config('app.partition_id', '', false)",
 	)
+}
+
+// validatePartitionIDs rejects IDs that would corrupt the CSV encoding
+// used by app_tenancy_matches (string_to_array on ','). Only applied
+// when claims are present and being bound.
+func validatePartitionIDs(ids []string) error {
+	for _, id := range ids {
+		if id == "" {
+			continue
+		}
+		if strings.Contains(id, ",") {
+			return fmt.Errorf(
+				"tenancy/postgres: partition id %q contains ',' which is reserved as the list separator",
+				id,
+			)
+		}
+	}
+	return nil
 }
 
 var _ tenancy.Provider = (*Provider)(nil)

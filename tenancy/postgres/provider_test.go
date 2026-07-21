@@ -118,6 +118,28 @@ func grantRLSEntitiesAccess(t *testing.T, db *gorm.DB) {
 	).Error)
 }
 
+func seedTwoTenants(t *testing.T, db *gorm.DB) {
+	t.Helper()
+	require.NoError(t, db.Create(&rlsEntity{
+		BaseModel: data.BaseModel{TenantID: "T1", PartitionID: "P1"},
+		Name:      "row-T1",
+	}).Error)
+	require.NoError(t, db.Create(&rlsEntity{
+		BaseModel: data.BaseModel{TenantID: "T2", PartitionID: "P2"},
+		Name:      "row-T2",
+	}).Error)
+}
+
+func installRLS(ctx context.Context, t *testing.T, env *providerEnv) {
+	t.Helper()
+	require.NoError(t, env.adminDB.AutoMigrate(&rlsEntity{}))
+	require.NoError(t, env.adminDB.Exec("TRUNCATE rls_entities").Error)
+	require.NoError(t, env.prov.Install(ctx, env.adminDB, []tenancy.ModelInfo{
+		{Table: "rls_entities", TenantColumn: "tenant_id", PartitionColumn: "partition_id"},
+	}))
+	grantRLSEntitiesAccess(t, env.adminDB)
+}
+
 func (s *ProviderTestSuite) TestInstallIdempotent() {
 	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependencyOption) {
 		ctx := t.Context()
@@ -153,23 +175,8 @@ func (s *ProviderTestSuite) TestRLSFiltersAcrossTenants() {
 
 		env := s.providerSetup(ctx, t, dsn)
 		defer env.cleanup()
-
-		require.NoError(t, env.adminDB.AutoMigrate(&rlsEntity{}))
-		require.NoError(t, env.adminDB.Exec("TRUNCATE rls_entities").Error)
-		require.NoError(t, env.prov.Install(ctx, env.adminDB, []tenancy.ModelInfo{
-			{Table: "rls_entities", TenantColumn: "tenant_id", PartitionColumn: "partition_id"},
-		}))
-		grantRLSEntitiesAccess(t, env.adminDB)
-
-		// Seed across two tenants using the admin DB (no claims, RLS bypassed by superuser).
-		require.NoError(t, env.adminDB.Create(&rlsEntity{
-			BaseModel: data.BaseModel{TenantID: "T1", PartitionID: "P1"},
-			Name:      "row-T1",
-		}).Error)
-		require.NoError(t, env.adminDB.Create(&rlsEntity{
-			BaseModel: data.BaseModel{TenantID: "T2", PartitionID: "P2"},
-			Name:      "row-T2",
-		}).Error)
+		installRLS(ctx, t, env)
+		seedTwoTenants(t, env.adminDB)
 
 		// Bind T1 claims and query via the scoped DB — only T1's row should be visible.
 		ctxT1 := tenancy.WithClaims(ctx, &tenancy.Claims{
@@ -200,13 +207,7 @@ func (s *ProviderTestSuite) TestRLSMultiPartitionPrincipal() {
 
 		env := s.providerSetup(ctx, t, dsn)
 		defer env.cleanup()
-
-		require.NoError(t, env.adminDB.AutoMigrate(&rlsEntity{}))
-		require.NoError(t, env.adminDB.Exec("TRUNCATE rls_entities").Error)
-		require.NoError(t, env.prov.Install(ctx, env.adminDB, []tenancy.ModelInfo{
-			{Table: "rls_entities", TenantColumn: "tenant_id", PartitionColumn: "partition_id"},
-		}))
-		grantRLSEntitiesAccess(t, env.adminDB)
+		installRLS(ctx, t, env)
 
 		// Seed three rows for tenant T1 across three partitions.
 		for _, p := range []string{"P1", "P2", "P3"} {
@@ -229,6 +230,23 @@ func (s *ProviderTestSuite) TestRLSMultiPartitionPrincipal() {
 	})
 }
 
+func (s *ProviderTestSuite) TestNoClaimsDoesNotErrorAndSeesAll() {
+	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependencyOption) {
+		ctx := t.Context()
+		dsn := dep.ByIsDatabase(ctx).GetDS(ctx).String()
+
+		env := s.providerSetup(ctx, t, dsn)
+		defer env.cleanup()
+		installRLS(ctx, t, env)
+		seedTwoTenants(t, env.adminDB)
+
+		// Missing claims: no error, no filtering.
+		var got []rlsEntity
+		require.NoError(t, env.scopedDB.WithContext(ctx).Find(&got).Error)
+		require.Len(t, got, 2)
+	})
+}
+
 func (s *ProviderTestSuite) TestSkipClaimsBypassEnforcement() {
 	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependencyOption) {
 		ctx := t.Context()
@@ -236,25 +254,11 @@ func (s *ProviderTestSuite) TestSkipClaimsBypassEnforcement() {
 
 		env := s.providerSetup(ctx, t, dsn)
 		defer env.cleanup()
-
-		require.NoError(t, env.adminDB.AutoMigrate(&rlsEntity{}))
-		require.NoError(t, env.adminDB.Exec("TRUNCATE rls_entities").Error)
-		require.NoError(t, env.prov.Install(ctx, env.adminDB, []tenancy.ModelInfo{
-			{Table: "rls_entities", TenantColumn: "tenant_id", PartitionColumn: "partition_id"},
-		}))
-		grantRLSEntitiesAccess(t, env.adminDB)
-
-		require.NoError(t, env.adminDB.Create(&rlsEntity{
-			BaseModel: data.BaseModel{TenantID: "T1", PartitionID: "P1"},
-			Name:      "row-T1",
-		}).Error)
-		require.NoError(t, env.adminDB.Create(&rlsEntity{
-			BaseModel: data.BaseModel{TenantID: "T2", PartitionID: "P2"},
-			Name:      "row-T2",
-		}).Error)
+		installRLS(ctx, t, env)
+		seedTwoTenants(t, env.adminDB)
 
 		// Skip=true should make every row visible (provider does not
-		// push any session vars; RLS empty-match-all branch fires).
+		// push any session scope; empty-match-all branch fires).
 		ctxSkip := tenancy.WithClaims(ctx, &tenancy.Claims{
 			TenantID:     "anything",
 			PartitionIDs: []string{"anything"},
@@ -273,12 +277,8 @@ func (s *ProviderTestSuite) TestAfterReleaseResetsSessionState() {
 
 		env := s.providerSetup(ctx, t, dsn)
 		defer env.cleanup()
-
-		require.NoError(t, env.adminDB.AutoMigrate(&rlsEntity{}))
-		require.NoError(t, env.prov.Install(ctx, env.adminDB, []tenancy.ModelInfo{
-			{Table: "rls_entities", TenantColumn: "tenant_id", PartitionColumn: "partition_id"},
-		}))
-		grantRLSEntitiesAccess(t, env.adminDB)
+		installRLS(ctx, t, env)
+		seedTwoTenants(t, env.adminDB)
 
 		// Bind claims and issue a no-op query so the hook fires.
 		ctxScoped := tenancy.WithClaims(ctx, &tenancy.Claims{
@@ -287,15 +287,135 @@ func (s *ProviderTestSuite) TestAfterReleaseResetsSessionState() {
 		})
 		require.NoError(t, env.scopedDB.WithContext(ctxScoped).Exec("SELECT 1").Error)
 
-		// Subsequent acquire with no claims must see empty session vars.
-		// current_setting(..., true) returns NULL when the var has never
-		// been set on this conn (after RESET), which is the post-release
-		// invariant we want to assert. COALESCE keeps the column non-NULL
-		// so a plain string scan works.
+		// Subsequent acquire with no claims must see empty session vars
+		// and therefore match-all again.
 		var got string
 		require.NoError(t, env.scopedDB.Raw(
 			`SELECT COALESCE(current_setting('app.tenant_id', true), '')`,
 		).Scan(&got).Error)
 		require.Empty(t, got, "session state must be reset by AfterRelease")
+
+		var rows []rlsEntity
+		require.NoError(t, env.scopedDB.WithContext(ctx).Find(&rows).Error)
+		require.Len(t, rows, 2, "unscoped after release must see all rows")
+	})
+}
+
+func (s *ProviderTestSuite) TestNoCrossTenantLeakOnConnReuse() {
+	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependencyOption) {
+		ctx := t.Context()
+		dsn := dep.ByIsDatabase(ctx).GetDS(ctx).String()
+
+		env := s.providerSetup(ctx, t, dsn)
+		defer env.cleanup()
+		installRLS(ctx, t, env)
+		seedTwoTenants(t, env.adminDB)
+
+		// Rapidly alternate tenants on the same pool — each acquire must
+		// fully replace session state.
+		for i := range 20 {
+			var cctx context.Context
+			wantName := "row-T1"
+			if i%2 == 0 {
+				cctx = tenancy.WithClaims(ctx, &tenancy.Claims{TenantID: "T1", PartitionIDs: []string{"P1"}})
+			} else {
+				cctx = tenancy.WithClaims(ctx, &tenancy.Claims{TenantID: "T2", PartitionIDs: []string{"P2"}})
+				wantName = "row-T2"
+			}
+			var got []rlsEntity
+			require.NoError(t, env.scopedDB.WithContext(cctx).Find(&got).Error)
+			require.Len(t, got, 1, "iteration %d", i)
+			require.Equal(t, wantName, got[0].Name)
+		}
+	})
+}
+
+func (s *ProviderTestSuite) TestWithCheckRejectsCrossTenantInsert() {
+	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependencyOption) {
+		ctx := t.Context()
+		dsn := dep.ByIsDatabase(ctx).GetDS(ctx).String()
+
+		env := s.providerSetup(ctx, t, dsn)
+		defer env.cleanup()
+		installRLS(ctx, t, env)
+
+		ctxT1 := tenancy.WithClaims(ctx, &tenancy.Claims{
+			TenantID:     "T1",
+			PartitionIDs: []string{"P1"},
+		})
+
+		// Insert for own tenant/partition succeeds.
+		require.NoError(t, env.scopedDB.WithContext(ctxT1).Create(&rlsEntity{
+			BaseModel: data.BaseModel{TenantID: "T1", PartitionID: "P1"},
+			Name:      "own-row",
+		}).Error)
+
+		// Insert for another tenant must fail WITH CHECK.
+		err := env.scopedDB.WithContext(ctxT1).Create(&rlsEntity{
+			BaseModel: data.BaseModel{TenantID: "T2", PartitionID: "P2"},
+			Name:      "cross-tenant",
+		}).Error
+		require.Error(t, err, "WITH CHECK must reject cross-tenant insert")
+
+		// Insert for own tenant but wrong partition must fail.
+		err = env.scopedDB.WithContext(ctxT1).Create(&rlsEntity{
+			BaseModel: data.BaseModel{TenantID: "T1", PartitionID: "P9"},
+			Name:      "wrong-partition",
+		}).Error
+		require.Error(t, err, "WITH CHECK must reject out-of-partition insert")
+	})
+}
+
+func (s *ProviderTestSuite) TestCommaInPartitionIDRejectsAcquire() {
+	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependencyOption) {
+		ctx := t.Context()
+		dsn := dep.ByIsDatabase(ctx).GetDS(ctx).String()
+
+		env := s.providerSetup(ctx, t, dsn)
+		defer env.cleanup()
+		installRLS(ctx, t, env)
+
+		ctxBad := tenancy.WithClaims(ctx, &tenancy.Claims{
+			TenantID:     "T1",
+			PartitionIDs: []string{"P1,P2"},
+		})
+		var got []rlsEntity
+		err := env.scopedDB.WithContext(ctxBad).Find(&got).Error
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "contains ','")
+	})
+}
+
+func (s *ProviderTestSuite) TestTransactionKeepsConsistentScope() {
+	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependencyOption) {
+		ctx := t.Context()
+		dsn := dep.ByIsDatabase(ctx).GetDS(ctx).String()
+
+		env := s.providerSetup(ctx, t, dsn)
+		defer env.cleanup()
+		installRLS(ctx, t, env)
+		seedTwoTenants(t, env.adminDB)
+
+		ctxT1 := tenancy.WithClaims(ctx, &tenancy.Claims{
+			TenantID:     "T1",
+			PartitionIDs: []string{"P1"},
+		})
+
+		err := env.scopedDB.WithContext(ctxT1).Transaction(func(tx *gorm.DB) error {
+			var got []rlsEntity
+			if err := tx.Find(&got).Error; err != nil {
+				return err
+			}
+			require.Len(t, got, 1)
+			require.Equal(t, "row-T1", got[0].Name)
+
+			got = nil
+			if err := tx.Find(&got).Error; err != nil {
+				return err
+			}
+			require.Len(t, got, 1)
+			return nil
+		})
+		require.NoError(t, err)
 	})
 }

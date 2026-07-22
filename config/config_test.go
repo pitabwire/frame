@@ -200,6 +200,38 @@ func (s *ConfigSuite) TestHTTPClientSettings() {
 	s.Equal(90*time.Second, cfg.GetHTTPClientIdleTimeout())
 }
 
+func (s *ConfigSuite) TestQueuePushHandlerTimeout_NoTimeoutByDefault() {
+	cfg := &ConfigurationDefault{}
+	s.Equal(time.Duration(0), cfg.GetQueuePushHandlerTimeout())
+	s.Equal(time.Duration(0), DefaultQueuePushHandlerTimeout())
+
+	cfg.QueuePushHandlerTimeout = "0s"
+	s.Equal(time.Duration(0), cfg.GetQueuePushHandlerTimeout())
+
+	cfg.QueuePushHandlerTimeout = "2m"
+	s.Equal(2*time.Minute, cfg.GetQueuePushHandlerTimeout())
+
+	cfg.QueuePushHandlerTimeout = "not-a-duration"
+	s.Equal(time.Duration(0), cfg.GetQueuePushHandlerTimeout())
+}
+
+func (s *ConfigSuite) TestHTTPWriteTimeout_UnboundedWhenQueuePushHasNoTimeout() {
+	// Default push handler timeout is 0 → write timeout must not force 30s
+	// and kill long queue consumers mid-handler.
+	cfg := &ConfigurationDefault{}
+	s.Equal(time.Duration(0), cfg.HTTPWriteTimeout())
+
+	// Explicit write timeout still wins when set.
+	cfg.HTTPServerWriteTimeout = "45s"
+	s.Equal(45*time.Second, cfg.HTTPWriteTimeout())
+
+	// Positive push handler timeout restores normal write-timeout defaults.
+	cfg = &ConfigurationDefault{
+		QueuePushHandlerTimeout: "25s",
+	}
+	s.Equal(30*time.Second, cfg.HTTPWriteTimeout())
+}
+
 func (s *ConfigSuite) TestDatabaseAndEventConfig() {
 	cfg := &ConfigurationDefault{
 		DatabasePrimaryURL:                   []string{"postgres://primary"},

@@ -331,7 +331,11 @@ type ConfigurationDefault struct {
 	QueuePushTrustMetadata  bool   `envDefault:"false"         env:"FRAME_QUEUE_PUSH_TRUST_METADATA" yaml:"queue_push_trust_metadata"`
 	QueuePushAckPoison      bool   `envDefault:"false"         env:"FRAME_QUEUE_PUSH_ACK_POISON" yaml:"queue_push_ack_poison"`
 	QueuePushMaxBodyBytes   int64  `envDefault:"1048576"       env:"FRAME_QUEUE_PUSH_MAX_BODY_BYTES" yaml:"queue_push_max_body_bytes"`
-	QueuePushHandlerTimeout string `envDefault:"25s"           env:"FRAME_QUEUE_PUSH_HANDLER_TIMEOUT" yaml:"queue_push_handler_timeout"`
+	// QueuePushHandlerTimeout bounds the push delivery context. Default "0s"
+	// means no timeout: queue work runs until the handler returns. Outbound
+	// peer I/O is still bounded by HTTP/Connect client timeouts. Set a positive
+	// duration only when a hard push SLA is required.
+	QueuePushHandlerTimeout string `envDefault:"0s"            env:"FRAME_QUEUE_PUSH_HANDLER_TIMEOUT" yaml:"queue_push_handler_timeout"`
 
 	oidcMap OIDCMap `env:"-" yaml:"-"`
 }
@@ -405,13 +409,17 @@ func (c *ConfigurationDefault) GetQueuePushAckPoison() bool {
 
 const (
 	defaultQueuePushMaxBodyBytes = 1 << 20 // 1 MiB
-	defaultQueuePushHandlerTO    = 25 * time.Second
+	// defaultQueuePushHandlerTO is zero: queue consumers must not invent
+	// artificial per-message deadlines. Long-running event handlers complete
+	// under their own client timeouts (Keto, Hydra, DB), not a 25s push cap.
+	defaultQueuePushHandlerTO = time.Duration(0)
 )
 
 // DefaultQueuePushMaxBodyBytes is the default max request body for push handlers.
 func DefaultQueuePushMaxBodyBytes() int64 { return defaultQueuePushMaxBodyBytes }
 
-// DefaultQueuePushHandlerTimeout is the default per-request handler timeout for push.
+// DefaultQueuePushHandlerTimeout is the default per-request handler timeout for
+// push. Zero means no timeout (queue work runs to completion).
 func DefaultQueuePushHandlerTimeout() time.Duration { return defaultQueuePushHandlerTO }
 
 func (c *ConfigurationDefault) GetQueuePushMaxBodyBytes() int64 {
@@ -421,9 +429,19 @@ func (c *ConfigurationDefault) GetQueuePushMaxBodyBytes() int64 {
 	return c.QueuePushMaxBodyBytes
 }
 
+// GetQueuePushHandlerTimeout returns the push handler deadline.
+// "0", "0s", empty, or invalid values mean no timeout (duration 0).
+// Positive durations are honored as-is.
 func (c *ConfigurationDefault) GetQueuePushHandlerTimeout() time.Duration {
-	d, err := time.ParseDuration(c.QueuePushHandlerTimeout)
-	if err != nil || d <= 0 {
+	raw := strings.TrimSpace(c.QueuePushHandlerTimeout)
+	if raw == "" {
+		return defaultQueuePushHandlerTO
+	}
+	d, err := time.ParseDuration(raw)
+	if err != nil {
+		return defaultQueuePushHandlerTO
+	}
+	if d < 0 {
 		return defaultQueuePushHandlerTO
 	}
 	return d
@@ -667,6 +685,15 @@ func (c *ConfigurationDefault) HTTPReadHeaderTimeout() time.Duration {
 }
 
 func (c *ConfigurationDefault) HTTPWriteTimeout() time.Duration {
+	// Queue push with no handler timeout must not race http.Server.WriteTimeout
+	// (default 30s). Unbounded push work completes under peer client timeouts.
+	// Explicit HTTP_SERVER_WRITE_TIMEOUT still wins when set to a non-default value.
+	if c.GetQueuePushHandlerTimeout() <= 0 {
+		raw := strings.TrimSpace(c.HTTPServerWriteTimeout)
+		if raw == "" || raw == "30s" {
+			return 0
+		}
+	}
 	return parseDurationOrDefault(c.HTTPServerWriteTimeout, defaultHTTPWriteTimeout)
 }
 

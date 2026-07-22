@@ -19,16 +19,17 @@ const DefaultBasePath = "/_frame/queue"
 
 const (
 	defaultMaxBodyShift = 20 // 1 << 20 = 1 MiB
-	defaultHandlerSec   = 25
 )
 
 // Config configures the multiplexing push handler.
 type Config struct {
-	BasePath       string
-	Auth           Authenticator
-	TrustClaims    bool
-	AckPoison      bool
-	MaxBodyBytes   int64
+	BasePath     string
+	Auth         Authenticator
+	TrustClaims  bool
+	AckPoison    bool
+	MaxBodyBytes int64
+	// HandlerTimeout bounds the delivery context. Zero means no timeout —
+	// queue consumers process until the handler returns (background work).
 	HandlerTimeout time.Duration
 	// ProtocolOverride forces a codec; empty uses subscriber URL query or auto.
 	ProtocolOverride string
@@ -49,9 +50,8 @@ func NewHandler(lookup queue.PushLookup, cfg Config) *Handler {
 	if cfg.MaxBodyBytes <= 0 {
 		cfg.MaxBodyBytes = 1 << defaultMaxBodyShift
 	}
-	if cfg.HandlerTimeout <= 0 {
-		cfg.HandlerTimeout = time.Duration(defaultHandlerSec) * time.Second
-	}
+	// HandlerTimeout <= 0 is intentional: requestContext leaves the context
+	// unbounded so long-running event handlers are not killed mid-flight.
 	if cfg.Auth == nil {
 		cfg.Auth = NoneAuth{}
 	}

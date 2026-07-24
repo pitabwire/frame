@@ -25,6 +25,10 @@ type OIDCConfig struct {
 	Issuers     []string
 	JWKSURL     string
 	JWKSRefresh time.Duration
+	// AllowedEmails restricts accepted principals when non-empty. Matched
+	// case-insensitively against the JWT email claim, then sub. Empty means
+	// no principal allowlist (signature + issuer + audience only).
+	AllowedEmails []string
 }
 
 // GoogleCloudTasksOIDCPreset returns defaults for Cloud Tasks OIDC tokens.
@@ -38,6 +42,22 @@ func GoogleCloudTasksOIDCPreset(audience string) OIDCConfig {
 		JWKSURL:     defaultGoogleJWKSURL,
 		JWKSRefresh: defaultJWKSRefresh,
 	}
+}
+
+// ParseCommaSeparatedList splits a comma-separated config string, trims entries,
+// and drops empties. Used for OIDC issuers and allowed emails.
+func ParseCommaSeparatedList(raw string) []string {
+	if strings.TrimSpace(raw) == "" {
+		return nil
+	}
+	parts := strings.Split(raw, ",")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if p = strings.TrimSpace(p); p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
 }
 
 // OIDCAuth validates Google OIDC bearer tokens for Cloud Tasks push.
@@ -110,7 +130,48 @@ func (o *OIDCAuth) Authenticate(r *http.Request) error {
 	if !audienceMatch(claims["aud"], audience) {
 		return fmt.Errorf("%w: audience mismatch", queue.ErrForbidden)
 	}
+
+	if len(o.cfg.AllowedEmails) > 0 {
+		email, sub := principalFromClaims(claims)
+		if !principalAllowed(email, sub, o.cfg.AllowedEmails) {
+			return fmt.Errorf("%w: service account not allowed", queue.ErrForbidden)
+		}
+	}
 	return nil
+}
+
+func principalFromClaims(claims jwt.MapClaims) (string, string) {
+	var email, sub string
+	if v, ok := claims["email"].(string); ok {
+		email = strings.TrimSpace(v)
+	}
+	if v, ok := claims["sub"].(string); ok {
+		sub = strings.TrimSpace(v)
+	}
+	return email, sub
+}
+
+// principalAllowed reports whether email or sub matches an allowlist entry
+// (case-insensitive). Empty allowlist is treated as unrestricted by the caller.
+func principalAllowed(email, sub string, allowed []string) bool {
+	if len(allowed) == 0 {
+		return true
+	}
+	email = strings.ToLower(email)
+	sub = strings.ToLower(sub)
+	for _, a := range allowed {
+		want := strings.ToLower(strings.TrimSpace(a))
+		if want == "" {
+			continue
+		}
+		if email != "" && email == want {
+			return true
+		}
+		if sub != "" && sub == want {
+			return true
+		}
+	}
+	return false
 }
 
 func issuerAllowed(iss string, allowed []string) bool {

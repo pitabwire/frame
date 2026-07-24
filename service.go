@@ -525,21 +525,14 @@ func (s *Service) buildPushAuthenticator(
 }
 
 func (s *Service) buildPushOIDCAuth(ctx context.Context, pushCfg config.ConfigurationQueuePush) push.Authenticator {
-	issuers := []string{}
-	if raw := strings.TrimSpace(pushCfg.GetQueuePushOIDCIssuers()); raw != "" {
-		for _, part := range strings.Split(raw, ",") {
-			if part = strings.TrimSpace(part); part != "" {
-				issuers = append(issuers, part)
-			}
-		}
-	}
 	oidcCfg := push.GoogleCloudTasksOIDCPreset(pushCfg.GetQueuePushOIDCAudience())
-	if len(issuers) > 0 {
+	if issuers := push.ParseCommaSeparatedList(pushCfg.GetQueuePushOIDCIssuers()); len(issuers) > 0 {
 		oidcCfg.Issuers = issuers
 	}
 	if jwks := pushCfg.GetQueuePushOIDCJWKSURL(); jwks != "" {
 		oidcCfg.JWKSURL = jwks
 	}
+	oidcCfg.AllowedEmails = push.ParseCommaSeparatedList(pushCfg.GetQueuePushOIDCAllowedEmails())
 	auth := push.NewOIDCAuth(ctx, oidcCfg)
 	s.AddCleanupMethod(func(_ context.Context) { auth.Stop() })
 	return auth

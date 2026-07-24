@@ -35,7 +35,7 @@ func (m DeliveryMode) String() string {
 type PublishKind int
 
 const (
-	// PublishKindGoCloud uses gocloud OpenTopic (mem://, nats://).
+	// PublishKindGoCloud uses gocloud OpenTopic (mem://, nats://, gcppubsub://).
 	PublishKindGoCloud PublishKind = iota
 	// PublishKindCloudEventsHTTP POSTs CloudEvents binary mode over HTTP.
 	PublishKindCloudEventsHTTP
@@ -67,7 +67,9 @@ func ClassifySubscriberURL(queueURL string) (DeliveryMode, url.Values, error) {
 		return 0, nil, fmt.Errorf("queue: invalid subscriber URL: %w", err)
 	}
 	switch strings.ToLower(u.Scheme) {
-	case "mem", "nats":
+	case "mem", "nats", schemeGCPPubSub:
+		// gcppubsub:// is Go Cloud pull (StreamingPull). A GCP-side push
+		// subscription that POSTs to this service uses push:// instead.
 		return DeliveryModePull, u.Query(), nil
 	case schemePush, "http", "https":
 		return DeliveryModePush, u.Query(), nil
@@ -86,7 +88,7 @@ func ClassifyPublisherURL(queueURL string) (PublishKind, error) {
 		return 0, fmt.Errorf("queue: invalid publisher URL: %w", err)
 	}
 	switch strings.ToLower(u.Scheme) {
-	case "mem", "nats":
+	case "mem", "nats", schemeGCPPubSub:
 		return PublishKindGoCloud, nil
 	case schemeCEHTTP, schemeCEHTTPS:
 		return PublishKindCloudEventsHTTP, nil

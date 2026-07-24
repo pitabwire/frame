@@ -28,18 +28,35 @@ _ = svc.QueueManager().Publish(ctx, "orders", OrderCreated{ID: "123"})
 |--------|------|----------|
 | `mem://` | pull | In-memory gocloud |
 | `nats://` | pull | NATS / JetStream via `natspubsub` |
+| `gcppubsub://` | pull | GCP Pub/Sub StreamingPull via gocloud (`gcppubsub` driver; ADC or emulator) |
 | `push://{ref}` | push | HTTP only; demux by **registration reference** |
 | `http(s)://…` | push | Completes latent stub; demux still by registration ref |
 
 Query on push URLs: `protocol=auto|raw|cloudevents|cloudtasks` (default `auto`).
 
+**GCP Pub/Sub push vs pull:** `gcppubsub://…/subscriptions/…` is always **pull** inside Frame (the process opens a subscription and receives). If you configure a *GCP-side* push subscription that POSTs to this service, register the subscriber as `push://{ref}` and point the push endpoint at `https://…/_frame/queue/{ref}` — do not use `gcppubsub://` for that path (no gocloud receive loop; HTTP demux only).
+
 ### Publish
 
 | Scheme | Behavior |
 |--------|----------|
-| `mem://` / `nats://` | gocloud OpenTopic |
+| `mem://` / `nats://` / `gcppubsub://` | gocloud OpenTopic |
 | `ce+https://host/path?type=…&source=…` | CloudEvents 1.0 **binary** HTTP POST (`ce+` stripped on the wire) |
 | `cloudtasks:///projects/{p}/locations/{l}/queues/{q}?url=…` | Cloud Tasks CreateTask REST |
+
+GCP topic URL forms (gocloud):
+
+```text
+gcppubsub://projects/{project}/topics/{topic}
+gcppubsub://{project}/{topic}
+```
+
+GCP subscription URL forms (pull):
+
+```text
+gcppubsub://projects/{project}/subscriptions/{sub}
+gcppubsub://{project}/{sub}
+```
 
 Canonical Cloud Tasks form (empty host):
 
@@ -77,7 +94,7 @@ spec:
 ## Cloud Tasks
 
 1. Publisher URL with ADC credentials on the service (CreateTask API OAuth2).
-2. Subscriber `push://orders` with `FRAME_QUEUE_PUSH_AUTH=oidc`.
+2. Subscriber `push://orders` with `FRAME_QUEUE_PUSH_AUTH=oidc` (optionally pin the invoker SA via `FRAME_QUEUE_PUSH_OIDC_ALLOWED_EMAILS`).
 3. Task `url` = `https://…/_frame/queue/orders`.
 4. Configure queue **maxAttempts** + **DLQ** (non-2xx always retry until maxAttempts).
 
@@ -105,14 +122,25 @@ Permanent poison: return `fmt.Errorf("%w: …", queue.ErrNotRetryable)`. Optiona
 | `FRAME_QUEUE_PUSH_REQUIRE_AUTH` | inherits `RUN_SERVICE_SECURELY` | fail start if push + auth=none |
 | `FRAME_QUEUE_PUSH_BEARER_TOKEN` | | bearer secret |
 | `FRAME_QUEUE_PUSH_OIDC_AUDIENCE` | request URL | JWT audience |
+| `FRAME_QUEUE_PUSH_OIDC_ISSUERS` | Google accounts | comma-separated issuers |
+| `FRAME_QUEUE_PUSH_OIDC_JWKS_URL` | Google certs | JWKS URL |
+| `FRAME_QUEUE_PUSH_OIDC_ALLOWED_EMAILS` | empty | comma-separated SA emails / `sub` allowlist (empty = no principal filter) |
 | `FRAME_QUEUE_PUSH_TRUST_METADATA` | `false` | allow claim-shaped metadata from push |
 | `FRAME_QUEUE_PUSH_MAX_BODY_BYTES` | `1048576` | body limit |
-| `FRAME_QUEUE_PUSH_HANDLER_TIMEOUT` | `25s` | keep below HTTP write timeout (30s) |
+| `FRAME_QUEUE_PUSH_HANDLER_TIMEOUT` | `0s` (no timeout) | optional hard push SLA |
 | `FRAME_QUEUE_PUSH_BASE_PATH` | `/_frame/queue` | reserved mux path |
 
 By default, push **strips** claim keys (`sub`, `tenant_id`, `roles`, …) so handlers cannot be fooled by forged headers.
 
-OIDC for Cloud Tasks uses a **dedicated** Google JWKS validator — not the app Hydra JWT authenticator.
+OIDC for Cloud Tasks / GCP push uses a **dedicated** Google JWKS validator — not the app Hydra JWT authenticator. When `FRAME_QUEUE_PUSH_OIDC_ALLOWED_EMAILS` is set, the JWT `email` claim (then `sub`) must match one entry case-insensitively; mismatch → **403**.
+
+Example (Cloud Tasks or Pub/Sub push from a known SA):
+
+```bash
+FRAME_QUEUE_PUSH_AUTH=oidc
+FRAME_QUEUE_PUSH_OIDC_AUDIENCE=https://orders.example.com/_frame/queue/orders
+FRAME_QUEUE_PUSH_OIDC_ALLOWED_EMAILS=tasks-invoker@my-proj.iam.gserviceaccount.com,pubsub-push@my-proj.iam.gserviceaccount.com
+```
 
 ## Subscriber handlers
 

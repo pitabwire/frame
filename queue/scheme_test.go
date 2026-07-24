@@ -16,6 +16,8 @@ func TestClassifySubscriberURL(t *testing.T) {
 	}{
 		{"mem://events", queue.DeliveryModePull, true},
 		{"nats://localhost/s", queue.DeliveryModePull, true},
+		{"gcppubsub://projects/p/subscriptions/s", queue.DeliveryModePull, true},
+		{"gcppubsub://myproject/mysub", queue.DeliveryModePull, true},
 		{"push://orders", queue.DeliveryModePush, true},
 		{"https://svc/_frame/queue/orders", queue.DeliveryModePush, true},
 		{"http://localhost:8080/x", queue.DeliveryModePush, true},
@@ -46,6 +48,8 @@ func TestClassifyPublisherURL(t *testing.T) {
 	}{
 		{"mem://events", queue.PublishKindGoCloud, true},
 		{"nats://localhost/s", queue.PublishKindGoCloud, true},
+		{"gcppubsub://projects/p/topics/t", queue.PublishKindGoCloud, true},
+		{"gcppubsub://myproject/mytopic", queue.PublishKindGoCloud, true},
 		{"ce+https://broker/path?type=t", queue.PublishKindCloudEventsHTTP, true},
 		{"ce+http://localhost/x?type=t", queue.PublishKindCloudEventsHTTP, true},
 		{"cloudtasks:///projects/p/locations/l/queues/q?url=https://x/", queue.PublishKindCloudTasks, true},

@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	_ "github.com/pitabwire/natspubsub" // required for NATS pubsub driver registration
+	_ "gocloud.dev/pubsub/gcppubsub"    // required for GCP Pub/Sub driver registration
 	_ "gocloud.dev/pubsub/mempubsub"    // required for in-memory pubsub driver registration
 
 	"github.com/pitabwire/frame/v2/data"

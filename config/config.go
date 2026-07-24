@@ -328,9 +328,13 @@ type ConfigurationDefault struct {
 	QueuePushOIDCAudience   string `envDefault:""              env:"FRAME_QUEUE_PUSH_OIDC_AUDIENCE" yaml:"queue_push_oidc_audience"`
 	QueuePushOIDCIssuers    string `envDefault:""              env:"FRAME_QUEUE_PUSH_OIDC_ISSUERS" yaml:"queue_push_oidc_issuers"`
 	QueuePushOIDCJWKSURL    string `envDefault:"https://www.googleapis.com/oauth2/v3/certs" env:"FRAME_QUEUE_PUSH_OIDC_JWKS_URL" yaml:"queue_push_oidc_jwks_url"`
-	QueuePushTrustMetadata  bool   `envDefault:"false"         env:"FRAME_QUEUE_PUSH_TRUST_METADATA" yaml:"queue_push_trust_metadata"`
-	QueuePushAckPoison      bool   `envDefault:"false"         env:"FRAME_QUEUE_PUSH_ACK_POISON" yaml:"queue_push_ack_poison"`
-	QueuePushMaxBodyBytes   int64  `envDefault:"1048576"       env:"FRAME_QUEUE_PUSH_MAX_BODY_BYTES" yaml:"queue_push_max_body_bytes"`
+	// QueuePushOIDCAllowedEmails is a comma-separated allowlist of service-account
+	// emails (or sub claims) accepted for push OIDC. Empty means no principal
+	// restriction (signature + issuer + audience only).
+	QueuePushOIDCAllowedEmails string `envDefault:"" env:"FRAME_QUEUE_PUSH_OIDC_ALLOWED_EMAILS" yaml:"queue_push_oidc_allowed_emails"`
+	QueuePushTrustMetadata     bool   `envDefault:"false" env:"FRAME_QUEUE_PUSH_TRUST_METADATA" yaml:"queue_push_trust_metadata"`
+	QueuePushAckPoison         bool   `envDefault:"false"         env:"FRAME_QUEUE_PUSH_ACK_POISON" yaml:"queue_push_ack_poison"`
+	QueuePushMaxBodyBytes      int64  `envDefault:"1048576"       env:"FRAME_QUEUE_PUSH_MAX_BODY_BYTES" yaml:"queue_push_max_body_bytes"`
 	// QueuePushHandlerTimeout bounds the push delivery context. Default "0s"
 	// means no timeout: queue work runs until the handler returns. Outbound
 	// peer I/O is still bounded by HTTP/Connect client timeouts. Set a positive
@@ -349,6 +353,7 @@ type ConfigurationQueuePush interface {
 	GetQueuePushOIDCAudience() string
 	GetQueuePushOIDCIssuers() string
 	GetQueuePushOIDCJWKSURL() string
+	GetQueuePushOIDCAllowedEmails() string
 	GetQueuePushTrustMetadata() bool
 	GetQueuePushAckPoison() bool
 	GetQueuePushMaxBodyBytes() int64
@@ -397,6 +402,10 @@ func (c *ConfigurationDefault) GetQueuePushOIDCJWKSURL() string {
 		return "https://www.googleapis.com/oauth2/v3/certs"
 	}
 	return c.QueuePushOIDCJWKSURL
+}
+
+func (c *ConfigurationDefault) GetQueuePushOIDCAllowedEmails() string {
+	return c.QueuePushOIDCAllowedEmails
 }
 
 func (c *ConfigurationDefault) GetQueuePushTrustMetadata() bool {

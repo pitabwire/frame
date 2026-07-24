@@ -55,7 +55,7 @@ func (GCPPubSub) Decode(r *http.Request) (*Inbound, error) {
 		return nil, fmt.Errorf("%w: read body: %w", errDecodeSentinel, err)
 	}
 	var env gcpPushEnvelope
-	if err := json.Unmarshal(raw, &env); err != nil {
+	if err = json.Unmarshal(raw, &env); err != nil {
 		return nil, fmt.Errorf("%w: not a gcp pubsub push envelope: %w", errDecodeSentinel, err)
 	}
 	if env.Message.MessageID == "" && env.Message.Data == "" && env.Subscription == "" {

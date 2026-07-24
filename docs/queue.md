@@ -91,6 +91,31 @@ spec:
     uri: http://orders.default.svc.cluster.local/_frame/queue/orders
 ```
 
+## GCP Pub/Sub (Cloud Run)
+
+Reliable path: **publish to a topic via gocloud**, **receive via HTTP push** into the Frame demux.
+
+| Side | Env | Example |
+|------|-----|---------|
+| Name / demux ref | `EVENTS_QUEUE_NAME` | `identity-profile-events` |
+| Publish (topic) | `EVENTS_QUEUE_PUBLISH_URL` | `gcppubsub://my-project/identity-profile-events` |
+| Subscribe (HTTP) | `EVENTS_QUEUE_SUBSCRIBE_URL` | `push://identity-profile-events` |
+| Fallback both | `EVENTS_QUEUE_URL` | used when publish/subscribe overrides are empty |
+
+1. Create a Pub/Sub topic (and optional regional `message_storage_policy`).
+2. Create a **push** subscription with endpoint  
+   `https://{service}/_frame/queue/{EVENTS_QUEUE_NAME}`  
+   and OIDC (`FRAME_QUEUE_PUSH_AUTH=oidc`).
+3. Set `EVENTS_QUEUE_PUBLISH_URL` to the topic URL and `EVENTS_QUEUE_SUBSCRIBE_URL` to `push://{name}`.
+4. Do **not** use `gcppubsub://…/subscriptions/…` when the GCP subscription is push — that would open a StreamingPull loop instead of the HTTP handler.
+
+```go
+// setupEventsQueue (automatic with WithRegisterEvents) uses:
+//   publisher  = GetEventsQueuePublishURL()  // gcppubsub://…
+//   subscriber = GetEventsQueueSubscribeURL() // push://…
+//   handlers   = events.Manager.Handler()
+```
+
 ## Cloud Tasks
 
 1. Publisher URL with ADC credentials on the service (CreateTask API OAuth2).

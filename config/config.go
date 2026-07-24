@@ -319,6 +319,12 @@ type ConfigurationDefault struct {
 
 	EventsQueueName string `envDefault:"frame.events.internal_._queue"       env:"EVENTS_QUEUE_NAME" yaml:"events_queue_name"`
 	EventsQueueURL  string `envDefault:"mem://frame.events.internal_._queue" env:"EVENTS_QUEUE_URL"  yaml:"events_queue_url"`
+	// EventsQueuePublishURL overrides the publisher URL when set (e.g. gcppubsub://project/topic).
+	// Empty falls back to EventsQueueURL so local mem:// setups stay single-URL.
+	EventsQueuePublishURL string `envDefault:"" env:"EVENTS_QUEUE_PUBLISH_URL" yaml:"events_queue_publish_url"`
+	// EventsQueueSubscribeURL overrides the subscriber URL when set (e.g. push://ref for
+	// GCP Pub/Sub push → POST /_frame/queue/{ref}). Empty falls back to EventsQueueURL.
+	EventsQueueSubscribeURL string `envDefault:"" env:"EVENTS_QUEUE_SUBSCRIBE_URL" yaml:"events_queue_subscribe_url"`
 
 	// Queue push (HTTP multiplexing) settings
 	QueuePushBasePath       string `envDefault:"/_frame/queue" env:"FRAME_QUEUE_PUSH_BASE_PATH" yaml:"queue_push_base_path"`
@@ -1115,6 +1121,10 @@ func (c *ConfigurationDefault) GetDatabaseSlowQueryLogThreshold() time.Duration 
 type ConfigurationEvents interface {
 	GetEventsQueueName() string
 	GetEventsQueueURL() string
+	// GetEventsQueuePublishURL is the publisher URL (may differ from subscribe for GCP push).
+	GetEventsQueuePublishURL() string
+	// GetEventsQueueSubscribeURL is the subscriber URL (push:// for HTTP demux, gcppubsub for pull).
+	GetEventsQueueSubscribeURL() string
 }
 
 var _ ConfigurationEvents = new(ConfigurationDefault)
@@ -1133,6 +1143,20 @@ func (c *ConfigurationDefault) GetEventsQueueURL() string {
 	}
 
 	return c.EventsQueueURL
+}
+
+func (c *ConfigurationDefault) GetEventsQueuePublishURL() string {
+	if strings.TrimSpace(c.EventsQueuePublishURL) != "" {
+		return c.EventsQueuePublishURL
+	}
+	return c.GetEventsQueueURL()
+}
+
+func (c *ConfigurationDefault) GetEventsQueueSubscribeURL() string {
+	if strings.TrimSpace(c.EventsQueueSubscribeURL) != "" {
+		return c.EventsQueueSubscribeURL
+	}
+	return c.GetEventsQueueURL()
 }
 
 type ConfigurationTLS interface {

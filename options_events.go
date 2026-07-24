@@ -29,6 +29,12 @@ func (s *Service) EventsManager() events.Manager {
 
 // setupEventsQueue sets up the default events queue publisher and subscriber
 // if an event registry is configured for the service.
+//
+// Publish and subscribe URLs may differ (GCP Pub/Sub push pattern):
+//   - EVENTS_QUEUE_PUBLISH_URL=gcppubsub://project/topic
+//   - EVENTS_QUEUE_SUBSCRIBE_URL=push://ref  (GCP push → POST /_frame/queue/{ref})
+//
+// When the override envs are empty, both sides use EVENTS_QUEUE_URL.
 func (s *Service) setupEventsQueue(ctx context.Context) error {
 	cfg, ok := s.Config().(config.ConfigurationEvents)
 	if !ok {
@@ -39,17 +45,19 @@ func (s *Service) setupEventsQueue(ctx context.Context) error {
 
 	s.eventsManager = events.NewManager(ctx, s.QueueManager(), cfg)
 
+	ref := cfg.GetEventsQueueName()
+	pubURL := cfg.GetEventsQueuePublishURL()
+	subURL := cfg.GetEventsQueueSubscribeURL()
+
 	eventsQueueSubscriberOpt := WithRegisterSubscriber(
-		cfg.GetEventsQueueName(),
-		cfg.GetEventsQueueURL(),
+		ref,
+		subURL,
 		s.eventsManager.Handler(),
 	)
-	eventsQueueSubscriberOpt(ctx, s) // This registers the subscriber
+	eventsQueueSubscriberOpt(ctx, s)
 
-	eventsQueuePublisherOpt := WithRegisterPublisher(cfg.GetEventsQueueName(), cfg.GetEventsQueueURL())
-	eventsQueuePublisherOpt(ctx, s) // This registers the publisher
+	eventsQueuePublisherOpt := WithRegisterPublisher(ref, pubURL)
+	eventsQueuePublisherOpt(ctx, s)
 
-	// Note: Actual initialization of this specific subscriber and publisher
-	// will happen in initializeRegisteredPublishers and initializeRegisteredSubscribers.
 	return nil
 }

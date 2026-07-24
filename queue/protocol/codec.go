@@ -24,6 +24,7 @@ const (
 	ProtocolRaw         = "raw"
 	ProtocolCloudEvents = "cloudevents"
 	ProtocolCloudTasks  = "cloudtasks"
+	ProtocolGCPPubSub   = "gcppubsub"
 )
 
 // DefaultCodecs returns the ordered codec list for protocol=auto.
@@ -31,6 +32,7 @@ func DefaultCodecs() []Codec {
 	return []Codec{
 		CloudTasks{},
 		CloudEvents{},
+		GCPPubSub{},
 		Raw{},
 	}
 }
@@ -49,6 +51,8 @@ func SelectCodec(protocol string, r *http.Request, codecs []Codec) Codec {
 		return CloudEvents{}
 	case ProtocolCloudTasks:
 		return CloudTasks{}
+	case ProtocolGCPPubSub:
+		return GCPPubSub{}
 	default:
 		// auto
 		for _, c := range codecs {

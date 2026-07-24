@@ -26,8 +26,9 @@ type OIDCConfig struct {
 	JWKSURL     string
 	JWKSRefresh time.Duration
 	// AllowedEmails restricts accepted principals when non-empty. Matched
-	// case-insensitively against the JWT email claim, then sub. Empty means
-	// no principal allowlist (signature + issuer + audience only).
+	// case-insensitively against both the JWT email claim and the sub claim
+	// (either may authorize). Empty means no principal allowlist
+	// (signature + issuer + audience only).
 	AllowedEmails []string
 }
 
@@ -134,7 +135,7 @@ func (o *OIDCAuth) Authenticate(r *http.Request) error {
 	if len(o.cfg.AllowedEmails) > 0 {
 		email, sub := principalFromClaims(claims)
 		if !principalAllowed(email, sub, o.cfg.AllowedEmails) {
-			return fmt.Errorf("%w: service account not allowed", queue.ErrForbidden)
+			return fmt.Errorf("%w: service account not allowed (email/sub)", queue.ErrForbidden)
 		}
 	}
 	return nil
@@ -145,25 +146,32 @@ func principalFromClaims(claims jwt.MapClaims) (string, string) {
 	if v, ok := claims["email"].(string); ok {
 		email = strings.TrimSpace(v)
 	}
+	// sub may be a string (SA email or subject id). Non-string values are ignored.
 	if v, ok := claims["sub"].(string); ok {
 		sub = strings.TrimSpace(v)
 	}
 	return email, sub
 }
 
-// principalAllowed reports whether email or sub matches an allowlist entry
-// (case-insensitive). Empty allowlist is treated as unrestricted by the caller.
+// principalAllowed reports whether the JWT principal is on the allowlist.
+// Both email and sub are always considered (case-insensitive): a match on
+// either claim is sufficient. Empty allowlist is unrestricted (caller should
+// skip calling this when the list is empty).
 func principalAllowed(email, sub string, allowed []string) bool {
 	if len(allowed) == 0 {
 		return true
 	}
-	email = strings.ToLower(email)
-	sub = strings.ToLower(sub)
+	email = strings.ToLower(strings.TrimSpace(email))
+	sub = strings.ToLower(strings.TrimSpace(sub))
+	if email == "" && sub == "" {
+		return false
+	}
 	for _, a := range allowed {
 		want := strings.ToLower(strings.TrimSpace(a))
 		if want == "" {
 			continue
 		}
+		// Check both claims for every allowlist entry.
 		if email != "" && email == want {
 			return true
 		}

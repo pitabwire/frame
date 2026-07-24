@@ -28,7 +28,7 @@ _ = svc.QueueManager().Publish(ctx, "orders", OrderCreated{ID: "123"})
 |--------|------|----------|
 | `mem://` | pull | In-memory gocloud |
 | `nats://` | pull | NATS / JetStream via `natspubsub` |
-| `gcppubsub://` | pull | GCP Pub/Sub StreamingPull via gocloud (`gcppubsub` driver; ADC or emulator) |
+| `gcppubsub://` | pull | GCP Pub/Sub StreamingPull via gocloud (`gcppubsub` driver; ADC or emulator). Frame blank-imports the driver by default; production apps should also blank-import `_ "gocloud.dev/pubsub/gcppubsub"` in `main` so GCP environments keep the driver linked. |
 | `push://{ref}` | push | HTTP only; demux by **registration reference** |
 | `http(s)://…` | push | Completes latent stub; demux still by registration ref |
 
@@ -157,7 +157,7 @@ Permanent poison: return `fmt.Errorf("%w: …", queue.ErrNotRetryable)`. Optiona
 
 By default, push **strips** claim keys (`sub`, `tenant_id`, `roles`, …) so handlers cannot be fooled by forged headers.
 
-OIDC for Cloud Tasks / GCP push uses a **dedicated** Google JWKS validator — not the app Hydra JWT authenticator. When `FRAME_QUEUE_PUSH_OIDC_ALLOWED_EMAILS` is set, the JWT `email` claim (then `sub`) must match one entry case-insensitively; mismatch → **403**.
+OIDC for Cloud Tasks / GCP push uses a **dedicated** Google JWKS validator — not the app Hydra JWT authenticator. When `FRAME_QUEUE_PUSH_OIDC_ALLOWED_EMAILS` is set, **both** JWT `email` and `sub` are checked against the allowlist (case-insensitive); a match on **either** claim is enough. Mismatch on both → **403**.
 
 Example (Cloud Tasks or Pub/Sub push from a known SA):
 

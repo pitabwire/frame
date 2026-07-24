@@ -69,6 +69,22 @@ func TestPrincipalAllowed(t *testing.T) {
 			wantErr: nil,
 		},
 		{
+			// Both claims are always checked: a non-matching email must not
+			// block an allowlisted sub.
+			name:    "sub match when email present but different",
+			allowed: []string{"tasks@proj.iam.gserviceaccount.com"},
+			email:   "other@proj.iam.gserviceaccount.com",
+			sub:     "tasks@proj.iam.gserviceaccount.com",
+			wantErr: nil,
+		},
+		{
+			name:    "email match when sub present but different",
+			allowed: []string{"tasks@proj.iam.gserviceaccount.com"},
+			email:   "tasks@proj.iam.gserviceaccount.com",
+			sub:     "not-the-sa-email",
+			wantErr: nil,
+		},
+		{
 			name:    "not allowed",
 			allowed: []string{"tasks@proj.iam.gserviceaccount.com"},
 			email:   "evil@proj.iam.gserviceaccount.com",

@@ -36,7 +36,8 @@ func WithExamplePlugin() frame.Option {
 | `AddSubscriberStartup` | After publishers | Register subscribers or workers |
 | `AddPreStartMethod` | Before serving requests | Warm caches, load config, migrations |
 | `AddCleanupMethod` | On shutdown | Close pools, flush metrics, stop goroutines |
-| `AddHealthCheck` | Periodic health probe | DB, cache, external dependencies |
+| `AddHealthCheck` | Readiness probe (`/readyz`, `/healthz`) | DB, cache, external dependencies |
+| `AddLivenessCheck` | Liveness probe (`/livez`) only | Deadlock / non-recoverable process faults (rare) |
 
 ## How Options Compose
 

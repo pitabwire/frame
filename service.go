@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -76,10 +77,17 @@ type Service struct {
 	driverMu sync.Mutex
 	driver   server.Driver
 
-	healthCheckers  []Checker
-	healthCheckPath string
-	startup         func(ctx context.Context, s *Service)
-	cleanup         func(ctx context.Context)
+	// Kubernetes health probes: /livez, /readyz, /healthz
+	// https://kubernetes.io/docs/reference/using-api/health-checks/
+	healthCheckers   []Checker // readiness / healthz dependency checks
+	livenessCheckers []Checker // optional process-level /livez checks
+	healthCheckPath  string    // /healthz (or custom alias)
+	livenessPath     string    // /livez
+	readinessPath    string    // /readyz
+	terminating      atomic.Bool
+
+	startup func(ctx context.Context, s *Service)
+	cleanup func(ctx context.Context)
 
 	configuration any
 
@@ -348,16 +356,6 @@ func (s *Service) AddCleanupMethod(f func(ctx context.Context)) {
 	s.cleanup = func(ctx context.Context) { f(ctx); old(ctx) }
 }
 
-// AddHealthCheck Adds health checks that are run periodically to ascertain the system is ok
-// The arguments are implementations of the checker interface and should work with just about
-// any system that is given to them.
-func (s *Service) AddHealthCheck(checker Checker) {
-	if s.healthCheckers == nil {
-		s.healthCheckers = []Checker{}
-	}
-	s.healthCheckers = append(s.healthCheckers, checker)
-}
-
 // Run keeps the service useful by handling incoming requests.
 func (s *Service) Run(ctx context.Context, address string) error {
 	s.startedAt = time.Now()
@@ -398,6 +396,9 @@ func (s *Service) Run(ctx context.Context, address string) error {
 
 	select {
 	case <-ctx.Done():
+		// Fail readiness immediately so load balancers stop sending traffic
+		// while liveness stays healthy for graceful drain.
+		s.markTerminating()
 		s.stopWithTimeout(ctx)
 		return ctx.Err()
 	case err0 := <-s.errorChannel:
@@ -414,6 +415,7 @@ func (s *Service) Run(ctx context.Context, address string) error {
 			s.Log(ctx).
 				WithError(err0).
 				Error("system exit in error")
+			s.markTerminating()
 			s.stopWithTimeout(ctx)
 		} else {
 			s.Log(ctx).Debug("system exit")
@@ -469,7 +471,7 @@ func (s *Service) createAndConfigureMux(ctx context.Context) *http.ServeMux {
 
 	s.registerDebugEndpoints(mux)
 	s.registerOPLEndpoints(mux)
-	mux.HandleFunc(s.healthCheckPath, s.HandleHealth)
+	s.registerHealthEndpoints(mux)
 	s.registerOpenAPIRoutes(mux)
 	s.registerOAuth2ClientJWKSRoute(mux)
 	s.registerQueuePushHandler(ctx, mux)
@@ -714,11 +716,6 @@ func (s *Service) startServerDriver(ctx context.Context, httpPort string) error 
 
 // initServer starts the Service. It initializes server drivers.
 func (s *Service) initServer(ctx context.Context, httpPort string) error {
-	if s.healthCheckPath == "" ||
-		(s.healthCheckPath == "/" && s.handler != nil) {
-		s.healthCheckPath = "/healthz"
-	}
-
 	httpPort = s.determineHTTPPort(httpPort)
 
 	s.startOnce.Do(func() {
@@ -798,6 +795,10 @@ func (s *Service) startProfilerIfEnabled(ctx context.Context) error {
 // Stop Used to gracefully run clean up methods ensuring all requests that
 // were being handled are completed well without interuptions.
 func (s *Service) Stop(ctx context.Context) {
+	// Fail /readyz before tearing down listeners so traffic is drained first.
+	// /livez stays healthy until the process exits.
+	s.markTerminating()
+
 	if !s.stopMutex.TryLock() {
 		return
 	}

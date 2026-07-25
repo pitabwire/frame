@@ -54,7 +54,8 @@ This ensures in-memory queue topics exist before subscribers are started.
 - `AddPublisherStartup(func(ctx context.Context, s *Service))`
 - `AddSubscriberStartup(func(ctx context.Context, s *Service))`
 - `AddCleanupMethod(func(ctx context.Context))`
-- `AddHealthCheck(checker Checker)`
+- `AddHealthCheck(checker Checker)` — readiness/dependency checks for `/readyz` and `/healthz`
+- `AddLivenessCheck(checker Checker)` — optional process-level checks for `/livez`
 - `GetStartupErrors() []error`
 
 ## Core Options
@@ -121,9 +122,39 @@ Service options are composable and can be applied at construction or later via `
 - `WorkManager() workerpool.Manager`
 - `HTTPClientManager() client.Manager`
 
-## Health Checks
+## Health Checks (Kubernetes probes)
 
-Health checks are registered using `AddHealthCheck`, and are served on `/healthz` by default.
+Frame always registers the three Kubernetes API health endpoints
+([docs](https://kubernetes.io/docs/reference/using-api/health-checks/)):
+
+| Path | Probe | Behaviour |
+| --- | --- | --- |
+| `/livez` | Liveness | Process is alive; restart only on non-recoverable faults. Does **not** check dependencies. Stays healthy during graceful shutdown. |
+| `/readyz` | Readiness | Ready to accept traffic. Fails until startup completes, while terminating, or when any readiness checker fails. |
+| `/healthz` | Deprecated | Same semantics as `/readyz`. Prefer `/livez` + `/readyz` for new deployments. |
+
+```go
+svc.AddHealthCheck(frame.CheckerFunc(func() error {
+    return db.PingContext(ctx) // readiness only
+}))
+
+// Rare: process-level liveness (never external deps)
+svc.AddLivenessCheck(frame.CheckerFunc(detectDeadlock))
+```
+
+Probe handlers return HTTP `200` when healthy and `503` when not. Machines
+should rely on the status code; the JSON body is for operators.
+
+Suggested Pod probe configuration:
+
+```yaml
+startupProbe:
+  httpGet: { path: /readyz, port: 8080 }
+livenessProbe:
+  httpGet: { path: /livez, port: 8080 }
+readinessProbe:
+  httpGet: { path: /readyz, port: 8080 }
+```
 
 ## Error Semantics
 

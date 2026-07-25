@@ -461,6 +461,7 @@ func (s *ServiceTestSuite) TestHealthCheckResponseBody() {
 			assert.Equal(t, http.StatusOK, resp.StatusCode)
 			assert.Equal(t, "my-svc", hr.Service)
 			assert.Equal(t, "1.2.3", hr.Version)
+			assert.Equal(t, "healthz", hr.Probe)
 			assert.Equal(t, "healthy", hr.Status)
 			assert.NotEmpty(t, hr.Uptime)
 			assert.Empty(t, hr.Checks)
@@ -487,11 +488,147 @@ func (s *ServiceTestSuite) TestHealthCheckResponseBody() {
 			var hr frame.HealthResponse
 			require.NoError(t, json.NewDecoder(resp.Body).Decode(&hr))
 
-			assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
+			assert.Equal(t, http.StatusServiceUnavailable, resp.StatusCode)
 			assert.Equal(t, "unhealthy", hr.Status)
 			require.Len(t, hr.Checks, 1)
 			assert.Equal(t, "unhealthy", hr.Checks[0].Status)
 			assert.Equal(t, "db down", hr.Checks[0].Error)
+		})
+	})
+}
+
+// TestKubernetesHealthProbes verifies /livez, /readyz, and /healthz semantics
+// per https://kubernetes.io/docs/reference/using-api/health-checks/
+func (s *ServiceTestSuite) TestKubernetesHealthProbes() {
+	s.WithTestDependancies(s.T(), func(t *testing.T, _ *definition.DependencyOption) {
+		failReady := frame.CheckerFunc(func() error {
+			return errors.New("db down")
+		})
+		failLive := frame.CheckerFunc(func() error {
+			return errors.New("deadlock")
+		})
+
+		decode := func(t *testing.T, resp *http.Response) frame.HealthResponse {
+			t.Helper()
+			var hr frame.HealthResponse
+			require.NoError(t, json.NewDecoder(resp.Body).Decode(&hr))
+			_ = resp.Body.Close()
+			return hr
+		}
+
+		t.Run("all three endpoints healthy after startup", func(t *testing.T) {
+			ctx, svc := frame.NewService(
+				frame.WithName("probe-svc"),
+				frametests.WithNoopDriver(),
+			)
+			defer svc.Stop(ctx)
+			require.NoError(t, svc.Run(ctx, ":0"))
+
+			ts := httptest.NewServer(svc.H())
+			defer ts.Close()
+
+			for _, path := range []string{"/livez", "/readyz", "/healthz"} {
+				resp, err := http.Get(ts.URL + path)
+				require.NoError(t, err)
+				hr := decode(t, resp)
+				assert.Equal(t, http.StatusOK, resp.StatusCode, path)
+				assert.Equal(t, "healthy", hr.Status, path)
+				assert.Equal(t, strings.TrimPrefix(path, "/"), hr.Probe, path)
+			}
+		})
+
+		t.Run("dependency failure fails readyz and healthz but not livez", func(t *testing.T) {
+			ctx, svc := frame.NewService(
+				frame.WithName("ready-fail"),
+				frametests.WithNoopDriver(),
+			)
+			defer svc.Stop(ctx)
+			svc.AddHealthCheck(failReady)
+			require.NoError(t, svc.Run(ctx, ":0"))
+
+			ts := httptest.NewServer(svc.H())
+			defer ts.Close()
+
+			live, liveErr := http.Get(ts.URL + "/livez")
+			require.NoError(t, liveErr)
+			assert.Equal(t, http.StatusOK, live.StatusCode)
+			assert.Equal(t, "healthy", decode(t, live).Status)
+
+			for _, path := range []string{"/readyz", "/healthz"} {
+				resp, getErr := http.Get(ts.URL + path)
+				require.NoError(t, getErr)
+				hr := decode(t, resp)
+				assert.Equal(t, http.StatusServiceUnavailable, resp.StatusCode, path)
+				assert.Equal(t, "unhealthy", hr.Status, path)
+			}
+		})
+
+		t.Run("liveness checker failure fails livez only", func(t *testing.T) {
+			ctx, svc := frame.NewService(
+				frame.WithName("live-fail"),
+				frametests.WithNoopDriver(),
+			)
+			defer svc.Stop(ctx)
+			svc.AddLivenessCheck(failLive)
+			require.NoError(t, svc.Run(ctx, ":0"))
+
+			ts := httptest.NewServer(svc.H())
+			defer ts.Close()
+
+			live, liveErr := http.Get(ts.URL + "/livez")
+			require.NoError(t, liveErr)
+			assert.Equal(t, http.StatusServiceUnavailable, live.StatusCode)
+			assert.Equal(t, "unhealthy", decode(t, live).Status)
+
+			ready, readyErr := http.Get(ts.URL + "/readyz")
+			require.NoError(t, readyErr)
+			assert.Equal(t, http.StatusOK, ready.StatusCode)
+			assert.Equal(t, "healthy", decode(t, ready).Status)
+		})
+
+		t.Run("readyz fails before startup completes", func(t *testing.T) {
+			_, svc := frame.NewService(frame.WithName("pre-start"))
+
+			w := httptest.NewRecorder()
+			svc.HandleReadyz(w, httptest.NewRequest(http.MethodGet, "/readyz", http.NoBody))
+			assert.Equal(t, http.StatusServiceUnavailable, w.Code)
+
+			var hr frame.HealthResponse
+			require.NoError(t, json.NewDecoder(w.Body).Decode(&hr))
+			assert.Equal(t, "unhealthy", hr.Status)
+			assert.Equal(t, "readyz", hr.Probe)
+
+			// Process is still live before startup finishes.
+			wLive := httptest.NewRecorder()
+			svc.HandleLivez(wLive, httptest.NewRequest(http.MethodGet, "/livez", http.NoBody))
+			assert.Equal(t, http.StatusOK, wLive.Code)
+		})
+
+		t.Run("terminating fails readyz but not livez", func(t *testing.T) {
+			ctx, svc := frame.NewService(
+				frame.WithName("drain"),
+				frametests.WithNoopDriver(),
+			)
+			require.NoError(t, svc.Run(ctx, ":0"))
+
+			ts := httptest.NewServer(svc.H())
+			defer ts.Close()
+
+			// Stop marks terminating; keep handler for probe inspection.
+			svc.Stop(ctx)
+
+			ready, err := http.Get(ts.URL + "/readyz")
+			require.NoError(t, err)
+			assert.Equal(t, http.StatusServiceUnavailable, ready.StatusCode)
+			hr := decode(t, ready)
+			assert.Equal(t, "unhealthy", hr.Status)
+			require.NotEmpty(t, hr.Checks)
+			assert.Equal(t, "shutdown", hr.Checks[0].Name)
+
+			live, err := http.Get(ts.URL + "/livez")
+			require.NoError(t, err)
+			assert.Equal(t, http.StatusOK, live.StatusCode)
+			assert.Equal(t, "healthy", decode(t, live).Status)
 		})
 	})
 }

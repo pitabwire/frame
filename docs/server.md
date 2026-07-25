@@ -37,8 +37,17 @@ _ = svc.Run(ctx, ":8080")
 
 ### Health Checks
 
-- Default path: `/healthz`
-- Register custom checks using `AddHealthCheck`.
+Kubernetes probe endpoints (always registered):
+
+| Path | Role |
+| --- | --- |
+| `/livez` | Liveness — process alive; no dependency checks |
+| `/readyz` | Readiness — startup complete, not terminating, dependency checks pass |
+| `/healthz` | Deprecated alias of readiness |
+
+- Register dependency checks with `AddHealthCheck` (used by `/readyz` and `/healthz`).
+- Optional process-level checks: `AddLivenessCheck` (used by `/livez` only).
+- Path overrides: `WithLivenessPath`, `WithReadinessPath`, `WithHealthCheckPath`.
 
 ## HTTP/2 Support
 

@@ -109,8 +109,28 @@ func (s *Service) debugQueues(w http.ResponseWriter, _ *http.Request) {
 }
 
 func (s *Service) debugHealth(w http.ResponseWriter, _ *http.Request) {
+	livePath := s.livenessPath
+	if livePath == "" {
+		livePath = DefaultLivenessPath
+	}
+	readyPath := s.readinessPath
+	if readyPath == "" {
+		readyPath = DefaultReadinessPath
+	}
+	healthzPath := s.healthCheckPath
+	if healthzPath == "" {
+		healthzPath = DefaultHealthzPath
+	}
 	resp := map[string]any{
-		"checks": len(s.healthCheckers),
+		"readiness_checks": len(s.healthCheckers),
+		"liveness_checks":  len(s.livenessCheckers),
+		"startup_complete": s.isStartupCompleted(),
+		"terminating":      s.isTerminating(),
+		"paths": map[string]string{
+			"livez":   livePath,
+			"readyz":  readyPath,
+			"healthz": healthzPath,
+		},
 	}
 	writeJSON(w, resp)
 }

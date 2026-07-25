@@ -155,7 +155,15 @@ Permanent poison: return `fmt.Errorf("%w: …", queue.ErrNotRetryable)`. Optiona
 | `FRAME_QUEUE_PUSH_HANDLER_TIMEOUT` | `0s` (no timeout) | optional hard push SLA |
 | `FRAME_QUEUE_PUSH_BASE_PATH` | `/_frame/queue` | reserved mux path |
 
-By default, push **strips** claim keys (`sub`, `tenant_id`, `roles`, …) so handlers cannot be fooled by forged headers.
+By default, push **strips** claim keys (`sub`, `tenant_id`, `partition_id`,
+`partition_ids`, `roles`, …) so handlers cannot be fooled by forged headers.
+
+Pull consumers default to **TrustAll** (legacy). Secure Profile uses
+`frame.WithQueueClaimTrust(protocol.TrustTenancyOnly)` so `roles` /
+`service_name` cannot force RLS Skip from metadata while still binding
+tenant/partition from trusted publishers. Residual risk: forged
+`tenant_id` on an open broker — use private mesh, per-tenant topics, or
+`TrustNone` + handler-side `tenancy.WithClaims`.
 
 OIDC for Cloud Tasks / GCP push uses a **dedicated** Google JWKS validator — not the app Hydra JWT authenticator. When `FRAME_QUEUE_PUSH_OIDC_ALLOWED_EMAILS` is set, **both** JWT `email` and `sub` are checked against the allowlist (case-insensitive); a match on **either** claim is enough. Mismatch on both → **403**.
 

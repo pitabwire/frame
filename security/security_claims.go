@@ -404,15 +404,43 @@ func partitionIDsForMetadata(all []string, primary string) string {
 	return strings.Join(extras, ",")
 }
 
+// ClaimsToContextOption configures ClaimsToContext.
+type ClaimsToContextOption func(*claimsToContextConfig)
+
+type claimsToContextConfig struct {
+	// HonorInternalSkip defaults true: internal role sets SkipTenancyChecksOnClaims.
+	// Secure Profile / queue TrustTenancyOnly pass WithoutInternalTenancySkip.
+	HonorInternalSkip bool
+}
+
+// WithoutInternalTenancySkip prevents roles=internal from setting
+// SkipTenancyChecksOnClaims (which maps to tenancy.Claims.Skip and
+// disables RLS under fail-open providers).
+func WithoutInternalTenancySkip() ClaimsToContextOption {
+	return func(c *claimsToContextConfig) {
+		c.HonorInternalSkip = false
+	}
+}
+
 // ClaimsToContext adds authentication claims to the current supplied context.
 // It normalizes identity first so sub === profile_id for all consumers.
-func (a *AuthenticationClaims) ClaimsToContext(ctx context.Context) context.Context {
+//
+// Default (no opts): internal system callers still set SkipTenancyChecksOnClaims
+// for back-compat. Pass WithoutInternalTenancySkip() for Secure Profile.
+func (a *AuthenticationClaims) ClaimsToContext(ctx context.Context, opts ...ClaimsToContextOption) context.Context {
+	cfg := claimsToContextConfig{HonorInternalSkip: true}
+	for _, o := range opts {
+		if o != nil {
+			o(&cfg)
+		}
+	}
+
 	if a != nil {
 		a.NormalizeIdentity()
 	}
 	ctx = context.WithValue(ctx, ctxKeyAuthenticationClaim, a)
 
-	if a != nil && a.isInternalSystem() {
+	if cfg.HonorInternalSkip && a != nil && a.isInternalSystem() {
 		ctx = SkipTenancyChecksOnClaims(ctx)
 	}
 

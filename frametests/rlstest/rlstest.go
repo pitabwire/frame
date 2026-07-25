@@ -56,10 +56,40 @@ type Provider struct {
 	enabled atomic.Bool
 }
 
-// New returns a fresh wrapper.
-func New() *Provider {
-	return &Provider{inner: tenpg.New()}
+// New returns a fresh wrapper. Optional tenpg.Option values configure the
+// inner Postgres provider (security mode, allowlist, etc.).
+func New(opts ...tenpg.Option) *Provider {
+	return &Provider{inner: tenpg.New(opts...)}
 }
+
+// Inner returns the wrapped Postgres provider for mode/allowlist injection.
+func (p *Provider) Inner() *tenpg.Provider { return p.inner }
+
+// SetSecurityMode implements tenancy.ModeAware when the inner does.
+func (p *Provider) SetSecurityMode(m tenancy.SecurityMode) {
+	p.inner.SetSecurityMode(m)
+}
+
+// SecurityMode implements tenancy.ModeAware.
+func (p *Provider) SecurityMode() tenancy.SecurityMode {
+	return p.inner.SecurityMode()
+}
+
+// SetAllowGlobalServices implements tenancy.AllowGlobalAware.
+func (p *Provider) SetAllowGlobalServices(names ...string) {
+	p.inner.SetAllowGlobalServices(names...)
+}
+
+// AllowGlobalServices implements tenancy.AllowGlobalAware.
+func (p *Provider) AllowGlobalServices() []string {
+	return p.inner.AllowGlobalServices()
+}
+
+// EnrollmentStrict forwards to the inner provider.
+func (p *Provider) EnrollmentStrict() bool { return p.inner.EnrollmentStrict() }
+
+// SetEnrollmentStrict forwards to the inner provider.
+func (p *Provider) SetEnrollmentStrict(strict bool) { p.inner.SetEnrollmentStrict(strict) }
 
 // Enable turns on the per-connection SET ROLE behaviour. Call after
 // migration (and after grants on the migrated tables) and before

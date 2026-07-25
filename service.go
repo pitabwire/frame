@@ -28,6 +28,7 @@ import (
 	"github.com/pitabwire/frame/v2/openapi"
 	"github.com/pitabwire/frame/v2/profiler"
 	"github.com/pitabwire/frame/v2/queue"
+	"github.com/pitabwire/frame/v2/queue/protocol"
 	"github.com/pitabwire/frame/v2/queue/push"
 	"github.com/pitabwire/frame/v2/security"
 	httpInterceptor "github.com/pitabwire/frame/v2/security/interceptors/httptor"
@@ -91,16 +92,25 @@ type Service struct {
 
 	configuration any
 
-	clientManager       client.Manager
-	workerPoolManager   workerpool.Manager
-	localizationManager localization.Manager
-	securityManager     security.Manager
-	cacheManager        cache.Manager
-	queueManager        queue.Manager
-	eventsManager       events.Manager
-	datastoreManager    datastore.Manager
-	tenancyProvider     tenancy.Provider
-	tenancyProviderSet  bool
+	clientManager         client.Manager
+	workerPoolManager     workerpool.Manager
+	localizationManager   localization.Manager
+	securityManager       security.Manager
+	cacheManager          cache.Manager
+	queueManager          queue.Manager
+	eventsManager         events.Manager
+	datastoreManager      datastore.Manager
+	tenancyProvider       tenancy.Provider
+	tenancyProviderSet    bool
+	tenancySecurityMode   tenancy.SecurityMode
+	allowGlobalServices   []string
+	legacyInternalSkip    bool // default true; Secure Profile false
+	legacyInternalSkipSet bool
+	queueClaimTrust       *int // nil = TrustAll; see queue/protocol
+	enrollmentStrict      bool
+	tenancyArmingCheck    *bool // nil = auto (on when mode secure)
+	claimsBinder          *tenancy.ClaimsBinder
+	cacheTenantPrefix     bool
 
 	telemetryManager telemetry.Manager
 
@@ -893,6 +903,11 @@ func (s *Service) initWorkersAndQueues(ctx context.Context, cfg *config.Configur
 	if ts, tsErr := googleCloudTasksTokenSource(ctx); tsErr == nil && ts != nil {
 		qmOpts = append(qmOpts, queue.WithTokenSource(ts))
 	}
+	// Secure Profile queue claim trust + internal-skip policy.
+	if s.queueClaimTrust != nil {
+		qmOpts = append(qmOpts, queue.WithClaimTrust(protocol.ClaimTrustLevel(*s.queueClaimTrust)))
+	}
+	qmOpts = append(qmOpts, queue.WithHonorInternalSkip(honorInternalSkip(s)))
 
 	s.queueManager = queue.NewQueueManager(ctx, s.workerPoolManager, qmOpts...)
 	s.AddCleanupMethod(func(cleanupCtx context.Context) {

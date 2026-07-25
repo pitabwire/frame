@@ -3,6 +3,9 @@ package frame
 import (
 	"context"
 
+	"github.com/pitabwire/util"
+	"gorm.io/gorm"
+
 	"github.com/pitabwire/frame/v2/config"
 	"github.com/pitabwire/frame/v2/datastore"
 	"github.com/pitabwire/frame/v2/datastore/manager"
@@ -110,17 +113,12 @@ func WithDatastore(opts ...pool.Option) Option {
 	return func(ctx context.Context, s *Service) {
 		enrichedOpts, doMigrate := datastoreOptsFromConfig(s, opts)
 
-		// Default to Postgres-RLS only if WithTenancyProvider was never
-		// called. WithTenancyProvider(nil) explicitly disables enforcement.
-		if !s.tenancyProviderSet {
-			s.tenancyProvider = tenpg.New()
-		}
-		// Forward the provider through to the pool so it wires hooks before
-		// any connection is opened. The pool also defaults internally, but
-		// passing it explicitly makes the wiring visible.
+		mode := resolveTenancySecurityMode(s)
+		s.tenancySecurityMode = mode
+		configureTenancyProvider(ctx, s, mode)
+
 		enrichedOpts = append(enrichedOpts, pool.WithTenancyProvider(s.tenancyProvider))
 
-		// Create the manager if it doesn't exist
 		dbManager := WithDatastoreManager()
 		dbManager(ctx, s)
 
@@ -128,12 +126,62 @@ func WithDatastore(opts ...pool.Option) Option {
 		dbConnectionOpts(ctx, s)
 
 		if doMigrate {
-			// minor feature to automatically make a pool that can be used for db migrations
 			enrichedOpts = append(enrichedOpts, pool.WithPreparedStatements(false))
 			migrationOpts := WithDatastoreConnectionWithOptions(datastore.DefaultMigrationPoolName, enrichedOpts...)
 			migrationOpts(ctx, s)
 		}
+
+		registerTenancyArmingCheck(s, mode)
 	}
+}
+
+func configureTenancyProvider(ctx context.Context, s *Service, mode tenancy.SecurityMode) {
+	// Default to Postgres-RLS only if WithTenancyProvider was never called.
+	// WithTenancyProvider(nil) explicitly disables enforcement.
+	if !s.tenancyProviderSet {
+		s.tenancyProvider = tenpg.New(
+			tenpg.WithSecurityMode(mode),
+			tenpg.WithAllowGlobalServices(s.allowGlobalServices...),
+			tenpg.WithEnrollmentStrict(s.enrollmentStrict),
+		)
+		return
+	}
+	if s.tenancyProvider == nil {
+		return
+	}
+	if ma, ok := s.tenancyProvider.(tenancy.ModeAware); ok {
+		ma.SetSecurityMode(mode)
+	} else {
+		util.Log(ctx).Warn("tenancy provider does not implement ModeAware; security mode ignored")
+	}
+	if aa, ok := s.tenancyProvider.(tenancy.AllowGlobalAware); ok {
+		aa.SetAllowGlobalServices(s.allowGlobalServices...)
+	}
+	if es, ok := s.tenancyProvider.(interface{ SetEnrollmentStrict(bool) }); ok {
+		es.SetEnrollmentStrict(s.enrollmentStrict)
+	}
+}
+
+func registerTenancyArmingCheck(s *Service, mode tenancy.SecurityMode) {
+	arming := mode.IsSecure()
+	if s.tenancyArmingCheck != nil {
+		arming = *s.tenancyArmingCheck
+	}
+	if !arming || s.tenancyProvider == nil {
+		return
+	}
+	s.AddHealthCheck(&tenpg.ArmingCheck{
+		DB: func(checkCtx context.Context) *gorm.DB {
+			if s.datastoreManager == nil {
+				return nil
+			}
+			p := s.datastoreManager.GetPool(checkCtx, datastore.DefaultPoolName)
+			if p == nil {
+				return nil
+			}
+			return p.DB(checkCtx, true)
+		},
+	})
 }
 
 // WithTenancyProvider overrides the default Postgres-RLS tenancy

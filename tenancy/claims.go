@@ -78,6 +78,16 @@ func (c *Claims) Normalize() *Claims {
 	}
 }
 
+// IsBindable reports whether claims can drive RLS session binding:
+// non-nil, not Skip, non-empty, and with a non-empty TenantID after trim.
+// Partition-only claims are not bindable under Secure Profile rules.
+func (c *Claims) IsBindable() bool {
+	if c == nil || c.Skip || c.IsEmpty() {
+		return false
+	}
+	return strings.TrimSpace(c.TenantID) != ""
+}
+
 // Validate reports whether the claims are safe to bind to a storage
 // session. Empty claims and Skip claims always pass (providers do not
 // bind session scope for them). Non-empty claims must have well-formed
@@ -221,31 +231,72 @@ func ClaimsFromContext(ctx context.Context) *Claims {
 	return nil
 }
 
+// ClaimsFromAuthOption configures ClaimsFromAuth. Options are applied
+// per call — no package globals.
+type ClaimsFromAuthOption func(*claimsFromAuthConfig)
+
+type claimsFromAuthConfig struct {
+	// HonorInternalSkip defaults true for back-compat when no options
+	// are passed. Secure Profile binders pass WithHonorInternalSkip(false).
+	HonorInternalSkip bool
+}
+
+// WithHonorInternalSkip controls whether roles=internal and
+// SkipTenancyChecksOnClaims map to Claims.Skip.
+func WithHonorInternalSkip(v bool) ClaimsFromAuthOption {
+	return func(c *claimsFromAuthConfig) {
+		c.HonorInternalSkip = v
+	}
+}
+
 // ClaimsFromAuth derives Claims from auth claims using the frame
 // default mapping:
 //
 //	TenantID     = auth.GetTenantID()
 //	PartitionIDs = auth.GetPartitionIDs()
 //	AccessID     = auth.GetAccessID()
-//	Skip         = auth.IsInternalSystem() || security.IsTenancyChecksOnClaimSkipped(ctx)
+//	Skip         = (optional) auth.IsInternalSystem() || IsTenancyChecksOnClaimSkipped
 //
 // The result is always normalized (trimmed, deduped partitions).
-// Not overridable — callers needing different semantics build Claims
-// directly and bind via WithClaims.
 //
-// Note: SkipTenancyChecksOnClaims is for internal/system bypass of
-// storage enforcement. Queue workers reconstruct claims from metadata
-// without that flag so RLS can filter on the published tenant.
-func ClaimsFromAuth(ctx context.Context, auth *security.AuthenticationClaims) *Claims {
+// Default (no opts): HonorInternalSkip=true for back-compat.
+// Secure Profile: ClaimsFromAuth(ctx, auth, WithHonorInternalSkip(false)).
+func ClaimsFromAuth(ctx context.Context, auth *security.AuthenticationClaims, opts ...ClaimsFromAuthOption) *Claims {
 	if auth == nil {
 		return nil
+	}
+	cfg := claimsFromAuthConfig{HonorInternalSkip: true}
+	for _, o := range opts {
+		if o != nil {
+			o(&cfg)
+		}
+	}
+	// Skip is driven by the context flag set in ClaimsToContext for internal
+	// callers (legacy). WithoutInternalTenancySkip leaves the flag unset so
+	// internal JWTs still bind RLS. HonorInternalSkip=false forces Skip off
+	// even if the flag was set (Secure Profile / TrustTenancyOnly).
+	skip := false
+	if cfg.HonorInternalSkip {
+		skip = security.IsTenancyChecksOnClaimSkipped(ctx)
 	}
 	return (&Claims{
 		TenantID:     auth.GetTenantID(),
 		PartitionIDs: auth.GetPartitionIDs(),
 		AccessID:     auth.GetAccessID(),
-		Skip:         auth.IsInternalSystem() || security.IsTenancyChecksOnClaimSkipped(ctx),
+		Skip:         skip,
 	}).Normalize()
+}
+
+// ClaimsFromContextWithOptions is like ClaimsFromContext but uses the
+// supplied ClaimsFromAuth options when falling back to auth claims.
+func ClaimsFromContextWithOptions(ctx context.Context, opts ...ClaimsFromAuthOption) *Claims {
+	if v, ok := ctx.Value(claimsKey{}).(*Claims); ok {
+		return v
+	}
+	if auth := security.ClaimsFromContext(ctx); auth != nil {
+		return ClaimsFromAuth(ctx, auth, opts...)
+	}
+	return nil
 }
 
 // WithExtraPartitions reads the current Claims from ctx, extends them

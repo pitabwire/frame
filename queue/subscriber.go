@@ -14,6 +14,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	"gocloud.dev/pubsub"
 
+	"github.com/pitabwire/frame/v2/queue/protocol"
 	"github.com/pitabwire/frame/v2/telemetry"
 	"github.com/pitabwire/frame/v2/workerpool"
 )
@@ -29,6 +30,12 @@ type subscriber struct {
 	url       string
 	handlers  []SubscribeWorker
 	mode      DeliveryMode
+
+	// claimTrust controls metadata claim reconstruction (default TrustAll).
+	claimTrust protocol.ClaimTrustLevel
+	// honorInternalSkip maps roles=internal to tenancy Skip (default true).
+	// Secure Profile sets false so queue metadata cannot disable RLS.
+	honorInternalSkip bool
 
 	// mu guards subscription lifecycle transitions (create/recreate/shutdown).
 	// Holding it serialises Stop() against listen()'s context-cancel path and
@@ -378,12 +385,14 @@ func newSubscriber(
 	reference string,
 	queueURL string,
 	handlers ...SubscribeWorker,
-) Subscriber {
+) *subscriber {
 	return &subscriber{
-		reference: reference,
-		url:       queueURL,
-		handlers:  handlers,
-		tracer:    telemetry.NewTracer("queue/subscriber/" + reference),
+		reference:         reference,
+		url:               queueURL,
+		handlers:          handlers,
+		claimTrust:        protocol.TrustAll,
+		honorInternalSkip: true,
+		tracer:            telemetry.NewTracer("queue/subscriber/" + reference),
 		metrics: &subscriberMetrics{
 			ActiveMessages: &atomic.Int64{},
 			LastActivity:   &atomic.Int64{},

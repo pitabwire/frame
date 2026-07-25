@@ -17,9 +17,23 @@ import (
 // transparently RLS-scoped without any additional wiring.
 //
 // Caller-supplied moreInterceptors are appended after this chain.
+// Uses a legacy claims binder (HonorInternalSkip=true). For Secure Profile
+// use DefaultListWithBinder.
 func DefaultList(
+	ctx context.Context,
+	authI security.Authenticator,
+	moreInterceptors ...connect.Interceptor,
+) ([]connect.Interceptor, error) {
+	return DefaultListWithBinder(ctx, authI, nil, moreInterceptors...)
+}
+
+// DefaultListWithBinder is DefaultList with an explicit tenancy.ClaimsBinder.
+// Nil binder keeps legacy behaviour. Secure Profile passes a binder with
+// HonorInternalSkip=false and RequireClaims=true.
+func DefaultListWithBinder(
 	_ context.Context,
 	authI security.Authenticator,
+	binder *tenancy.ClaimsBinder,
 	moreInterceptors ...connect.Interceptor,
 ) ([]connect.Interceptor, error) {
 	var interceptorList []connect.Interceptor
@@ -29,12 +43,17 @@ func DefaultList(
 		return nil, err
 	}
 
+	claimsIx := tenancy.NewClaimsInterceptor()
+	if binder != nil {
+		claimsIx = tenancy.NewClaimsInterceptorWithBinder(binder)
+	}
+
 	interceptorList = append(
 		interceptorList,
 		otelInterceptor,
 		NewValidationInterceptor(),
 		NewAuthInterceptor(authI),
-		tenancy.NewClaimsInterceptor(),
+		claimsIx,
 	)
 	interceptorList = append(interceptorList, moreInterceptors...)
 

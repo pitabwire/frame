@@ -12,7 +12,9 @@ import (
 	"gocloud.dev/pubsub"
 
 	"github.com/pitabwire/frame/v2/localization"
+	"github.com/pitabwire/frame/v2/queue/protocol"
 	"github.com/pitabwire/frame/v2/security"
+	"github.com/pitabwire/frame/v2/tenancy"
 	"github.com/pitabwire/frame/v2/workerpool"
 )
 
@@ -23,16 +25,22 @@ func (s *subscriber) processDelivery(ctx context.Context, metadata map[string]st
 		metadata = map[string]string{}
 	}
 
-	// Reconstruct auth claims from publisher metadata so storage-layer
-	// tenancy (RLS) can filter on the published tenant/partitions.
-	// Do not blanket-call SkipTenancyChecksOnClaims: that flag maps to
-	// tenancy.Claims.Skip and would disable RLS for every consumer.
-	// Internal/system roles still skip via ClaimsToContext / IsInternalSystem.
+	// Apply claim trust before reconstruction. TrustTenancyOnly strips roles so
+	// forged roles=internal cannot disable RLS. TrustAll is the legacy default.
+	md := protocol.ApplyClaimTrust(metadata, s.claimTrust)
+
+	// Reconstruct auth claims so storage-layer tenancy (RLS) can filter.
 	pCtx := ctx
-	authClaim := security.ClaimsFromMap(metadata)
+	authClaim := security.ClaimsFromMap(md)
 	if authClaim != nil {
-		pCtx = authClaim.ClaimsToContext(pCtx)
+		var ctcOpts []security.ClaimsToContextOption
+		if !s.honorInternalSkip {
+			ctcOpts = append(ctcOpts, security.WithoutInternalTenancySkip())
+		}
+		pCtx = authClaim.ClaimsToContext(pCtx, ctcOpts...)
 		pCtx = util.SetTenancy(pCtx, authClaim)
+		pCtx = tenancy.WithClaims(pCtx, tenancy.ClaimsFromAuth(pCtx, authClaim,
+			tenancy.WithHonorInternalSkip(s.honorInternalSkip)))
 	}
 
 	// Extract remote span context for linking, not parenting.

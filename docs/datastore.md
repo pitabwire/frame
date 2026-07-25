@@ -69,14 +69,29 @@ never references `tenant_id` or `partition_id` directly.
 
 ### When enforcement applies
 
-| Context | Behaviour |
-|---------|-----------|
-| No / empty claims | No session scope, **no error** — all rows visible |
-| `Skip=true` / `WithSkipEnforcement` | Same as missing claims (explicit bypass) |
-| Claims with tenancy set | Session vars bound → RLS filters by default |
+| Context | FailOpen (default) | Hybrid / FailClosed (Secure Profile) |
+|---------|--------------------|--------------------------------------|
+| No / empty claims | Match-all, no error | **Error** `ErrClaimsRequired` |
+| Bare `WithSkipEnforcement` | Match-all | **Error** `ErrSkipNotPermitted` |
+| Claims with `TenantID` | RLS filters | RLS filters |
+| Partition-only (no TenantID) | Unsafe bind | **Error** `ErrTenantIDRequired` |
+| `WithSystemPrincipal` + TenantID | Bind principal scope | Bind principal scope |
+| Framework `Migrate` | Match-all (elevated) | Match-all via **unforgeable** marker |
+| App `Reason:"migration"` alone | N/A | **Denied** without allowlist/marker |
 
-So: **if tenancy is not in context, queries still work**. Filtering only
-runs when claims are present (and not skipped).
+**Secure Profile** (recommended production):
+
+```go
+frame.WithSecureProfile(), // Hybrid + TrustTenancyOnly + no internal Skip + …
+// or piece-wise:
+frame.WithTenancySecurityMode(tenancy.ModeHybrid),
+frame.WithLegacyInternalSkip(false),
+```
+
+Env: `FRAME_TENANCY_SECURITY_MODE=hybrid|fail_closed|fail_open`.
+
+Stock default remains **fail-open** for compatibility. See
+[Transparent Multi-Tenant Isolation](superpowers/specs/2026-07-25-transparent-multi-tenant-isolation.md).
 
 Partition IDs must not contain `,` (CSV encoding in the session GUC).
 Call `claims.Validate()` (or let the provider do it on acquire) to catch
@@ -132,10 +147,13 @@ ctx = tenancy.WithClaims(ctx, &tenancy.Claims{
     AccessID:     "A1",
 })
 
-// For admin scripts or migrations that legitimately need full-table
-// access, bypass enforcement explicitly (optional — missing claims
-// already do not filter):
-ctx = tenancy.WithSkipEnforcement(ctx)
+// Migrations: Frame pool.Migrate elevates automatically (framework marker).
+// Do not use bare WithSkipEnforcement in Hybrid — use SystemPrincipal:
+ctx = tenancy.WithSystemPrincipal(ctx, tenancy.SystemPrincipal{
+    ServiceName: "my-svc", // must be on WithSystemPrincipalAllowGlobal
+    Reason:      "admin_export", // logs only
+    AllowGlobal: true,
+})
 ```
 
 ### Performance: prefer the interceptor over auth-claim fallback

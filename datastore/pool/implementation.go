@@ -164,7 +164,11 @@ func (s *pool) selectOne(p []*gorm.DB, idx *uint64) *gorm.DB {
 func (s *pool) CanMigrate() bool { return s.shouldDoMigrations }
 
 func (s *pool) SaveMigration(ctx context.Context, migrationPatches ...*migration.Patch) error {
-	executor := migration.NewMigrator(ctx, func(ctx context.Context) *gorm.DB { return s.DB(ctx, false) })
+	// Elevate before first DB acquire so Hybrid mode does not reject migrations.
+	ctx = tenancy.WithFrameworkMigration(ctx)
+	executor := migration.NewMigrator(ctx, func(jobCtx context.Context) *gorm.DB {
+		return s.DB(tenancy.EnsureFrameworkMigration(jobCtx, ctx), false)
+	})
 	for _, p := range migrationPatches {
 		if err := executor.SaveMigrationString(ctx, p.Name, p.Patch, p.RevertPatch); err != nil {
 			return err
@@ -177,10 +181,20 @@ func (s *pool) SaveMigration(ctx context.Context, migrationPatches ...*migration
 // Provider.Install on the tenancy-enrolled subset, and applies any
 // patch-based migrations from migrationsDirPath. Uses the adapter's
 // advisory lock to serialise concurrent boots.
+//
+// Always elevates via tenancy.WithFrameworkMigration before the first
+// DB acquire so ModeHybrid/ModeFailClosed do not break boot migrations.
+// Application code cannot forge this elevation with Reason:"migration".
 func (s *pool) Migrate(ctx context.Context, migrationsDirPath string, migrations ...any) error {
 	if migrationsDirPath == "" {
 		migrationsDirPath = "./migrations/0001"
 	}
+
+	// FIRST: framework migration elevation (unexported marker + AllowGlobal principal).
+	ctx = tenancy.WithFrameworkMigration(ctx)
+	util.Log(ctx).WithField("system_principal", "migration").
+		WithField("framework", true).
+		Debug("MigrateDatastore -- framework migration elevation")
 
 	db := s.DB(ctx, false)
 	if db == nil {
@@ -207,7 +221,10 @@ func (s *pool) Migrate(ctx context.Context, migrationsDirPath string, migrations
 		return err
 	}
 
-	executor := migration.NewMigrator(ctx, func(ctx context.Context) *gorm.DB { return s.DB(ctx, false) })
+	parent := ctx
+	executor := migration.NewMigrator(ctx, func(jobCtx context.Context) *gorm.DB {
+		return s.DB(tenancy.EnsureFrameworkMigration(jobCtx, parent), false)
+	})
 	if err := executor.ScanMigrationFiles(ctx, migrationsDirPath); err != nil {
 		util.Log(ctx).WithError(err).Error("MigrateDatastore -- Error scanning for new migrations")
 		return err
@@ -249,10 +266,16 @@ func (s *pool) applyAutoMigrations(
 	if s.provider == nil {
 		return nil
 	}
-	enrolled, err := tenancy.EnrolledModels(db, migrations)
+	strict := false
+	if es, ok := s.provider.(interface{ EnrollmentStrict() bool }); ok {
+		strict = es.EnrollmentStrict()
+	}
+	enrolled, err := tenancy.EnrolledModelsWithOptions(db, migrations, strict)
 	if err != nil {
 		return err
 	}
+	util.Log(ctx).WithField("enrolled_tables", len(enrolled)).
+		Info("MigrateDatastore -- tenancy enrollment")
 	if err = s.provider.Install(ctx, db, enrolled); err != nil {
 		util.Log(ctx).WithError(err).Error("MigrateDatastore -- tenancy install failed")
 		return err

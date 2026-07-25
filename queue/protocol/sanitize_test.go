@@ -32,3 +32,36 @@ func TestSanitizeInboundKeepsClaimsWhenTrusted(t *testing.T) {
 	require.Equal(t, "admin", out["roles"])
 	require.Equal(t, "t1", out["tenant_id"])
 }
+
+func TestIsClaimKeyIncludesPartitionIDs(t *testing.T) {
+	t.Parallel()
+	require.True(t, protocol.IsClaimKey("partition_ids"))
+	require.True(t, protocol.IsClaimKey("partition_id"))
+}
+
+func TestApplyClaimTrustTenancyOnlyStripsRoles(t *testing.T) {
+	t.Parallel()
+	md := map[string]string{
+		"tenant_id":     "t1",
+		"partition_id":  "p1",
+		"partition_ids": "p2",
+		"roles":         "internal",
+		"service_name":  "svc",
+		"traceparent":   "00-x",
+	}
+	out := protocol.ApplyClaimTrust(md, protocol.TrustTenancyOnly)
+	require.Equal(t, "t1", out["tenant_id"])
+	require.Equal(t, "p1", out["partition_id"])
+	require.Equal(t, "p2", out["partition_ids"])
+	require.NotContains(t, out, "roles")
+	require.NotContains(t, out, "service_name")
+	require.Equal(t, "00-x", out["traceparent"])
+}
+
+func TestSanitizeInboundStripsPartitionIDsWhenUntrusted(t *testing.T) {
+	t.Parallel()
+	md := map[string]string{"partition_ids": "p2,p3", "tenant_id": "t1"}
+	out := protocol.SanitizeInbound(md, false)
+	require.NotContains(t, out, "partition_ids")
+	require.NotContains(t, out, "tenant_id")
+}

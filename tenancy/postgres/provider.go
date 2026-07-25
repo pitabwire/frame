@@ -16,22 +16,33 @@ import (
 // policies during Migrate and binds per-request tenancy state via
 // pgxpool acquire/release hooks (no transactions required).
 //
-// Semantics (by design):
-//   - No claims / empty claims / Skip → do not scope the connection
-//     (empty session vars → policy allows all rows; no errors).
-//   - Claims with TenantID (and optional partitions) → bind session
-//     vars so RLS filters by default.
-//   - Every release clears session vars so a later scoped request
-//     cannot inherit another principal's scope.
+// Security modes (see tenancy.SecurityMode):
+//   - ModeFailOpen (default): nil/empty/Skip → clear session (match-all).
+//   - ModeHybrid / ModeFailClosed: require bindable claims or authorized
+//     SystemPrincipal; bare Skip rejected; partition-only rejected.
 //
 // Connection poolers: session-scoped GUCs require session affinity
 // (direct Postgres or PgBouncer pool_mode=session). See docs/datastore.md.
 type Provider struct {
-	adapter dialect.DialectAdapter
+	adapter             dialect.DialectAdapter
+	mode                tenancy.SecurityMode
+	allowGlobalServices map[string]struct{}
+	enrollmentStrict    bool
 }
 
-// New returns a fresh Postgres tenancy provider.
-func New() *Provider { return &Provider{} }
+// New returns a Postgres tenancy provider with optional configuration.
+func New(opts ...Option) *Provider {
+	p := &Provider{
+		mode:                tenancy.ModeFailOpen,
+		allowGlobalServices: make(map[string]struct{}),
+	}
+	for _, o := range opts {
+		if o != nil {
+			o(p)
+		}
+	}
+	return p
+}
 
 // Name implements tenancy.Provider.
 func (*Provider) Name() string { return "postgres-rls" }
@@ -41,11 +52,44 @@ func (*Provider) Capabilities() tenancy.Capabilities {
 	return tenancy.Capabilities{EnforcesAtStorage: true}
 }
 
-// Install implements tenancy.Provider. Idempotent:
-//   - CREATE OR REPLACE for the SQL function
-//   - DROP POLICY IF EXISTS / CREATE POLICY pair per table
-//   - ALTER TABLE … ENABLE / FORCE ROW LEVEL SECURITY (Postgres
-//     no-ops if already enabled).
+// SetSecurityMode implements tenancy.ModeAware.
+func (p *Provider) SetSecurityMode(m tenancy.SecurityMode) { p.mode = m }
+
+// SecurityMode implements tenancy.ModeAware.
+func (p *Provider) SecurityMode() tenancy.SecurityMode { return p.mode }
+
+// SetAllowGlobalServices implements tenancy.AllowGlobalAware.
+func (p *Provider) SetAllowGlobalServices(names ...string) {
+	p.setAllowGlobalServices(names...)
+}
+
+// AllowGlobalServices implements tenancy.AllowGlobalAware.
+func (p *Provider) AllowGlobalServices() []string {
+	out := make([]string, 0, len(p.allowGlobalServices))
+	for n := range p.allowGlobalServices {
+		out = append(out, n)
+	}
+	return out
+}
+
+func (p *Provider) setAllowGlobalServices(names ...string) {
+	if p.allowGlobalServices == nil {
+		p.allowGlobalServices = make(map[string]struct{})
+	}
+	// Replace set when called from SetAllowGlobalServices / option.
+	p.allowGlobalServices = make(map[string]struct{}, len(names))
+	for _, n := range names {
+		n = strings.TrimSpace(n)
+		if n != "" {
+			p.allowGlobalServices[n] = struct{}{}
+		}
+	}
+}
+
+// EnrollmentStrict reports whether strict enrollment is enabled.
+func (p *Provider) EnrollmentStrict() bool { return p.enrollmentStrict }
+
+// Install implements tenancy.Provider.
 func (p *Provider) Install(_ context.Context, db *gorm.DB, models []tenancy.ModelInfo) error {
 	if db == nil {
 		return errors.New("tenancy/postgres: nil db")
@@ -61,10 +105,6 @@ func (p *Provider) Install(_ context.Context, db *gorm.DB, models []tenancy.Mode
 	return nil
 }
 
-// applyTenancyPolicy emits the four idempotent statements for one table.
-// Identifiers are quoted through the wired adapter (so dialect-specific
-// rules apply) with a fallback to the canonical Postgres quoting when
-// the provider has not been wired (e.g. tests that call Install directly).
 func (p *Provider) applyTenancyPolicy(db *gorm.DB, m tenancy.ModelInfo) error {
 	quote := func(s string) string {
 		if p.adapter != nil {
@@ -90,11 +130,7 @@ func (p *Provider) applyTenancyPolicy(db *gorm.DB, m tenancy.ModelInfo) error {
 	return nil
 }
 
-// WireAdapter implements tenancy.Provider. Stashes the adapter (for
-// identifier quoting in Install), then registers a BeforeAcquire hook
-// that pushes Claims-derived session vars onto the connection and an
-// AfterRelease hook that resets them so connections are returned to
-// the pool clean.
+// WireAdapter implements tenancy.Provider.
 func (p *Provider) WireAdapter(adapter dialect.DialectAdapter) error {
 	if adapter == nil {
 		return errors.New("tenancy/postgres: nil adapter")
@@ -109,27 +145,79 @@ func (p *Provider) WireAdapter(adapter dialect.DialectAdapter) error {
 	return nil
 }
 
-// WireGorm implements tenancy.Provider. Postgres-RLS is enforced at
-// the connection-acquire level, so no per-query GORM plugin is needed.
+// WireGorm implements tenancy.Provider.
 func (*Provider) WireGorm(_ *gorm.DB) error { return nil }
 
-// beforeAcquire pulls tenancy.Claims from ctx.
-//
-//   - nil, empty, or Skip → clear session vars and return (no error,
-//     no filtering — empty GUCs are match-all in app_tenancy_matches).
-//   - otherwise → bind tenant + partitions so RLS filters.
-//
-// Clearing on the unscoped path (instead of a pure no-op) prevents a
-// previous principal's scope from surviving if release cleanup was
-// skipped; behaviour for callers without claims stays "see everything".
-func (*Provider) beforeAcquire(ctx context.Context, conn dialect.DialectConn) error {
-	claims := tenancy.ClaimsFromContext(ctx)
-	if claims == nil || claims.IsEmpty() || claims.Skip {
+// beforeAcquire binds tenancy session GUCs per SecurityMode resolution order.
+// See design: Transparent Multi-Tenant Isolation for Frame.
+func (p *Provider) beforeAcquire(ctx context.Context, conn dialect.DialectConn) error {
+	if sp, ok := tenancy.SystemPrincipalFromContext(ctx); ok {
+		return p.acquireWithPrincipal(ctx, conn, sp)
+	}
+	return p.acquireWithClaims(ctx, conn, tenancy.ClaimsFromContext(ctx))
+}
+
+func (p *Provider) acquireWithPrincipal(
+	ctx context.Context, conn dialect.DialectConn, sp tenancy.SystemPrincipal,
+) error {
+	// (1) Authorized global elevation → match-all
+	if sp.AllowGlobal {
+		if p.mode.IsSecure() && !p.allowGlobalAuthorized(ctx, sp) {
+			return tenancy.ErrAllowGlobalDenied
+		}
 		return clearSession(ctx, conn)
 	}
-	if err := claims.Validate(); err != nil {
+	// (2) Scoped system principal → bind principal scope
+	if sp.TenantID == "" {
+		return tenancy.ErrTenantIDRequired
+	}
+	bind := (&tenancy.Claims{TenantID: sp.TenantID, PartitionIDs: sp.PartitionIDs}).Normalize()
+	if err := bind.Validate(); err != nil {
 		return err
 	}
+	return bindSession(ctx, conn, bind)
+}
+
+func (p *Provider) acquireWithClaims(
+	ctx context.Context, conn dialect.DialectConn, claims *tenancy.Claims,
+) error {
+	// (3) Explicit Skip without SystemPrincipal
+	if claims != nil && claims.Skip {
+		if p.mode == tenancy.ModeFailOpen {
+			return clearSession(ctx, conn)
+		}
+		return tenancy.ErrSkipNotPermitted
+	}
+	// (4) Normal claims bind
+	if claims != nil && !claims.IsEmpty() {
+		claims = claims.Normalize()
+		if p.mode.IsSecure() && claims.TenantID == "" {
+			return tenancy.ErrTenantIDRequired
+		}
+		if err := claims.Validate(); err != nil {
+			return err
+		}
+		return bindSession(ctx, conn, claims)
+	}
+	// (5) Missing / empty claims
+	if p.mode == tenancy.ModeFailOpen {
+		return clearSession(ctx, conn)
+	}
+	return tenancy.ErrClaimsRequired
+}
+
+func (p *Provider) allowGlobalAuthorized(ctx context.Context, sp tenancy.SystemPrincipal) bool {
+	if tenancy.IsFrameworkMigration(ctx) {
+		return true
+	}
+	if p.allowGlobalServices == nil {
+		return false
+	}
+	_, ok := p.allowGlobalServices[sp.ServiceName]
+	return ok
+}
+
+func bindSession(ctx context.Context, conn dialect.DialectConn, claims *tenancy.Claims) error {
 	if err := conn.Exec(
 		ctx,
 		"SELECT set_config('app.tenant_id', $1, false), set_config('app.partition_id', $2, false)",
@@ -141,9 +229,7 @@ func (*Provider) beforeAcquire(ctx context.Context, conn dialect.DialectConn) er
 	return nil
 }
 
-// afterRelease resets the session vars so subsequent acquires that
-// don't carry tenancy claims see clean defaults (match-all).
-func (*Provider) afterRelease(ctx context.Context, conn dialect.DialectConn) error {
+func (p *Provider) afterRelease(ctx context.Context, conn dialect.DialectConn) error {
 	return clearSession(ctx, conn)
 }
 
@@ -154,4 +240,8 @@ func clearSession(ctx context.Context, conn dialect.DialectConn) error {
 	)
 }
 
-var _ tenancy.Provider = (*Provider)(nil)
+var (
+	_ tenancy.Provider         = (*Provider)(nil)
+	_ tenancy.ModeAware        = (*Provider)(nil)
+	_ tenancy.AllowGlobalAware = (*Provider)(nil)
+)

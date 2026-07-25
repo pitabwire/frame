@@ -12,6 +12,7 @@ import (
 	"golang.org/x/oauth2"
 
 	"github.com/pitabwire/frame/v2/data"
+	"github.com/pitabwire/frame/v2/queue/protocol"
 	"github.com/pitabwire/frame/v2/workerpool"
 )
 
@@ -26,6 +27,10 @@ type queueManager struct {
 	httpClient  *http.Client
 	tokenSource oauth2.TokenSource
 	serviceName string
+
+	// Claim trust defaults applied to new subscribers (Secure Profile).
+	claimTrust        protocol.ClaimTrustLevel
+	honorInternalSkip bool
 }
 
 // ManagerOption configures the queue manager.
@@ -52,11 +57,29 @@ func WithServiceName(name string) ManagerOption {
 	}
 }
 
+// WithClaimTrust sets the default ClaimTrustLevel for new subscribers.
+// Default is TrustAll (legacy). Secure Profile uses TrustTenancyOnly.
+func WithClaimTrust(level protocol.ClaimTrustLevel) ManagerOption {
+	return func(m *queueManager) {
+		m.claimTrust = level
+	}
+}
+
+// WithHonorInternalSkip controls whether roles=internal in metadata maps
+// to tenancy Skip. Default true. Secure Profile sets false.
+func WithHonorInternalSkip(v bool) ManagerOption {
+	return func(m *queueManager) {
+		m.honorInternalSkip = v
+	}
+}
+
 func NewQueueManager(_ context.Context, workPool workerpool.Manager, opts ...ManagerOption) Manager {
 	q := &queueManager{
 		publishQueueMap:      &sync.Map{},
 		subscriptionQueueMap: &sync.Map{},
 		workPool:             workPool,
+		claimTrust:           protocol.TrustAll,
+		honorInternalSkip:    true,
 	}
 	for _, opt := range opts {
 		if opt != nil {
@@ -140,6 +163,8 @@ func (s *queueManager) AddSubscriber(
 	}
 
 	subs := newSubscriber(s.workPool, reference, queueURL, handlers...)
+	subs.claimTrust = s.claimTrust
+	subs.honorInternalSkip = s.honorInternalSkip
 
 	s.initMutex.Lock()
 	alreadyInitialized := s.initialized

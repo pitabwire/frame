@@ -164,3 +164,81 @@ func TestWithSkipEnforcementOverridesAuthClaims(t *testing.T) {
 	require.NotNil(t, got)
 	require.True(t, got.Skip, "explicit Skip must win over derived auth claims")
 }
+
+func TestClaimsNormalizeTrimsAndDedupes(t *testing.T) {
+	t.Parallel()
+
+	raw := &tenancy.Claims{
+		TenantID:     "  t1  ",
+		PartitionIDs: []string{" p1 ", "", "p2", "p1", "  "},
+		AccessID:     " a1 ",
+	}
+	got := raw.Normalize()
+	require.Equal(t, "t1", got.TenantID)
+	require.Equal(t, []string{"p1", "p2"}, got.PartitionIDs)
+	require.Equal(t, "a1", got.AccessID)
+	// Receiver unchanged (immutable).
+	require.Equal(t, "  t1  ", raw.TenantID)
+}
+
+func TestClaimsValidateRejectsCommaInIDs(t *testing.T) {
+	t.Parallel()
+
+	require.NoError(t, (&tenancy.Claims{TenantID: "t1", PartitionIDs: []string{"p1"}}).Validate())
+	require.NoError(t, (*tenancy.Claims)(nil).Validate())
+	require.NoError(t, (&tenancy.Claims{Skip: true, TenantID: "bad,id"}).Validate(),
+		"Skip claims skip validation")
+
+	err := (&tenancy.Claims{TenantID: "t,1", PartitionIDs: []string{"p1"}}).Validate()
+	require.ErrorIs(t, err, tenancy.ErrInvalidTenantID)
+
+	err = (&tenancy.Claims{TenantID: "t1", PartitionIDs: []string{"p,1"}}).Validate()
+	require.ErrorIs(t, err, tenancy.ErrInvalidPartitionID)
+}
+
+func TestClaimsFromAuthNormalizesWhitespace(t *testing.T) {
+	t.Parallel()
+
+	auth := &security.AuthenticationClaims{
+		TenantID:    "  t1  ",
+		PartitionID: " p1 ",
+		AccessID:    " a1 ",
+		Ext: map[string]any{
+			"partition_ids": []string{" p2 ", "p1", ""},
+		},
+	}
+	got := tenancy.ClaimsFromAuth(context.Background(), auth)
+	require.Equal(t, "t1", got.TenantID)
+	require.Equal(t, []string{"p1", "p2"}, got.PartitionIDs)
+	require.Equal(t, "a1", got.AccessID)
+	require.False(t, got.Skip)
+}
+
+func TestClaimsFromAuthMultiPartitionFromExt(t *testing.T) {
+	t.Parallel()
+
+	auth := &security.AuthenticationClaims{
+		TenantID:    "t1",
+		PartitionID: "p1",
+		Ext:         map[string]any{"partition_ids": "p2, p3"},
+	}
+	got := tenancy.ClaimsFromAuth(context.Background(), auth)
+	require.Equal(t, []string{"p1", "p2", "p3"}, got.PartitionIDs)
+}
+
+func TestWithClaimsNormalizesOnBind(t *testing.T) {
+	t.Parallel()
+
+	ctx := tenancy.WithClaims(context.Background(), &tenancy.Claims{
+		TenantID:     " t1 ",
+		PartitionIDs: []string{" p1 "},
+	})
+	got := tenancy.ClaimsFromContext(ctx)
+	require.Equal(t, "t1", got.TenantID)
+	require.Equal(t, []string{"p1"}, got.PartitionIDs)
+}
+
+func TestIsEmptyTreatsWhitespaceAsEmpty(t *testing.T) {
+	t.Parallel()
+	require.True(t, (&tenancy.Claims{TenantID: "  ", PartitionIDs: []string{"", " "}}).IsEmpty())
+}

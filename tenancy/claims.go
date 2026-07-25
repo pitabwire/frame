@@ -2,8 +2,23 @@ package tenancy
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"strings"
 
 	"github.com/pitabwire/frame/v2/security"
+)
+
+// Sentinel errors for claims validation.
+var (
+	// ErrInvalidTenantID is returned when a tenant id contains reserved
+	// characters or is otherwise unusable for storage-layer binding.
+	ErrInvalidTenantID = errors.New("tenancy: invalid tenant id")
+
+	// ErrInvalidPartitionID is returned when a partition id contains the
+	// reserved list separator ',' (used by the Postgres session GUC CSV
+	// encoding) or is otherwise unusable.
+	ErrInvalidPartitionID = errors.New("tenancy: invalid partition id")
 )
 
 // Claims is the storage-layer view of a principal's tenancy. Treat as
@@ -31,65 +46,93 @@ type Claims struct {
 
 // IsEmpty reports whether the claims carry enforceable tenancy. Empty
 // claims behave identically to "no claims attached" from a provider's
-// perspective (no filtering, no error).
+// perspective (no filtering, no error). Whitespace-only IDs are treated
+// as empty (call Normalize first for full sanitisation).
 func (c *Claims) IsEmpty() bool {
 	if c == nil {
 		return true
 	}
-	return c.TenantID == "" && len(c.PartitionIDs) == 0
+	if strings.TrimSpace(c.TenantID) != "" {
+		return false
+	}
+	for _, p := range c.PartitionIDs {
+		if strings.TrimSpace(p) != "" {
+			return false
+		}
+	}
+	return true
 }
 
-// ExtendPartitions returns a new Claims with the supplied partition IDs
-// merged in. Preserves TenantID, AccessID, and Skip unchanged. Empty
-// strings are ignored; duplicates are removed; existing order is kept
-// and new IDs appended after.
-//
-// A nil receiver yields a fresh Claims carrying only the deduplicated
-// non-empty partition IDs; TenantID, AccessID, and Skip default to
-// zero values in that path.
-func (c *Claims) ExtendPartitions(partitionIDs ...string) *Claims {
+// Normalize returns a copy with trimmed IDs, empty partitions dropped,
+// and partition IDs deduplicated (order preserved). A nil receiver yields
+// nil. The receiver is never mutated.
+func (c *Claims) Normalize() *Claims {
 	if c == nil {
-		return &Claims{PartitionIDs: dedupedNonEmpty(partitionIDs)}
+		return nil
 	}
-
-	merged := make([]string, 0, len(c.PartitionIDs)+len(partitionIDs))
-	seen := make(map[string]struct{}, cap(merged))
-	for _, p := range c.PartitionIDs {
-		if p == "" {
-			continue
-		}
-		if _, dup := seen[p]; dup {
-			continue
-		}
-		seen[p] = struct{}{}
-		merged = append(merged, p)
-	}
-	for _, p := range partitionIDs {
-		if p == "" {
-			continue
-		}
-		if _, dup := seen[p]; dup {
-			continue
-		}
-		seen[p] = struct{}{}
-		merged = append(merged, p)
-	}
-
 	return &Claims{
-		TenantID:     c.TenantID,
-		PartitionIDs: merged,
-		AccessID:     c.AccessID,
+		TenantID:     strings.TrimSpace(c.TenantID),
+		PartitionIDs: normalizePartitionIDs(c.PartitionIDs),
+		AccessID:     strings.TrimSpace(c.AccessID),
 		Skip:         c.Skip,
 	}
 }
 
-func dedupedNonEmpty(in []string) []string {
+// Validate reports whether the claims are safe to bind to a storage
+// session. Empty claims and Skip claims always pass (providers do not
+// bind session scope for them). Non-empty claims must have well-formed
+// tenant and partition identifiers.
+//
+// Rules:
+//   - tenant id must not contain ','
+//   - no partition id may contain ',' (CSV separator for session GUCs)
+//
+// Call Normalize before Validate when inputs may carry surrounding
+// whitespace.
+func (c *Claims) Validate() error {
+	if c == nil || c.Skip || c.IsEmpty() {
+		return nil
+	}
+	if err := validateID(c.TenantID, ErrInvalidTenantID); err != nil {
+		return err
+	}
+	return ValidatePartitionIDs(c.PartitionIDs)
+}
+
+// ValidatePartitionIDs rejects partition IDs that would corrupt the CSV
+// encoding used by storage providers (string_to_array on ','). Empty
+// strings are ignored. Exported so providers can validate without
+// reimplementing the rule.
+func ValidatePartitionIDs(ids []string) error {
+	for _, id := range ids {
+		if id == "" {
+			continue
+		}
+		if err := validateID(id, ErrInvalidPartitionID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func validateID(id string, sentinel error) error {
+	if id == "" {
+		return nil
+	}
+	if strings.Contains(id, ",") {
+		return fmt.Errorf("%w: %q contains ',' which is reserved as the list separator", sentinel, id)
+	}
+	return nil
+}
+
+func normalizePartitionIDs(in []string) []string {
 	if len(in) == 0 {
 		return nil
 	}
 	out := make([]string, 0, len(in))
 	seen := make(map[string]struct{}, len(in))
 	for _, s := range in {
+		s = strings.TrimSpace(s)
 		if s == "" {
 			continue
 		}
@@ -99,7 +142,49 @@ func dedupedNonEmpty(in []string) []string {
 		seen[s] = struct{}{}
 		out = append(out, s)
 	}
+	if len(out) == 0 {
+		return nil
+	}
 	return out
+}
+
+// ExtendPartitions returns a new Claims with the supplied partition IDs
+// merged in. Preserves TenantID, AccessID, and Skip unchanged. Empty
+// strings are ignored; duplicates are removed; existing order is kept
+// and new IDs appended after. IDs are trimmed.
+//
+// A nil receiver yields a fresh Claims carrying only the deduplicated
+// non-empty partition IDs; TenantID, AccessID, and Skip default to
+// zero values in that path.
+func (c *Claims) ExtendPartitions(partitionIDs ...string) *Claims {
+	if c == nil {
+		return &Claims{PartitionIDs: normalizePartitionIDs(partitionIDs)}
+	}
+
+	merged := make([]string, 0, len(c.PartitionIDs)+len(partitionIDs))
+	seen := make(map[string]struct{}, cap(merged))
+	appendUnique := func(ids []string) {
+		for _, p := range ids {
+			p = strings.TrimSpace(p)
+			if p == "" {
+				continue
+			}
+			if _, dup := seen[p]; dup {
+				continue
+			}
+			seen[p] = struct{}{}
+			merged = append(merged, p)
+		}
+	}
+	appendUnique(c.PartitionIDs)
+	appendUnique(partitionIDs)
+
+	return &Claims{
+		TenantID:     strings.TrimSpace(c.TenantID),
+		PartitionIDs: merged,
+		AccessID:     strings.TrimSpace(c.AccessID),
+		Skip:         c.Skip,
+	}
 }
 
 // claimsKey is the unexported context key under which Claims are
@@ -107,14 +192,14 @@ func dedupedNonEmpty(in []string) []string {
 // other packages' context values.
 type claimsKey struct{}
 
-// WithClaims binds Claims to ctx. Returns the parent ctx unchanged
-// when c is nil to avoid hiding a "no claims" signal behind a
-// non-empty context.
+// WithClaims binds Claims to ctx. Nil claims leave ctx unchanged.
+// Non-nil claims are normalized before binding so storage providers
+// never see whitespace-padded IDs.
 func WithClaims(ctx context.Context, c *Claims) context.Context {
 	if c == nil {
 		return ctx
 	}
-	return context.WithValue(ctx, claimsKey{}, c)
+	return context.WithValue(ctx, claimsKey{}, c.Normalize())
 }
 
 // ClaimsFromContext returns the bound Claims with graceful fallback:
@@ -144,18 +229,23 @@ func ClaimsFromContext(ctx context.Context) *Claims {
 //	AccessID     = auth.GetAccessID()
 //	Skip         = auth.IsInternalSystem() || security.IsTenancyChecksOnClaimSkipped(ctx)
 //
+// The result is always normalized (trimmed, deduped partitions).
 // Not overridable — callers needing different semantics build Claims
 // directly and bind via WithClaims.
+//
+// Note: SkipTenancyChecksOnClaims is for internal/system bypass of
+// storage enforcement. Queue workers reconstruct claims from metadata
+// without that flag so RLS can filter on the published tenant.
 func ClaimsFromAuth(ctx context.Context, auth *security.AuthenticationClaims) *Claims {
 	if auth == nil {
 		return nil
 	}
-	return &Claims{
+	return (&Claims{
 		TenantID:     auth.GetTenantID(),
 		PartitionIDs: auth.GetPartitionIDs(),
 		AccessID:     auth.GetAccessID(),
 		Skip:         auth.IsInternalSystem() || security.IsTenancyChecksOnClaimSkipped(ctx),
-	}
+	}).Normalize()
 }
 
 // WithExtraPartitions reads the current Claims from ctx, extends them

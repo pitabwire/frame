@@ -23,8 +23,12 @@ func (s *subscriber) processDelivery(ctx context.Context, metadata map[string]st
 		metadata = map[string]string{}
 	}
 
-	pCtx := security.SkipTenancyChecksOnClaims(ctx)
-
+	// Reconstruct auth claims from publisher metadata so storage-layer
+	// tenancy (RLS) can filter on the published tenant/partitions.
+	// Do not blanket-call SkipTenancyChecksOnClaims: that flag maps to
+	// tenancy.Claims.Skip and would disable RLS for every consumer.
+	// Internal/system roles still skip via ClaimsToContext / IsInternalSystem.
+	pCtx := ctx
 	authClaim := security.ClaimsFromMap(metadata)
 	if authClaim != nil {
 		pCtx = authClaim.ClaimsToContext(pCtx)

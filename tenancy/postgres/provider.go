@@ -127,7 +127,7 @@ func (*Provider) beforeAcquire(ctx context.Context, conn dialect.DialectConn) er
 	if claims == nil || claims.IsEmpty() || claims.Skip {
 		return clearSession(ctx, conn)
 	}
-	if err := validatePartitionIDs(claims.PartitionIDs); err != nil {
+	if err := claims.Validate(); err != nil {
 		return err
 	}
 	if err := conn.Exec(
@@ -152,24 +152,6 @@ func clearSession(ctx context.Context, conn dialect.DialectConn) error {
 		ctx,
 		"SELECT set_config('app.tenant_id', '', false), set_config('app.partition_id', '', false)",
 	)
-}
-
-// validatePartitionIDs rejects IDs that would corrupt the CSV encoding
-// used by app_tenancy_matches (string_to_array on ','). Only applied
-// when claims are present and being bound.
-func validatePartitionIDs(ids []string) error {
-	for _, id := range ids {
-		if id == "" {
-			continue
-		}
-		if strings.Contains(id, ",") {
-			return fmt.Errorf(
-				"tenancy/postgres: partition id %q contains ',' which is reserved as the list separator",
-				id,
-			)
-		}
-	}
-	return nil
 }
 
 var _ tenancy.Provider = (*Provider)(nil)

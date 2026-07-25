@@ -104,7 +104,10 @@ func (a *AuthenticationClaims) profileIDFromClaims() string {
 }
 
 func (a *AuthenticationClaims) GetTenantID() string {
-	result := a.TenantID
+	if a == nil {
+		return ""
+	}
+	result := strings.TrimSpace(a.TenantID)
 	if result != "" {
 		return result
 	}
@@ -118,11 +121,14 @@ func (a *AuthenticationClaims) GetTenantID() string {
 		return ""
 	}
 
-	return result
+	return strings.TrimSpace(result)
 }
 
 func (a *AuthenticationClaims) GetPartitionID() string {
-	result := a.PartitionID
+	if a == nil {
+		return ""
+	}
+	result := strings.TrimSpace(a.PartitionID)
 	if result != "" {
 		return result
 	}
@@ -136,20 +142,23 @@ func (a *AuthenticationClaims) GetPartitionID() string {
 		return ""
 	}
 
-	return result
+	return strings.TrimSpace(result)
 }
 
 // GetPartitionIDs returns every partition this principal can access:
 // the primary PartitionID plus any extras carried in Ext["partition_ids"]
 // (as a []string, []any, or comma-separated string). The list is
-// deduplicated and the primary id appears first. Returns an empty slice
-// when no partitions are set.
+// trimmed, deduplicated, and the primary id appears first. Returns an
+// empty slice when no partitions are set.
 //
 // Use this when callers may legitimately span multiple partitions —
 // e.g. a SACCO operator with access to several branches, or a
 // reporting analyst aggregating across groups. Single-partition
 // callers continue to work: the returned slice has one element.
 func (a *AuthenticationClaims) GetPartitionIDs() []string {
+	if a == nil {
+		return nil
+	}
 	primary := a.GetPartitionID()
 	additional := extractAdditionalPartitionIDs(a.Ext["partition_ids"])
 
@@ -160,6 +169,7 @@ func (a *AuthenticationClaims) GetPartitionIDs() []string {
 		seen[primary] = struct{}{}
 	}
 	for _, p := range additional {
+		p = strings.TrimSpace(p)
 		if p == "" {
 			continue
 		}
@@ -175,15 +185,24 @@ func (a *AuthenticationClaims) GetPartitionIDs() []string {
 // extractAdditionalPartitionIDs normalises the Ext["partition_ids"]
 // payload (which may arrive as []string, []any, or a comma-separated
 // string thanks to JWT marshallers) into a plain []string slice.
+// Each entry is trimmed; empty values are dropped.
 func extractAdditionalPartitionIDs(raw any) []string {
 	switch v := raw.(type) {
 	case []string:
-		return v
+		out := make([]string, 0, len(v))
+		for _, s := range v {
+			if trimmed := strings.TrimSpace(s); trimmed != "" {
+				out = append(out, trimmed)
+			}
+		}
+		return out
 	case []any:
 		out := make([]string, 0, len(v))
 		for _, item := range v {
 			if s, isStr := item.(string); isStr {
-				out = append(out, s)
+				if trimmed := strings.TrimSpace(s); trimmed != "" {
+					out = append(out, trimmed)
+				}
 			}
 		}
 		return out
@@ -215,7 +234,10 @@ func (a *AuthenticationClaims) GetProfileID() string {
 }
 
 func (a *AuthenticationClaims) GetAccessID() string {
-	result := a.AccessID
+	if a == nil {
+		return ""
+	}
+	result := strings.TrimSpace(a.AccessID)
 	if result != "" {
 		return result
 	}
@@ -229,7 +251,7 @@ func (a *AuthenticationClaims) GetAccessID() string {
 		return ""
 	}
 
-	return result
+	return strings.TrimSpace(result)
 }
 
 func (a *AuthenticationClaims) GetContactID() string {
@@ -342,16 +364,44 @@ func (a *AuthenticationClaims) IsInternalSystem() bool {
 }
 
 // AsMetadata Creates a string map to be used as metadata in queue data.
+// Multi-partition principals encode extra partitions in "partition_ids"
+// (comma-separated, excluding the primary) so ClaimsFromMap can restore
+// the full set on the consumer side.
 func (a *AuthenticationClaims) AsMetadata() map[string]string {
 	m := make(map[string]string)
+	if a == nil {
+		return m
+	}
 	m["sub"] = a.Subject
 	m["tenant_id"] = a.GetTenantID()
 	m["partition_id"] = a.GetPartitionID()
+	if extras := partitionIDsForMetadata(a.GetPartitionIDs(), a.GetPartitionID()); extras != "" {
+		m["partition_ids"] = extras
+	}
 	m["access_id"] = a.GetAccessID()
 	m["contact_id"] = a.GetContactID()
 	m["device_id"] = a.GetDeviceID()
 	m["roles"] = strings.Join(a.GetRoles(), ",")
 	return m
+}
+
+// partitionIDsForMetadata returns extra partition IDs beyond the primary,
+// joined with ','. Empty when there is only a primary (or none).
+func partitionIDsForMetadata(all []string, primary string) string {
+	if len(all) == 0 {
+		return ""
+	}
+	extras := make([]string, 0, len(all))
+	for _, p := range all {
+		if p == "" || p == primary {
+			continue
+		}
+		extras = append(extras, p)
+	}
+	if len(extras) == 0 {
+		return ""
+	}
+	return strings.Join(extras, ",")
 }
 
 // ClaimsToContext adds authentication claims to the current supplied context.
@@ -406,6 +456,8 @@ func ClaimsFromContext(ctx context.Context) *AuthenticationClaims {
 }
 
 // ClaimsFromMap extracts authentication claims from the supplied map if they exist.
+// Supports the keys produced by AsMetadata, including multi-partition
+// "partition_ids" (comma-separated extras restored into Ext).
 func ClaimsFromMap(m map[string]string) *AuthenticationClaims {
 	// Extract required fields and return nil if any are missing
 	sub, okSubject := m["sub"]
@@ -418,24 +470,29 @@ func ClaimsFromMap(m map[string]string) *AuthenticationClaims {
 
 	// Initialize AuthenticationClaims with required fields
 	claims := &AuthenticationClaims{
-		TenantID:    tenantID,
-		PartitionID: partitionID,
+		TenantID:    strings.TrimSpace(tenantID),
+		PartitionID: strings.TrimSpace(partitionID),
 		Ext:         make(map[string]any),
 	}
-	claims.Subject = sub
+	claims.Subject = strings.TrimSpace(sub)
 
 	for key, val := range m {
 		switch key {
 		case "profile_id":
-			claims.ProfileID = val
+			claims.ProfileID = strings.TrimSpace(val)
 		case "access_id":
-			claims.AccessID = val
+			claims.AccessID = strings.TrimSpace(val)
 		case "contact_id":
-			claims.ContactID = val
+			claims.ContactID = strings.TrimSpace(val)
 		case "device_id":
-			claims.DeviceID = val
+			claims.DeviceID = strings.TrimSpace(val)
 		case "roles":
-			claims.Ext[key] = strings.Split(val, ",")
+			claims.Ext[key] = splitCommaTrimmed(val)
+		case "partition_ids":
+			// Restore multi-partition extras for GetPartitionIDs.
+			if ids := splitCommaTrimmed(val); len(ids) > 0 {
+				claims.Ext["partition_ids"] = ids
+			}
 		default:
 			// Skip primary values ("sub", "tenant_id", "partition_id")
 			if key == "sub" || key == "tenant_id" || key == "partition_id" {
@@ -448,6 +505,23 @@ func ClaimsFromMap(m map[string]string) *AuthenticationClaims {
 
 	claims.NormalizeIdentity()
 	return claims
+}
+
+func splitCommaTrimmed(val string) []string {
+	if val == "" {
+		return nil
+	}
+	parts := strings.Split(val, ",")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if trimmed := strings.TrimSpace(p); trimmed != "" {
+			out = append(out, trimmed)
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 // EnrichTenancyClaims internal services act on behalf of different users

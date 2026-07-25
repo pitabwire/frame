@@ -79,6 +79,10 @@ So: **if tenancy is not in context, queries still work**. Filtering only
 runs when claims are present (and not skipped).
 
 Partition IDs must not contain `,` (CSV encoding in the session GUC).
+Call `claims.Validate()` (or let the provider do it on acquire) to catch
+this early. `Claims.Normalize()` / `WithClaims` / `ClaimsFromAuth` trim
+whitespace and dedupe partition IDs.
+
 Policies use both `USING` and `WITH CHECK` (reads and writes).
 
 ### Connection poolers (PgBouncer)
@@ -117,11 +121,14 @@ got := tenancy.ClaimsFromContext(ctx)
 // For service-on-behalf-of flows, extend with additional partitions:
 ctx = tenancy.WithExtraPartitions(ctx, "branch-2", "branch-3")
 
-// For job workers reconstructing claims from queue metadata, build
-// Claims explicitly and bind them when you want RLS filtering:
+// For job workers, Frame queue consumers reconstruct
+// security.AuthenticationClaims from publisher AsMetadata() (including
+// multi-partition partition_ids). That enables RLS via ClaimsFromAuth
+// when tenant/partition are present. You can also bind storage claims
+// explicitly:
 ctx = tenancy.WithClaims(ctx, &tenancy.Claims{
     TenantID:     "T1",
-    PartitionIDs: []string{"P1"},
+    PartitionIDs: []string{"P1", "P2"},
     AccessID:     "A1",
 })
 

@@ -33,8 +33,9 @@ type Claims struct {
 	// across groups). Single-partition principals carry one element.
 	PartitionIDs []string
 
-	// AccessID is an optional access-control hint propagated through
-	// queue metadata and lifecycle hooks.
+	// AccessID is the membership grant used for this session (write
+	// attribution). Stamped onto rows at create; not used for RLS or Keto.
+	// Empty is allowed (service accounts, system jobs).
 	AccessID string
 
 	// Skip is true for internal/system callers that should bypass

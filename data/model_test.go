@@ -1,6 +1,7 @@
 package data_test
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -11,6 +12,7 @@ import (
 	"github.com/pitabwire/frame/v2/config"
 	"github.com/pitabwire/frame/v2/data"
 	"github.com/pitabwire/frame/v2/frametests/definition"
+	"github.com/pitabwire/frame/v2/security"
 	"github.com/pitabwire/frame/v2/tests"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -273,4 +275,36 @@ func TestBaseModelSettersRoundTrip(t *testing.T) {
 	require.Empty(t, m.GetTenantID())
 	require.Empty(t, m.GetPartitionID())
 	require.Empty(t, m.GetAccessID())
+}
+
+// TestBaseModelGenIDWriteAttribution stamps tenant/partition/access and actor
+// from auth claims; access_id is attribution only (not isolation).
+func TestBaseModelGenIDWriteAttribution(t *testing.T) {
+	t.Parallel()
+
+	auth := &security.AuthenticationClaims{
+		TenantID:    "t1",
+		PartitionID: "p1",
+		AccessID:    "acc-1",
+		ProfileID:   "prof-1",
+	}
+	auth.Subject = "wire-sub-client-id"
+	auth.NormalizeIdentity()
+
+	ctx := auth.ClaimsToContext(context.Background())
+	m := &data.BaseModel{}
+	m.GenID(ctx)
+
+	require.NotEmpty(t, m.ID)
+	require.Equal(t, "t1", m.TenantID)
+	require.Equal(t, "p1", m.PartitionID)
+	require.Equal(t, "acc-1", m.AccessID)
+	require.Equal(t, "prof-1", m.CreatedBy, "actor should be profile_id after normalize")
+	require.Equal(t, "prof-1", m.ModifiedBy)
+
+	// Does not overwrite explicit values.
+	m2 := &data.BaseModel{AccessID: "preset", TenantID: "keep-t"}
+	m2.GenID(ctx)
+	require.Equal(t, "preset", m2.AccessID)
+	require.Equal(t, "keep-t", m2.TenantID)
 }

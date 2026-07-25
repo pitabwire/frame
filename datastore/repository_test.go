@@ -483,6 +483,7 @@ func (s *RepositoryTestSuite) TestImmutableFields() {
 		require.Contains(t, immutableFields, "created_at", "created_at should be immutable")
 		require.Contains(t, immutableFields, "tenant_id", "tenant_id should be immutable")
 		require.Contains(t, immutableFields, "partition_id", "partition_id should be immutable")
+		require.Contains(t, immutableFields, "access_id", "access_id should be immutable (write attribution)")
 
 		// Create entity
 		entity := &TestEntity{
@@ -495,13 +496,15 @@ func (s *RepositoryTestSuite) TestImmutableFields() {
 		originalID := entity.GetID()
 		originalCreatedAt := entity.CreatedAt
 		originalTenantID := entity.TenantID
+		originalAccessID := entity.AccessID
 
 		// Try to update entity - attempt to change immutable fields (they should be ignored)
 		entity.Name = "Updated Name"
 		// Note: We DON'T change entity.ID because it's needed for the WHERE clause
-		// The Omit() in Update should prevent created_at, tenant_id from being updated
+		// The Omit() in Update should prevent created_at, tenant_id, access_id from being updated
 		entity.CreatedAt = time.Now().Add(24 * time.Hour)
 		entity.TenantID = "new-tenant-should-not-update"
+		entity.AccessID = "new-access-should-not-update"
 
 		// Update without specifying fields (should omit immutable fields)
 		rowsAffected, err := repo.Update(ctx, entity)
@@ -521,6 +524,7 @@ func (s *RepositoryTestSuite) TestImmutableFields() {
 			"created_at should not change",
 		)
 		require.Equal(t, originalTenantID, updated.TenantID, "tenant_id should not change")
+		require.Equal(t, originalAccessID, updated.AccessID, "access_id should not change (write attribution)")
 		require.Equal(t, "Updated Name", updated.Name, "name should be updated")
 	})
 }
@@ -731,6 +735,14 @@ func (s *RepositoryTestSuite) TestBulkUpdate() {
 			entityCount: 10,
 			updateParams: map[string]any{
 				"tenant_id": "new-tenant",
+			},
+			expectError: true,
+		},
+		{
+			name:        "bulk update with immutable field 'access_id' should fail",
+			entityCount: 10,
+			updateParams: map[string]any{
+				"access_id": "new-access",
 			},
 			expectError: true,
 		},

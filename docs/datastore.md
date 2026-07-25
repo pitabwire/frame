@@ -100,6 +100,33 @@ whitespace and dedupe partition IDs.
 
 Policies use both `USING` and `WITH CHECK` (reads and writes).
 
+### Access ID (write attribution only)
+
+`access_id` is the **membership grant** used for the current session (which
+Access record the user entered through). Frame uses it for **write
+attribution**, not for read isolation or Keto:
+
+| Concern | Field / plane |
+|---------|----------------|
+| Cross-tenant / branch isolation | `tenant_id` + `partition_id` (RLS) + Plane 1 ReBAC |
+| Capabilities in that partition | Plane 2 (`FunctionChecker`) |
+| Per-resource ACLs | Plane 3 |
+| Who created the row | `created_by` (`profile_id`) |
+| Which membership stamped the row | `access_id` |
+
+**Behaviour:**
+
+- On create, `BaseModel.GenID` / `BeforeCreate` copies `access_id` from JWT
+  claims when the column is empty.
+- `BaseRepository` treats `access_id` as **immutable** (with `tenant_id` /
+  `partition_id`) so updates cannot retarget attribution.
+- Empty `access_id` is allowed (service accounts, system jobs).
+- **Do not** add Keto tuples or RLS clauses keyed only by `access_id` unless
+  product requirements change; partition membership remains the data plane.
+
+Interactive user tokens should carry `access_id` from login/consent when a
+grant exists; do not invent Keto paths of the form `tenant/partition/access`.
+
 ### Connection poolers (PgBouncer)
 
 Session GUCs require **session affinity** to the Postgres backend:

@@ -98,11 +98,13 @@ func NewBaseRepository[T data.BaseModelI](
 	}
 
 	repo := &baseRepository[T]{
-		dbPool:                    dbPool,
-		workMan:                   workMan,
-		modelFactory:              modelFactory,
-		batchSize:                 751, //nolint:mnd // default batch size
-		immutableFields:           []string{"id", "created_at", "tenant_id", "partition_id"},
+		dbPool:       dbPool,
+		workMan:      workMan,
+		modelFactory: modelFactory,
+		batchSize:    751, //nolint:mnd // default batch size
+		// access_id is write attribution (membership used at create); not a
+		// read-isolation key and not used in Keto. Immutable like tenant/partition.
+		immutableFields:           []string{"id", "created_at", "tenant_id", "partition_id", "access_id"},
 		allowedFields:             make(map[string]struct{}),
 		bulkCreateConflictColumns: cfg.bulkCreateConflictColumns,
 	}

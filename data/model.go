@@ -46,6 +46,8 @@ func (model *BaseModel) GenID(ctx context.Context) {
 		model.ID = util.IDString()
 	}
 
+	// Write-path defaults from auth claims. Tenant/partition feed RLS;
+	// AccessID is membership attribution only (not storage isolation, not Keto).
 	authClaim := security.ClaimsFromContext(ctx)
 	if authClaim == nil {
 		return
@@ -63,12 +65,16 @@ func (model *BaseModel) GenID(ctx context.Context) {
 		model.TenantID = authClaim.GetTenantID()
 	}
 
-	// Set CreatedBy and ModifiedBy from the active actor's subject/profile ID.
-	if authClaim.Subject != "" {
+	// Actor for audit trails is profile_id after NormalizeIdentity (sub === profile).
+	actor := authClaim.GetProfileID()
+	if actor == "" {
+		actor = authClaim.Subject
+	}
+	if actor != "" {
 		if model.CreatedBy == "" {
-			model.CreatedBy = authClaim.Subject
+			model.CreatedBy = actor
 		}
-		model.ModifiedBy = authClaim.Subject
+		model.ModifiedBy = actor
 	}
 }
 

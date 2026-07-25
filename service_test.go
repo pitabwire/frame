@@ -1195,6 +1195,8 @@ func TestService_H2CClientConfiguration(t *testing.T) {
 	}
 }
 
+// configWithoutHTTPServer implements ConfigurationEvents so events init succeeds,
+// but not ConfigurationHTTPServer — isolating the HTTP config requirement on Run.
 type configWithoutHTTPServer struct{}
 
 func (c *configWithoutHTTPServer) GetEventsQueueName() string {
@@ -1203,6 +1205,14 @@ func (c *configWithoutHTTPServer) GetEventsQueueName() string {
 
 func (c *configWithoutHTTPServer) GetEventsQueueURL() string {
 	return "mem://frame.events.internal_._queue"
+}
+
+func (c *configWithoutHTTPServer) GetEventsQueuePublishURL() string {
+	return c.GetEventsQueueURL()
+}
+
+func (c *configWithoutHTTPServer) GetEventsQueueSubscribeURL() string {
+	return c.GetEventsQueueURL()
 }
 
 func (s *ServiceTestSuite) TestRunRequiresHTTPServerConfig() {

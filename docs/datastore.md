@@ -119,11 +119,13 @@ _, svc := frame.NewService(
     frame.WithDatastore(), // installs default Postgres adapter + RLS provider
 )
 
-// Register the lightweight claims interceptor on Connect handlers
-// AFTER your authentication interceptor:
+// Preferred: service-aware defaults (honours Secure Profile binder):
+ix, err := svc.ConnectDefaultInterceptors(ctx, authenticator)
+// …
+// Or manually after auth:
 options := connect.WithInterceptors(
     authInterceptor,
-    tenancy.NewClaimsInterceptor(),
+    tenancy.NewClaimsInterceptorWithBinder(svc.ClaimsBinder()),
 )
 ```
 

@@ -12,6 +12,7 @@ import (
 	"google.golang.org/protobuf/reflect/protoreflect"
 
 	"github.com/pitabwire/frame/v2/config"
+	"github.com/pitabwire/frame/v2/setup"
 )
 
 // ManifestRegistrationURLEnvVar is the environment variable that provides
@@ -42,26 +43,25 @@ const ManifestRegistrationPath = "/_internal/register/permissions"
 //
 // Two delivery paths (both require PERMISSIONS_REGISTRATION_URL):
 //
-//  1. Setup job (preferred on Cloud Run): registers SetupTaskPermissions so a
-//     one-shot job can run `setup migrate permissions` via Service.RunSetup.
-//     That path publishes synchronously with retries and fails the job on error.
+//  1. Setup plan (preferred): registers an abstract setup.Step named
+//     setup.NamePermissions on Service.Setup(). A Job runs it in bulk via
+//     setup.Registry.Run / Service.RunSetup (fail-closed, sync retries).
 //
 //  2. Runtime PreStart (optional): when PERMISSIONS_REGISTER_ON_START is true
 //     (default, Colony/K8s parity), also schedules an async best-effort
-//     PreStart publish on every process start. Set PERMISSIONS_REGISTER_ON_START=false
-//     on Cloud Run replicas when the setup job owns registration so cold starts
-//     do not POST manifests on every scale-from-zero.
+//     PreStart publish on every process start. Set
+//     PERMISSIONS_REGISTER_ON_START=false on Cloud Run replicas when the
+//     setup Job owns registration.
 //
-// Earlier versions gated registration on DO_MIGRATION=true only; that broke
-// when migrate cmd paths exited before PreStart. Prefer the setup job.
+// See package setup and docs/SETUP_JOB.md for the abstract bulk model.
 //
 // Usage:
 //
 //	sd := profilepb.File_profile_v1_profile_proto.Services().ByName("ProfileService")
-//	frame.WithPermissionRegistration(sd)
-//	// setup job:
-//	//   svc.Init(ctx, frame.WithPermissionRegistration(sd), frame.WithSetupTask("migrate", ...))
-//	//   if frame.IsSetupMode(cfg) { _ = svc.RunSetup(ctx); return }
+//	svc.Init(ctx, frame.WithPermissionRegistration(sd), frame.WithSetupFunc(setup.NameMigrate, migrateFn))
+//	if frame.IsSetupMode(&cfg) {
+//	    return svc.RunSetup(ctx)
+//	}
 func WithPermissionRegistration(sd protoreflect.ServiceDescriptor) Option {
 	return func(_ context.Context, s *Service) {
 		registrationURL := os.Getenv(ManifestRegistrationURLEnvVar)
@@ -69,14 +69,17 @@ func WithPermissionRegistration(sd protoreflect.ServiceDescriptor) Option {
 			return
 		}
 
-		// Setup job path: synchronous, fail-closed (preferred for Cloud Run Jobs).
-		s.AddSetupTask(SetupTaskPermissions, func(ctx context.Context, svc *Service) error {
-			manifest := buildManifestFromDescriptor(sd)
-			if manifest == nil {
-				util.Log(ctx).Warn("setup permissions: no service_permissions extension on descriptor; skipping")
-				return nil
-			}
-			return publishManifestWithRetrySync(ctx, svc, registrationURL, manifest)
+		// Abstract setup step — executable alone or in a bulk plan.
+		s.Setup().Register(setup.Func{
+			StepName: setup.NamePermissions,
+			Fn: func(ctx context.Context) error {
+				manifest := buildManifestFromDescriptor(sd)
+				if manifest == nil {
+					util.Log(ctx).Warn("setup permissions: no service_permissions extension on descriptor; skipping")
+					return nil
+				}
+				return publishManifestWithRetrySync(ctx, s, registrationURL, manifest)
+			},
 		})
 
 		// Runtime PreStart: async, best-effort (opt-out via PERMISSIONS_REGISTER_ON_START=false).
@@ -88,10 +91,6 @@ func WithPermissionRegistration(sd protoreflect.ServiceDescriptor) Option {
 			if manifest == nil {
 				return
 			}
-			// Retry the manifest POST in a small backoff loop. A pod that is
-			// also its own OAuth2 token-signing endpoint (the auth service)
-			// can't sign assertions until at least one replica is ready.
-			// Logging at Warn keeps the pod alive; registration is idempotent.
 			go publishManifestWithRetry(ctx, svc, registrationURL, manifest)
 		})
 	}

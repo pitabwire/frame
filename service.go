@@ -35,6 +35,7 @@ import (
 	securityManager "github.com/pitabwire/frame/v2/security/manager"
 	"github.com/pitabwire/frame/v2/server"
 	"github.com/pitabwire/frame/v2/server/implementation"
+	"github.com/pitabwire/frame/v2/setup"
 	"github.com/pitabwire/frame/v2/telemetry"
 	"github.com/pitabwire/frame/v2/tenancy"
 	"github.com/pitabwire/frame/v2/version"
@@ -134,7 +135,7 @@ type Service struct {
 	publisherStartups    []func(ctx context.Context, s *Service)
 	subscriberStartups   []func(ctx context.Context, s *Service)
 	otherStartups        []func(ctx context.Context, s *Service)
-	setupTasks           []setupTask // one-shot Cloud Run / Helm setup job steps
+	setupRegistry        *setup.Registry // abstract bulk setup plan (migrate, permissions, …)
 	startupRegistrations sync.Mutex
 	shutdownTimeout      time.Duration // Overall shutdown timeout
 }

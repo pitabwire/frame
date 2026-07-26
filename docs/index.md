@@ -38,6 +38,7 @@ Start here:
 - `docs/getting-started.md`
 - `docs/architecture.md`
 - `docs/service.md`
+- `docs/SETUP_JOB.md` — abstract bulk setup plans (migrate, permissions, bootstrap)
 - `docs/plugins-options.md`
 - `docs/ai-assistants.md`
 - `docs/examples.md`

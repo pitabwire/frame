@@ -24,6 +24,10 @@ ctx, svc := frame.NewServiceWithContext(ctx, frame.WithName("orders"))
 - `NewService` applies options and initializes core managers.
 - `Run` starts the HTTP server, background processing, and startup hooks.
 - `Stop` executes cleanup and shuts down gracefully.
+- **Setup jobs** (migrate / permissions / bootstrap) use the abstract
+  [`setup`](../setup) package and `Service.RunSetup` — see
+  [SETUP_JOB.md](./SETUP_JOB.md). Do not put one-shot deploy work only in
+  runtime PreStart.
 
 ### Startup Hooks (Ordering Matters)
 

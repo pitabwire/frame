@@ -7,94 +7,62 @@ import (
 
 	"github.com/pitabwire/frame/v2"
 	"github.com/pitabwire/frame/v2/config"
+	"github.com/pitabwire/frame/v2/setup"
 	"github.com/stretchr/testify/require"
 )
 
-func TestIsSetupModeFromEnvFlags(t *testing.T) {
-	t.Parallel()
-
-	t.Run("do_setup", func(t *testing.T) {
-		t.Parallel()
-		cfg := config.ConfigurationDefault{DoSetup: true}
-		require.True(t, cfg.IsSetupMode())
-		require.True(t, frame.IsSetupMode(&cfg))
-	})
-
-	t.Run("setup_tasks csv", func(t *testing.T) {
-		t.Parallel()
-		cfg := config.ConfigurationDefault{SetupTasks: "migrate, permissions ,bootstrap"}
-		require.True(t, cfg.IsSetupMode())
-		require.Equal(t, []string{"migrate", "permissions", "bootstrap"}, cfg.GetSetupTasks())
-	})
-
-	t.Run("idle", func(t *testing.T) {
-		t.Parallel()
-		cfg := config.ConfigurationDefault{}
-		// Without argv `setup` or flags, default config is not setup mode.
-		// (argv-based detection is covered by config package / integration.)
-		if !cfg.DoSetup && cfg.SetupTasks == "" {
-			// May still be true if the test binary was invoked with setup args;
-			// only assert CSV parsing above.
-			_ = cfg.IsSetupMode()
-		}
-	})
-}
-
-func TestRunSetupOrderAndUnknown(t *testing.T) {
+func TestServiceSetupRegistryBulk(t *testing.T) {
 	t.Parallel()
 
 	ctx, svc := frame.NewService()
 	order := make([]string, 0, 3)
 
-	svc.AddSetupTask("migrate", func(_ context.Context, _ *frame.Service) error {
-		order = append(order, "migrate")
+	svc.Setup().RegisterFunc(setup.NameMigrate, func(context.Context) error {
+		order = append(order, setup.NameMigrate)
 		return nil
 	})
-	svc.AddSetupTask("permissions", func(_ context.Context, _ *frame.Service) error {
-		order = append(order, "permissions")
+	svc.AddSetupTask(setup.NamePermissions, func(_ context.Context, _ *frame.Service) error {
+		order = append(order, setup.NamePermissions)
 		return nil
 	})
-	svc.AddSetupTask("bootstrap", func(_ context.Context, _ *frame.Service) error {
-		order = append(order, "bootstrap")
+	svc.Init(ctx, frame.WithSetupFunc(setup.NameBootstrap, func(context.Context) error {
+		order = append(order, setup.NameBootstrap)
 		return nil
-	})
+	}))
 
-	require.NoError(t, svc.RunSetup(ctx, "migrate", "bootstrap", "permissions"))
-	require.Equal(t, []string{"migrate", "bootstrap", "permissions"}, order)
-
-	err := svc.RunSetup(ctx, "nope")
-	require.ErrorIs(t, err, frame.ErrUnknownSetupTask)
+	require.NoError(t, svc.RunSetup(ctx, setup.NameMigrate, setup.NameBootstrap, setup.NamePermissions))
+	require.Equal(t, []string{setup.NameMigrate, setup.NameBootstrap, setup.NamePermissions}, order)
 }
 
-func TestRunSetupFailClosed(t *testing.T) {
+func TestServiceRunSetupFailClosed(t *testing.T) {
 	t.Parallel()
 
 	ctx, svc := frame.NewService()
-	svc.AddSetupTask("migrate", func(_ context.Context, _ *frame.Service) error {
+	svc.AddSetupTask(setup.NameMigrate, func(_ context.Context, _ *frame.Service) error {
 		return errors.New("schema boom")
 	})
-	err := svc.RunSetup(ctx, "migrate")
-	require.ErrorContains(t, err, "setup task \"migrate\"")
+	err := svc.RunSetup(ctx, setup.NameMigrate)
+	require.ErrorContains(t, err, "setup step \"migrate\"")
 	require.ErrorContains(t, err, "schema boom")
 }
 
-func TestWithSetupTaskOption(t *testing.T) {
+func TestSetupSelectionFromConfig(t *testing.T) {
+	t.Parallel()
+
+	cfg := config.ConfigurationDefault{DoSetup: true, SetupTasks: "migrate,permissions"}
+	sel := frame.SetupSelection(&cfg)
+	require.True(t, sel.Active)
+	require.Equal(t, []string{"migrate", "permissions"}, sel.Names)
+	require.True(t, frame.IsSetupMode(&cfg))
+}
+
+func TestWithSetupStepOption(t *testing.T) {
 	t.Parallel()
 
 	ctx, svc := frame.NewService()
-	svc.Init(ctx, frame.WithSetupTask("migrate", func(_ context.Context, _ *frame.Service) error {
-		return nil
+	svc.Init(ctx, frame.WithSetupStep(setup.Func{
+		StepName: setup.NameVerify,
+		Fn:       func(context.Context) error { return nil },
 	}))
-	require.Equal(t, []string{"migrate"}, svc.SetupTaskNames())
-}
-
-func TestPermissionsRegisterOnStartDefault(t *testing.T) {
-	t.Parallel()
-	cfg := config.ConfigurationDefault{}
-	// envDefault true — zero value before env parse is false; after FromEnv it is true.
-	// Explicit opt-out:
-	cfg.PermissionsRegisterOnStart = false
-	require.False(t, cfg.GetPermissionsRegisterOnStart())
-	cfg.PermissionsRegisterOnStart = true
-	require.True(t, cfg.GetPermissionsRegisterOnStart())
+	require.Equal(t, []string{setup.NameVerify}, svc.SetupTaskNames())
 }

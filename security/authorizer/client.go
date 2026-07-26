@@ -3,13 +3,18 @@ package authorizer
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"net/url"
+	"strings"
 	"time"
 
 	rts "github.com/ory/keto/proto/ory/keto/relation_tuples/v1alpha2"
 	"github.com/pitabwire/util"
+	"golang.org/x/oauth2"
+	"google.golang.org/api/idtoken"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 
 	"github.com/pitabwire/frame/v2/config"
@@ -32,6 +37,13 @@ type ketoAdapter struct {
 }
 
 // NewKetoAdapter creates a new Keto adapter with the given configuration.
+//
+// Transport selection from AUTHORIZATION_SERVICE_*_URI:
+//   - http://host:port  → plaintext gRPC (Kubernetes in-cluster)
+//   - https://host[:port] → TLS gRPC; when ADC can mint a Google ID token for
+//     the URI origin (Cloud Run / GCE metadata), attach it as Bearer so
+//     IAM-authenticated Cloud Run services (roles/run.invoker) accept the call
+//   - bare host:port     → plaintext (legacy / local)
 func NewKetoAdapter(
 	cfg config.ConfigurationAuthorization,
 	auditLogger security.AuditLogger,
@@ -47,40 +59,97 @@ func NewKetoAdapter(
 	}
 
 	if cfg.AuthorizationServiceCanRead() {
-		readConn, err := grpc.NewClient(
-			grpcTarget(cfg.GetAuthorizationServiceReadURI()),
-			grpc.WithTransportCredentials(insecure.NewCredentials()),
-		)
-		if err == nil {
+		if readConn, err := dialKetoGRPC(cfg.GetAuthorizationServiceReadURI()); err == nil {
 			adapter.readConn = readConn
 			adapter.checkClient = rts.NewCheckServiceClient(readConn)
 			adapter.readClient = rts.NewReadServiceClient(readConn)
 			adapter.expandClient = rts.NewExpandServiceClient(readConn)
+		} else {
+			util.Log(context.Background()).WithError(err).WithField(
+				"uri", cfg.GetAuthorizationServiceReadURI(),
+			).Warn("failed to dial keto read service")
 		}
 	}
 
 	if cfg.AuthorizationServiceCanWrite() {
-		writeConn, err := grpc.NewClient(
-			grpcTarget(cfg.GetAuthorizationServiceWriteURI()),
-			grpc.WithTransportCredentials(insecure.NewCredentials()),
-		)
-		if err == nil {
+		if writeConn, err := dialKetoGRPC(cfg.GetAuthorizationServiceWriteURI()); err == nil {
 			adapter.writeConn = writeConn
 			adapter.writeClient = rts.NewWriteServiceClient(writeConn)
+		} else {
+			util.Log(context.Background()).WithError(err).WithField(
+				"uri", cfg.GetAuthorizationServiceWriteURI(),
+			).Warn("failed to dial keto write service")
 		}
 	}
 
 	return adapter
 }
 
-// grpcTarget extracts a host:port suitable for grpc.NewClient from a URI.
-// grpc.NewClient treats "http" as a resolver scheme and appends ":443",
-// so we must strip the scheme and pass only host:port.
-func grpcTarget(uri string) string {
-	if u, err := url.Parse(uri); err == nil && u.Host != "" {
-		return u.Host
+// dialKetoGRPC opens a gRPC client connection with transport credentials that
+// match the URI scheme (plaintext for http / bare hosts, TLS for https).
+func dialKetoGRPC(rawURI string) (*grpc.ClientConn, error) {
+	target, opts := ketoDialOptions(rawURI)
+	return grpc.NewClient(target, opts...)
+}
+
+// ketoDialOptions returns the gRPC target (host:port) and dial options for uri.
+func ketoDialOptions(rawURI string) (string, []grpc.DialOption) {
+	u, err := url.Parse(rawURI)
+	if err != nil || u.Host == "" {
+		// Legacy bare host:port or path-only values.
+		return rawURI, []grpc.DialOption{
+			grpc.WithTransportCredentials(insecure.NewCredentials()),
+		}
 	}
-	return uri
+
+	target := u.Host
+	scheme := strings.ToLower(u.Scheme)
+
+	if scheme == "https" {
+		opts := []grpc.DialOption{
+			grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{
+				MinVersion: tls.VersionTLS12,
+			})),
+		}
+		// Audience must match Cloud Run service URL or a configured custom audience.
+		audience := "https://" + u.Host
+		if ts, tsErr := idtoken.NewTokenSource(context.Background(), audience); tsErr == nil {
+			opts = append(opts, grpc.WithPerRPCCredentials(&idTokenRPCCredentials{ts: ts}))
+		}
+		return target, opts
+	}
+
+	// http:// or empty scheme → plaintext (cluster-internal keto).
+	return target, []grpc.DialOption{
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	}
+}
+
+// idTokenRPCCredentials attaches a Google ID token as Authorization: Bearer
+// for Cloud Run IAM (roles/run.invoker). Requires transport security.
+type idTokenRPCCredentials struct {
+	ts oauth2.TokenSource
+}
+
+func (c *idTokenRPCCredentials) GetRequestMetadata(_ context.Context, _ ...string) (map[string]string, error) {
+	tok, err := c.ts.Token()
+	if err != nil {
+		return nil, err
+	}
+	return map[string]string{
+		"authorization": "Bearer " + tok.AccessToken,
+	}, nil
+}
+
+func (c *idTokenRPCCredentials) RequireTransportSecurity() bool {
+	return true
+}
+
+// grpcTarget extracts a host:port suitable for grpc.NewClient from a URI.
+// Kept for tests and callers that only need the target form.
+func grpcTarget(uri string) string {
+	target, _ := ketoDialOptions(uri)
+	return target
 }
 
 // Close releases gRPC connections.

@@ -10,6 +10,9 @@ import (
 
 	"github.com/pitabwire/util"
 	"google.golang.org/protobuf/reflect/protoreflect"
+
+	"github.com/pitabwire/frame/v2/config"
+	"github.com/pitabwire/frame/v2/setup"
 )
 
 // ManifestRegistrationURLEnvVar is the environment variable that provides
@@ -38,30 +41,27 @@ const ManifestRegistrationPath = "/_internal/register/permissions"
 // is extracted from the proto service descriptor's service_permissions
 // annotation using proto reflection.
 //
-// Registration runs as a PreStartMethod whenever PERMISSIONS_REGISTRATION_URL
-// is set and the proto descriptor carries a service_permissions extension.
-// It fires once per process start, before the service begins serving
-// traffic. The tenancy registration endpoint is an idempotent upsert keyed
-// on namespace, so repeat registrations across pod restarts are safe and
-// keep the tenancy.service_namespaces table in sync with whatever the
-// running binary declares.
+// Two delivery paths (both require PERMISSIONS_REGISTRATION_URL):
 //
-// Earlier versions gated registration on DO_MIGRATION=true so that only the
-// migration job published manifests. That coupling broke whenever a
-// service's cmd/main.go short-circuited before svc.Run (typical pattern):
-// the migration pod never reached the PreStartMethod, the regular pod was
-// locked out by the gate, and the namespace was never registered. Decoupling
-// from migration mode fixes that without forcing every consumer to invent
-// glue around svc.Run.
+//  1. Setup plan (preferred): registers an abstract setup.Step named
+//     setup.NamePermissions on Service.Setup(). A Job runs it in bulk via
+//     setup.Registry.Run / Service.RunSetup (fail-closed, sync retries).
 //
-// The tenancy service URL is read from PERMISSIONS_REGISTRATION_URL. When
-// unset, the option is a no-op — services that don't want to register can
-// leave it unset in their environment.
+//  2. Runtime PreStart (optional): when PERMISSIONS_REGISTER_ON_START is true
+//     (default, Colony/K8s parity), also schedules an async best-effort
+//     PreStart publish on every process start. Set
+//     PERMISSIONS_REGISTER_ON_START=false on Cloud Run replicas when the
+//     setup Job owns registration.
+//
+// See package setup and docs/SETUP_JOB.md for the abstract bulk model.
 //
 // Usage:
 //
 //	sd := profilepb.File_profile_v1_profile_proto.Services().ByName("ProfileService")
-//	frame.WithPermissionRegistration(sd)
+//	svc.Init(ctx, frame.WithPermissionRegistration(sd), frame.WithSetupFunc(setup.NameMigrate, migrateFn))
+//	if frame.IsSetupMode(&cfg) {
+//	    return svc.RunSetup(ctx)
+//	}
 func WithPermissionRegistration(sd protoreflect.ServiceDescriptor) Option {
 	return func(_ context.Context, s *Service) {
 		registrationURL := os.Getenv(ManifestRegistrationURLEnvVar)
@@ -69,23 +69,50 @@ func WithPermissionRegistration(sd protoreflect.ServiceDescriptor) Option {
 			return
 		}
 
+		// Abstract setup step — executable alone or in a bulk plan.
+		s.Setup().Register(setup.Func{
+			StepName: setup.NamePermissions,
+			Fn: func(ctx context.Context) error {
+				manifest := buildManifestFromDescriptor(sd)
+				if manifest == nil {
+					util.Log(ctx).Warn("setup permissions: no service_permissions extension on descriptor; skipping")
+					return nil
+				}
+				return publishManifestWithRetrySync(ctx, s, registrationURL, manifest)
+			},
+		})
+
+		// Runtime PreStart: async, best-effort (opt-out via PERMISSIONS_REGISTER_ON_START=false).
+		if !permissionsRegisterOnStart(s) {
+			return
+		}
 		s.AddPreStartMethod(func(ctx context.Context, svc *Service) {
 			manifest := buildManifestFromDescriptor(sd)
 			if manifest == nil {
 				return
 			}
-
-			// Retry the manifest POST in a small backoff loop. A pod that is
-			// also its own OAuth2 token-signing endpoint (the auth service)
-			// can't sign assertions until at least one replica is ready, so
-			// the first few attempts during a cold-start roll may legitimately
-			// see connection-refused / token-endpoint-unavailable. Logging at
-			// Warn (rather than Fatal-ing the process) keeps the pod alive
-			// long enough for the signer to come up; once registration
-			// succeeds the loop exits. Registration is an idempotent upsert,
-			// so retrying is safe.
 			go publishManifestWithRetry(ctx, svc, registrationURL, manifest)
 		})
+	}
+}
+
+func permissionsRegisterOnStart(s *Service) bool {
+	if s == nil {
+		return true
+	}
+	if c, ok := s.Config().(config.ConfigurationSetup); ok {
+		return c.GetPermissionsRegisterOnStart()
+	}
+	// Env fallback when config does not implement ConfigurationSetup.
+	v := strings.TrimSpace(os.Getenv("PERMISSIONS_REGISTER_ON_START"))
+	if v == "" {
+		return true
+	}
+	switch strings.ToLower(v) {
+	case "0", "false", "no", "off":
+		return false
+	default:
+		return true
 	}
 }
 
@@ -186,52 +213,110 @@ func standardRoleName(v int32) string {
 	return standardRoleNames[v]
 }
 
+var permissionRegistrationDelays = []time.Duration{ //nolint:gochecknoglobals // shared backoff schedule
+	1 * time.Second, 2 * time.Second, 5 * time.Second, 10 * time.Second,
+	20 * time.Second, 30 * time.Second, 60 * time.Second,
+}
+
 // publishManifestWithRetry runs publishManifest in a bounded backoff loop.
-// It logs failures at Warn level instead of crashing the process so a pod
-// that depends on its own OAuth2 token-signing endpoint (the auth service)
-// can survive the brief window during a cold rollout when no replica is
-// available to sign assertions. The endpoint is an idempotent upsert keyed
-// on namespace, so retried POSTs after success are harmless.
+// Failures are logged at Warn; the process is not crashed (runtime PreStart).
 func publishManifestWithRetry(ctx context.Context, svc *Service, registrationURL string, manifest any) {
+	_ = publishManifestWithRetryMode(ctx, svc, registrationURL, manifest, false)
+}
+
+// publishManifestWithRetrySync is the setup-job path: same backoff, but the
+// final failure is returned so the Cloud Run Job exits non-zero.
+func publishManifestWithRetrySync(ctx context.Context, svc *Service, registrationURL string, manifest any) error {
+	return publishManifestWithRetryMode(ctx, svc, registrationURL, manifest, true)
+}
+
+func publishManifestWithRetryMode(
+	ctx context.Context,
+	svc *Service,
+	registrationURL string,
+	manifest any,
+	failClosed bool,
+) error {
 	logger := util.Log(ctx)
-	namespace := ""
-	if m, ok := manifest.(map[string]any); ok {
-		namespace, _ = m["namespace"].(string)
+	namespace := manifestNamespace(manifest)
+	maxAttempts := 0 // unbounded for runtime PreStart
+	if failClosed {
+		maxAttempts = len(permissionRegistrationDelays)
 	}
 
-	delays := []time.Duration{
-		1 * time.Second, 2 * time.Second, 5 * time.Second, 10 * time.Second,
-		20 * time.Second, 30 * time.Second, 60 * time.Second,
-	}
-	for attempt := 0; ; attempt++ {
+	for attempt := 0; maxAttempts == 0 || attempt < maxAttempts; attempt++ {
 		err := publishManifest(ctx, svc, registrationURL, manifest)
 		if err == nil {
 			if attempt > 0 {
 				logger.WithField("namespace", namespace).WithField("attempts", attempt+1).
 					Info("permission manifest registered after retries")
 			}
-			return
+			return nil
 		}
-		if ctx.Err() != nil {
-			logger.WithError(err).WithField("namespace", namespace).
-				Warn("permission manifest registration abandoned: context cancelled")
-			return
+		if done := waitPermissionRetry(ctx, logger, namespace, err, attempt, failClosed); done != nil {
+			if failClosed {
+				return done
+			}
+			// Runtime PreStart: never fail the process.
+			return nil
 		}
-		delay := delays[len(delays)-1]
-		if attempt < len(delays) {
-			delay = delays[attempt]
-		}
-		logger.WithError(err).WithField("namespace", namespace).
-			WithField("retry_in", delay.String()).
-			Warn("permission manifest registration failed, retrying")
+	}
+	if failClosed {
+		return fmt.Errorf("permission manifest registration failed for %s after retries", namespace)
+	}
+	return nil
+}
 
-		t := time.NewTimer(delay)
-		select {
-		case <-ctx.Done():
-			t.Stop()
-			return
-		case <-t.C:
+func manifestNamespace(manifest any) string {
+	m, isMap := manifest.(map[string]any)
+	if !isMap {
+		return ""
+	}
+	ns, _ := m["namespace"].(string)
+	return ns
+}
+
+// waitPermissionRetry sleeps for the next backoff slot. Returns a non-nil error
+// when the caller should stop (context cancelled or fail-closed exhausted).
+func waitPermissionRetry(
+	ctx context.Context,
+	logger *util.LogEntry,
+	namespace string,
+	err error,
+	attempt int,
+	failClosed bool,
+) error {
+	if ctx.Err() != nil {
+		logger.WithError(err).WithField("namespace", namespace).
+			Warn("permission manifest registration abandoned: context cancelled")
+		if failClosed {
+			return fmt.Errorf("permission manifest registration cancelled for %s: %w", namespace, err)
 		}
+		return err // non-nil stops the loop; publishManifestWithRetry ignores return
+	}
+	if failClosed && attempt >= len(permissionRegistrationDelays)-1 {
+		logger.WithError(err).WithField("namespace", namespace).
+			Error("permission manifest registration failed after retries")
+		return fmt.Errorf("permission manifest registration failed for %s: %w", namespace, err)
+	}
+	delay := permissionRegistrationDelays[len(permissionRegistrationDelays)-1]
+	if attempt < len(permissionRegistrationDelays) {
+		delay = permissionRegistrationDelays[attempt]
+	}
+	logger.WithError(err).WithField("namespace", namespace).
+		WithField("retry_in", delay.String()).
+		Warn("permission manifest registration failed, retrying")
+
+	t := time.NewTimer(delay)
+	defer t.Stop()
+	select {
+	case <-ctx.Done():
+		if failClosed {
+			return fmt.Errorf("permission manifest registration cancelled for %s: %w", namespace, err)
+		}
+		return err
+	case <-t.C:
+		return nil
 	}
 }
 

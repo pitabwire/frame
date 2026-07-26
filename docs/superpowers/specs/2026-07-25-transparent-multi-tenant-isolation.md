@@ -7,7 +7,7 @@
 | **Date** | 2026-07-25 |
 | **Status** | Draft (revised after design review) |
 | **Repository** | github.com/pitabwire/frame/v2 (`/home/j/code/pitabwire/frame`) |
-| **Related** | [Tenancy & RLS Pluggable Design](docs/superpowers/specs/2026-05-12-tenancy-rls-pluggable-design.md) (landed); claims mapping hardening (`0fd41df`); health probes (`277b565`) |
+| **Related** | [Tenancy & RLS Pluggable Design](2026-05-12-tenancy-rls-pluggable-design.md) (landed); claims mapping hardening (`0fd41df`); health probes (`277b565`) |
 | **Durable copy** | Prefer later under `docs/superpowers/specs/` (e.g. `2026-07-25-transparent-multi-tenant-isolation.md`) |
 
 ---

@@ -151,7 +151,7 @@ env = {
 
 ## Adoption checklist
 
-1. Frame ≥ **v2.0.17** (no runtime PreStart permissions).
+1. Frame ≥ **v2.1.0** (also tagged as v2.0.17) (no runtime PreStart permissions).
 2. Register `migrate` / `bootstrap` / `verify` on `svc.Setup()`.
 3. `WithPermissionRegistration(sd)` so the Job can run `permissions`.
 4. Branch: `if frame.ShouldRunSetup(&cfg) { RunSetupForProcess; return }`.

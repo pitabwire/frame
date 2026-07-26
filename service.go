@@ -134,6 +134,7 @@ type Service struct {
 	publisherStartups    []func(ctx context.Context, s *Service)
 	subscriberStartups   []func(ctx context.Context, s *Service)
 	otherStartups        []func(ctx context.Context, s *Service)
+	setupTasks           []setupTask // one-shot Cloud Run / Helm setup job steps
 	startupRegistrations sync.Mutex
 	shutdownTimeout      time.Duration // Overall shutdown timeout
 }

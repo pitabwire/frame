@@ -310,6 +310,18 @@ type ConfigurationDefault struct {
 	DatabaseSkipDefaultTransaction bool     `env:"SKIP_DEFAULT_TRANSACTION" yaml:"skip_default_transaction" envDefault:"true"`
 	DatabasePreferSimpleProtocol   bool     `env:"PREFER_SIMPLE_PROTOCOL"   yaml:"prefer_simple_protocol"   envDefault:"true"`
 
+	// Setup job (Cloud Run Job / Helm pre-upgrade): multi-step one-shot work.
+	// Prefer argv `setup migrate permissions bootstrap` over DO_MIGRATION alone.
+	// See frame.RunSetup / WithSetupTask / WithPermissionRegistration.
+	DoSetup    bool   `env:"DO_SETUP"          yaml:"do_setup"          envDefault:"false"`
+	SetupTasks string `env:"FRAME_SETUP_TASKS" yaml:"setup_tasks"       envDefault:""` // CSV when not using argv
+
+	// PermissionsRegisterOnStart controls whether WithPermissionRegistration
+	// also fires on every runtime PreStart (async, best-effort). Default true
+	// keeps cluster/Colony behaviour. Set false on Cloud Run replicas when
+	// the setup job owns permission publishing (`setup … permissions`).
+	PermissionsRegisterOnStart bool `env:"PERMISSIONS_REGISTER_ON_START" yaml:"permissions_register_on_start" envDefault:"true"`
+
 	DatabaseMaxIdleConnections           int `envDefault:"2"   env:"DATABASE_MAX_IDLE_CONNECTIONS"                yaml:"database_max_idle_connections"`
 	DatabaseMaxOpenConnections           int `envDefault:"5"   env:"DATABASE_MAX_OPEN_CONNECTIONS"                yaml:"database_max_open_connections"`
 	DatabaseMaxConnectionLifeTimeSeconds int `envDefault:"300" env:"DATABASE_MAX_CONNECTION_LIFE_TIME_IN_SECONDS" yaml:"database_max_connection_life_time_seconds"`
@@ -1079,6 +1091,67 @@ func (c *ConfigurationDefault) GetDatabaseReplicaHostURL() []string {
 func (c *ConfigurationDefault) DoDatabaseMigrate() bool {
 	stdArgs := os.Args[1:]
 	return c.DatabaseMigrate || (len(stdArgs) > 0 && stdArgs[0] == "migrate")
+}
+
+// ConfigurationSetup is the contract for multi-step setup jobs (migrate,
+// permissions, bootstrap, …). Implemented by ConfigurationDefault.
+type ConfigurationSetup interface {
+	IsSetupMode() bool
+	GetSetupTasks() []string
+	GetPermissionsRegisterOnStart() bool
+}
+
+var _ ConfigurationSetup = new(ConfigurationDefault)
+
+// IsSetupMode reports setup-job intent (not the legacy bare `migrate` argv).
+func (c *ConfigurationDefault) IsSetupMode() bool {
+	if c.DoSetup {
+		return true
+	}
+	if strings.TrimSpace(c.SetupTasks) != "" {
+		return true
+	}
+	args := os.Args[1:]
+	return len(args) > 0 && args[0] == "setup"
+}
+
+// GetSetupTasks returns ordered task names from argv after `setup`, else
+// FRAME_SETUP_TASKS CSV. Empty means “all registered tasks”.
+func (c *ConfigurationDefault) GetSetupTasks() []string {
+	args := os.Args[1:]
+	if len(args) > 0 && args[0] == "setup" {
+		if len(args) == 1 {
+			return nil
+		}
+		out := make([]string, 0, len(args)-1)
+		for _, a := range args[1:] {
+			a = strings.TrimSpace(a)
+			if a != "" {
+				out = append(out, a)
+			}
+		}
+		return out
+	}
+	raw := strings.TrimSpace(c.SetupTasks)
+	if raw == "" {
+		return nil
+	}
+	parts := strings.Split(raw, ",")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+// GetPermissionsRegisterOnStart is true when runtime PreStart should still
+// publish permission manifests (default). Setup jobs always register when
+// the "permissions" task is selected, independent of this flag.
+func (c *ConfigurationDefault) GetPermissionsRegisterOnStart() bool {
+	return c.PermissionsRegisterOnStart
 }
 
 func (c *ConfigurationDefault) PreferSimpleProtocol() bool {

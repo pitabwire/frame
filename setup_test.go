@@ -66,3 +66,24 @@ func TestWithSetupStepOption(t *testing.T) {
 	}))
 	require.Equal(t, []string{setup.NameVerify}, svc.SetupTaskNames())
 }
+
+func TestPermissionsRegisterOnStartDisabled(t *testing.T) {
+	t.Parallel()
+	cfg := config.ConfigurationDefault{PermissionsRegisterOnStart: true}
+	// Field is ignored — runtime PreStart publishing was removed.
+	require.False(t, cfg.GetPermissionsRegisterOnStart())
+}
+
+func TestShouldRunSetupAndLegacyMigrate(t *testing.T) {
+	t.Parallel()
+	ctx, svc := frame.NewService()
+	ran := false
+	svc.Setup().RegisterFunc(setup.NameMigrate, func(context.Context) error {
+		ran = true
+		return nil
+	})
+	cfg := config.ConfigurationDefault{DatabaseMigrate: true}
+	require.True(t, frame.ShouldRunSetup(&cfg))
+	require.NoError(t, svc.RunSetupForProcess(ctx, &cfg))
+	require.True(t, ran)
+}

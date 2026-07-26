@@ -1,11 +1,14 @@
 # Setup plans: abstract bulk one-shot work
 
 Deploy-time work (schema migrate, permission manifests, root/bot bootstrap,
-verification) should run as a **bulk setup plan** in a Job — not on every
-runtime cold start, and not as ad-hoc Frame-only side effects.
+verification) runs as a **bulk setup plan** in a Job — not on every runtime
+cold start.
 
-Frame ships an **abstract** package, [`setup`](../setup), plus thin Service
-adapters. The contract does not depend on Cloud Run, Helm, or Frame internals.
+Frame ships package [`setup`](../setup) plus thin Service adapters. The
+contract does not depend on Cloud Run, Helm, or Frame HTTP serving.
+
+**Permission manifests are never published at runtime PreStart.** Use the
+`permissions` setup step so startup stays fast.
 
 ---
 
@@ -28,8 +31,6 @@ type Step interface {
 
 Sugar: `setup.Func{StepName: "migrate", Fn: fn}`.
 
-Well-known names (conventions only):
-
 | Constant | Name | Typical use |
 |----------|------|-------------|
 | `setup.NameMigrate` | `migrate` | Schema migrations |
@@ -45,201 +46,131 @@ reg.RegisterFunc(setup.NameMigrate, migrateFn)
 reg.Register(myBootstrapStep)
 reg.RegisterFunc(setup.NameVerify, verifyFn)
 
-// all registered, registration order
-err := reg.RunAll(ctx)
-
-// explicit subset / order
+err := reg.RunAll(ctx) // registration order
 err := reg.Run(ctx, setup.NameMigrate, setup.NamePermissions, setup.NameBootstrap)
 ```
-
-- Same name registered twice → **replace** function, **keep** position.
-- Unknown name → `setup.ErrUnknownStep`.
-- Empty registry / empty selection → `setup.ErrEmptyPlan`.
 
 ### `Selection` — process mode (pure)
 
 ```go
 sel := setup.Select(os.Args[1:], doSetupFlag, setupTasksCSV)
-// or setup.SelectFromOS(doSetup, csv)
-
 if sel.Active {
     return reg.Run(ctx, sel.Names...) // empty Names => all registered
 }
-// else: long-running server
 ```
 
-| Input | `Active` | `Names` |
-|-------|----------|---------|
+| Input | Active | Names |
+|-------|--------|-------|
 | argv `setup migrate permissions` | true | `[migrate, permissions]` |
-| argv `setup` | true | empty → run all |
-| `DO_SETUP=true` | true | CSV or all |
-| `FRAME_SETUP_TASKS=a,b` | true | `[a,b]` |
-| argv `migrate` alone | **false** | (legacy migrate path) |
+| argv `setup` | true | empty → all registered |
+| `DO_SETUP=true` / `FRAME_SETUP_TASKS` | true | CSV or all |
+| argv `migrate` alone | **false** | use `ShouldRunSetup` + `RunSetupForProcess` |
 
 ---
 
-## Frame adapters (thin)
+## Frame adapters
 
 | API | Role |
 |-----|------|
-| `svc.Setup() *setup.Registry` | Lazy registry on the Service |
-| `frame.WithSetupStep(step)` | Register abstract `setup.Step` |
-| `frame.WithSetupFunc(name, fn)` | Register name + `func(ctx) error` |
-| `frame.WithSetupTask(name, fn)` | Register `func(ctx, *Service) error` when step needs Service |
-| `svc.RunSetup(ctx, names...)` | `Setup().Run` + config selection |
-| `frame.IsSetupMode(cfg)` / `SetupSelection(cfg)` | Config/argv selection |
-| `frame.WithPermissionRegistration(sd)` | Registers `permissions` **Step** + optional runtime PreStart |
+| `svc.Setup() *setup.Registry` | Lazy registry |
+| `WithSetupStep` / `WithSetupFunc` | Register abstract steps |
+| `WithSetupTask` | Step that needs `*Service` |
+| `WithPermissionRegistration(sd)` | Registers **only** the `permissions` setup Step (no PreStart) |
+| `ShouldRunSetup(cfg)` | Setup mode **or** legacy migrate |
+| `RunSetupForProcess(ctx, cfg)` | Runs plan for this process then caller exits |
+| `IsSetupMode` / `SetupSelection` | Config/argv selection |
 
-Config (`config.ConfigurationDefault`):
+### Config
 
-| Env / field | Purpose |
-|-------------|---------|
+| Env | Purpose |
+|-----|---------|
 | `DO_SETUP` | Force setup mode |
-| `FRAME_SETUP_TASKS` | CSV step list when not using argv |
-| `PERMISSIONS_REGISTER_ON_START` | Runtime PreStart for manifests (default `true`; set `false` when Job owns it) |
-| `PERMISSIONS_REGISTRATION_URL` | Tenancy register URL (required for permissions step) |
+| `FRAME_SETUP_TASKS` | CSV step list |
+| `PERMISSIONS_REGISTRATION_URL` | Required on the **setup Job** for permissions |
+| `PERMISSIONS_REGISTER_ON_START` | **Deprecated / ignored** |
 
 ---
 
 ## Application pattern
 
 ```go
-package main
+ctx, svc := frame.NewServiceWithContext(ctx, frame.WithConfig(&cfg), frame.WithDatastore())
 
-import (
-    "context"
+svc.Setup().RegisterFunc(setup.NameMigrate, func(ctx context.Context) error {
+    return repository.Migrate(ctx, svc.DatastoreManager(), cfg.GetDatabaseMigrationPath())
+})
+svc.Setup().RegisterFunc(setup.NameBootstrap, func(ctx context.Context) error {
+    return business.EnsureRootAuthorization(ctx, deps)
+})
 
-    "github.com/pitabwire/frame/v2"
-    "github.com/pitabwire/frame/v2/config"
-    "github.com/pitabwire/frame/v2/setup"
-    "github.com/pitabwire/util"
-)
+sd := myv1.File_....Services().ByName("MyService")
 
-func main() {
-    ctx := context.Background()
-    cfg, err := config.LoadWithOIDC[MyConfig](ctx)
-    if err != nil {
-        util.Log(ctx).WithError(err).Fatal("config")
-    }
-
-    ctx, svc := frame.NewServiceWithContext(ctx,
-        frame.WithConfig(&cfg),
-        frame.WithDatastore(),
-    )
-
-    // Abstract steps (no Service coupling when possible).
-    svc.Setup().RegisterFunc(setup.NameMigrate, func(ctx context.Context) error {
-        return repository.Migrate(ctx, svc.DatastoreManager(), cfg.GetDatabaseMigrationPath())
-    })
-    svc.Setup().RegisterFunc(setup.NameBootstrap, func(ctx context.Context) error {
-        return business.EnsureRootAuthorization(ctx, deps)
-    })
-    svc.Setup().RegisterFunc(setup.NameVerify, func(ctx context.Context) error {
-        return business.ConfirmReady(ctx, deps)
-    })
-
-    // Permissions step registered abstractly via Frame helper.
-    sd := myv1.File_....Services().ByName("MyService")
+if frame.ShouldRunSetup(&cfg) {
+    // Light Init: enough for OAuth HTTP client + registered steps.
     svc.Init(ctx, frame.WithPermissionRegistration(sd))
-
-    // --- one-shot Job ---
-    if frame.IsSetupMode(&cfg) {
-        if err := svc.RunSetup(ctx); err != nil {
-            util.Log(ctx).WithError(err).Fatal("setup plan failed")
-        }
-        return
+    if err := svc.RunSetupForProcess(ctx, &cfg); err != nil {
+        util.Log(ctx).WithError(err).Fatal("setup plan failed")
     }
-
-    // --- runtime ---
-    if err := svc.Run(ctx, ""); err != nil {
-        util.Log(ctx).WithError(err).Fatal("server stopped")
-    }
-}
-```
-
-**Standalone (no Service)** — same package, pure:
-
-```go
-reg := setup.NewRegistry()
-reg.RegisterFunc(setup.NameMigrate, migrateFn)
-reg.RegisterFunc(setup.NameVerify, verifyFn)
-
-sel := setup.SelectFromOS(false, os.Getenv("FRAME_SETUP_TASKS"))
-if !sel.Active {
-    // serve...
     return
 }
-if err := reg.Run(ctx, sel.Names...); err != nil {
-    log.Fatal(err)
-}
+
+// Runtime — no permission POST on startup.
+svc.Init(ctx, frame.WithHTTPHandler(...), frame.WithPermissionRegistration(sd), ...)
+// WithPermissionRegistration still registers the step (harmless if never RunSetup);
+// omit it on pure runtime if you prefer, as long as the setup Job image includes it.
+_ = svc.Run(ctx, "")
 ```
+
+**Legacy `migrate` argv:** `ShouldRunSetup` is true; `RunSetupForProcess` runs
+registered well-known steps in order: migrate → bootstrap → permissions → verify.
 
 ---
 
-## Cloud Run / Helm
+## Cloud Run
 
-### Job (setup plan)
+### Job
 
 ```hcl
-# After apps adopt the setup package:
-args = ["setup", "migrate", "permissions", "bootstrap", "verify"]
+args = ["setup", "migrate", "permissions", "bootstrap"]
+# or keep ["migrate"] — RunSetupForProcess still runs well-known registered steps
 
 env = {
   PERMISSIONS_REGISTRATION_URL = "https://tenancy.stawi.org/_internal/register/permissions"
-  # OAuth/Keto as needed so permissions step can authenticate
+  # OAuth/Keto as needed so the permissions step can authenticate
 }
 ```
 
 ### Runtime service
 
 ```hcl
-env = {
-  PERMISSIONS_REGISTER_ON_START = "false"  # Job owns manifests
-  # do not require setup argv
-}
+# Fast cold start: no setup argv, no permission registration on PreStart.
+# PERMISSIONS_REGISTRATION_URL optional on runtime.
 ```
-
-### Legacy
-
-| Still supported | Notes |
-|-----------------|--------|
-| argv `migrate` / `DO_MIGRATION` | `DoDatabaseMigrate()` only — **not** a full setup plan |
-| PreStart permission publish | Default on until you set `PERMISSIONS_REGISTER_ON_START=false` |
-
----
-
-## Why not “migrate only” or “register on every start”?
-
-| Approach | Problem |
-|----------|---------|
-| Job runs only schema migrate | Apps often exit before any permission/bootstrap code |
-| Runtime PreStart every scale-from-zero | Extra tenancy traffic; async fail-open hides errors |
-| **Bulk setup plan** | Ordered, fail-closed, re-runnable, abstract steps |
 
 ---
 
 ## Adoption checklist
 
-1. Depend on a Frame release that includes package `setup`.
-2. Register steps on `svc.Setup()` (migrate, bootstrap, verify, …).
-3. Keep `WithPermissionRegistration` for the permissions step (or register your own `setup.Step`).
-4. Branch on `frame.IsSetupMode` / `setup.Selection.Active` before `svc.Run`.
-5. Point the Cloud Run Job at `["setup", …]`.
-6. Set `PERMISSIONS_REGISTER_ON_START=false` on runtime replicas.
-7. Remove ad-hoc early-return migrate paths once the plan covers them.
+1. Frame ≥ **v2.0.17** (no runtime PreStart permissions).
+2. Register `migrate` / `bootstrap` / `verify` on `svc.Setup()`.
+3. `WithPermissionRegistration(sd)` so the Job can run `permissions`.
+4. Branch: `if frame.ShouldRunSetup(&cfg) { RunSetupForProcess; return }`.
+5. Job args: `["setup", "migrate", "permissions", …]` (or legacy `migrate`).
+6. Runtime must not rely on startup permission POSTs.
 
 ---
 
 ## API map
 
 ```
-setup.Step / setup.Func          abstract unit of work
-setup.Registry                   bulk register + Run / RunAll
-setup.Selection / Select         pure mode + name list
+setup.Step / Func          abstract unit of work
+setup.Registry             bulk register + Run / RunAll
+setup.Selection / Select   pure mode + name list
         │
         ▼
-frame.Service.Setup()            holds Registry
-frame.WithSetupStep/Func/Task    registration helpers
-frame.RunSetup / IsSetupMode     Service + config wiring
-frame.WithPermissionRegistration registers permissions Step (+ optional PreStart)
+frame.Service.Setup()              holds Registry
+frame.WithSetupStep/Func/Task      registration helpers
+frame.ShouldRunSetup               setup job OR legacy migrate
+frame.RunSetupForProcess           execute plan for this process
+frame.WithPermissionRegistration   permissions Step only (no PreStart)
 ```

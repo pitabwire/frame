@@ -316,11 +316,10 @@ type ConfigurationDefault struct {
 	DoSetup    bool   `env:"DO_SETUP"          yaml:"do_setup"          envDefault:"false"`
 	SetupTasks string `env:"FRAME_SETUP_TASKS" yaml:"setup_tasks"       envDefault:""` // CSV when not using argv
 
-	// PermissionsRegisterOnStart controls whether WithPermissionRegistration
-	// also fires on every runtime PreStart (async, best-effort). Default true
-	// keeps cluster/Colony behaviour. Set false on Cloud Run replicas when
-	// the setup job owns permission publishing (`setup … permissions`).
-	PermissionsRegisterOnStart bool `env:"PERMISSIONS_REGISTER_ON_START" yaml:"permissions_register_on_start" envDefault:"true"`
+	// PermissionsRegisterOnStart is deprecated and ignored. Permission
+	// manifests are published only via the setup plan (setup.NamePermissions).
+	// Kept so existing env/config files do not fail to parse.
+	PermissionsRegisterOnStart bool `env:"PERMISSIONS_REGISTER_ON_START" yaml:"permissions_register_on_start" envDefault:"false"`
 
 	DatabaseMaxIdleConnections           int `envDefault:"2"   env:"DATABASE_MAX_IDLE_CONNECTIONS"                yaml:"database_max_idle_connections"`
 	DatabaseMaxOpenConnections           int `envDefault:"5"   env:"DATABASE_MAX_OPEN_CONNECTIONS"                yaml:"database_max_open_connections"`
@@ -1147,11 +1146,10 @@ func (c *ConfigurationDefault) GetSetupTasks() []string {
 	return out
 }
 
-// GetPermissionsRegisterOnStart is true when runtime PreStart should still
-// publish permission manifests (default). Setup jobs always register when
-// the "permissions" task is selected, independent of this flag.
+// GetPermissionsRegisterOnStart always returns false. Runtime PreStart
+// permission publishing was removed — use setup.NamePermissions in a setup job.
 func (c *ConfigurationDefault) GetPermissionsRegisterOnStart() bool {
-	return c.PermissionsRegisterOnStart
+	return false
 }
 
 func (c *ConfigurationDefault) PreferSimpleProtocol() bool {

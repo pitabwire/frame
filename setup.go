@@ -124,3 +124,49 @@ func SetupSelection(cfg any) setup.Selection {
 	}
 	return setup.SelectFromOS(false, "")
 }
+
+// ShouldRunSetup is true when this process is a setup job (argv setup / DO_SETUP /
+// FRAME_SETUP_TASKS) or a legacy migrate job (argv migrate / DO_MIGRATION).
+// Runtime servers should call this and, when true, RunSetupForProcess then exit.
+func ShouldRunSetup(cfg any) bool {
+	if IsSetupMode(cfg) {
+		return true
+	}
+	if c, ok := cfg.(config.ConfigurationDatabase); ok {
+		return c.DoDatabaseMigrate()
+	}
+	return false
+}
+
+// RunSetupForProcess runs the setup plan for this process:
+//   - setup mode with explicit tasks → those tasks in order
+//   - setup mode with no task list → all registered steps (registration order)
+//   - legacy migrate only → well-known steps that are registered
+//     (migrate, bootstrap, permissions, verify), in that order
+//
+// Call only when ShouldRunSetup(cfg) is true. Returns an error if the plan fails.
+func (s *Service) RunSetupForProcess(ctx context.Context, cfg any) error {
+	if s == nil {
+		return setup.ErrEmptyPlan
+	}
+	if IsSetupMode(cfg) {
+		return s.RunSetup(ctx) // empty Names ⇒ all registered
+	}
+	// Legacy migrate argv / DO_MIGRATION: run registered well-known steps only.
+	order := []string{
+		setup.NameMigrate,
+		setup.NameBootstrap,
+		setup.NamePermissions,
+		setup.NameVerify,
+	}
+	var names []string
+	for _, n := range order {
+		if _, ok := s.Setup().Get(n); ok {
+			names = append(names, n)
+		}
+	}
+	if len(names) == 0 {
+		return setup.ErrEmptyPlan
+	}
+	return s.RunSetup(ctx, names...)
+}

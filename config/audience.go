@@ -124,18 +124,23 @@ func normalizeAudienceURL(value string) (string, error) {
 	if parsed.Fragment != "" {
 		return "", errors.New("fragment is not allowed")
 	}
-	if parsed.Path == "" || parsed.Path == "/" {
-		return "", errors.New("non-root path is required")
+	// Resource audiences may be either:
+	//   - subdomain form: https://profile.stawi.org (empty path)
+	//   - legacy path form: https://api.stawi.org/profile (non-root path)
+	if parsed.Path == "/" {
+		parsed.Path = ""
 	}
-	if strings.HasSuffix(parsed.Path, "/") {
-		return "", errors.New("trailing slash is not allowed")
-	}
-	if cleaned := path.Clean(parsed.Path); cleaned != parsed.Path {
-		return "", errors.New("path must not contain dot or duplicate-slash segments")
+	if parsed.Path != "" {
+		if strings.HasSuffix(parsed.Path, "/") {
+			return "", errors.New("trailing slash is not allowed")
+		}
+		if cleaned := path.Clean(parsed.Path); cleaned != parsed.Path {
+			return "", errors.New("path must not contain dot or duplicate-slash segments")
+		}
 	}
 
 	parsed.Scheme = httpsScheme
 	parsed.Host = strings.ToLower(parsed.Hostname())
 	parsed.RawPath = ""
-	return parsed.String(), nil
+	return strings.TrimSuffix(parsed.String(), "/"), nil
 }

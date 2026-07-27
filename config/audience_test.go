@@ -33,17 +33,19 @@ func TestParseResourceAudience(t *testing.T) {
 		want    config.ResourceAudience
 		wantErr bool
 	}{
-		{name: "canonical", value: "https://api.stawi.org/profile", want: "https://api.stawi.org/profile"},
-		{name: "normalizes host", value: " https://API.STAWI.ORG/profile ", want: "https://api.stawi.org/profile"},
+		{name: "canonical path", value: "https://api.stawi.org/profile", want: "https://api.stawi.org/profile"},
+		{name: "canonical subdomain", value: "https://profile.stawi.org", want: "https://profile.stawi.org"},
+		{name: "normalizes host path", value: " https://API.STAWI.ORG/profile ", want: "https://api.stawi.org/profile"},
+		{name: "normalizes host subdomain", value: " https://PROFILE.STAWI.ORG ", want: "https://profile.stawi.org"},
 		{name: "empty", value: "", wantErr: true},
 		{name: "non url", value: "service_profile", wantErr: true},
-		{name: "http", value: "http://api.stawi.org/profile", wantErr: true},
-		{name: "root", value: "https://api.stawi.org/", wantErr: true},
-		{name: "port", value: "https://api.stawi.org:443/profile", wantErr: true},
-		{name: "query", value: "https://api.stawi.org/profile?a=b", wantErr: true},
-		{name: "fragment", value: "https://api.stawi.org/profile#x", wantErr: true},
-		{name: "userinfo", value: "https://user@api.stawi.org/profile", wantErr: true},
-		{name: "trailing slash", value: "https://api.stawi.org/profile/", wantErr: true},
+		{name: "http", value: "http://profile.stawi.org", wantErr: true},
+		{name: "apex only", value: "https://stawi.org", want: "https://stawi.org"},
+		{name: "port", value: "https://profile.stawi.org:443", wantErr: true},
+		{name: "query", value: "https://profile.stawi.org?a=b", wantErr: true},
+		{name: "fragment", value: "https://profile.stawi.org#x", wantErr: true},
+		{name: "userinfo", value: "https://user@profile.stawi.org", wantErr: true},
+		{name: "trailing slash path", value: "https://api.stawi.org/profile/", wantErr: true},
 		{name: "dot segment", value: "https://api.stawi.org/a/../profile", wantErr: true},
 		{name: "duplicate slash", value: "https://api.stawi.org//profile", wantErr: true},
 		{name: "encoded", value: "https://api.stawi.org/%70rofile", wantErr: true},
@@ -67,18 +69,18 @@ func TestParseResourceAudiencesRejectsDuplicatesAndSorts(t *testing.T) {
 	t.Parallel()
 
 	got, err := config.ParseResourceAudiences([]string{
-		"https://api.stawi.org/tenancy",
-		"https://api.stawi.org/profile",
+		"https://tenancy.stawi.org",
+		"https://profile.stawi.org",
 	})
 	require.NoError(t, err)
 	require.Equal(t, []config.ResourceAudience{
-		"https://api.stawi.org/profile",
-		"https://api.stawi.org/tenancy",
+		"https://profile.stawi.org",
+		"https://tenancy.stawi.org",
 	}, got)
 
 	_, err = config.ParseResourceAudiences([]string{
-		"https://api.stawi.org/profile",
-		"https://API.STAWI.ORG/profile",
+		"https://profile.stawi.org",
+		"https://PROFILE.STAWI.ORG",
 	})
 	require.Error(t, err)
 }

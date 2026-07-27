@@ -139,12 +139,15 @@ func ShouldRunSetup(cfg any) bool {
 }
 
 // RunSetupForProcess runs the setup plan for this process:
-//   - setup mode with explicit tasks → those tasks in order
+//   - setup mode (argv "setup", DO_SETUP, FRAME_SETUP_TASKS) with explicit
+//     tasks → those tasks in order
 //   - setup mode with no task list → all registered steps (registration order)
-//   - legacy migrate only → well-known steps that are registered
-//     (migrate, bootstrap, permissions, verify), in that order
+//   - legacy migrate argv / DO_MIGRATION only → well-known steps that are
+//     registered (migrate, bootstrap, permissions, verify), in that order
 //
-// Call only when ShouldRunSetup(cfg) is true. Returns an error if the plan fails.
+// Prefer argv ["setup"] (or DO_SETUP without a task subset) for deploys so
+// every registered step runs. Call only when ShouldRunSetup(cfg) is true.
+// Returns an error if the plan fails.
 func (s *Service) RunSetupForProcess(ctx context.Context, cfg any) error {
 	if s == nil {
 		return setup.ErrEmptyPlan

@@ -121,24 +121,35 @@ svc.Init(ctx, frame.WithHTTPHandler(...), frame.WithPermissionRegistration(sd), 
 _ = svc.Run(ctx, "")
 ```
 
-**Legacy `migrate` argv:** `ShouldRunSetup` is true; `RunSetupForProcess` runs
-registered well-known steps in order: migrate → bootstrap → permissions → verify.
+**Preferred Job argv:** `["setup"]` (no task list) → every registered step in
+registration order (typically migrate, bootstrap, permissions, verify).
+
+**Legacy `migrate` argv:** still supported; `RunSetupForProcess` runs only the
+well-known steps that are registered, in fixed order:
+migrate → bootstrap → permissions → verify. Prefer `setup` for new deploys.
 
 ---
 
-## Cloud Run
+## Cloud Run / Colony Job
 
-### Job
+Prefer the **full setup plan** — not a permissions-only or migrate-only subset:
 
 ```hcl
-args = ["setup", "migrate", "permissions", "bootstrap"]
-# or keep ["migrate"] — RunSetupForProcess still runs well-known registered steps
+args = ["setup"]
+# empty task list → every registered step (migrate, bootstrap, permissions, verify, …)
 
 env = {
+  DO_SETUP                     = "true"  # optional when argv is already "setup"
   PERMISSIONS_REGISTRATION_URL = "https://tenancy.stawi.org/_internal/register/permissions"
   # OAuth/Keto as needed so the permissions step can authenticate
 }
 ```
+
+| Job argv | Behaviour |
+|----------|-----------|
+| `["setup"]` | **Preferred.** All registered steps, registration order. |
+| `["setup", "migrate", "permissions"]` | Explicit subset only (use sparingly). |
+| `["migrate"]` | **Legacy.** Well-known subset via `DO_MIGRATION` path; still supported. |
 
 ### Runtime service
 
@@ -151,11 +162,11 @@ env = {
 
 ## Adoption checklist
 
-1. Frame ≥ **v2.1.0** (also tagged as v2.0.17) (no runtime PreStart permissions).
+1. Frame ≥ **v2.1.0** (no runtime PreStart permissions).
 2. Register `migrate` / `bootstrap` / `verify` on `svc.Setup()`.
 3. `WithPermissionRegistration(sd)` so the Job can run `permissions`.
 4. Branch: `if frame.ShouldRunSetup(&cfg) { RunSetupForProcess; return }`.
-5. Job args: `["setup", "migrate", "permissions", …]` (or legacy `migrate`).
+5. Job args: **`["setup"]`** (full plan). Avoid relying on legacy `migrate` alone.
 6. Runtime must not rely on startup permission POSTs.
 
 ---

@@ -311,8 +311,9 @@ type ConfigurationDefault struct {
 	DatabasePreferSimpleProtocol   bool     `env:"PREFER_SIMPLE_PROTOCOL"   yaml:"prefer_simple_protocol"   envDefault:"true"`
 
 	// Setup job (Cloud Run Job / Helm pre-upgrade): multi-step one-shot work.
-	// Prefer argv `setup migrate permissions bootstrap` over DO_MIGRATION alone.
-	// See frame.RunSetup / WithSetupTask / WithPermissionRegistration.
+	// Prefer argv `setup` (all registered steps) or DO_SETUP=true over legacy
+	// DO_MIGRATION / argv `migrate`. See frame.RunSetup / WithSetupTask /
+	// WithPermissionRegistration.
 	DoSetup    bool   `env:"DO_SETUP"          yaml:"do_setup"          envDefault:"false"`
 	SetupTasks string `env:"FRAME_SETUP_TASKS" yaml:"setup_tasks"       envDefault:""` // CSV when not using argv
 

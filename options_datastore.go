@@ -109,6 +109,16 @@ func datastoreOptsFromConfig(s *Service, opts []pool.Option) ([]pool.Option, boo
 	return opts, doMigrate
 }
 
+// needMigrationPool is true when the process will run schema migrate steps:
+// legacy DO_MIGRATION / argv migrate, or the setup plan (argv setup / DO_SETUP)
+// which includes setup.NameMigrate among registered steps.
+func needMigrationPool(s *Service, doMigrateFlag bool) bool {
+	if doMigrateFlag {
+		return true
+	}
+	return IsSetupMode(s.Config())
+}
+
 func WithDatastore(opts ...pool.Option) Option {
 	return func(ctx context.Context, s *Service) {
 		enrichedOpts, doMigrate := datastoreOptsFromConfig(s, opts)
@@ -125,7 +135,7 @@ func WithDatastore(opts ...pool.Option) Option {
 		dbConnectionOpts := WithDatastoreConnectionWithOptions(datastore.DefaultPoolName, enrichedOpts...)
 		dbConnectionOpts(ctx, s)
 
-		if doMigrate {
+		if needMigrationPool(s, doMigrate) {
 			enrichedOpts = append(enrichedOpts, pool.WithPreparedStatements(false))
 			migrationOpts := WithDatastoreConnectionWithOptions(datastore.DefaultMigrationPoolName, enrichedOpts...)
 			migrationOpts(ctx, s)

@@ -338,18 +338,26 @@ func applyOutboundOAuth(
 	}
 
 	if cfg.tokenSource != nil {
+		// Product OAuth in Authorization, then Cloud Run IAM via
+		// X-Serverless-Authorization when a Google ID token is available
+		// (GCE/Cloud Run metadata). Cluster-internal HTTP is unchanged.
+		oauthTransport := &oauth2.Transport{
+			Base:   base,
+			Source: oauth2.ReuseTokenSource(nil, cfg.tokenSource),
+		}
 		client.Transport = oauth2CloseIdleTransport{
-			inner: &oauth2.Transport{
-				Base:   base,
-				Source: oauth2.ReuseTokenSource(nil, cfg.tokenSource),
-			},
-			base: base,
+			inner: &cloudRunIAMTransport{inner: oauthTransport},
+			base:  base,
 		}
 	}
 
 	if cfg.cliCredCfg != nil {
 		oauth2Ctx := context.WithValue(ctx, oauth2.HTTPClient, client)
 		client = cfg.cliCredCfg.Client(oauth2Ctx)
+		// clientcredentials.Client also needs dual-auth for Cloud Run hosts.
+		if client.Transport != nil {
+			client.Transport = &cloudRunIAMTransport{inner: client.Transport}
+		}
 	}
 
 	return client, nil

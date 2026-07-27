@@ -309,25 +309,65 @@ func (a *AuthenticationClaims) GetDeviceID() string {
 }
 
 func (a *AuthenticationClaims) GetRoles() []string {
-	var result = a.Roles
-	if len(result) > 0 {
-		return result
+	if len(a.Roles) > 0 {
+		return a.Roles
 	}
-
+	if a.Ext == nil {
+		return nil
+	}
 	roles, ok := a.Ext["roles"]
 	if !ok {
 		roles, ok = a.Ext["role"]
 		if !ok {
-			return result
+			return nil
 		}
 	}
+	// Token-hook session extras are almost always a JSON array
+	// (["internal"], ["admin","user"]). Comma-separated strings remain
+	// supported for ClaimsFromMap / AsMetadata round-trips.
+	return normalizeRoleList(roles)
+}
 
-	roleStr, ok2 := roles.(string)
-	if ok2 {
-		result = append(result, strings.Split(roleStr, ",")...)
+// normalizeRoleList accepts the shapes Hydra/JWT unmarshalling produce for
+// roles under ext: string, []string, or []any of strings.
+func normalizeRoleList(roles any) []string {
+	switch typed := roles.(type) {
+	case string:
+		return splitRoleCSV(typed)
+	case []string:
+		out := make([]string, 0, len(typed))
+		for _, part := range typed {
+			if part = strings.TrimSpace(part); part != "" {
+				out = append(out, part)
+			}
+		}
+		return out
+	case []any:
+		out := make([]string, 0, len(typed))
+		for _, item := range typed {
+			part, isStr := item.(string)
+			if !isStr {
+				continue
+			}
+			if part = strings.TrimSpace(part); part != "" {
+				out = append(out, part)
+			}
+		}
+		return out
+	default:
+		return nil
 	}
+}
 
-	return result
+func splitRoleCSV(raw string) []string {
+	parts := strings.Split(raw, ",")
+	out := make([]string, 0, len(parts))
+	for _, part := range parts {
+		if part = strings.TrimSpace(part); part != "" {
+			out = append(out, part)
+		}
+	}
+	return out
 }
 
 func (a *AuthenticationClaims) GetServiceName() string {

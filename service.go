@@ -18,6 +18,7 @@ import (
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
+	"google.golang.org/protobuf/reflect/protoreflect"
 
 	"github.com/pitabwire/frame/v2/cache"
 	"github.com/pitabwire/frame/v2/client"
@@ -125,19 +126,23 @@ type Service struct {
 	registeredPlugins []string
 	routeLister       RouteLister
 
-	startedAt            time.Time
-	startOnce            sync.Once
-	startupOnce          sync.Once
-	startupCompleted     bool
-	stopMutex            sync.Mutex
-	startupErrors        []error
-	startupMutex         sync.Mutex
-	publisherStartups    []func(ctx context.Context, s *Service)
-	subscriberStartups   []func(ctx context.Context, s *Service)
-	otherStartups        []func(ctx context.Context, s *Service)
-	setupRegistry        *setup.Registry // abstract bulk setup plan (migrate, permissions, …)
-	startupRegistrations sync.Mutex
-	shutdownTimeout      time.Duration // Overall shutdown timeout
+	startedAt          time.Time
+	startOnce          sync.Once
+	startupOnce        sync.Once
+	startupCompleted   bool
+	stopMutex          sync.Mutex
+	startupErrors      []error
+	startupMutex       sync.Mutex
+	publisherStartups  []func(ctx context.Context, s *Service)
+	subscriberStartups []func(ctx context.Context, s *Service)
+	otherStartups      []func(ctx context.Context, s *Service)
+	setupRegistry      *setup.Registry // abstract bulk setup plan (migrate, permissions, …)
+	// permissionManifestSDs accumulates service descriptors from
+	// WithPermissionRegistration so multi-service binaries publish every
+	// namespace (repeated option calls append instead of overwriting).
+	permissionManifestSDs []protoreflect.ServiceDescriptor
+	startupRegistrations  sync.Mutex
+	shutdownTimeout       time.Duration // Overall shutdown timeout
 }
 
 type Option func(ctx context.Context, service *Service)

@@ -36,12 +36,16 @@ const (
 const ManifestRegistrationPath = "/_internal/register/permissions"
 
 // WithPermissionRegistration registers a setup.Step named setup.NamePermissions
-// that publishes this service's permission manifest to tenancy.
+// that publishes this service's permission manifest(s) to tenancy.
 //
 // Runtime PreStart registration is intentionally not used — permission
 // publishing is a one-shot setup plan step so process startup stays fast.
 // Jobs must run `setup … permissions` (or legacy migrate via
 // Service.RunSetupForProcess) with PERMISSIONS_REGISTRATION_URL set.
+//
+// Multiple descriptors may be passed in one call, or via repeated option
+// applications — they accumulate and all publish under the single
+// "permissions" setup step (no silent overwrite of earlier namespaces).
 //
 // See package setup and docs/SETUP_JOB.md.
 //
@@ -50,28 +54,71 @@ const ManifestRegistrationPath = "/_internal/register/permissions"
 //	sd := profilepb.File_profile_v1_profile_proto.Services().ByName("ProfileService")
 //	svc.Setup().RegisterFunc(setup.NameMigrate, migrateFn)
 //	svc.Init(ctx, frame.WithPermissionRegistration(sd))
+//	// multi-service binary:
+//	svc.Init(ctx, frame.WithPermissionRegistration(billingSD, collectionSD))
 //	if frame.ShouldRunSetup(&cfg) {
 //	    return svc.RunSetupForProcess(ctx, &cfg)
 //	}
-func WithPermissionRegistration(sd protoreflect.ServiceDescriptor) Option {
+func WithPermissionRegistration(sds ...protoreflect.ServiceDescriptor) Option {
 	return func(_ context.Context, s *Service) {
 		registrationURL := os.Getenv(ManifestRegistrationURLEnvVar)
 		if registrationURL == "" {
 			return
 		}
-
+		appendPermissionDescriptors(s, sds)
+		if len(s.permissionManifestSDs) == 0 {
+			return
+		}
 		s.Setup().Register(setup.Func{
 			StepName: setup.NamePermissions,
 			Fn: func(ctx context.Context) error {
-				manifest := buildManifestFromDescriptor(sd)
-				if manifest == nil {
-					util.Log(ctx).Warn("setup permissions: no service_permissions extension on descriptor; skipping")
-					return nil
-				}
-				return publishManifestWithRetrySync(ctx, s, registrationURL, manifest)
+				return s.publishAllPermissionManifests(ctx, registrationURL)
 			},
 		})
 	}
+}
+
+func appendPermissionDescriptors(s *Service, sds []protoreflect.ServiceDescriptor) {
+	for _, sd := range sds {
+		if sd != nil {
+			s.permissionManifestSDs = append(s.permissionManifestSDs, sd)
+		}
+	}
+}
+
+// publishAllPermissionManifests posts every accumulated service descriptor's
+// permission manifest to tenancy during the setup permissions step.
+func (s *Service) publishAllPermissionManifests(ctx context.Context, registrationURL string) error {
+	var firstErr error
+	published := 0
+	for _, sd := range s.permissionManifestSDs {
+		if sd == nil {
+			continue
+		}
+		manifest := buildManifestFromDescriptor(sd)
+		if manifest == nil {
+			util.Log(ctx).WithField("service", string(sd.FullName())).
+				Warn("setup permissions: no service_permissions extension on descriptor; skipping")
+			continue
+		}
+		if err := publishManifestWithRetrySync(ctx, s, registrationURL, manifest); err != nil {
+			if firstErr == nil {
+				firstErr = err
+			}
+			continue
+		}
+		published++
+	}
+	if published == 0 && firstErr == nil {
+		util.Log(ctx).
+			Warn("setup permissions: no manifests published (all descriptors lacked service_permissions)")
+		return nil
+	}
+	if firstErr != nil {
+		return firstErr
+	}
+	util.Log(ctx).WithField("manifests", published).Info("setup permissions: manifests registered")
+	return nil
 }
 
 // buildManifestFromDescriptor extracts a permission manifest from a proto

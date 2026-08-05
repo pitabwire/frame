@@ -197,12 +197,32 @@ func (s *AuthorizerTestSuite) TestPermissionChecker_WithSubjectNamespace() {
 
 func (s *AuthorizerTestSuite) TestPermissionChecker_DefaultCallbackRetries() {
 	adapter := s.newAdapter(nil)
-	// Default callback logs and returns nil, which triggers a retry that fails.
+	// Non-internal denial: default callback logs only; retry still denied.
 	c := authorizer.NewTenancyAccessChecker(adapter, "resource")
 
-	err := c.Check(claimsCtx("pc-def", "pc-t-def", "pc-p-def", "system_internal"), "view")
+	err := c.Check(claimsCtx("pc-def", "pc-t-def", "pc-p-def", "user"), "view")
 	s.Require().Error(err)
 
 	var permErr *authorizer.PermissionDeniedError
 	s.ErrorAs(err, &permErr)
+}
+
+func (s *AuthorizerTestSuite) TestPermissionChecker_DefaultSelfHealsInternalService() {
+	ctx := s.T().Context()
+	adapter := s.newAdapter(nil)
+
+	// Default callback writes tenancy_access#service for roles=["internal"].
+	c := authorizer.NewTenancyAccessChecker(adapter, "tenancy_access")
+
+	err := c.CheckAccess(claimsCtx("pc-bot-heal", "pc-t-bot", "pc-p-bot", security.ConstantSystemInternalRole))
+	s.Require().NoError(err)
+
+	tp := tenancyPath("pc-t-bot", "pc-p-bot")
+	result, err := adapter.Check(ctx, security.CheckRequest{
+		Object:     security.ObjectRef{Namespace: "tenancy_access", ID: tp},
+		Permission: "service",
+		Subject:    security.SubjectRef{Namespace: security.NamespaceProfile, ID: "pc-bot-heal"},
+	})
+	s.Require().NoError(err)
+	s.True(result.Allowed)
 }

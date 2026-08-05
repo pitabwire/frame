@@ -110,11 +110,11 @@ func (c *ResourceAccessChecker) CheckSubject(ctx context.Context, resourceID, pe
 		ctx, c.constraints, c.permConstraints, permission, req.Object, req.Subject,
 	); cErr != nil {
 		util.Log(ctx).WithFields(map[string]any{
-			"object_namespace": req.Object.Namespace,
-			"object_id":        req.Object.ID,
-			"permission":       permission,
-			fieldSubjectID:     subjectID,
-			"denial_source":    "constraint",
+			fieldObjectNamespace: req.Object.Namespace,
+			"object_id":          req.Object.ID,
+			"permission":         permission,
+			fieldSubjectID:       subjectID,
+			"denial_source":      "constraint",
 		}).Info("authorization decision: denied by constraint")
 		return cErr
 	}

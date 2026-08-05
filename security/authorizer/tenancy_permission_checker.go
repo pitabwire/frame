@@ -54,6 +54,11 @@ type TenancyAccessChecker struct {
 
 // NewTenancyAccessChecker creates a checker that verifies permissions
 // against objectNamespace using the provided authorizer.
+//
+// By default, when an internal system caller (roles include "internal") is
+// denied Plane-1 access, the checker self-heals by writing
+// `{objectNamespace}:{path}#service ← profile_user:{profileID}` and retries
+// once. Regular user denials only log. Override with WithOnTenancyAccessDenied.
 func NewTenancyAccessChecker(
 	auth security.Authorizer,
 	objectNamespace string,
@@ -63,18 +68,47 @@ func NewTenancyAccessChecker(
 		authorizer:       auth,
 		objectNamespace:  objectNamespace,
 		subjectNamespace: security.NamespaceProfile,
-		onTenancyAccessDenied: func(ctx context.Context, _ security.Authorizer, tenancyPath, subjectID string) error {
-			util.Log(ctx).WithFields(map[string]any{
-				"tenant_id":    tenancyPath,
-				fieldSubjectID: subjectID,
-			}).Error("PERMISSION DENIED: tenancy access denied")
-			return nil
-		},
 	}
+	// Default after struct fields are set so the closure can use c.objectNamespace.
+	c.onTenancyAccessDenied = c.defaultOnTenancyAccessDenied
 	for _, o := range opts {
 		o(c)
 	}
 	return c
+}
+
+// defaultOnTenancyAccessDenied self-heals missing Plane-1 #service tuples for
+// internal service bots. Non-internal callers are logged only (no grant).
+func (c *TenancyAccessChecker) defaultOnTenancyAccessDenied(
+	ctx context.Context,
+	auth security.Authorizer,
+	tenancyPath, subjectID string,
+) error {
+	fields := map[string]any{
+		"tenant_id":          tenancyPath,
+		fieldSubjectID:       subjectID,
+		fieldObjectNamespace: c.objectNamespace,
+	}
+
+	claims := security.ClaimsFromContext(ctx)
+	if claims == nil || !claims.IsInternalSystem() {
+		util.Log(ctx).WithFields(fields).Error("PERMISSION DENIED: tenancy access denied")
+		return nil
+	}
+
+	tuple := security.RelationTuple{
+		Object:   security.ObjectRef{Namespace: c.objectNamespace, ID: tenancyPath},
+		Relation: "service",
+		Subject:  security.SubjectRef{Namespace: c.subjectNamespace, ID: subjectID},
+	}
+	if err := auth.WriteTuple(ctx, tuple); err != nil {
+		util.Log(ctx).WithFields(fields).WithError(err).
+			Error("PERMISSION DENIED: self-heal of tenancy service access failed")
+		return err
+	}
+	util.Log(ctx).WithFields(fields).
+		Info("self-healed missing tenancy service tuple for internal caller")
+	return nil
 }
 
 // CheckAccess verifies that the caller has data access to the partition

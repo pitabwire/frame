@@ -13,6 +13,9 @@ import (
 // across audit, ResourceAccessChecker, and TenancyPermissionChecker.
 const fieldSubjectID = "subject_id"
 
+// fieldObjectNamespace is the structured-log key for the Keto object namespace.
+const fieldObjectNamespace = "object_namespace"
+
 // auditLogger implements the AuditLogger interface.
 type auditLogger struct {
 	sampleRate float64
@@ -59,13 +62,13 @@ func (a *auditLogger) LogDecision(
 	}
 
 	fields := map[string]any{
-		"object_namespace": req.Object.Namespace,
-		"object_id":        req.Object.ID,
-		"permission":       req.Permission,
-		"subject_ns":       req.Subject.Namespace,
-		fieldSubjectID:     req.Subject.ID,
-		"allowed":          result.Allowed,
-		"checked_at":       result.CheckedAt,
+		fieldObjectNamespace: req.Object.Namespace,
+		"object_id":          req.Object.ID,
+		"permission":         req.Permission,
+		"subject_ns":         req.Subject.Namespace,
+		fieldSubjectID:       req.Subject.ID,
+		"allowed":            result.Allowed,
+		"checked_at":         result.CheckedAt,
 	}
 
 	if result.Reason != "" {

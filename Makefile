@@ -1,6 +1,6 @@
 SHELL := /bin/bash
 
-.PHONY: help clean build
+.PHONY: help clean build tests
 
 default: format build
 

@@ -1,6 +1,6 @@
 module github.com/pitabwire/frame/v2
 
-go 1.26
+go 1.26.0
 
 require (
 	buf.build/go/protovalidate v1.3.0
@@ -18,7 +18,7 @@ require (
 	github.com/nicksnyder/go-i18n/v2 v2.6.1
 	github.com/ory/keto/proto v0.13.0-alpha.0.0.20260420082854-eb334a7a5cf0
 	github.com/panjf2000/ants/v2 v2.12.1
-	github.com/pitabwire/natspubsub v0.8.4
+	github.com/pitabwire/natspubsub v0.8.5
 	github.com/pitabwire/util v0.9.1
 	github.com/redis/go-redis/v9 v9.22.0
 	github.com/rs/xid v1.6.0
@@ -31,7 +31,7 @@ require (
 	github.com/valkey-io/valkey-go v1.0.77
 	go.opentelemetry.io/contrib/bridges/otelslog v0.20.1
 	go.opentelemetry.io/contrib/exporters/autoexport v0.71.0
-	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.70.0
+	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.71.0
 	go.opentelemetry.io/contrib/propagators/autoprop v0.71.0
 	go.opentelemetry.io/otel v1.46.0
 	go.opentelemetry.io/otel/log v0.22.0

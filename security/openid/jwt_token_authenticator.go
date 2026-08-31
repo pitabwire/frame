@@ -465,10 +465,24 @@ func buildEC(k JWK) (*ecdsa.PublicKey, error) {
 		return nil, fmt.Errorf("unsupported EC curve %s", k.Crv)
 	}
 
-	x := new(big.Int).SetBytes(xb)
-	y := new(big.Int).SetBytes(yb)
+	// Coordinates are fixed-width big-endian per RFC 7518 §6.2.1, but some
+	// issuers strip leading zeros, so left-pad to the curve's field size before
+	// handing the uncompressed point to the standard library.
+	const bitsPerByte = 8
+	size := (curve.Params().BitSize + bitsPerByte - 1) / bitsPerByte
+	if len(xb) > size || len(yb) > size {
+		return nil, fmt.Errorf("invalid EC coordinate length for curve %s", k.Crv)
+	}
+	point := make([]byte, 1+2*size)
+	point[0] = 4 // uncompressed point prefix
+	copy(point[1+size-len(xb):], xb)
+	copy(point[1+2*size-len(yb):], yb)
 
-	return &ecdsa.PublicKey{Curve: curve, X: x, Y: y}, nil
+	pub, err := ecdsa.ParseUncompressedPublicKey(curve, point)
+	if err != nil {
+		return nil, fmt.Errorf("invalid EC public key: %w", err)
+	}
+	return pub, nil
 }
 
 // ------------------------------

@@ -1,0 +1,317 @@
+#!/usr/bin/env bash
+# git-hooks/pre-commit — lint + tests MUST pass before a commit is created.
+#
+# Source of truth: github.com/antinvestor/common (scripts/git-hooks/)
+# Install:  scripts/git-hooks/install-all.sh
+# Enable:   git config core.hooksPath .githooks
+#
+# Policy: lint and test failures are fixed locally. They must not reach GitHub.
+#
+# Emergency skip only (both required):
+#   ALLOW_SKIP_HOOKS=1 SKIP_HOOKS=1 git commit ...
+# Prefer: git commit --no-verify is also an emergency escape (git built-in).
+#
+# PRECOMMIT_QUICK=1 / PRECOMMIT_SKIP_TESTS=1 — lint only (push still full-tests).
+#
+# Version: 2026-08-08.2
+set -euo pipefail
+
+HOOK_NAME="pre-commit"
+
+if [[ "${SKIP_HOOKS:-}" == "1" || "${SKIP_HOOKS:-}" == "true" ]]; then
+  if [[ "${ALLOW_SKIP_HOOKS:-}" != "1" && "${ALLOW_SKIP_HOOKS:-}" != "true" ]]; then
+    echo "[$HOOK_NAME] REFUSED: SKIP_HOOKS is set but ALLOW_SKIP_HOOKS is not." >&2
+    echo "[$HOOK_NAME] Fix lint/tests locally. Emergency only:" >&2
+    echo "  ALLOW_SKIP_HOOKS=1 SKIP_HOOKS=1 git commit ..." >&2
+    exit 1
+  fi
+  echo "[$HOOK_NAME] WARNING: ALLOW_SKIP_HOOKS+SKIP_HOOKS — checks skipped (do not push broken code)"
+  exit 0
+fi
+
+ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+cd "$ROOT"
+
+STAGED="$(git diff --cached --name-only --diff-filter=ACM || true)"
+if [[ -z "$STAGED" ]]; then
+  exit 0
+fi
+
+relevant_change=0
+while IFS= read -r f; do
+  case "$f" in
+    *.go|*.mod|*.sum|go.work|go.work.sum) relevant_change=1 ;;
+    *.dart|pubspec.yaml|pubspec.lock|analysis_options.yaml) relevant_change=1 ;;
+    *.ts|*.tsx|*.js|*.jsx|package.json|package-lock.json|yarn.lock|pnpm-lock.yaml) relevant_change=1 ;;
+    *.py|requirements*.txt|pyproject.toml|setup.py|setup.cfg|Pipfile|poetry.lock) relevant_change=1 ;;
+    *.rs|Cargo.toml|Cargo.lock) relevant_change=1 ;;
+    *.proto|buf.yaml|buf.gen.yaml|buf.lock) relevant_change=1 ;;
+    Makefile|Makefile.*|*.mk|.golangci.yml|.golangci.yaml) relevant_change=1 ;;
+    *.yaml|*.yml) relevant_change=1 ;;
+  esac
+done <<< "$STAGED"
+
+if [[ "$relevant_change" -eq 0 ]]; then
+  echo "[$HOOK_NAME] No source/config changes staged — skipping lint/tests"
+  exit 0
+fi
+
+_MAKE_TARGETS_CACHE=""
+has_make_target() {
+  local target="$1"
+  [[ -f Makefile ]] || return 1
+  if [[ -z "$_MAKE_TARGETS_CACHE" ]]; then
+    _MAKE_TARGETS_CACHE="$(make -qp 2>/dev/null | awk -F':' '
+      /^# Not a target:|^$/ { next }
+      /^[^.#% ][^$#\/\t=]*:([^=]|$)/ {
+        split($1, a, " ")
+        print a[1]
+      }' | sort -u || true)"
+  fi
+  [[ -n "$_MAKE_TARGETS_CACHE" ]] || return 1
+  grep -Fxq "$target" <<< "$_MAKE_TARGETS_CACHE"
+}
+
+run_make() {
+  local target="$1"
+  echo "[$HOOK_NAME] make $target"
+  make "$target"
+}
+
+ensure_format_staged() {
+  local dirty
+  dirty="$(git diff --name-only || true)"
+  if [[ -n "$dirty" ]]; then
+    echo ""
+    echo "[$HOOK_NAME] Formatter/linter modified working tree files:"
+    echo "$dirty"
+    echo ""
+    echo "Stage the fixes (git add ...) and commit again. Do not skip hooks."
+    exit 1
+  fi
+}
+
+staged_go_files() {
+  echo "$STAGED" | grep -E '\.go$' || true
+}
+
+run_gofmt_staged() {
+  local files bad
+  files="$(staged_go_files)"
+  [[ -z "$files" ]] && return 0
+  command -v gofmt >/dev/null 2>&1 || return 0
+  echo "[$HOOK_NAME] gofmt -l (staged Go files)"
+  # shellcheck disable=SC2086
+  bad="$(echo "$files" | xargs -r gofmt -l 2>/dev/null || true)"
+  if [[ -n "$bad" ]]; then
+    echo "[$HOOK_NAME] FAIL: staged files need gofmt:"
+    echo "$bad"
+    echo "Fix: gofmt -w \$files && git add \$files"
+    exit 1
+  fi
+}
+
+run_golangci() {
+  if ! echo "$STAGED" | grep -qE '\.go$|go\.(mod|sum)$'; then
+    return 0
+  fi
+  if ! command -v golangci-lint >/dev/null 2>&1; then
+    echo "[$HOOK_NAME] FAIL: golangci-lint is required for Go changes (matches CI)." >&2
+    echo "  Install: https://golangci-lint.run/welcome/install/" >&2
+    echo "  Or: go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest" >&2
+    exit 1
+  fi
+  echo "[$HOOK_NAME] golangci-lint run"
+  golangci-lint run
+}
+
+run_go_tests() {
+  command -v go >/dev/null 2>&1 || { echo "[$HOOK_NAME] go not found" >&2; exit 1; }
+  echo "[$HOOK_NAME] go test ./..."
+  go test ./...
+}
+
+run_dart_fallback() {
+  if command -v dart >/dev/null 2>&1; then
+    echo "[$HOOK_NAME] dart format --output=none --set-exit-if-changed ."
+    dart format --output=none --set-exit-if-changed .
+    echo "[$HOOK_NAME] dart analyze"
+    dart analyze
+  fi
+  if [[ "${PRECOMMIT_SKIP_TESTS:-}" != "1" && "${PRECOMMIT_QUICK:-}" != "1" ]]; then
+    if command -v flutter >/dev/null 2>&1 && grep -q 'flutter:' pubspec.yaml 2>/dev/null; then
+      echo "[$HOOK_NAME] flutter test"
+      flutter test
+    elif command -v dart >/dev/null 2>&1; then
+      echo "[$HOOK_NAME] dart test"
+      dart test
+    fi
+  fi
+}
+
+run_node_in_dir() {
+  local dir="$1"
+  [[ -f "$dir/package.json" ]] || return 0
+  if ! command -v npm >/dev/null 2>&1; then
+    echo "[$HOOK_NAME] FAIL: npm required to lint $dir" >&2
+    exit 1
+  fi
+  (
+    cd "$dir"
+    # Prefer ci-clean node_modules when missing.
+    if [[ ! -d node_modules ]] && [[ -f package-lock.json ]]; then
+      echo "[$HOOK_NAME] npm ci ($dir) — node_modules missing"
+      npm ci --no-audit --no-fund
+    fi
+    if grep -q '"lint"' package.json; then
+      echo "[$HOOK_NAME] npm run lint ($dir)"
+      npm run lint
+    fi
+    if grep -q '"typecheck"' package.json; then
+      echo "[$HOOK_NAME] npm run typecheck ($dir)"
+      npm run typecheck
+    fi
+    if grep -q '"prettier"' package.json || [[ -f node_modules/.bin/prettier ]]; then
+      echo "[$HOOK_NAME] prettier --check ($dir)"
+      npx prettier --check "**/*.{ts,tsx,js,jsx,json,md,css}" 2>/dev/null \
+        || npx prettier --check "**/*.{ts,tsx,js,json,md}"
+    fi
+    if [[ "${PRECOMMIT_SKIP_TESTS:-}" != "1" && "${PRECOMMIT_QUICK:-}" != "1" ]]; then
+      if grep -q '"test"' package.json; then
+        echo "[$HOOK_NAME] npm test ($dir)"
+        npm test
+      fi
+    fi
+  )
+}
+
+run_nested_node_checks() {
+  local dir pkg_dirs=() f
+  while IFS= read -r f; do
+    [[ -z "$f" ]] && continue
+    case "$f" in
+      *.ts|*.tsx|*.js|*.jsx|package.json|package-lock.json|yarn.lock|pnpm-lock.yaml) ;;
+      *) continue ;;
+    esac
+    dir="$(dirname "$f")"
+    while [[ "$dir" != "." && "$dir" != "/" ]]; do
+      if [[ -f "$dir/package.json" ]]; then
+        pkg_dirs+=("$dir")
+        break
+      fi
+      dir="$(dirname "$dir")"
+    done
+  done <<< "$STAGED"
+
+  if echo "$STAGED" | grep -qE '^ui/'; then
+    for dir in ui/app ui/admin ui; do
+      if [[ -f "$dir/package.json" ]]; then
+        pkg_dirs+=("$dir")
+      fi
+    done
+  fi
+
+  [[ ${#pkg_dirs[@]} -eq 0 ]] && return 0
+  mapfile -t pkg_dirs < <(printf '%s\n' "${pkg_dirs[@]}" | sort -u)
+  for dir in "${pkg_dirs[@]}"; do
+    run_node_in_dir "$dir"
+  done
+}
+
+run_python_fallback() {
+  if command -v ruff >/dev/null 2>&1; then
+    echo "[$HOOK_NAME] ruff check ."
+    ruff check .
+  elif command -v flake8 >/dev/null 2>&1; then
+    echo "[$HOOK_NAME] flake8"
+    flake8
+  fi
+  if [[ "${PRECOMMIT_SKIP_TESTS:-}" != "1" && "${PRECOMMIT_QUICK:-}" != "1" ]]; then
+    if command -v pytest >/dev/null 2>&1; then
+      echo "[$HOOK_NAME] pytest"
+      pytest
+    fi
+  fi
+}
+
+echo "[$HOOK_NAME] Running local quality gates in $ROOT (must pass before commit)"
+echo "[$HOOK_NAME] PRECOMMIT_QUICK=1 skips tests only; lint always runs. Never skip to land broken CI."
+
+ran_make_lint=0
+ran_make_format=0
+
+if [[ -f Makefile ]]; then
+  if has_make_target format; then
+    run_make format
+    ran_make_format=1
+    ran_make_lint=1
+  elif has_make_target fmt; then
+    run_make fmt
+    ran_make_format=1
+  fi
+  if [[ "$ran_make_format" -eq 0 ]] && has_make_target lint; then
+    run_make lint
+    ran_make_lint=1
+  elif [[ "$ran_make_format" -eq 0 ]] && has_make_target vet; then
+    run_make vet
+  fi
+
+  ensure_format_staged
+
+  if [[ -f go.mod ]]; then
+    if [[ "$ran_make_format" -eq 0 ]]; then
+      run_gofmt_staged
+    fi
+    if [[ "$ran_make_lint" -eq 0 ]]; then
+      run_golangci
+    fi
+  fi
+
+  run_nested_node_checks
+  ensure_format_staged
+
+  if [[ "${PRECOMMIT_SKIP_TESTS:-}" == "1" || "${PRECOMMIT_QUICK:-}" == "1" ]]; then
+    echo "[$HOOK_NAME] tests deferred (PRECOMMIT_QUICK/SKIP_TESTS) — pre-push will still require them"
+  else
+    if has_make_target test; then
+      run_make test
+    elif has_make_target tests; then
+      run_make tests
+    elif has_make_target check; then
+      run_make check
+    elif [[ -f go.mod ]]; then
+      run_go_tests
+    else
+      echo "[$HOOK_NAME] WARNING: no make test target"
+    fi
+  fi
+elif [[ -f go.mod ]]; then
+  run_gofmt_staged
+  echo "[$HOOK_NAME] go vet ./..."
+  go vet ./...
+  run_golangci
+  run_nested_node_checks
+  ensure_format_staged
+  if [[ "${PRECOMMIT_SKIP_TESTS:-}" != "1" && "${PRECOMMIT_QUICK:-}" != "1" ]]; then
+    run_go_tests
+  fi
+elif [[ -f pubspec.yaml ]]; then
+  run_dart_fallback
+  ensure_format_staged
+elif [[ -f package.json ]]; then
+  run_node_in_dir .
+  run_nested_node_checks
+  ensure_format_staged
+elif [[ -f pyproject.toml || -f setup.py || -f requirements.txt ]]; then
+  run_python_fallback
+else
+  if [[ -f go.mod ]]; then
+    run_gofmt_staged
+    run_golangci
+    run_go_tests
+  fi
+  run_nested_node_checks
+fi
+
+echo "[$HOOK_NAME] OK — lint/tests passed; safe to commit"
+exit 0

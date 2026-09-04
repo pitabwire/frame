@@ -188,6 +188,41 @@ func applyPoolSizing(cfg *pgxpool.Config, opts dialect.ConnectionOptions) {
 	}
 }
 
+// applyQueryExecMode makes PreferSimpleProtocol / PreparedStatements take
+// effect at the pgx layer.
+//
+// gorm's postgres driver only honours Config.PreferSimpleProtocol when it
+// parses the DSN itself; this adapter hands it an already-open *sql.DB, so
+// the preference was silently dropped and pgx kept its default
+// statement-cache mode. Behind a transaction-mode pooler (PgBouncer,
+// Supavisor, Neon) that mode fails with "prepared statement ... does not
+// exist / already exists" (SQLSTATE 26000 / 42P05) as soon as connections
+// are reassigned. An explicit default_query_exec_mode in the DSN always wins.
+func applyQueryExecMode(cfg *pgxpool.Config, dsn string, opts dialect.ConnectionOptions) {
+	cfg.ConnConfig.DefaultQueryExecMode = QueryExecMode(dsn, opts)
+}
+
+// QueryExecMode reports the pgx query execution mode the adapter will use for
+// the given DSN and connection options.
+func QueryExecMode(dsn string, opts dialect.ConnectionOptions) pgx.QueryExecMode {
+	if strings.Contains(dsn, "default_query_exec_mode") {
+		cfg, err := pgx.ParseConfig(dsn)
+		if err == nil {
+			return cfg.DefaultQueryExecMode
+		}
+	}
+	switch {
+	case opts.PreferSimpleProtocol:
+		return pgx.QueryExecModeSimpleProtocol
+	case !opts.PreparedStatements:
+		// Extended protocol without server-side prepared statements: safe
+		// behind transaction pooling, keeps binary parameter encoding.
+		return pgx.QueryExecModeExec
+	default:
+		return pgx.QueryExecModeCacheStatement
+	}
+}
+
 // configureSQLDB applies *sql.DB pool sizing. MaxIdleConns is forced
 // to 0 so every release flows through pgxpool, which is the property
 // the hook chain relies on for tenancy hook correctness.
@@ -226,6 +261,7 @@ func (a *Adapter) OpenConnection(
 	}
 
 	applyPoolSizing(cfg, opts)
+	applyQueryExecMode(cfg, cleanDSN, opts)
 	cfg.ConnConfig.Tracer = otelpgx.NewTracer()
 
 	// Wire PrepareConn / AfterRelease to dispatchers that close over a

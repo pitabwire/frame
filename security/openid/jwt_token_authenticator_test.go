@@ -267,7 +267,6 @@ func (s *JwtAuthenticatorTestSuite) TestValidAuthenticationEC() {
 		definition.NewDependancyOption("jwt_auth_test", "test", s.Resources()),
 	}
 	frametests.WithTestDependencies(s.T(), depOptions, func(t *testing.T, _ *definition.DependencyOption) {
-		t.Skip("EC key parsing has issues - skipping for now")
 		ctx := t.Context()
 		auth := s.createAuthenticator()
 		token, err := s.createValidToken("EC", s.ecKid)
@@ -284,7 +283,6 @@ func (s *JwtAuthenticatorTestSuite) TestValidAuthenticationEd25519() {
 		definition.NewDependancyOption("jwt_auth_test", "test", s.Resources()),
 	}
 	frametests.WithTestDependencies(s.T(), depOptions, func(t *testing.T, _ *definition.DependencyOption) {
-		t.Skip("Ed25519 key parsing has issues - skipping for now")
 		ctx := t.Context()
 		auth := s.createAuthenticator()
 		token, err := s.createValidToken("Ed25519", s.ed25519Kid)

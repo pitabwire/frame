@@ -6,36 +6,37 @@ package pingv1connect
 
 import (
 	context "context"
-	errors "errors"
-	http "net/http"
-	strings "strings"
+	sync "sync"
 
-	connect "connectrpc.com/connect"
-	v1 "github.com/pitabwire/frame/v2/frametests/rpcservice/ping/v1"
+	connect "connectrpc.com/connect/v2"
+	v1 "github.com/pitabwire/frame/v3/frametests/rpcservice/ping/v1"
 )
-
-// This is a compile-time assertion to ensure that this generated file and the connect package are
-// compatible. If you get a compiler error that this constant is not defined, this code was
-// generated with a version of connect newer than the one compiled into your binary. You can fix the
-// problem by either regenerating this code with an older version of connect or updating the connect
-// version compiled into your binary.
-const _ = connect.IsAtLeastVersion1_13_0
 
 const (
 	// PingServiceName is the fully-qualified name of the PingService service.
 	PingServiceName = "ping.v1.PingService"
 )
 
-// These constants are the fully-qualified names of the RPCs defined in this package. They're
-// exposed at runtime as Spec.Procedure and as the final two segments of the HTTP route.
+// These constants are the procedure names of the RPCs defined in this package. They're exposed at
+// runtime as Spec.Procedure and as the final two segments of the HTTP route.
 //
 // Note that these are different from the fully-qualified method names used by
 // google.golang.org/protobuf/reflect/protoreflect. To convert from these constants to
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// PingServicePingProcedure is the fully-qualified name of the PingService's Ping RPC.
+	// PingServicePingProcedure is the procedure name of the PingService's Ping RPC.
 	PingServicePingProcedure = "/ping.v1.PingService/Ping"
+)
+
+var (
+	pingServicePingSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_ping_v1_ping_proto.Services().ByName("PingService").Methods().ByName("Ping"),
+			Procedure:  PingServicePingProcedure,
+		}
+	})
 )
 
 // PingServiceClient is a client for the ping.v1.PingService service.
@@ -44,38 +45,10 @@ type PingServiceClient interface {
 	Ping(context.Context, *v1.PingRequest) (*v1.PingResponse, error)
 }
 
-// NewPingServiceClient constructs a client for the ping.v1.PingService service. By default, it uses
-// the Connect protocol with the binary Protobuf Codec, asks for gzipped responses, and sends
-// uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the connect.WithGRPC() or
-// connect.WithGRPCWeb() options.
-//
-// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
-// http://api.acme.com or https://acme.com/grpc).
-func NewPingServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) PingServiceClient {
-	baseURL = strings.TrimRight(baseURL, "/")
-	pingServiceMethods := v1.File_ping_v1_ping_proto.Services().ByName("PingService").Methods()
-	return &pingServiceClient{
-		ping: connect.NewClient[v1.PingRequest, v1.PingResponse](
-			httpClient,
-			baseURL+PingServicePingProcedure,
-			connect.WithSchema(pingServiceMethods.ByName("Ping")),
-			connect.WithClientOptions(opts...),
-		),
-	}
-}
-
-// pingServiceClient implements PingServiceClient.
-type pingServiceClient struct {
-	ping *connect.Client[v1.PingRequest, v1.PingResponse]
-}
-
-// Ping calls ping.v1.PingService.Ping.
-func (c *pingServiceClient) Ping(ctx context.Context, req *v1.PingRequest) (*v1.PingResponse, error) {
-	response, err := c.ping.CallUnary(ctx, connect.NewRequest(req))
-	if response != nil {
-		return response.Msg, err
-	}
-	return nil, err
+// NewPingServiceClient constructs a client for the ping.v1.PingService service. Multiple service
+// clients may share a single connect.Client.
+func NewPingServiceClient(client *connect.Client) PingServiceClient {
+	return &pingServiceClient{client: client}
 }
 
 // PingServiceHandler is an implementation of the ping.v1.PingService service.
@@ -84,32 +57,43 @@ type PingServiceHandler interface {
 	Ping(context.Context, *v1.PingRequest) (*v1.PingResponse, error)
 }
 
-// NewPingServiceHandler builds an HTTP handler from the service implementation. It returns the path
-// on which to mount the handler and the handler itself.
-//
-// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
-// and JSON codecs. They also support gzip compression.
-func NewPingServiceHandler(svc PingServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
-	pingServiceMethods := v1.File_ping_v1_ping_proto.Services().ByName("PingService").Methods()
-	pingServicePingHandler := connect.NewUnaryHandlerSimple(
-		PingServicePingProcedure,
-		svc.Ping,
-		connect.WithSchema(pingServiceMethods.ByName("Ping")),
-		connect.WithHandlerOptions(opts...),
+// RegisterPingServiceHandler registers svc as the ping.v1.PingService implementation on server.
+func RegisterPingServiceHandler(server *connect.Server, svc PingServiceHandler) {
+	adapter := pingServiceHandler{svc: svc}
+	server.Register(
+		connect.Method{Spec: pingServicePingSpec(), Handler: adapter.ping},
 	)
-	return "/ping.v1.PingService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case PingServicePingProcedure:
-			pingServicePingHandler.ServeHTTP(w, r)
-		default:
-			http.NotFound(w, r)
-		}
-	})
 }
 
 // UnimplementedPingServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedPingServiceHandler struct{}
 
 func (UnimplementedPingServiceHandler) Ping(context.Context, *v1.PingRequest) (*v1.PingResponse, error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("ping.v1.PingService.Ping is not implemented"))
+	return nil, connect.NewError(connect.CodeUnimplemented, "ping.v1.PingService.Ping is not implemented")
+}
+
+type pingServiceClient struct {
+	client *connect.Client
+}
+
+func (c *pingServiceClient) Ping(ctx context.Context, req *v1.PingRequest) (*v1.PingResponse, error) {
+	var res v1.PingResponse
+	if err := c.client.CallUnary(ctx, pingServicePingSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+type pingServiceHandler struct{ svc PingServiceHandler }
+
+func (h pingServiceHandler) ping(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.PingRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.Ping(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
 }

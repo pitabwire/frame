@@ -7,8 +7,8 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/pitabwire/frame/v2/queue"
-	"github.com/pitabwire/frame/v2/queue/push"
+	"github.com/pitabwire/frame/v3/queue"
+	"github.com/pitabwire/frame/v3/queue/push"
 	"github.com/stretchr/testify/require"
 )
 

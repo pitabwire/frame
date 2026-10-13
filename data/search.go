@@ -9,7 +9,7 @@ import (
 	"github.com/pitabwire/util"
 	"gorm.io/gorm"
 
-	"github.com/pitabwire/frame/v2/workerpool"
+	"github.com/pitabwire/frame/v3/workerpool"
 )
 
 // defaultBatchSize limits pagination batches to keep memory usage predictable.

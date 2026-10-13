@@ -3,7 +3,7 @@ package security_test
 import (
 	"testing"
 
-	"github.com/pitabwire/frame/v2/security"
+	"github.com/pitabwire/frame/v3/security"
 	"github.com/stretchr/testify/require"
 )
 

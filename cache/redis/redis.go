@@ -7,7 +7,7 @@ import (
 
 	"github.com/redis/go-redis/v9"
 
-	"github.com/pitabwire/frame/v2/cache"
+	"github.com/pitabwire/frame/v3/cache"
 )
 
 // Cache is a Redis-backed cache implementation.

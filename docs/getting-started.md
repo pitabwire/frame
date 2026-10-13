@@ -5,7 +5,7 @@ This guide shows the minimal setup and then builds toward a real service that us
 ## Install
 
 ```bash
-go get -u github.com/pitabwire/frame/v2
+go get -u github.com/pitabwire/frame/v3
 ```
 
 ## Default Repo Shape (Monorepo)
@@ -37,7 +37,7 @@ import (
     "log"
     "net/http"
 
-    "github.com/pitabwire/frame/v2"
+    "github.com/pitabwire/frame/v3"
 )
 
 func main() {
@@ -65,7 +65,7 @@ import (
     "log"
     "net/http"
 
-    "github.com/pitabwire/frame/v2"
+    "github.com/pitabwire/frame/v3"
 )
 
 func main() {

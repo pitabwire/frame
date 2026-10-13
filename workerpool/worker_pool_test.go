@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pitabwire/frame/v2/tests"
-	"github.com/pitabwire/frame/v2/workerpool"
+	"github.com/pitabwire/frame/v3/tests"
+	"github.com/pitabwire/frame/v3/workerpool"
 	"github.com/stretchr/testify/suite"
 )
 

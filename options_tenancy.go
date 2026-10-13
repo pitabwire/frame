@@ -5,8 +5,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/pitabwire/frame/v2/queue/protocol"
-	"github.com/pitabwire/frame/v2/tenancy"
+	"github.com/pitabwire/frame/v3/queue/protocol"
+	"github.com/pitabwire/frame/v3/tenancy"
 )
 
 // WithTenancySecurityMode sets ModeFailOpen (default), ModeHybrid, or ModeFailClosed.

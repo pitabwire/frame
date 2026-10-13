@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/pitabwire/frame/v2/security"
+	"github.com/pitabwire/frame/v3/security"
 )
 
 // AccessConstraint evaluates a contextual condition that must hold for access

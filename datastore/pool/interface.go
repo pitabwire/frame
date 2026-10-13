@@ -5,7 +5,7 @@ import (
 
 	"gorm.io/gorm"
 
-	"github.com/pitabwire/frame/v2/datastore/migration"
+	"github.com/pitabwire/frame/v3/datastore/migration"
 )
 
 // Connection represents a single database connection configuration.

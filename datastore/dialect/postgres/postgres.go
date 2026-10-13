@@ -19,7 +19,7 @@ import (
 	gormpostgres "gorm.io/driver/postgres"
 	"gorm.io/gorm"
 
-	"github.com/pitabwire/frame/v2/datastore/dialect"
+	"github.com/pitabwire/frame/v3/datastore/dialect"
 )
 
 const idleTimeToMaxLifeTimeDivisor = 2

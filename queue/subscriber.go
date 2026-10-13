@@ -14,9 +14,9 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	"gocloud.dev/pubsub"
 
-	"github.com/pitabwire/frame/v2/queue/protocol"
-	"github.com/pitabwire/frame/v2/telemetry"
-	"github.com/pitabwire/frame/v2/workerpool"
+	"github.com/pitabwire/frame/v3/queue/protocol"
+	"github.com/pitabwire/frame/v3/telemetry"
+	"github.com/pitabwire/frame/v3/workerpool"
 )
 
 const (

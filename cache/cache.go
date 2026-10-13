@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/pitabwire/frame/v2/internal"
+	"github.com/pitabwire/frame/v3/internal"
 )
 
 // Cache is a generic cache interface with automatic serialization.

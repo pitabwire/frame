@@ -2,73 +2,26 @@ package connect
 
 import (
 	"context"
+	"net/http"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
-	"github.com/pitabwire/frame/v2/localization"
+	"github.com/pitabwire/frame/v3/localization"
 )
 
-// LanguageInterceptor implements connect.Interceptor for ensuring language is available in the context.
-type LanguageInterceptor struct {
-}
+const acceptLanguageHeader = "Accept-Language"
 
-// NewLanguageInterceptor creates a new validation interceptor with default options.
-func NewLanguageInterceptor() (*LanguageInterceptor, error) {
-	return &LanguageInterceptor{}, nil
-}
-
-// WrapUnary validates unary requests and responses.
-func (l *LanguageInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
-	return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-		l := localization.ExtractLanguageFromHTTPHeader(req.Header())
-
-		ctx = localization.ToContext(ctx, l)
-
-		// Call the handler
-		return next(ctx, req)
-	}
-}
-
-// WrapStreamingClient validates streaming client messages (pass-through for server-side).
-func (l *LanguageInterceptor) WrapStreamingClient(next connect.StreamingClientFunc) connect.StreamingClientFunc {
-	return next
-}
-
-// WrapStreamingHandler validates streaming messages.
-func (l *LanguageInterceptor) WrapStreamingHandler(next connect.StreamingHandlerFunc) connect.StreamingHandlerFunc {
-	return func(ctx context.Context, conn connect.StreamingHandlerConn) error {
-		// Wrap the connection to intercept Receive and Send calls
-		wrappedConn := &languageStreamConn{
-			StreamingHandlerConn: conn,
-			interceptor:          l,
-			ctx:                  ctx,
+// NewLanguageInterceptor returns a Connect server interceptor that reads the
+// Accept-Language request header and stores the requested languages in the
+// context passed to the handler, for unary and streaming RPCs alike.
+func NewLanguageInterceptor() (connect.ServerInterceptor, error) {
+	return func(next connect.ServerFunc) connect.ServerFunc {
+		return func(ctx context.Context, spec connect.Spec, stream connect.ServerStream) error {
+			if info, ok := connect.CallInfoForServerContext(ctx); ok {
+				header := http.Header{acceptLanguageHeader: info.RequestHeader().Values(acceptLanguageHeader)}
+				ctx = localization.ToContext(ctx, localization.ExtractLanguageFromHTTPHeader(header))
+			}
+			return next(ctx, spec, stream)
 		}
-
-		return next(ctx, wrappedConn)
-	}
-}
-
-// languageStreamConn wraps a StreamingHandlerConn to validate messages.
-type languageStreamConn struct {
-	connect.StreamingHandlerConn
-	interceptor *LanguageInterceptor
-	ctx         context.Context
-}
-
-// Receive validates incoming stream messages.
-func (v *languageStreamConn) Receive(msg any) error {
-	l := localization.ExtractLanguageFromHTTPHeader(v.StreamingHandlerConn.RequestHeader())
-
-	v.ctx = localization.ToContext(v.ctx, l)
-
-	if err := v.StreamingHandlerConn.Receive(msg); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-// Send validates outgoing stream messages.
-func (v *languageStreamConn) Send(msg any) error {
-	return v.StreamingHandlerConn.Send(msg)
+	}, nil
 }

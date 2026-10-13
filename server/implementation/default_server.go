@@ -7,10 +7,9 @@ import (
 	"net/http"
 
 	"github.com/pitabwire/util"
-	"golang.org/x/net/http2"
 
-	"github.com/pitabwire/frame/v2/config"
-	"github.com/pitabwire/frame/v2/server"
+	"github.com/pitabwire/frame/v3/config"
+	"github.com/pitabwire/frame/v3/server"
 )
 
 type defaultDriver struct {
@@ -83,18 +82,17 @@ func (dd *defaultDriver) getListener(ctx context.Context,
 	return tls.NewListener(listener, dd.tlsCfg), nil
 }
 
-func (dd *defaultDriver) configureProtocols(isTLS bool) error {
+// configureProtocols enables HTTP/2 next to HTTP/1.1: over TLS via ALPN (the
+// TLS config advertises h2), and as cleartext h2c otherwise.
+func (dd *defaultDriver) configureProtocols(isTLS bool) {
 	protocols := new(http.Protocols)
 	protocols.SetHTTP1(true)
 	if isTLS {
 		protocols.SetHTTP2(true)
-		dd.httpServer.Protocols = protocols
-		return http2.ConfigureServer(dd.httpServer, nil)
+	} else {
+		protocols.SetUnencryptedHTTP2(true)
 	}
-
-	protocols.SetUnencryptedHTTP2(true)
 	dd.httpServer.Protocols = protocols
-	return nil
 }
 
 // ListenAndServe sets the address and handlers on DefaultDriver's http.Server,
@@ -104,9 +102,7 @@ func (dd *defaultDriver) ListenAndServe(addr string, h http.Handler) error {
 
 	dd.httpServer.Addr = addr
 	dd.httpServer.Handler = h
-	if err := dd.configureProtocols(dd.tlsCfg != nil); err != nil {
-		return err
-	}
+	dd.configureProtocols(dd.tlsCfg != nil)
 
 	logField := "http port"
 	if dd.tlsCfg != nil {
@@ -138,9 +134,7 @@ func (dd *defaultDriver) ListenAndServeTLS(addr, certPath, certKeyPath string, h
 	}
 
 	dd.tlsCfg = server.NormalizeTLSConfig(dd.tlsCfg)
-	if err := dd.configureProtocols(true); err != nil {
-		return err
-	}
+	dd.configureProtocols(true)
 
 	ln, err0 := dd.getListener(dd.ctx, addr, dd.listener)
 	if err0 != nil {

@@ -5,7 +5,7 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/pitabwire/frame/v2/queue"
+	"github.com/pitabwire/frame/v3/queue"
 )
 
 // HTTPStatusFor maps processing errors to HTTP status codes for push delivery.

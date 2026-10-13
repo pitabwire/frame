@@ -78,15 +78,15 @@ type UnsafePingServiceServer interface {
 	mustEmbedUnimplementedPingServiceServer()
 }
 
-func RegisterPingServiceServer(s grpc.ServiceRegistrar, svc PingServiceServer) {
+func RegisterPingServiceServer(s grpc.ServiceRegistrar, srv PingServiceServer) {
 	// If the following call panics, it indicates UnimplementedPingServiceServer was
 	// embedded by pointer and is nil.  This will cause panics if an
 	// unimplemented method is ever invoked, so we test this at initialization
 	// time to prevent it from happening at runtime later due to I/O.
-	if t, ok := svc.(interface{ testEmbeddedByValue() }); ok {
+	if t, ok := srv.(interface{ testEmbeddedByValue() }); ok {
 		t.testEmbeddedByValue()
 	}
-	s.RegisterService(&PingService_ServiceDesc, svc)
+	s.RegisterService(&PingService_ServiceDesc, srv)
 }
 
 func _PingService_Ping_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {

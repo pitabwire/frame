@@ -10,9 +10,9 @@ plugins:
     out: ./
     opt:
       - paths=source_relative
-      - simple
+
 managed:
   enabled: true
   override:
     - file_option: go_package_prefix
-      value: github.com/pitabwire/frame/v2/frametests/rpcservice
+      value: github.com/pitabwire/frame/v3/frametests/rpcservice

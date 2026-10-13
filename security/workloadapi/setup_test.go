@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/pitabwire/frame/v2/config"
-	frameworkloadapi "github.com/pitabwire/frame/v2/security/workloadapi"
+	"github.com/pitabwire/frame/v3/config"
+	frameworkloadapi "github.com/pitabwire/frame/v3/security/workloadapi"
 	"github.com/stretchr/testify/suite"
 )
 

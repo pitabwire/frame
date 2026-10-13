@@ -5,8 +5,8 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/pitabwire/frame/v2/security"
-	"github.com/pitabwire/frame/v2/telemetry"
+	"github.com/pitabwire/frame/v3/security"
+	"github.com/pitabwire/frame/v3/telemetry"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/attribute"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"

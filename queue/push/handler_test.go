@@ -9,10 +9,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pitabwire/frame/v2/config"
-	"github.com/pitabwire/frame/v2/queue"
-	"github.com/pitabwire/frame/v2/queue/push"
-	"github.com/pitabwire/frame/v2/workerpool"
+	"github.com/pitabwire/frame/v3/config"
+	"github.com/pitabwire/frame/v3/queue"
+	"github.com/pitabwire/frame/v3/queue/push"
+	"github.com/pitabwire/frame/v3/workerpool"
 	"github.com/stretchr/testify/require"
 )
 

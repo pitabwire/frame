@@ -148,9 +148,13 @@ _, svc := frame.NewService(
 
 // Preferred: service-aware defaults (honours Secure Profile binder):
 ix, err := svc.ConnectDefaultInterceptors(ctx, authenticator)
+if err != nil {
+    return err
+}
+server := connect.NewServer(ix...) // connectrpc.com/connect/v2
 // …
 // Or manually after auth:
-options := connect.WithInterceptors(
+server := connect.NewServer(
     authInterceptor,
     tenancy.NewClaimsInterceptorWithBinder(svc.ClaimsBinder()),
 )
@@ -199,7 +203,7 @@ after your authentication interceptor so the derived claims are bound
 once per request:
 
 ```go
-options := connect.WithInterceptors(
+server := connect.NewServer(
     authInterceptor,
     tenancy.NewClaimsInterceptor(),  // pre-binds Claims so the hot path is path 1
 )

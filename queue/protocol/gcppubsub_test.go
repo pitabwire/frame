@@ -8,7 +8,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/pitabwire/frame/v2/queue/protocol"
+	"github.com/pitabwire/frame/v3/queue/protocol"
 )
 
 func TestGCPPubSubDecode(t *testing.T) {

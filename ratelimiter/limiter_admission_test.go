@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pitabwire/frame/v2/ratelimiter"
+	"github.com/pitabwire/frame/v3/ratelimiter"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

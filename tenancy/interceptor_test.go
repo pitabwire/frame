@@ -4,19 +4,20 @@ import (
 	"context"
 	"testing"
 
-	"connectrpc.com/connect"
-	"github.com/pitabwire/frame/v2/security"
-	"github.com/pitabwire/frame/v2/tenancy"
-	"github.com/pitabwire/frame/v2/tests"
+	"connectrpc.com/connect/v2"
+	"github.com/pitabwire/frame/v3/security"
+	"github.com/pitabwire/frame/v3/tenancy"
+	"github.com/pitabwire/frame/v3/tests"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"google.golang.org/protobuf/types/known/wrapperspb"
 )
 
-// okResponse returns a non-nil connect response used by tests so the
-// noop handler doesn't violate the `nilnil` lint rule.
-func okResponse() connect.AnyResponse {
-	return connect.NewResponse(&wrapperspb.StringValue{Value: "ok"})
+// invoke runs the claims interceptor around next as a unary RPC would.
+func invoke(ctx context.Context, interceptor connect.ServerInterceptor, next func(context.Context) error) error {
+	wrapped := interceptor(func(innerCtx context.Context, _ connect.Spec, _ connect.ServerStream) error {
+		return next(innerCtx)
+	})
+	return wrapped(ctx, connect.Spec{StreamType: connect.StreamTypeUnary}, nil)
 }
 
 type InterceptorTestSuite struct {
@@ -46,17 +47,15 @@ func (s *InterceptorTestSuite) TestClaimsInterceptorBindsClaims() {
 	ctxAuth := auth.ClaimsToContext(context.Background())
 
 	interceptor := tenancy.NewClaimsInterceptor()
-	wrapped := interceptor.WrapUnary(func(innerCtx context.Context, _ connect.AnyRequest) (connect.AnyResponse, error) {
+	err := invoke(ctxAuth, interceptor, func(innerCtx context.Context) error {
 		got := tenancy.ClaimsFromContext(innerCtx)
 		require.NotNil(t, got, "interceptor must bind claims into innerCtx")
 		require.Equal(t, "T1", got.TenantID)
 		require.Equal(t, []string{"P1"}, got.PartitionIDs)
 		require.Equal(t, "A1", got.AccessID)
 		require.False(t, got.Skip, "non-internal-system auth must yield Skip=false")
-		return okResponse(), nil
+		return nil
 	})
-
-	_, err := wrapped(ctxAuth, nil)
 	require.NoError(t, err)
 }
 
@@ -66,11 +65,10 @@ func (s *InterceptorTestSuite) TestClaimsInterceptorBindsClaims() {
 func (s *InterceptorTestSuite) TestClaimsInterceptorWithNoAuthIsNoOp() {
 	t := s.T()
 	interceptor := tenancy.NewClaimsInterceptor()
-	wrapped := interceptor.WrapUnary(func(innerCtx context.Context, _ connect.AnyRequest) (connect.AnyResponse, error) {
+	err := invoke(context.Background(), interceptor, func(innerCtx context.Context) error {
 		require.Nil(t, tenancy.ClaimsFromContext(innerCtx))
-		return okResponse(), nil
+		return nil
 	})
-	_, err := wrapped(context.Background(), nil)
 	require.NoError(t, err)
 }
 
@@ -86,13 +84,27 @@ func (s *InterceptorTestSuite) TestClaimsInterceptorSkipForInternalSystem() {
 	ctxAuth := auth.ClaimsToContext(context.Background())
 
 	interceptor := tenancy.NewClaimsInterceptor()
-	wrapped := interceptor.WrapUnary(func(innerCtx context.Context, _ connect.AnyRequest) (connect.AnyResponse, error) {
+	err := invoke(ctxAuth, interceptor, func(innerCtx context.Context) error {
 		got := tenancy.ClaimsFromContext(innerCtx)
 		require.NotNil(t, got)
 		require.True(t, got.Skip)
-		return okResponse(), nil
+		return nil
 	})
-
-	_, err := wrapped(ctxAuth, nil)
 	require.NoError(t, err)
+}
+
+// TestClaimsInterceptorRequiredClaimsFails verifies a secure binder rejects a
+// call with no bindable tenancy as FailedPrecondition and keeps the cause.
+func (s *InterceptorTestSuite) TestClaimsInterceptorRequiredClaimsFails() {
+	t := s.T()
+	interceptor := tenancy.NewClaimsInterceptorWithBinder(tenancy.NewClaimsBinder(true))
+	called := false
+	err := invoke(context.Background(), interceptor, func(context.Context) error {
+		called = true
+		return nil
+	})
+	require.Error(t, err)
+	require.False(t, called)
+	require.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
+	require.ErrorIs(t, err, tenancy.ErrClaimsRequired)
 }

@@ -11,7 +11,7 @@ import (
 
 	"github.com/pitabwire/util"
 
-	"github.com/pitabwire/frame/v2"
+	"github.com/pitabwire/frame/v3"
 )
 
 func GetFreePort(ctx context.Context) (int, error) {

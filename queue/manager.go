@@ -11,9 +11,9 @@ import (
 	"github.com/pitabwire/util"
 	"golang.org/x/oauth2"
 
-	"github.com/pitabwire/frame/v2/data"
-	"github.com/pitabwire/frame/v2/queue/protocol"
-	"github.com/pitabwire/frame/v2/workerpool"
+	"github.com/pitabwire/frame/v3/data"
+	"github.com/pitabwire/frame/v3/queue/protocol"
+	"github.com/pitabwire/frame/v3/workerpool"
 )
 
 type queueManager struct {

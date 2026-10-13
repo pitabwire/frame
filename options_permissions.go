@@ -11,7 +11,7 @@ import (
 	"github.com/pitabwire/util"
 	"google.golang.org/protobuf/reflect/protoreflect"
 
-	"github.com/pitabwire/frame/v2/setup"
+	"github.com/pitabwire/frame/v3/setup"
 )
 
 // ManifestRegistrationURLEnvVar is the environment variable that provides

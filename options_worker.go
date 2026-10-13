@@ -3,8 +3,8 @@ package frame
 import (
 	"context"
 
-	"github.com/pitabwire/frame/v2/config"
-	"github.com/pitabwire/frame/v2/workerpool"
+	"github.com/pitabwire/frame/v3/config"
+	"github.com/pitabwire/frame/v3/workerpool"
 )
 
 // WithBackgroundConsumer sets a background consumer function for the worker pool.

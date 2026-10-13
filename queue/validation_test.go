@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pitabwire/frame/v2/queue"
-	"github.com/pitabwire/frame/v2/workerpool"
+	"github.com/pitabwire/frame/v3/queue"
+	"github.com/pitabwire/frame/v3/workerpool"
 )
 
 // testConfig implements ConfigurationWorkerPool for testing.

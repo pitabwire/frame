@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/pitabwire/frame/v2/setup"
+	"github.com/pitabwire/frame/v3/setup"
 	"github.com/stretchr/testify/require"
 )
 

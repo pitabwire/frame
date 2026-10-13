@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/pitabwire/frame/v2/security"
+	"github.com/pitabwire/frame/v3/security"
 )
 
 // ClaimsBinder derives and binds storage-layer tenancy.Claims for request

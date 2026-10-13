@@ -6,8 +6,8 @@ import (
 
 	"github.com/pitabwire/util"
 
-	config2 "github.com/pitabwire/frame/v2/config"
-	"github.com/pitabwire/frame/v2/telemetry"
+	config2 "github.com/pitabwire/frame/v3/config"
+	"github.com/pitabwire/frame/v3/telemetry"
 )
 
 // WithLogger Option that helps with initialization of our internal dbLogger.

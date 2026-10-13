@@ -28,15 +28,48 @@ grpcServer := grpc.NewServer(
 
 ## Connect Interceptors
 
-Package: `security/interceptors/connect`
+Package: `security/interceptors/connect`, built on `connectrpc.com/connect/v2`.
+Every constructor returns a `connect.ServerInterceptor`, which wraps unary and
+streaming RPCs alike. Pass them to `connect.NewServer`, register the generated
+handlers on that server, and mount it with `connecthttp.Mount`:
 
 ```go
-interceptor := connectAuth.NewAuthInterceptor(svc.SecurityManager(), svc.Config())
+import (
+    "connectrpc.com/connect/v2"
+    "connectrpc.com/connect/v2/connecthttp"
+
+    connectix "github.com/pitabwire/frame/v3/security/interceptors/connect"
+)
+
+// otel → validation → auth → tenancy claims, plus your own.
+interceptors, err := svc.ConnectDefaultInterceptors(ctx, svc.SecurityManager().GetAuthenticator(ctx),
+    connectix.NewTenancyAccessInterceptor(tenancyChecker),
+    connectix.NewFunctionAccessInterceptor(functionChecker, procedurePermissions),
+)
+if err != nil {
+    return err
+}
+
+server := connect.NewServer(interceptors...)
+profilev1connect.RegisterProfileServiceHandler(server, handler)
+
+mux := http.NewServeMux()
+connecthttp.Mount(mux, server)
 ```
 
-## Validation Interceptors
+| Constructor | Purpose |
+| --- | --- |
+| `NewAuthInterceptor(authenticator)` | Bearer-token authentication from the `Authorization` header |
+| `NewValidationInterceptor(opts...)` | protovalidate rules plus `google.protobuf.Struct` size limits on every received request |
+| `NewValidationClientInterceptor(opts...)` | The same validation on the client side, before a request is sent |
+| `NewTenancyAccessInterceptor(checker)` | Partition data-access check |
+| `NewFunctionAccessInterceptor(checker, perms)` | Per-procedure functional permissions |
+| `DefaultList` / `DefaultListWithBinder` | The standard chain; prefer `Service.ConnectDefaultInterceptors` |
 
-Connect interceptors include protobuf validation helpers.
+`tenancy.NewClaimsInterceptor` and `localization/interceptors/connect.NewLanguageInterceptor`
+are server interceptors of the same shape.
+
+Upgrading from frame v2? See the [v2 → v3 migration guide](migrating-v3.md).
 
 ## Best Practices
 

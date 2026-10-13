@@ -4,8 +4,8 @@ import (
 	"context"
 	"errors"
 
-	"github.com/pitabwire/frame/v2/config"
-	"github.com/pitabwire/frame/v2/events"
+	"github.com/pitabwire/frame/v3/config"
+	"github.com/pitabwire/frame/v3/events"
 )
 
 // WithRegisterEvents registers events for the service. All events are unique and shouldn't share a name otherwise the last one registered will take precedence.

@@ -59,7 +59,7 @@ if err != nil {
 }
 
 if !limiter.Allow(ctx, tenantID) {
-	return connect.NewError(connect.CodeResourceExhausted, errors.New("tenant request budget exceeded"))
+	return connect.NewError(connect.CodeResourceExhausted, "tenant request budget exceeded")
 }
 ```
 
@@ -112,7 +112,7 @@ if err != nil {
 }
 
 if !limiter.Allow(ctx, tenantID) {
-	return connect.NewError(connect.CodeResourceExhausted, errors.New("tenant ingest budget exceeded"))
+	return connect.NewError(connect.CodeResourceExhausted, "tenant ingest budget exceeded")
 }
 ```
 
@@ -229,7 +229,7 @@ if err != nil {
 }
 
 if !depthLimiter.Allow(ctx) {
-	return connect.NewError(connect.CodeResourceExhausted, errors.New("event backlog too high"))
+	return connect.NewError(connect.CodeResourceExhausted, "event backlog too high")
 }
 ```
 

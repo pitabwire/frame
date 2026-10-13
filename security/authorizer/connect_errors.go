@@ -3,7 +3,7 @@ package authorizer
 import (
 	"errors"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 )
 
 // ToConnectError translates authorization errors into ConnectRPC error codes.
@@ -18,13 +18,13 @@ func ToConnectError(err error) error {
 	}
 
 	if errors.Is(err, ErrInvalidSubject) || errors.Is(err, ErrInvalidObject) {
-		return connect.NewError(connect.CodeUnauthenticated, err)
+		return connect.NewError(connect.CodeUnauthenticated, err.Error()).WithCause(err)
 	}
 
 	var permErr *PermissionDeniedError
 	if errors.As(err, &permErr) {
-		return connect.NewError(connect.CodePermissionDenied, err)
+		return connect.NewError(connect.CodePermissionDenied, err.Error()).WithCause(err)
 	}
 
-	return connect.NewError(connect.CodeInternal, err)
+	return connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 }

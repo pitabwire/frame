@@ -9,9 +9,9 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	oauth2source "github.com/pitabwire/frame/v2/client/oauth2"
-	"github.com/pitabwire/frame/v2/client/oauth2/signer"
-	"github.com/pitabwire/frame/v2/config"
+	oauth2source "github.com/pitabwire/frame/v3/client/oauth2"
+	"github.com/pitabwire/frame/v3/client/oauth2/signer"
+	"github.com/pitabwire/frame/v3/config"
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"github.com/spiffe/go-spiffe/v2/svid/x509svid"
 	"github.com/spiffe/go-spiffe/v2/workloadapi"

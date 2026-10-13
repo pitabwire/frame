@@ -21,7 +21,7 @@ Frame helps you spin up HTTP and gRPC services with minimal boilerplate while ke
 ## Install
 
 ```bash
-go get -u github.com/pitabwire/frame/v2
+go get -u github.com/pitabwire/frame/v3
 ```
 
 ## Minimal Example
@@ -33,7 +33,7 @@ import (
     "context"
     "net/http"
 
-    "github.com/pitabwire/frame/v2"
+    "github.com/pitabwire/frame/v3"
 )
 
 func main() {
@@ -53,6 +53,7 @@ func main() {
 ## Documentation
 
 - Start here: `docs/index.md`
+- Upgrading from v2 (connect-go v2): `docs/migrating-v3.md`
 - Live site: https://pitabwire.github.io/frame/
 
 ## Docs Site (MkDocs)

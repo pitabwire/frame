@@ -9,8 +9,8 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 
-	"github.com/pitabwire/frame/v2/queue"
-	"github.com/pitabwire/frame/v2/security/openid"
+	"github.com/pitabwire/frame/v3/queue"
+	"github.com/pitabwire/frame/v3/security/openid"
 )
 
 const (

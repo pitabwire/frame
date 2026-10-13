@@ -9,8 +9,8 @@ import (
 	"github.com/spiffe/go-spiffe/v2/spiffetls/tlsconfig"
 	"github.com/spiffe/go-spiffe/v2/workloadapi"
 
-	"github.com/pitabwire/frame/v2/config"
-	"github.com/pitabwire/frame/v2/security"
+	"github.com/pitabwire/frame/v3/config"
+	"github.com/pitabwire/frame/v3/security"
 )
 
 type workloadAPI struct {

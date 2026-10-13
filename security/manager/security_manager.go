@@ -3,12 +3,12 @@ package manager
 import (
 	"context"
 
-	"github.com/pitabwire/frame/v2/client"
-	"github.com/pitabwire/frame/v2/config"
-	"github.com/pitabwire/frame/v2/security"
-	"github.com/pitabwire/frame/v2/security/authorizer"
-	"github.com/pitabwire/frame/v2/security/openid"
-	"github.com/pitabwire/frame/v2/security/workloadapi"
+	"github.com/pitabwire/frame/v3/client"
+	"github.com/pitabwire/frame/v3/config"
+	"github.com/pitabwire/frame/v3/security"
+	"github.com/pitabwire/frame/v3/security/authorizer"
+	"github.com/pitabwire/frame/v3/security/openid"
+	"github.com/pitabwire/frame/v3/security/workloadapi"
 )
 
 // SecurityConfiguration combines all configuration interfaces needed by the security manager.

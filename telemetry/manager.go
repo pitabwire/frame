@@ -11,7 +11,6 @@ import (
 	"go.opentelemetry.io/contrib/propagators/autoprop"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/log/global"
 	"go.opentelemetry.io/otel/propagation"
 	sdklogs "go.opentelemetry.io/otel/sdk/log"
 	sdkmetrics "go.opentelemetry.io/otel/sdk/metric"
@@ -19,8 +18,8 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.43.0"
 
-	"github.com/pitabwire/frame/v2/config"
-	"github.com/pitabwire/frame/v2/version"
+	"github.com/pitabwire/frame/v3/config"
+	"github.com/pitabwire/frame/v3/version"
 )
 
 type Manager interface {
@@ -203,7 +202,7 @@ func (m *manager) setupProviders(_ context.Context, res *resource.Resource) erro
 		sdklogs.WithResource(res),
 		sdklogs.WithProcessor(logsProcessor),
 	)
-	global.SetLoggerProvider(lp)
+	otel.SetLoggerProvider(lp)
 
 	m.logHandler = otelslog.NewHandler("",
 		otelslog.WithSource(true),

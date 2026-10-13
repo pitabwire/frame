@@ -3,7 +3,7 @@ package tenancy_test
 import (
 	"testing"
 
-	"github.com/pitabwire/frame/v2/tenancy"
+	"github.com/pitabwire/frame/v3/tenancy"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
 )

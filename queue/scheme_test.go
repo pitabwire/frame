@@ -3,7 +3,7 @@ package queue_test
 import (
 	"testing"
 
-	"github.com/pitabwire/frame/v2/queue"
+	"github.com/pitabwire/frame/v3/queue"
 	"github.com/stretchr/testify/require"
 )
 

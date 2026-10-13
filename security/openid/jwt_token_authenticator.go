@@ -19,8 +19,8 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/pitabwire/util"
 
-	"github.com/pitabwire/frame/v2/config"
-	"github.com/pitabwire/frame/v2/security"
+	"github.com/pitabwire/frame/v3/config"
+	"github.com/pitabwire/frame/v3/security"
 )
 
 const (
@@ -144,14 +144,10 @@ type JWK struct {
 	E string `json:"e,omitempty"`
 	N string `json:"n,omitempty"`
 
-	// EC
+	// EC and OKP (EdDSA) share crv and x.
 	Crv string `json:"crv,omitempty"`
 	X   string `json:"x,omitempty"`
 	Y   string `json:"y,omitempty"`
-
-	// OKP (EdDSA)
-	OKPCrv string `json:"crv,omitempty"` //nolint:govet // JWK format allows overlapping field names for different key types
-	OKPX   string `json:"x,omitempty"`   //nolint:govet // JWK format allows overlapping field names for different key types
 }
 
 type JWKSet struct {
@@ -490,11 +486,11 @@ func buildEC(k JWK) (*ecdsa.PublicKey, error) {
 // ------------------------------
 
 func buildOKP(k JWK) (any, error) {
-	if k.OKPX == "" || k.OKPCrv != "Ed25519" {
+	if k.X == "" || k.Crv != "Ed25519" {
 		return nil, errors.New("unsupported OKP key or curve")
 	}
 
-	pk, err := base64.RawURLEncoding.DecodeString(k.OKPX)
+	pk, err := base64.RawURLEncoding.DecodeString(k.X)
 	if err != nil {
 		return nil, fmt.Errorf("invalid OKP x: %w", err)
 	}

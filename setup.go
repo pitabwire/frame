@@ -3,8 +3,8 @@ package frame
 import (
 	"context"
 
-	"github.com/pitabwire/frame/v2/config"
-	"github.com/pitabwire/frame/v2/setup"
+	"github.com/pitabwire/frame/v3/config"
+	"github.com/pitabwire/frame/v3/setup"
 )
 
 // Re-export well-known setup step names so application code can stay on the

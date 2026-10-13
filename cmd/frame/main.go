@@ -7,9 +7,9 @@ import (
 	"os"
 	"strings"
 
-	"github.com/pitabwire/frame/v2/tools/blueprint"
-	"github.com/pitabwire/frame/v2/tools/openapi"
-	"github.com/pitabwire/frame/v2/tools/scaffold"
+	"github.com/pitabwire/frame/v3/tools/blueprint"
+	"github.com/pitabwire/frame/v3/tools/openapi"
+	"github.com/pitabwire/frame/v3/tools/scaffold"
 )
 
 const (

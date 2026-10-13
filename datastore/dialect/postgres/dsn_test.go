@@ -3,7 +3,7 @@ package postgres_test
 import (
 	"testing"
 
-	"github.com/pitabwire/frame/v2/datastore/dialect/postgres"
+	"github.com/pitabwire/frame/v3/datastore/dialect/postgres"
 	"github.com/stretchr/testify/require"
 )
 

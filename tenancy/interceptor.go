@@ -4,54 +4,35 @@ import (
 	"context"
 	"net/http"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
 
-// NewClaimsInterceptor returns a Connect interceptor that derives
+// NewClaimsInterceptor returns a Connect server interceptor that derives
 // tenancy.Claims from auth claims and binds them to ctx.
 // Zero-arg form uses a legacy binder (HonorInternalSkip=true, RequireClaims=false).
 //
 // Register after the authentication interceptor so auth claims are available.
-func NewClaimsInterceptor() connect.Interceptor {
+func NewClaimsInterceptor() connect.ServerInterceptor {
 	return NewClaimsInterceptorWithBinder(nil)
 }
 
 // NewClaimsInterceptorWithBinder uses the supplied binder. Nil uses legacy defaults.
-func NewClaimsInterceptorWithBinder(b *ClaimsBinder) connect.Interceptor {
+// A binding failure fails the RPC with connect.CodeFailedPrecondition.
+func NewClaimsInterceptorWithBinder(b *ClaimsBinder) connect.ServerInterceptor {
 	if b == nil {
 		b = NewClaimsBinder(false)
 	}
-	return &claimsInterceptor{binder: b}
-}
-
-type claimsInterceptor struct {
-	binder *ClaimsBinder
-}
-
-func (c *claimsInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
-	return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-		ctx, err := c.binder.Bind(ctx)
-		if err != nil {
-			return nil, connect.NewError(connect.CodeFailedPrecondition, err)
+	return func(next connect.ServerFunc) connect.ServerFunc {
+		return func(ctx context.Context, spec connect.Spec, stream connect.ServerStream) error {
+			boundCtx, err := b.Bind(ctx)
+			if err != nil {
+				return connect.NewError(connect.CodeFailedPrecondition, err.Error()).WithCause(err)
+			}
+			return next(boundCtx, spec, stream)
 		}
-		return next(ctx, req)
-	}
-}
-
-func (c *claimsInterceptor) WrapStreamingClient(next connect.StreamingClientFunc) connect.StreamingClientFunc {
-	return next
-}
-
-func (c *claimsInterceptor) WrapStreamingHandler(next connect.StreamingHandlerFunc) connect.StreamingHandlerFunc {
-	return func(ctx context.Context, conn connect.StreamingHandlerConn) error {
-		ctx, err := c.binder.Bind(ctx)
-		if err != nil {
-			return connect.NewError(connect.CodeFailedPrecondition, err)
-		}
-		return next(ctx, conn)
 	}
 }
 

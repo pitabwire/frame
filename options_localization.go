@@ -3,7 +3,7 @@ package frame
 import (
 	"context"
 
-	"github.com/pitabwire/frame/v2/localization"
+	"github.com/pitabwire/frame/v3/localization"
 )
 
 // WithTranslation Option that helps to specify or override the configuration object of our service.

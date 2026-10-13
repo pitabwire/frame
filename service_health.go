@@ -30,7 +30,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/pitabwire/frame/v2/version"
+	"github.com/pitabwire/frame/v3/version"
 )
 
 // Standard Kubernetes health check paths.

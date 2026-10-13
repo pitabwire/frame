@@ -28,7 +28,7 @@ _ = svc.QueueManager().Publish(ctx, "orders", OrderCreated{ID: "123"})
 |--------|------|----------|
 | `mem://` | pull | In-memory gocloud |
 | `nats://` | pull | NATS / JetStream via `natspubsub` |
-| `gcppubsub://` | pull | GCP Pub/Sub StreamingPull via gocloud (`gcppubsub` driver; ADC or emulator). Frame blank-imports the driver — apps that import `frame/v2` do not need their own blank import. |
+| `gcppubsub://` | pull | GCP Pub/Sub StreamingPull via gocloud (`gcppubsub` driver; ADC or emulator). Frame blank-imports the driver — apps that import `frame/v3` do not need their own blank import. |
 | `push://{ref}` | push | HTTP only; demux by **registration reference** |
 | `http(s)://…` | push | Completes latent stub; demux still by registration ref |
 

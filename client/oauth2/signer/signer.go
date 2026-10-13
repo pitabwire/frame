@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/pitabwire/frame/v2/config"
+	"github.com/pitabwire/frame/v3/config"
 )
 
 // JWTAssertionSigner signs JWT client assertions for the private_key_jwt

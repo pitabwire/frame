@@ -12,7 +12,7 @@ import (
 	"github.com/pitabwire/util"
 	"github.com/rs/xid"
 
-	"github.com/pitabwire/frame/v2/config"
+	"github.com/pitabwire/frame/v3/config"
 )
 
 var ErrWorkerPoolResultChannelIsClosed = errors.New("worker job is already closed")

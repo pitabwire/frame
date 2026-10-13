@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pitabwire/frame/v2/cache"
-	"github.com/pitabwire/frame/v2/tenancy"
+	"github.com/pitabwire/frame/v3/cache"
+	"github.com/pitabwire/frame/v3/tenancy"
 	"github.com/stretchr/testify/require"
 )
 

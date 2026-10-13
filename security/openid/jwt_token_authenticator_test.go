@@ -19,12 +19,12 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/pitabwire/frame/v2/config"
-	"github.com/pitabwire/frame/v2/frametests"
-	"github.com/pitabwire/frame/v2/frametests/definition"
-	"github.com/pitabwire/frame/v2/frametests/deps/testpostgres"
-	"github.com/pitabwire/frame/v2/security"
-	"github.com/pitabwire/frame/v2/security/openid"
+	"github.com/pitabwire/frame/v3/config"
+	"github.com/pitabwire/frame/v3/frametests"
+	"github.com/pitabwire/frame/v3/frametests/definition"
+	"github.com/pitabwire/frame/v3/frametests/deps/testpostgres"
+	"github.com/pitabwire/frame/v3/security"
+	"github.com/pitabwire/frame/v3/security/openid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -98,13 +98,10 @@ type JWK struct {
 	// RSA
 	E string `json:"e,omitempty"`
 	N string `json:"n,omitempty"`
-	// EC
+	// EC and OKP (EdDSA) share crv and x.
 	Crv string `json:"crv,omitempty"`
 	X   string `json:"x,omitempty"`
 	Y   string `json:"y,omitempty"`
-	// OKP (EdDSA)
-	OKPCrv string `json:"crv,omitempty"` //nolint:govet // JWK format allows overlapping field names for different key types
-	OKPX   string `json:"x,omitempty"`   //nolint:govet // JWK format allows overlapping field names for different key types
 }
 
 // JWKSet represents a set of JSON Web Keys for testing.
@@ -163,12 +160,12 @@ func (s *JwtAuthenticatorTestSuite) createEd25519JWK() JWK {
 	xBytes := s.ed25519Key[32:] // Public key part of the 64-byte private key
 
 	return JWK{
-		Kty:    "OKP",
-		Kid:    s.ed25519Kid,
-		Use:    "sig",
-		Alg:    "EdDSA",
-		OKPCrv: "Ed25519",
-		OKPX:   base64.RawURLEncoding.EncodeToString(xBytes),
+		Kty: "OKP",
+		Kid: s.ed25519Kid,
+		Use: "sig",
+		Alg: "EdDSA",
+		Crv: "Ed25519",
+		X:   base64.RawURLEncoding.EncodeToString(xBytes),
 	}
 }
 func (s *JwtAuthenticatorTestSuite) createAuthenticator() security.Authenticator {

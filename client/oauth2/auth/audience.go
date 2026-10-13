@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/pitabwire/frame/v2/config"
+	"github.com/pitabwire/frame/v3/config"
 )
 
 func resolveRequestedAudiences(cfg config.ConfigurationOAUTH2) ([]string, error) {

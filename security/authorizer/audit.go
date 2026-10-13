@@ -6,7 +6,7 @@ import (
 
 	"github.com/pitabwire/util"
 
-	"github.com/pitabwire/frame/v2/security"
+	"github.com/pitabwire/frame/v3/security"
 )
 
 // fieldSubjectID is the structured-log key used for the subject identifier

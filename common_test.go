@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/stretchr/testify/suite"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -32,7 +32,7 @@ func (s *ErrorSuite) TestErrorIsNotFoundTable() {
 		{name: "gorm record not found", err: gorm.ErrRecordNotFound, want: true},
 		{name: "grpc not found", err: status.Error(codes.NotFound, "missing"), want: true},
 		{name: "grpc internal", err: status.Error(codes.Internal, "failed"), want: false},
-		{name: "connect not found", err: connect.NewError(connect.CodeNotFound, errors.New("missing")), want: true},
+		{name: "connect not found", err: connect.NewError(connect.CodeNotFound, "missing"), want: true},
 		{name: "text not found", err: errors.New("resource not found"), want: true},
 		{name: "text compact notfound", err: errors.New("resource_notfound"), want: true},
 		{name: "text 404", err: fmt.Errorf("status=%d", 404), want: true},

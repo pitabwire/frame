@@ -8,11 +8,11 @@ import (
 	"testing"
 
 	"github.com/nicksnyder/go-i18n/v2/i18n"
-	"github.com/pitabwire/frame/v2"
-	"github.com/pitabwire/frame/v2/localization"
-	lgrpc "github.com/pitabwire/frame/v2/localization/interceptors/grpc"
-	lhttp "github.com/pitabwire/frame/v2/localization/interceptors/httpi"
-	"github.com/pitabwire/frame/v2/tests"
+	"github.com/pitabwire/frame/v3"
+	"github.com/pitabwire/frame/v3/localization"
+	lgrpc "github.com/pitabwire/frame/v3/localization/interceptors/grpc"
+	lhttp "github.com/pitabwire/frame/v3/localization/interceptors/httpi"
+	"github.com/pitabwire/frame/v3/tests"
 	"github.com/stretchr/testify/suite"
 	"google.golang.org/grpc/metadata"
 )

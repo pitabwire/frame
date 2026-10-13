@@ -9,7 +9,7 @@ import (
 	"github.com/rs/xid"
 	"gorm.io/gorm"
 
-	"github.com/pitabwire/frame/v2/security"
+	"github.com/pitabwire/frame/v3/security"
 )
 
 type BaseModelI interface {

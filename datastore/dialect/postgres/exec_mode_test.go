@@ -4,8 +4,8 @@ import (
 	"testing"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/pitabwire/frame/v2/datastore/dialect"
-	"github.com/pitabwire/frame/v2/datastore/dialect/postgres"
+	"github.com/pitabwire/frame/v3/datastore/dialect"
+	"github.com/pitabwire/frame/v3/datastore/dialect/postgres"
 	"github.com/stretchr/testify/require"
 )
 

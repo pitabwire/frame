@@ -16,9 +16,9 @@ import (
 	"gocloud.dev/pubsub"
 	"golang.org/x/oauth2"
 
-	"github.com/pitabwire/frame/v2/internal"
-	"github.com/pitabwire/frame/v2/localization"
-	"github.com/pitabwire/frame/v2/security"
+	"github.com/pitabwire/frame/v3/internal"
+	"github.com/pitabwire/frame/v3/localization"
+	"github.com/pitabwire/frame/v3/security"
 )
 
 const responseDrainLimit = 1 << defaultMaxBodyMiB

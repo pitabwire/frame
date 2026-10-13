@@ -6,9 +6,9 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/pitabwire/frame/v2/datastore/dialect"
-	"github.com/pitabwire/frame/v2/tenancy"
-	tenpg "github.com/pitabwire/frame/v2/tenancy/postgres"
+	"github.com/pitabwire/frame/v3/datastore/dialect"
+	"github.com/pitabwire/frame/v3/tenancy"
+	tenpg "github.com/pitabwire/frame/v3/tenancy/postgres"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
 )

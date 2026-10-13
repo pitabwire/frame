@@ -3,9 +3,9 @@ package connect
 import (
 	"context"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
-	"github.com/pitabwire/frame/v2/security/authorizer"
+	"github.com/pitabwire/frame/v3/security/authorizer"
 )
 
 // functionAccessInterceptor is a Connect interceptor that automatically enforces
@@ -38,10 +38,18 @@ type functionAccessInterceptor struct {
 func NewFunctionAccessInterceptor(
 	checker *authorizer.FunctionChecker,
 	permissions map[string][]string,
-) connect.Interceptor {
-	return &functionAccessInterceptor{
+) connect.ServerInterceptor {
+	f := &functionAccessInterceptor{
 		checker:     checker,
 		permissions: permissions,
+	}
+	return func(next connect.ServerFunc) connect.ServerFunc {
+		return func(ctx context.Context, spec connect.Spec, stream connect.ServerStream) error {
+			if err := f.checkPermissions(ctx, spec.Procedure); err != nil {
+				return err
+			}
+			return next(ctx, spec, stream)
+		}
 	}
 }
 
@@ -58,31 +66,4 @@ func (f *functionAccessInterceptor) checkPermissions(ctx context.Context, proced
 	}
 
 	return nil
-}
-
-// WrapUnary implements the unary interceptor for functional permission checking.
-func (f *functionAccessInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
-	return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-		if err := f.checkPermissions(ctx, req.Spec().Procedure); err != nil {
-			return nil, err
-		}
-		return next(ctx, req)
-	}
-}
-
-// WrapStreamingClient implements the streaming client interceptor (pass-through).
-func (f *functionAccessInterceptor) WrapStreamingClient(next connect.StreamingClientFunc) connect.StreamingClientFunc {
-	return next
-}
-
-// WrapStreamingHandler implements the streaming handler interceptor for functional permission checking.
-func (f *functionAccessInterceptor) WrapStreamingHandler(
-	next connect.StreamingHandlerFunc,
-) connect.StreamingHandlerFunc {
-	return func(ctx context.Context, conn connect.StreamingHandlerConn) error {
-		if err := f.checkPermissions(ctx, conn.Spec().Procedure); err != nil {
-			return err
-		}
-		return next(ctx, conn)
-	}
 }

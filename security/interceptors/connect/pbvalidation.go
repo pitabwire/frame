@@ -6,7 +6,8 @@ import (
 	"fmt"
 
 	"buf.build/go/protovalidate"
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connectproto"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/types/known/structpb"
@@ -59,12 +60,11 @@ func WithoutErrorDetails() Option {
 	})
 }
 
-// validationInterceptor is a [connect.Interceptor] that ensures that RPC request
-// messages match the constraints expressed in their Protobuf schemas. It does
-// not validate response messages unless the [WithValidateResponses] option
-// is specified.
+// validationInterceptor ensures that RPC request messages match the
+// constraints expressed in their Protobuf schemas. It does not validate
+// response messages unless the [WithValidateResponses] option is specified.
 //
-// By default, Interceptors use a validator that lazily compiles constraints
+// By default, the interceptor uses a validator that lazily compiles constraints
 // and works with any Protobuf message. This is a simple, widely-applicable
 // configuration: after compiling and caching the constraints for a Protobuf
 // message type once, validation is very efficient. To customize the validator,
@@ -74,10 +74,6 @@ func WithoutErrorDetails() Option {
 // always uses [connect.CodeInvalidArgument] and has a [detailed representation
 // of the error] attached as a [connect.ErrorDetail].
 //
-// This interceptor is primarily intended for use on handlers. Client-side use
-// is possible, but discouraged unless the client always has an up-to-date
-// schema.
-//
 // [detailed representation of the error]: https://pkg.go.dev/buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate#Violations
 type validationInterceptor struct {
 	validator         protovalidate.Validator
@@ -85,9 +81,7 @@ type validationInterceptor struct {
 	noErrorDetails    bool
 }
 
-// NewValidationInterceptor builds an validationInterceptor. The default configuration is
-// appropriate for most use cases.
-func NewValidationInterceptor(opts ...Option) connect.Interceptor {
+func newValidationInterceptor(opts ...Option) *validationInterceptor {
 	var interceptor validationInterceptor
 	for _, opt := range opts {
 		opt.apply(&interceptor)
@@ -100,40 +94,31 @@ func NewValidationInterceptor(opts ...Option) connect.Interceptor {
 	return &interceptor
 }
 
-// WrapUnary implements connect.validationInterceptor.
-func (i *validationInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
-	return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-		if err := i.validateRequest(req.Any()); err != nil {
-			return nil, err
-		}
-		response, err := next(ctx, req)
-		if err != nil {
-			return response, err
-		}
-		if validationErr := i.validateResponse(response.Any()); validationErr != nil {
-			return response, validationErr
-		}
-		return response, nil
-	}
-}
-
-// WrapStreamingClient implements connect.validationInterceptor.
-func (i *validationInterceptor) WrapStreamingClient(next connect.StreamingClientFunc) connect.StreamingClientFunc {
-	return func(ctx context.Context, spec connect.Spec) connect.StreamingClientConn {
-		return &streamingClientInterceptor{
-			StreamingClientConn: next(ctx, spec),
-			interceptor:         i,
+// NewValidationInterceptor builds a server interceptor that validates every
+// received request message, for unary and streaming RPCs alike. The default
+// configuration is appropriate for most use cases.
+func NewValidationInterceptor(opts ...Option) connect.ServerInterceptor {
+	i := newValidationInterceptor(opts...)
+	return func(next connect.ServerFunc) connect.ServerFunc {
+		return func(ctx context.Context, spec connect.Spec, stream connect.ServerStream) error {
+			return next(ctx, spec, &validatingServerStream{ServerStream: stream, interceptor: i})
 		}
 	}
 }
 
-// WrapStreamingHandler implements connect.validationInterceptor.
-func (i *validationInterceptor) WrapStreamingHandler(next connect.StreamingHandlerFunc) connect.StreamingHandlerFunc {
-	return func(ctx context.Context, conn connect.StreamingHandlerConn) error {
-		return next(ctx, &streamingHandlerInterceptor{
-			StreamingHandlerConn: conn,
-			interceptor:          i,
-		})
+// NewValidationClientInterceptor builds a client interceptor that validates
+// every sent request message. Client-side use is possible, but discouraged
+// unless the client always has an up-to-date schema.
+func NewValidationClientInterceptor(opts ...Option) connect.ClientInterceptor {
+	i := newValidationInterceptor(opts...)
+	return func(next connect.ClientFunc) connect.ClientFunc {
+		return func(ctx context.Context, spec connect.Spec) (connect.ClientStream, error) {
+			stream, err := next(ctx, spec)
+			if err != nil {
+				return nil, err
+			}
+			return &validatingClientStream{ClientStream: stream, interceptor: i}, nil
+		}
 	}
 }
 
@@ -169,16 +154,16 @@ func (i *validationInterceptor) validate(msg any, code connect.Code) error {
 	return nil
 }
 
-func (i *validationInterceptor) wrapValidationError(originalErr error, code connect.Code) error {
-	connectErr := connect.NewError(code, originalErr)
+func (i *validationInterceptor) wrapValidationError(originalErr error, code connect.Code) *connect.Error {
+	connectErr := connect.NewError(code, originalErr.Error()).WithCause(originalErr)
 	if i.noErrorDetails {
 		return connectErr
 	}
 
 	var ve *protovalidate.ValidationError
 	if errors.As(originalErr, &ve) {
-		if detail, err := connect.NewErrorDetail(ve.ToProto()); err == nil {
-			connectErr.AddDetail(detail)
+		if detail, err := connectproto.NewErrorDetail(ve.ToProto()); err == nil {
+			connectErr = connectErr.WithDetail(detail)
 		}
 	}
 	return connectErr
@@ -256,54 +241,53 @@ func visitStructs(
 func validateSingleStruct(s *structpb.Struct) error {
 	// 1. Exact wire size ≤ 1 MiB
 	if sz := proto.Size(s); sz > maxStructSizeB {
-		return connect.NewError(connect.CodeInvalidArgument,
-			fmt.Errorf("google.protobuf.Struct exceeds 1 MiB (size: %d bytes)", sz))
+		return fmt.Errorf("google.protobuf.Struct exceeds 1 MiB (size: %d bytes)", sz)
 	}
 
 	// 2. Max 200 top-level keys
 	if fields := s.GetFields(); len(fields) > maxStructFields {
-		return connect.NewError(connect.CodeInvalidArgument,
-			fmt.Errorf("google.protobuf.Struct has too many top-level fields (%d > %d)", len(fields), maxStructFields))
+		return fmt.Errorf(
+			"google.protobuf.Struct has too many top-level fields (%d > %d)", len(fields), maxStructFields)
 	}
 
 	return nil
 }
 
-type streamingClientInterceptor struct {
-	connect.StreamingClientConn
+type validatingClientStream struct {
+	connect.ClientStream
 
 	interceptor *validationInterceptor
 }
 
-func (s *streamingClientInterceptor) Send(msg any) error {
+func (s *validatingClientStream) Send(msg any) error {
 	if err := s.interceptor.validateRequest(msg); err != nil {
 		return err
 	}
-	return s.StreamingClientConn.Send(msg)
+	return s.ClientStream.Send(msg)
 }
 
-func (s *streamingClientInterceptor) Receive(msg any) error {
-	if err := s.StreamingClientConn.Receive(msg); err != nil {
+func (s *validatingClientStream) Receive(msg any) error {
+	if err := s.ClientStream.Receive(msg); err != nil {
 		return err
 	}
 	return s.interceptor.validateResponse(msg)
 }
 
-type streamingHandlerInterceptor struct {
-	connect.StreamingHandlerConn
+type validatingServerStream struct {
+	connect.ServerStream
 
 	interceptor *validationInterceptor
 }
 
-func (s *streamingHandlerInterceptor) Send(msg any) error {
+func (s *validatingServerStream) Send(msg any) error {
 	if err := s.interceptor.validateResponse(msg); err != nil {
 		return err
 	}
-	return s.StreamingHandlerConn.Send(msg)
+	return s.ServerStream.Send(msg)
 }
 
-func (s *streamingHandlerInterceptor) Receive(msg any) error {
-	if err := s.StreamingHandlerConn.Receive(msg); err != nil {
+func (s *validatingServerStream) Receive(msg any) error {
+	if err := s.ServerStream.Receive(msg); err != nil {
 		return err
 	}
 	return s.interceptor.validateRequest(msg)

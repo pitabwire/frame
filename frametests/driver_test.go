@@ -7,9 +7,9 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/pitabwire/frame/v2"
-	"github.com/pitabwire/frame/v2/config"
-	"github.com/pitabwire/frame/v2/frametests"
+	"github.com/pitabwire/frame/v3"
+	"github.com/pitabwire/frame/v3/config"
+	"github.com/pitabwire/frame/v3/frametests"
 	"github.com/stretchr/testify/require"
 )
 

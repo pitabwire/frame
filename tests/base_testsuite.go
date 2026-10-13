@@ -6,12 +6,12 @@ import (
 
 	"github.com/pitabwire/util"
 
-	"github.com/pitabwire/frame/v2/frametests"
-	"github.com/pitabwire/frame/v2/frametests/definition"
-	"github.com/pitabwire/frame/v2/frametests/deps/testnats"
-	"github.com/pitabwire/frame/v2/frametests/deps/testoryhydra"
-	"github.com/pitabwire/frame/v2/frametests/deps/testoryketo"
-	"github.com/pitabwire/frame/v2/frametests/deps/testpostgres"
+	"github.com/pitabwire/frame/v3/frametests"
+	"github.com/pitabwire/frame/v3/frametests/definition"
+	"github.com/pitabwire/frame/v3/frametests/deps/testnats"
+	"github.com/pitabwire/frame/v3/frametests/deps/testoryhydra"
+	"github.com/pitabwire/frame/v3/frametests/deps/testoryketo"
+	"github.com/pitabwire/frame/v3/frametests/deps/testpostgres"
 )
 
 const (

@@ -6,11 +6,11 @@ import (
 	"time"
 
 	"github.com/nats-io/nats.go"
-	"github.com/pitabwire/frame/v2/cache"
-	"github.com/pitabwire/frame/v2/data"
-	"github.com/pitabwire/frame/v2/frametests"
-	"github.com/pitabwire/frame/v2/frametests/definition"
-	"github.com/pitabwire/frame/v2/frametests/deps/testnats"
+	"github.com/pitabwire/frame/v3/cache"
+	"github.com/pitabwire/frame/v3/data"
+	"github.com/pitabwire/frame/v3/frametests"
+	"github.com/pitabwire/frame/v3/frametests/definition"
+	"github.com/pitabwire/frame/v3/frametests/deps/testnats"
 	"github.com/stretchr/testify/suite"
 )
 

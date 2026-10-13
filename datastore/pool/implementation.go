@@ -9,11 +9,11 @@ import (
 	"github.com/pitabwire/util"
 	"gorm.io/gorm"
 
-	"github.com/pitabwire/frame/v2/datastore/dialect"
-	dialectpg "github.com/pitabwire/frame/v2/datastore/dialect/postgres"
-	"github.com/pitabwire/frame/v2/datastore/migration"
-	"github.com/pitabwire/frame/v2/tenancy"
-	tenpg "github.com/pitabwire/frame/v2/tenancy/postgres"
+	"github.com/pitabwire/frame/v3/datastore/dialect"
+	dialectpg "github.com/pitabwire/frame/v3/datastore/dialect/postgres"
+	"github.com/pitabwire/frame/v3/datastore/migration"
+	"github.com/pitabwire/frame/v3/tenancy"
+	tenpg "github.com/pitabwire/frame/v3/tenancy/postgres"
 )
 
 const migrationAdvisoryLockID int64 = 82548391244719

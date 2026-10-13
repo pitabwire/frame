@@ -6,7 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/pitabwire/frame/v2/openapi"
+	"github.com/pitabwire/frame/v3/openapi"
 )
 
 type indexResponse struct {

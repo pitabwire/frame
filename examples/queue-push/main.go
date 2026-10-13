@@ -7,8 +7,8 @@ import (
 
 	"github.com/pitabwire/util"
 
-	"github.com/pitabwire/frame/v2"
-	"github.com/pitabwire/frame/v2/config"
+	"github.com/pitabwire/frame/v3"
+	"github.com/pitabwire/frame/v3/config"
 )
 
 // handler is a normal SubscribeWorker — identical for mem:// and push://.

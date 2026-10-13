@@ -3,7 +3,7 @@ package protocol_test
 import (
 	"testing"
 
-	"github.com/pitabwire/frame/v2/queue/protocol"
+	"github.com/pitabwire/frame/v3/queue/protocol"
 	"github.com/stretchr/testify/require"
 )
 

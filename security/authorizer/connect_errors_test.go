@@ -4,9 +4,9 @@ import (
 	"errors"
 	"testing"
 
-	"connectrpc.com/connect"
-	"github.com/pitabwire/frame/v2/security"
-	"github.com/pitabwire/frame/v2/security/authorizer"
+	"connectrpc.com/connect/v2"
+	"github.com/pitabwire/frame/v3/security"
+	"github.com/pitabwire/frame/v3/security/authorizer"
 	"github.com/stretchr/testify/assert"
 )
 

@@ -1,6 +1,6 @@
 package postgres
 
-import "github.com/pitabwire/frame/v2/tenancy"
+import "github.com/pitabwire/frame/v3/tenancy"
 
 // Option configures a Provider.
 type Option func(*Provider)

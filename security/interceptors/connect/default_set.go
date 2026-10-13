@@ -3,15 +3,15 @@ package connect
 import (
 	"context"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"connectrpc.com/otelconnect"
 
-	"github.com/pitabwire/frame/v2/security"
-	"github.com/pitabwire/frame/v2/tenancy"
+	"github.com/pitabwire/frame/v3/security"
+	"github.com/pitabwire/frame/v3/tenancy"
 )
 
-// DefaultList returns the standard chain of Connect interceptors used
-// by frame services. Order matters: otel → validation → auth → tenancy
+// DefaultList returns the standard chain of Connect server interceptors used
+// by frame services. Pass the result to connect.NewServer. Order matters: otel → validation → auth → tenancy
 // claims. The tenancy interceptor binds tenancy.Claims derived from the
 // authenticated principal so downstream pool.DB(ctx, _) queries are
 // transparently RLS-scoped without any additional wiring.
@@ -22,8 +22,8 @@ import (
 func DefaultList(
 	ctx context.Context,
 	authI security.Authenticator,
-	moreInterceptors ...connect.Interceptor,
-) ([]connect.Interceptor, error) {
+	moreInterceptors ...connect.ServerInterceptor,
+) ([]connect.ServerInterceptor, error) {
 	return DefaultListWithBinder(ctx, authI, nil, moreInterceptors...)
 }
 
@@ -34,11 +34,11 @@ func DefaultListWithBinder(
 	_ context.Context,
 	authI security.Authenticator,
 	binder *tenancy.ClaimsBinder,
-	moreInterceptors ...connect.Interceptor,
-) ([]connect.Interceptor, error) {
-	var interceptorList []connect.Interceptor
+	moreInterceptors ...connect.ServerInterceptor,
+) ([]connect.ServerInterceptor, error) {
+	var interceptorList []connect.ServerInterceptor
 
-	otelInterceptor, err := otelconnect.NewInterceptor()
+	otelInterceptor, err := otelconnect.NewServerInterceptor()
 	if err != nil {
 		return nil, err
 	}

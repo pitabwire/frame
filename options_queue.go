@@ -10,8 +10,8 @@ import (
 	_ "gocloud.dev/pubsub/gcppubsub"    // required for GCP Pub/Sub driver registration
 	_ "gocloud.dev/pubsub/mempubsub"    // required for in-memory pubsub driver registration
 
-	"github.com/pitabwire/frame/v2/data"
-	"github.com/pitabwire/frame/v2/queue"
+	"github.com/pitabwire/frame/v3/data"
+	"github.com/pitabwire/frame/v3/queue"
 )
 
 // WithRegisterPublisher Option to register publishing path referenced within the system.

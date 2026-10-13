@@ -9,7 +9,7 @@ import (
 
 	"github.com/pitabwire/util"
 
-	"github.com/pitabwire/frame/v2/config"
+	"github.com/pitabwire/frame/v3/config"
 )
 
 const (

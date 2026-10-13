@@ -7,8 +7,8 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/pitabwire/frame/v2/internal"
-	"github.com/pitabwire/frame/v2/tenancy"
+	"github.com/pitabwire/frame/v3/internal"
+	"github.com/pitabwire/frame/v3/tenancy"
 )
 
 const maxKeySegmentLen = 64

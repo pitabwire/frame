@@ -13,14 +13,15 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
-	"github.com/pitabwire/frame/v2"
-	"github.com/pitabwire/frame/v2/config"
-	"github.com/pitabwire/frame/v2/frametests"
-	"github.com/pitabwire/frame/v2/frametests/definition"
-	pingv1 "github.com/pitabwire/frame/v2/frametests/rpcservice/ping/v1"
-	"github.com/pitabwire/frame/v2/frametests/rpcservice/ping/v1/pingv1connect"
-	"github.com/pitabwire/frame/v2/tests"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
+	"github.com/pitabwire/frame/v3"
+	"github.com/pitabwire/frame/v3/config"
+	"github.com/pitabwire/frame/v3/frametests"
+	"github.com/pitabwire/frame/v3/frametests/definition"
+	pingv1 "github.com/pitabwire/frame/v3/frametests/rpcservice/ping/v1"
+	"github.com/pitabwire/frame/v3/frametests/rpcservice/ping/v1/pingv1connect"
+	"github.com/pitabwire/frame/v3/tests"
 	"github.com/pitabwire/util"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -54,9 +55,21 @@ func (s *connectRPCHandler) Ping(ctx context.Context, req *pingv1.PingRequest) (
 	}, nil
 }
 
+// newPingHandler mounts the ping service on a connect v2 server and returns
+// the resulting HTTP handler.
+func newPingHandler() http.Handler {
+	mux := http.NewServeMux()
+	srv := connect.NewServer()
+	pingv1connect.RegisterPingServiceHandler(srv, &connectRPCHandler{})
+	connecthttp.Mount(mux, srv)
+	return mux
+}
+
 func (s *ConnectServerTestSuite) startConnectServer(_ *testing.T) *httptest.Server {
 	mux := http.NewServeMux()
-	mux.Handle(pingv1connect.NewPingServiceHandler(&connectRPCHandler{}))
+	srv := connect.NewServer()
+	pingv1connect.RegisterPingServiceHandler(srv, &connectRPCHandler{})
+	connecthttp.Mount(mux, srv)
 
 	server := httptest.NewServer(mux)
 	return server
@@ -64,7 +77,9 @@ func (s *ConnectServerTestSuite) startConnectServer(_ *testing.T) *httptest.Serv
 
 func (s *ConnectServerTestSuite) startTLSConnectServer(_ *testing.T) *httptest.Server {
 	mux := http.NewServeMux()
-	mux.Handle(pingv1connect.NewPingServiceHandler(&connectRPCHandler{}))
+	srv := connect.NewServer()
+	pingv1connect.RegisterPingServiceHandler(srv, &connectRPCHandler{})
+	connecthttp.Mount(mux, srv)
 
 	server := httptest.NewTLSServer(mux)
 	return server
@@ -127,7 +142,7 @@ func (s *ConnectServerTestSuite) TestServiceConnectHealthServer() {
 				)
 				defer svc.Stop(ctx)
 
-				_, h := pingv1connect.NewPingServiceHandler(&connectRPCHandler{})
+				h := newPingHandler()
 
 				svc.Init(ctx, frame.WithHTTPHandler(h))
 
@@ -184,7 +199,7 @@ func (s *ConnectServerTestSuite) TestServiceConnectContextSetup() {
 			)
 			defer svc.Stop(ctx)
 
-			_, h := pingv1connect.NewPingServiceHandler(&connectRPCHandler{})
+			h := newPingHandler()
 
 			svc.Init(ctx, frame.WithHTTPHandler(h))
 
@@ -246,7 +261,7 @@ func (s *ConnectServerTestSuite) TestServiceRequestTraces() {
 			)
 			defer svc.Stop(ctx)
 
-			_, h := pingv1connect.NewPingServiceHandler(&connectRPCHandler{})
+			h := newPingHandler()
 
 			svc.Init(ctx, frame.WithHTTPHandler(h))
 
@@ -292,7 +307,9 @@ func (s *ConnectServerTestSuite) TestServiceConnectServer() {
 		for _, tc := range testCases {
 			t.Run(tc.name, func(_ *testing.T) {
 				mux := http.NewServeMux()
-				mux.Handle(pingv1connect.NewPingServiceHandler(&connectRPCHandler{}))
+				srv := connect.NewServer()
+				pingv1connect.RegisterPingServiceHandler(srv, &connectRPCHandler{})
+				connecthttp.Mount(mux, srv)
 
 				server := httptest.NewServer(mux)
 				defer server.Close()
@@ -341,7 +358,9 @@ func (s *ConnectServerTestSuite) TestServiceConnectTLSServer() {
 		for _, tc := range testCases {
 			t.Run(tc.name, func(_ *testing.T) {
 				mux := http.NewServeMux()
-				mux.Handle(pingv1connect.NewPingServiceHandler(&connectRPCHandler{}))
+				srv := connect.NewServer()
+				pingv1connect.RegisterPingServiceHandler(srv, &connectRPCHandler{})
+				connecthttp.Mount(mux, srv)
 
 				server := s.startTLSConnectServer(t)
 				defer server.Close()
@@ -418,10 +437,10 @@ func (s *ConnectServerTestSuite) TestServiceConnectRun() {
 }
 
 func (s *ConnectServerTestSuite) clientInvokeConnect(baseURL string, name string) error {
-	client := pingv1connect.NewPingServiceClient(
+	client := pingv1connect.NewPingServiceClient(connect.NewClient(connecthttp.NewTransport(
 		http.DefaultClient,
 		baseURL,
-	)
+	)))
 
 	req := pingv1.PingRequest{
 		Name: name,
@@ -451,11 +470,11 @@ func (s *ConnectServerTestSuite) clientInvokeConnectTLS(baseURL string, tlsConfi
 		},
 	}
 
-	pingClient := pingv1connect.NewPingServiceClient(
+	pingClient := pingv1connect.NewPingServiceClient(connect.NewClient(connecthttp.NewTransport(
 		client,
 		baseURL,
-		connect.WithGRPC(),
-	)
+		connecthttp.WithGRPC(),
+	)))
 
 	req := pingv1.PingRequest{
 		Name: "Testing Roma TLS",
@@ -496,7 +515,9 @@ func (s *ConnectServerTestSuite) TestServiceConnectContextRun() {
 				httpTestOpt, testSrvFn := frametests.WithHTTPTestDriver()
 
 				mux := http.NewServeMux()
-				mux.Handle(pingv1connect.NewPingServiceHandler(&connectRPCHandler{}))
+				server := connect.NewServer()
+				pingv1connect.RegisterPingServiceHandler(server, &connectRPCHandler{})
+				connecthttp.Mount(mux, server)
 				mux.HandleFunc("/", func(_ http.ResponseWriter, r *http.Request) {
 					util.Log(r.Context()).Info(tc.logData)
 				})

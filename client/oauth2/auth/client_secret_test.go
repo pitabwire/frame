@@ -6,8 +6,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/pitabwire/frame/v2/client/oauth2/auth"
-	"github.com/pitabwire/frame/v2/config"
+	"github.com/pitabwire/frame/v3/client/oauth2/auth"
+	"github.com/pitabwire/frame/v3/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

@@ -6,7 +6,7 @@ import (
 	"io/fs"
 	"strings"
 
-	"github.com/pitabwire/frame/v2/openapi"
+	"github.com/pitabwire/frame/v3/openapi"
 )
 
 // WithOpenAPISpec registers a single OpenAPI spec with the service.

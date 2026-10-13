@@ -70,6 +70,7 @@ nav:
       - AI Assistants: ai-assistants.md
       - Blueprints: blueprints.md
       - Examples: examples.md
+      - Migrating to v3: migrating-v3.md
   - Runtime:
       - Server: server.md
       - Configuration: configuration.md

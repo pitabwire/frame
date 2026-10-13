@@ -11,11 +11,11 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	"gocloud.dev/pubsub"
 
-	"github.com/pitabwire/frame/v2/localization"
-	"github.com/pitabwire/frame/v2/queue/protocol"
-	"github.com/pitabwire/frame/v2/security"
-	"github.com/pitabwire/frame/v2/tenancy"
-	"github.com/pitabwire/frame/v2/workerpool"
+	"github.com/pitabwire/frame/v3/localization"
+	"github.com/pitabwire/frame/v3/queue/protocol"
+	"github.com/pitabwire/frame/v3/security"
+	"github.com/pitabwire/frame/v3/tenancy"
+	"github.com/pitabwire/frame/v3/workerpool"
 )
 
 // processDelivery runs context enrichment and all handlers for one message.

@@ -5,7 +5,7 @@ import (
 
 	"github.com/testcontainers/testcontainers-go"
 
-	"github.com/pitabwire/frame/v2/data"
+	"github.com/pitabwire/frame/v3/data"
 )
 
 const ContainerFileMode = 0o755

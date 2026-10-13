@@ -9,8 +9,8 @@ import (
 	"crypto/rsa"
 	"testing"
 
-	"github.com/pitabwire/frame/v2/client/oauth2/signer"
-	"github.com/pitabwire/frame/v2/config"
+	"github.com/pitabwire/frame/v3/client/oauth2/signer"
+	"github.com/pitabwire/frame/v3/config"
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"github.com/spiffe/go-spiffe/v2/svid/x509svid"
 	"github.com/spiffe/go-spiffe/v2/workloadapi"

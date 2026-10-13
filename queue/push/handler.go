@@ -10,8 +10,8 @@ import (
 
 	"github.com/pitabwire/util"
 
-	"github.com/pitabwire/frame/v2/queue"
-	"github.com/pitabwire/frame/v2/queue/protocol"
+	"github.com/pitabwire/frame/v3/queue"
+	"github.com/pitabwire/frame/v3/queue/protocol"
 )
 
 // DefaultBasePath is the reserved mux path for queue push delivery.

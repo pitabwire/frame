@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/stretchr/testify/suite"
 	"gorm.io/gorm"

@@ -17,11 +17,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pitabwire/frame/v2/config"
-	"github.com/pitabwire/frame/v2/server"
-	"github.com/pitabwire/frame/v2/server/implementation"
+	"github.com/pitabwire/frame/v3/config"
+	"github.com/pitabwire/frame/v3/server"
+	"github.com/pitabwire/frame/v3/server/implementation"
 	"github.com/stretchr/testify/suite"
-	"golang.org/x/net/http2"
 )
 
 type DefaultDriverSuite struct {
@@ -86,7 +85,7 @@ func (s *DefaultDriverSuite) TestListenAndServeTLSNegotiatesHTTP2() {
 	s.Equal(http.StatusAccepted, resp.StatusCode)
 	s.Equal(2, resp.ProtoMajor)
 	s.Require().NotNil(resp.TLS)
-	s.Equal(http2.NextProtoTLS, resp.TLS.NegotiatedProtocol)
+	s.Equal("h2", resp.TLS.NegotiatedProtocol)
 	s.NotEmpty(caPEM)
 
 	s.shutdownDriver(driver, errCh)
@@ -128,7 +127,7 @@ func (s *DefaultDriverSuite) TestListenAndServeWithInjectedMutualTLSNegotiatesHT
 	s.Equal(http.StatusCreated, resp.StatusCode)
 	s.Equal(2, resp.ProtoMajor)
 	s.Require().NotNil(resp.TLS)
-	s.Equal(http2.NextProtoTLS, resp.TLS.NegotiatedProtocol)
+	s.Equal("h2", resp.TLS.NegotiatedProtocol)
 
 	plainClient := &http.Client{Transport: newH2CTransport()}
 	_, err := plainClient.Get("http://" + addr)
@@ -137,14 +136,11 @@ func (s *DefaultDriverSuite) TestListenAndServeWithInjectedMutualTLSNegotiatesHT
 	s.shutdownDriver(driver, errCh)
 }
 
-func newH2CTransport() *http2.Transport {
-	return &http2.Transport{
-		AllowHTTP: true,
-		DialTLSContext: func(ctx context.Context, network, addr string, _ *tls.Config) (net.Conn, error) {
-			dialer := &net.Dialer{}
-			return dialer.DialContext(ctx, network, addr)
-		},
-	}
+// newH2CTransport speaks only cleartext HTTP/2 (prior knowledge h2c).
+func newH2CTransport() *http.Transport {
+	protocols := new(http.Protocols)
+	protocols.SetUnencryptedHTTP2(true)
+	return &http.Transport{Protocols: protocols}
 }
 
 func (s *DefaultDriverSuite) freeAddress() string {

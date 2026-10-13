@@ -3,9 +3,9 @@ package connect
 import (
 	"context"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
-	"github.com/pitabwire/frame/v2/security/authorizer"
+	"github.com/pitabwire/frame/v3/security/authorizer"
 )
 
 // tenancyAccessInterceptor is a Connect interceptor that verifies the caller
@@ -19,10 +19,18 @@ type tenancyAccessInterceptor struct {
 	checker *authorizer.TenancyAccessChecker
 }
 
-// NewTenancyAccessInterceptor creates a Connect interceptor that enforces
-// tenancy data access using the provided TenancyAccessChecker.
-func NewTenancyAccessInterceptor(checker *authorizer.TenancyAccessChecker) connect.Interceptor {
-	return &tenancyAccessInterceptor{checker: checker}
+// NewTenancyAccessInterceptor creates a Connect server interceptor that
+// enforces tenancy data access using the provided TenancyAccessChecker.
+func NewTenancyAccessInterceptor(checker *authorizer.TenancyAccessChecker) connect.ServerInterceptor {
+	t := &tenancyAccessInterceptor{checker: checker}
+	return func(next connect.ServerFunc) connect.ServerFunc {
+		return func(ctx context.Context, spec connect.Spec, stream connect.ServerStream) error {
+			if err := t.checkAccess(ctx); err != nil {
+				return err
+			}
+			return next(ctx, spec, stream)
+		}
+	}
 }
 
 func (t *tenancyAccessInterceptor) checkAccess(ctx context.Context) error {
@@ -30,31 +38,4 @@ func (t *tenancyAccessInterceptor) checkAccess(ctx context.Context) error {
 		return authorizer.ToConnectError(err)
 	}
 	return nil
-}
-
-// WrapUnary implements the unary interceptor for tenancy access checking.
-func (t *tenancyAccessInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
-	return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-		if err := t.checkAccess(ctx); err != nil {
-			return nil, err
-		}
-		return next(ctx, req)
-	}
-}
-
-// WrapStreamingClient implements the streaming client interceptor (pass-through).
-func (t *tenancyAccessInterceptor) WrapStreamingClient(next connect.StreamingClientFunc) connect.StreamingClientFunc {
-	return next
-}
-
-// WrapStreamingHandler implements the streaming handler interceptor for tenancy access.
-func (t *tenancyAccessInterceptor) WrapStreamingHandler(
-	next connect.StreamingHandlerFunc,
-) connect.StreamingHandlerFunc {
-	return func(ctx context.Context, conn connect.StreamingHandlerConn) error {
-		if err := t.checkAccess(ctx); err != nil {
-			return err
-		}
-		return next(ctx, conn)
-	}
 }

@@ -6,7 +6,7 @@ import (
 
 	"gorm.io/gorm"
 
-	"github.com/pitabwire/frame/v2/datastore/dialect"
+	"github.com/pitabwire/frame/v3/datastore/dialect"
 )
 
 // createConnection asks the adapter to open a *gorm.DB. The adapter

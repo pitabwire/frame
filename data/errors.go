@@ -5,7 +5,7 @@ import (
 	"errors"
 	"strings"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/jackc/pgx/v5/pgconn"
 	"gorm.io/gorm"
 )
@@ -46,13 +46,13 @@ func ErrorConvertToAPI(err error) *connect.Error {
 
 	// Fast path: exact match for known GORM errors
 	if code, found := gormErrorMap[err]; found {
-		return connect.NewError(code, err)
+		return connect.NewError(code, err.Error()).WithCause(err)
 	}
 
 	// For wrapped errors (common with gorm), unwrap and check
 	for unwrapped := err; unwrapped != nil; unwrapped = errors.Unwrap(unwrapped) {
 		if code, found := gormErrorMap[unwrapped]; found {
-			return connect.NewError(code, err)
+			return connect.NewError(code, err.Error()).WithCause(err)
 		}
 	}
 
@@ -62,28 +62,28 @@ func ErrorConvertToAPI(err error) *connect.Error {
 	// Constraint violations
 	switch {
 	case containsAny(msg, "duplicate key", "unique constraint", "violates unique constraint"):
-		return connect.NewError(connect.CodeAlreadyExists, err)
+		return connect.NewError(connect.CodeAlreadyExists, err.Error()).WithCause(err)
 	case containsAny(msg, "foreign key", "violates foreign key"):
-		return connect.NewError(connect.CodeInvalidArgument, err)
+		return connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
 	case containsAny(msg, "check constraint", "violates check constraint"):
-		return connect.NewError(connect.CodeInvalidArgument, err)
+		return connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
 	case containsAny(msg, "not null", "violates not-null constraint"):
-		return connect.NewError(connect.CodeInvalidArgument, err)
+		return connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
 	}
 
 	// Connection / network issues
 	if containsAny(msg, "connection refused", "connection reset", "timeout", "network", "dial tcp") {
-		return connect.NewError(connect.CodeUnavailable, err)
+		return connect.NewError(connect.CodeUnavailable, err.Error()).WithCause(err)
 	}
 
 	// Transaction issues (deadlock, rollback, etc.)
 	if strings.Contains(msg, "transaction") &&
 		containsAny(msg, "rollback", "aborted", "deadlock") {
-		return connect.NewError(connect.CodeAborted, err)
+		return connect.NewError(connect.CodeAborted, err.Error()).WithCause(err)
 	}
 
 	// Fallback
-	return connect.NewError(connect.CodeInternal, err)
+	return connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 }
 
 // containsAny checks if any of the substrings exist in s (avoids repeated calls).

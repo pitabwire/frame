@@ -53,8 +53,9 @@ func WithEnrollmentStrict(strict bool) Option {
 	}
 }
 
-// WithTenancyArmingCheck enables/disables the readiness check that the app DB
-// role is not superuser/BYPASSRLS. When unset, the check is auto-enabled if
+// WithTenancyArmingCheck enables/disables the readiness checks that the app
+// DB role is not superuser/BYPASSRLS and that the connection keeps session
+// state (no transaction-mode pooler, see tenancy/postgres.CheckSessionAffinity). When unset, the check is auto-enabled if
 // SecurityMode is Hybrid or FailClosed.
 func WithTenancyArmingCheck(enabled bool) Option {
 	return func(_ context.Context, s *Service) {

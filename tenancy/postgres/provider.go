@@ -22,7 +22,10 @@ import (
 //     SystemPrincipal; bare Skip rejected; partition-only rejected.
 //
 // Connection poolers: session-scoped GUCs require session affinity
-// (direct Postgres or PgBouncer pool_mode=session). See docs/datastore.md.
+// (direct Postgres or PgBouncer pool_mode=session). Transaction/statement
+// pooling is unsupported: bindings leak across tenants or fall back to
+// match-all. Secure modes refuse readiness when CheckSessionAffinity detects
+// it. See docs/datastore.md.
 type Provider struct {
 	adapter             dialect.DialectAdapter
 	mode                tenancy.SecurityMode

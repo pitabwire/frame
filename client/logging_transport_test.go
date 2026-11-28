@@ -137,3 +137,30 @@ func (s *LoggingTransportSuite) TestRoundTrip_NeverLogsCredentials() {
 		s.NotContains(out, secret, "credentials must never reach the logs")
 	}
 }
+
+func (s *LoggingTransportSuite) TestRoundTrip_BodyLoggingMasksOAuthSecrets() {
+	base := loggingRoundTripFunc(func(req *http.Request) (*http.Response, error) {
+		_, _ = io.ReadAll(req.Body)
+		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(bytes.NewBufferString("{}"))}, nil
+	})
+	rt := NewLoggingTransport(base,
+		WithTransportLogRequests(true),
+		WithTransportLogBody(true),
+	)
+
+	logs := &bytes.Buffer{}
+	logger := util.NewLogger(s.T().Context(),
+		util.WithLogOutput(logs), util.WithLogLevel(slog.LevelDebug),
+		util.WithLogNoColor(true), util.WithLogHandlerExclusive())
+	ctx := util.ContextWithLogger(s.T().Context(), logger)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://idp.example.com/oauth2/token",
+		strings.NewReader("grant_type=client_credentials&client_id=svc&client_secret=body-cs-secret"))
+	s.Require().NoError(err)
+	resp, err := rt.RoundTrip(req)
+	s.Require().NoError(err)
+	s.Require().NoError(resp.Body.Close())
+
+	s.Contains(logs.String(), "client_id=svc", "the body is still logged")
+	s.NotContains(logs.String(), "body-cs-secret")
+}

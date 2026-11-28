@@ -174,7 +174,7 @@ func (t *loggingTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 				"method": req.Method,
 				"url":    redact.URL(req.URL.String()),
 				"host":   req.Host,
-				"body":   string(bodyLogged),
+				"body":   redact.Body(string(bodyLogged)),
 			})
 			logger.Info("HTTP request body logged")
 		}
@@ -274,7 +274,7 @@ func (t *loggingTransport) logResponseBody(logger *util.LogEntry, body *io.ReadC
 		bodyLogged := teeReader.LoggedBody()
 
 		if len(bodyLogged) > 0 {
-			logger = logger.WithField("body", string(bodyLogged))
+			logger = logger.WithField("body", redact.Body(string(bodyLogged)))
 		}
 	}
 	return logger

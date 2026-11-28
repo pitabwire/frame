@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -14,36 +15,44 @@ const Placeholder = "xxxxx"
 
 //nolint:gochecknoglobals // immutable lookup table
 var sensitiveQueryParams = map[string]struct{}{
-	"password":         {},
-	"pass":             {},
-	"passwd":           {},
-	"pwd":              {},
-	"secret":           {},
-	"client_secret":    {},
-	"token":            {},
-	"access_token":     {},
-	"refresh_token":    {},
-	"auth_token":       {},
-	"api_key":          {},
-	"apikey":           {},
-	"key":              {},
-	"sig":              {},
-	"signature":        {},
-	"x-amz-signature":  {},
-	"x-amz-credential": {},
-	"credentials":      {},
-	"nkey":             {},
-	"jwt":              {},
+	"password":             {},
+	"pass":                 {},
+	"passwd":               {},
+	"pwd":                  {},
+	"secret":               {},
+	"client_secret":        {},
+	"token":                {},
+	"access_token":         {},
+	"refresh_token":        {},
+	"auth_token":           {},
+	"api_key":              {},
+	"apikey":               {},
+	"key":                  {},
+	"sig":                  {},
+	"signature":            {},
+	"x-amz-signature":      {},
+	"x-amz-credential":     {},
+	"x-amz-security-token": {},
+	"x-goog-signature":     {},
+	"x-goog-credential":    {},
+	"awsaccesskeyid":       {},
+	"credentials":          {},
+	"nkey":                 {},
+	"jwt":                  {},
 }
 
 // keywordPasswordPattern matches password=value in libpq keyword/value DSNs.
 var keywordPasswordPattern = regexp.MustCompile(`(?i)(\bpassword\s*=\s*)('(?:[^'\\]|\\.)*'|\S+)`)
 
-// URL returns raw with credentials removed so it is safe to log or
-// embed in errors: the userinfo password (or a token-only userinfo) and
-// sensitive query parameters are replaced with Placeholder, as is the
-// password of libpq keyword/value DSNs. Strings that net/url cannot parse
-// still have their authority userinfo masked.
+// URL returns raw with credentials removed so it is safe to log or embed
+// in errors: the userinfo password and sensitive query parameters are
+// replaced with Placeholder, as is the password of libpq keyword/value DSNs.
+// A username without a password is not treated as a credential.
+//
+// Passwords containing reserved characters ('/', '?', '#', '"', '@', ...)
+// make net/url reject the string or mis-split it into host and path. In
+// those cases everything between "://" and the last '@' is masked, which may
+// over-redact but never leaks.
 func URL(raw string) string {
 	if raw == "" {
 		return raw
@@ -54,16 +63,13 @@ func URL(raw string) string {
 	}
 
 	u, err := url.Parse(raw)
-	if err != nil {
-		return redactUnparsedUserinfo(raw)
+	if err != nil || misparsedUserinfo(u) {
+		return maskUpToLastAt(raw)
 	}
 
 	if u.User != nil {
 		if _, hasPassword := u.User.Password(); hasPassword {
 			u.User = url.UserPassword(u.User.Username(), Placeholder)
-		} else if u.User.Username() != "" {
-			// A bare userinfo is commonly a token (redis://token@host).
-			u.User = url.User(Placeholder)
 		}
 	}
 
@@ -74,11 +80,42 @@ func URL(raw string) string {
 	return u.String()
 }
 
+// misparsedUserinfo detects a URL that net/url accepted but split inside a
+// password: no userinfo, a host:port-shaped authority, and an '@' that
+// ended up in the path, query or fragment (e.g. user:12/ss@host).
+func misparsedUserinfo(u *url.URL) bool {
+	if u.User != nil || !strings.Contains(u.Host, ":") {
+		return false
+	}
+	return strings.Contains(u.Path, "@") || strings.Contains(u.RawQuery, "@") ||
+		strings.Contains(u.Fragment, "@")
+}
+
+// maskUpToLastAt masks everything between "://" and the last '@', and the
+// sensitive query parameters after it.
+func maskUpToLastAt(raw string) string {
+	scheme, rest, _ := strings.Cut(raw, "://")
+	tail := rest
+	prefix := ""
+	if at := strings.LastIndex(rest, "@"); at >= 0 {
+		prefix = Placeholder
+		tail = rest[at:]
+	}
+	if q := strings.IndexByte(tail, '?'); q >= 0 {
+		tail = tail[:q+1] + redactQuery(tail[q+1:])
+	}
+	return scheme + "://" + prefix + tail
+}
+
 // Error returns err with every credential of the raw URL/DSN removed from its
 // message. Drivers and net/url routinely echo the full connection URL in
 // errors, so errors derived from a DSN must be scrubbed before they are
 // logged or surfaced. The original error stays reachable through Unwrap for
 // errors.Is / errors.As. Errors that contain no credential are returned as-is.
+//
+// Limitation: errors.As (or errors.Unwrap) hands back the original,
+// unscrubbed error, so calling Error() on the unwrapped value (for example a
+// *url.Error) still yields the credential. Log the scrubbed error itself.
 func Error(raw string, err error) error {
 	if err == nil {
 		return nil
@@ -91,17 +128,29 @@ func Error(raw string, err error) error {
 	return &scrubbedError{msg: scrubbed, err: err}
 }
 
-// Text removes every credential of the raw URL/DSN from text.
+// Text removes every credential of the raw URL/DSN from text, including the
+// %q-quoted forms that net/url and fmt produce (url.Error quotes the URL, so
+// a '"' or control character in a password is escaped there).
 func Text(raw, text string) string {
 	if raw == "" || text == "" {
 		return text
 	}
 
-	text = strings.ReplaceAll(text, raw, URL(raw))
+	redacted := URL(raw)
+	text = strings.ReplaceAll(text, strconv.Quote(raw), strconv.Quote(redacted))
+	text = strings.ReplaceAll(text, quotedInner(raw), quotedInner(redacted))
+	text = strings.ReplaceAll(text, raw, redacted)
 	for _, secret := range secrets(raw) {
+		text = strings.ReplaceAll(text, quotedInner(secret), Placeholder)
 		text = strings.ReplaceAll(text, secret, Placeholder)
 	}
 	return text
+}
+
+// quotedInner returns s as it appears inside a Go-quoted string.
+func quotedInner(s string) string {
+	q := strconv.Quote(s)
+	return q[1 : len(q)-1]
 }
 
 // secrets returns the credential values embedded in raw, in both raw and
@@ -125,14 +174,46 @@ func secrets(raw string) []string {
 }
 
 func userinfoSecrets(raw string) []string {
-	userinfo, ok := authorityUserinfo(raw)
-	if !ok {
+	_, rest, found := strings.Cut(raw, "://")
+	if !found {
 		return nil
 	}
+
+	if u, err := url.Parse(raw); err == nil && !misparsedUserinfo(u) {
+		return parsedPasswordForms(u, rest)
+	}
+
+	// net/url could not split the authority; assume everything up to the
+	// last '@' is userinfo.
+	at := strings.LastIndex(rest, "@")
+	if at < 0 {
+		return nil
+	}
+	userinfo := rest[:at]
 	if _, password, hasPassword := strings.Cut(userinfo, ":"); hasPassword {
 		return []string{password}
 	}
 	return []string{userinfo}
+}
+
+// parsedPasswordForms returns the decoded password of a well-formed URL and
+// its raw (percent-encoded) spelling. A username alone is not a credential.
+func parsedPasswordForms(u *url.URL, afterScheme string) []string {
+	if u.User == nil {
+		return nil
+	}
+	password, hasPassword := u.User.Password()
+	if !hasPassword {
+		return nil
+	}
+	out := []string{password}
+	authority, _, _ := strings.Cut(afterScheme, "/")
+	if at := strings.LastIndex(authority, "@"); at >= 0 {
+		if _, rawPassword, ok := strings.Cut(authority[:at], ":"); ok {
+			out = append(out, rawPassword)
+		}
+	}
+	return out
 }
 
 func querySecrets(raw string) []string {
@@ -185,36 +266,6 @@ func redactQuery(rawQuery string) string {
 	return strings.Join(pairs, "&")
 }
 
-// authorityUserinfo extracts the userinfo of scheme://userinfo@host without
-// relying on net/url, so it also works for strings net/url rejects.
-func authorityUserinfo(raw string) (string, bool) {
-	_, rest, found := strings.Cut(raw, "://")
-	if !found {
-		return "", false
-	}
-	if end := strings.IndexAny(rest, "/?#"); end >= 0 {
-		rest = rest[:end]
-	}
-	at := strings.LastIndex(rest, "@")
-	if at < 0 {
-		return "", false
-	}
-	return rest[:at], true
-}
-
-func redactUnparsedUserinfo(raw string) string {
-	userinfo, ok := authorityUserinfo(raw)
-	if !ok {
-		return raw
-	}
-	scheme, rest, _ := strings.Cut(raw, "://")
-	replacement := Placeholder
-	if user, _, found := strings.Cut(userinfo, ":"); found {
-		replacement = user + ":" + Placeholder
-	}
-	return scheme + "://" + replacement + strings.TrimPrefix(rest, userinfo)
-}
-
 type scrubbedError struct {
 	msg string
 	err error
@@ -242,4 +293,30 @@ func HeaderValue(name, value string) string {
 		return Placeholder
 	}
 	return value
+}
+
+//nolint:gochecknoglobals // immutable lookup table
+var sensitiveBodyFields = []string{
+	"password", "passwd", "pwd", "secret", "client_secret", "client_assertion",
+	"assertion", "access_token", "refresh_token", "id_token", "auth_token", "token",
+	"api_key", "apikey", "private_key", "code_verifier", "otp",
+}
+
+//nolint:gochecknoglobals // compiled once
+var (
+	bodyFieldAlternation = strings.Join(sensitiveBodyFields, "|")
+	jsonSecretPattern    = regexp.MustCompile(
+		`(?i)("(?:` + bodyFieldAlternation + `)"\s*:\s*)"(?:[^"\\]|\\.)*"`)
+	formSecretPattern = regexp.MustCompile(
+		`(?i)((?:^|[&?])(?:` + bodyFieldAlternation + `)=)[^&\s]*`)
+)
+
+// Body masks credential fields (passwords, client secrets/assertions, OAuth
+// tokens, ...) in JSON or form-encoded bodies before they are logged.
+func Body(body string) string {
+	if body == "" {
+		return body
+	}
+	body = jsonSecretPattern.ReplaceAllString(body, `${1}"`+Placeholder+`"`)
+	return formSecretPattern.ReplaceAllString(body, "${1}"+Placeholder)
 }

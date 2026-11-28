@@ -272,7 +272,7 @@ func newHTTPClient(ctx context.Context, opts ...HTTPOption) (*http.Client, error
 	}
 
 	if _, ok := base.(*otelhttp.Transport); !ok {
-		base = otelhttp.NewTransport(base)
+		base = otelhttp.NewTransport(spanURLRedactingTransport{inner: base})
 	}
 
 	base = newResilientTransport(base, cfg.retryPolicy)

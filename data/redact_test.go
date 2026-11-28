@@ -32,10 +32,10 @@ func TestDSNRedacted_RemovesCredentials(t *testing.T) {
 			secrets: []string{"pg-pass"},
 		},
 		{
-			name:    "token-only userinfo is redacted",
-			dsn:     "redis://bearer-token-value@cache:6379/0",
-			want:    "redis://xxxxx@cache:6379/0",
-			secrets: []string{"bearer-token-value"},
+			name:    "password-only userinfo is redacted",
+			dsn:     "redis://:redis-pw-value@cache:6379/0",
+			want:    "redis://:xxxxx@cache:6379/0",
+			secrets: []string{"redis-pw-value"},
 		},
 		{
 			name:    "sensitive query params are redacted",

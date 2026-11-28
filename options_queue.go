@@ -25,7 +25,7 @@ func WithRegisterPublisher(reference string, queueURL string) Option {
 			return
 		}
 		if !data.DSN(queueURL).Valid() {
-			s.AddStartupError(fmt.Errorf("publisher queueURL is invalid: %s", queueURL))
+			s.AddStartupError(fmt.Errorf("publisher queueURL is invalid: %s", data.RedactURL(queueURL)))
 			return
 		}
 
@@ -33,11 +33,11 @@ func WithRegisterPublisher(reference string, queueURL string) Option {
 		// so defer registration to pre-start phase
 		// Publishers must be registered before subscribers (for mem:// driver)
 		s.AddPublisherStartup(func(ctx context.Context, svc *Service) {
-			err := svc.QueueManager().AddPublisher(ctx, reference, queueURL)
+			err := data.DSN(queueURL).ScrubError(svc.QueueManager().AddPublisher(ctx, reference, queueURL))
 			if err != nil {
 				svc.Log(ctx).WithError(err).
 					WithField("publisher_ref", reference).
-					WithField("publisher_url", queueURL).
+					WithField("publisher_url", data.RedactURL(queueURL)).
 					Error("Failed to register publisher")
 				svc.AddStartupError(err)
 			}
@@ -55,7 +55,7 @@ func WithRegisterSubscriber(reference string, queueURL string,
 			return
 		}
 		if !data.DSN(queueURL).Valid() {
-			s.AddStartupError(fmt.Errorf("subscriber queueURL is invalid: %s", queueURL))
+			s.AddStartupError(fmt.Errorf("subscriber queueURL is invalid: %s", data.RedactURL(queueURL)))
 			return
 		}
 
@@ -63,11 +63,12 @@ func WithRegisterSubscriber(reference string, queueURL string,
 		// so defer registration to pre-start phase
 		// Subscribers must be registered after publishers (for mem:// driver)
 		s.AddSubscriberStartup(func(ctx context.Context, svc *Service) {
-			err := svc.QueueManager().AddSubscriber(ctx, reference, queueURL, handlers...)
+			err := data.DSN(queueURL).
+				ScrubError(svc.QueueManager().AddSubscriber(ctx, reference, queueURL, handlers...))
 			if err != nil {
 				svc.Log(ctx).WithError(err).
 					WithField("subscriber_ref", reference).
-					WithField("subscriber_url", queueURL).
+					WithField("subscriber_url", data.RedactURL(queueURL)).
 					Error("Failed to register subscriber")
 				svc.AddStartupError(err)
 			}

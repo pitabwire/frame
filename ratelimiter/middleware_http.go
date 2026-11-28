@@ -172,7 +172,7 @@ func RateLimitMiddleware(limiter *IPRateLimiter) func(http.Handler) http.Handler
 				return
 			}
 
-			w.Header().Set("X-RateLimit-Limit", strconv.Itoa(limiter.config.MaxPerWindow))
+			w.Header().Set("X-Ratelimit-Limit", strconv.Itoa(limiter.config.MaxPerWindow))
 			next.ServeHTTP(w, r)
 		})
 	}
@@ -189,12 +189,12 @@ func UserRateLimitMiddleware(userLimiter *UserRateLimiter, ipLimiter *IPRateLimi
 
 			userID := GetUserID(r.Context())
 			if userID != "" && userLimiter != nil {
-				w.Header().Set("X-RateLimit-Scope", "user")
+				w.Header().Set("X-Ratelimit-Scope", "user")
 				if !userLimiter.Allow(r.Context(), userID) {
 					rateLimitedResponse(w, userLimiter.config, "user")
 					return
 				}
-				w.Header().Set("X-RateLimit-Limit", strconv.Itoa(userLimiter.config.MaxPerWindow))
+				w.Header().Set("X-Ratelimit-Limit", strconv.Itoa(userLimiter.config.MaxPerWindow))
 				next.ServeHTTP(w, r)
 				return
 			}
@@ -204,14 +204,14 @@ func UserRateLimitMiddleware(userLimiter *UserRateLimiter, ipLimiter *IPRateLimi
 				return
 			}
 
-			w.Header().Set("X-RateLimit-Scope", "ip")
+			w.Header().Set("X-Ratelimit-Scope", "ip")
 			ip := GetIP(r)
 			if !ipLimiter.Allow(r.Context(), ip) {
 				rateLimitedResponse(w, ipLimiter.config, "ip")
 				return
 			}
 
-			w.Header().Set("X-RateLimit-Limit", strconv.Itoa(ipLimiter.config.MaxPerWindow))
+			w.Header().Set("X-Ratelimit-Limit", strconv.Itoa(ipLimiter.config.MaxPerWindow))
 			next.ServeHTTP(w, r)
 		})
 	}
@@ -223,9 +223,9 @@ func rateLimitedResponse(w http.ResponseWriter, cfg WindowConfig, scope string) 
 		retryAfter = int(time.Minute.Seconds())
 	}
 
-	w.Header().Set("X-RateLimit-Limit", strconv.Itoa(cfg.MaxPerWindow))
-	w.Header().Set("X-RateLimit-Remaining", "0")
-	w.Header().Set("X-RateLimit-Scope", scope)
+	w.Header().Set("X-Ratelimit-Limit", strconv.Itoa(cfg.MaxPerWindow))
+	w.Header().Set("X-Ratelimit-Remaining", "0")
+	w.Header().Set("X-Ratelimit-Scope", scope)
 	w.Header().Set("Retry-After", strconv.Itoa(retryAfter))
 	w.WriteHeader(http.StatusTooManyRequests)
 	writeIgnoreErr(w, `{"error": "rate limit exceeded", "code": "rate_limit_exceeded"}`)

@@ -11,6 +11,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	"gocloud.dev/pubsub"
 
+	"github.com/pitabwire/frame/v3/data"
 	"github.com/pitabwire/frame/v3/localization"
 	"github.com/pitabwire/frame/v3/queue/protocol"
 	"github.com/pitabwire/frame/v3/security"
@@ -69,7 +70,7 @@ func (s *subscriber) processDelivery(ctx context.Context, metadata map[string]st
 			util.Log(pCtx).
 				WithField("name", s.reference).
 				WithField("function", "processDelivery").
-				WithField("url", s.url).
+				WithField("url", data.RedactURL(s.url)).
 				WithError(err).
 				Warn("could not handle message")
 			return err
@@ -99,7 +100,7 @@ func (s *subscriber) processReceivedMessage(ctx context.Context, msg *pubsub.Mes
 		logger := util.Log(ctx).
 			WithField("name", s.reference).
 			WithField("function", "processReceivedMessage").
-			WithField("url", s.url)
+			WithField("url", data.RedactURL(s.url))
 		logger.WithError(submitErr).Error("could not process message, failed to submit job")
 		s.metrics.closeMessage(time.Now(), submitErr)
 		return submitErr

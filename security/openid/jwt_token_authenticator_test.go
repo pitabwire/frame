@@ -258,6 +258,12 @@ func (s *JwtAuthenticatorTestSuite) TestValidAuthenticationRSA() {
 		require.NotNil(t, claims, "Claims should be stored in context")
 		assert.Equal(t, "test-user", claims.Subject, "Subject should match")
 		assert.Equal(t, s.testIssuer, claims.Issuer, "Issuer should match")
+
+		verified := security.VerifiedTokenClaimsFromContext(resultCtx)
+		require.NotNil(t, verified, "a cryptographically verified token must be marked as such")
+		assert.Equal(t, "test-user", verified.Subject)
+		assert.Nil(t, security.VerifiedTokenClaimsFromContext(ctx),
+			"the input context is not marked verified")
 	})
 }
 

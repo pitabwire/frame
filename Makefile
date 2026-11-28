@@ -59,6 +59,11 @@ tests: ## runs all system tests
 	go tool cover -html=coverage.out -o coverage.html
 
 
+# Short fuzz run of the credential redactor (seed corpus also runs in `go test`).
+FUZZTIME ?= 30s
+fuzz-redact: ## fuzz internal/redact for $(FUZZTIME)
+	go test ./internal/redact/ -run '^$$' -fuzz=FuzzURLUserinfo -fuzztime=$(FUZZTIME)
+
 gen_tls_certificates:
 	rm -f tests_runner/*.pem
 	# Generate ca file

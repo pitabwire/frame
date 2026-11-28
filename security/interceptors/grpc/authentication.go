@@ -84,14 +84,14 @@ func UnaryAuthInterceptor(
 			return nil, err
 		}
 
-		ctx, err = authenticator.Authenticate(ctx, jwtToken, opts...)
+		authCtx, err := authenticator.Authenticate(ctx, jwtToken, opts...)
 		if err != nil {
-			logger := util.Log(ctx).WithError(err).WithField("jwtToken", jwtToken)
+			logger := util.Log(ctx).WithError(err).WithField("token_fingerprint", security.TokenFingerprint(jwtToken))
 			logger.Info(" UnaryAuthInterceptor -- could not authenticate token")
 			return nil, status.Error(codes.Unauthenticated, err.Error())
 		}
 
-		ctx = security.EnrichTenancyClaims(ctx,
+		ctx = security.EnrichTenancyClaims(authCtx,
 			getGrpcMetadata(ctx, "tenant-id"),
 			getGrpcMetadata(ctx, "partition-id"),
 			getGrpcMetadata(ctx, "access-id"))
@@ -153,7 +153,7 @@ func ensureAuthenticatedStreamContext(
 	// Attempt to authenticate and get an updated context.
 	authenticatedCtx, err := authenticator.Authenticate(ctx, jwtToken, opts...)
 	if err != nil {
-		logger := util.Log(ctx).WithError(err).WithField("jwtToken", jwtToken)
+		logger := util.Log(ctx).WithError(err).WithField("token_fingerprint", security.TokenFingerprint(jwtToken))
 		logger.Info("ensureAuthenticatedStreamContext -- could not authenticate token")
 		// Return original stream and the authentication error.
 		return ss, status.Error(codes.Unauthenticated, err.Error())

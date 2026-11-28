@@ -134,6 +134,13 @@ func WithHTTPTimeout(timeout time.Duration) HTTPOption {
 }
 
 // WithHTTPTransport sets the HTTP transport.
+//
+// Frame wraps the transport in otelhttp and redacts credential query
+// parameters from the url.full span attribute. If transport is already an
+// *otelhttp.Transport, Frame uses it as-is and cannot insert that
+// redaction: build it as otelhttp.NewTransport(yourInner) yourself only if
+// your URLs never carry secrets in the query string, or pass the inner
+// transport and let Frame add otelhttp.
 func WithHTTPTransport(transport http.RoundTripper) HTTPOption {
 	return func(c *httpConfig) {
 		c.transport = transport
@@ -272,7 +279,7 @@ func newHTTPClient(ctx context.Context, opts ...HTTPOption) (*http.Client, error
 	}
 
 	if _, ok := base.(*otelhttp.Transport); !ok {
-		base = otelhttp.NewTransport(base)
+		base = otelhttp.NewTransport(spanURLRedactingTransport{inner: base})
 	}
 
 	base = newResilientTransport(base, cfg.retryPolicy)

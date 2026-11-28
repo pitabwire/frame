@@ -16,6 +16,7 @@ import (
 	"gocloud.dev/pubsub"
 	"golang.org/x/oauth2"
 
+	"github.com/pitabwire/frame/v3/data"
 	"github.com/pitabwire/frame/v3/internal"
 	"github.com/pitabwire/frame/v3/localization"
 	"github.com/pitabwire/frame/v3/security"
@@ -108,7 +109,8 @@ func (p *publisher) Init(ctx context.Context) error {
 	p.kind = kind
 
 	if initErr := p.initByKind(ctx, kind); initErr != nil {
-		return initErr
+		// Drivers echo the full URL (credentials included) in their errors.
+		return data.DSN(p.url).ScrubError(initErr)
 	}
 
 	p.isInit.Store(true)

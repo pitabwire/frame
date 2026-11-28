@@ -30,6 +30,45 @@ Set the authorization service endpoints:
 
 Frame provides an `AuditLogger` interface to record authorization decisions. The Keto adapter uses a default audit logger that can be customized.
 
+## Tenancy access self-heal
+
+`authorizer.NewTenancyAccessChecker` checks Plane-1 data access on
+`{namespace}:{tenant}/{partition}`. When an internal service bot (role
+`internal`) is denied, the checker can self-heal by writing a `#service`
+tuple and retrying once (the default callback, or `WithOnTenancyAccessDenied`).
+
+Internal callers may act on any tenancy named in `X-Tenant-Id` /
+`X-Partition-Id` headers, and queue consumers rebuild claims from message
+metadata. Neither is proof that a partition exists, so self-heal only runs
+when:
+
+1. the caller's **verified JWT** (`security.VerifiedTokenClaimsFromContext`,
+   set only by the JWT authenticator) was issued for that tenant and partition
+   (`partition_id` or `partition_ids`), or
+2. a `PartitionVerifierFunc` confirms the partition exists.
+
+The default verifier accepts a partition when Keto already holds a `member`
+tuple for it: a direct membership or a parent link
+(`child#member <- parent#member`). `service` tuples do not count, because
+self-heal writes them. Verifier errors fail closed.
+
+Behaviour to plan for with the default verifier:
+
+- A **new child partition** is unknown until the tenancy service's
+  asynchronous partition sync (`authz.partition.sync`) writes its parent
+  link. Requests that arrive in that window are denied.
+- A **root partition nobody has been granted on** has no `member` tuple
+  and is denied until access is granted or the service-bot bootstrap
+  provisions explicit `#service` grants.
+
+Mitigations:
+
+- Prefer an authoritative verifier backed by the tenancy service, e.g.
+  `WithPartitionVerifier(func(ctx, t, p) (bool, error) { /* GetPartition */ })`.
+- Add a bounded retry for the sync window:
+  `WithPartitionVerifyRetry(3, 200*time.Millisecond)` (0.2s + 0.4s at most,
+  interrupted when the request context ends).
+
 ## Best Practices
 
 - Separate read vs write endpoints for high availability.

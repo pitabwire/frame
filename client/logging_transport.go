@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/pitabwire/util"
+
+	"github.com/pitabwire/frame/v3/internal/redact"
 )
 
 // teeReadCloser is a reader that duplicates its reads to both a limited buffer and the original reader.
@@ -170,9 +172,9 @@ func (t *loggingTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 		if len(bodyLogged) > 0 {
 			logger := util.Log(ctx).WithFields(map[string]any{
 				"method": req.Method,
-				"url":    req.URL.String(),
+				"url":    redact.URL(req.URL.String()),
 				"host":   req.Host,
-				"body":   string(bodyLogged),
+				"body":   redact.Body(string(bodyLogged)),
 			})
 			logger.Info("HTTP request body logged")
 		}
@@ -200,7 +202,7 @@ func (t *loggingTransport) logRequest(ctx context.Context, req *http.Request) {
 
 	logger := util.Log(ctx).WithFields(map[string]any{
 		"method": req.Method,
-		"url":    req.URL.String(),
+		"url":    redact.URL(req.URL.String()),
 		"host":   req.Host,
 	})
 
@@ -208,7 +210,7 @@ func (t *loggingTransport) logRequest(ctx context.Context, req *http.Request) {
 		headers := make(map[string]string)
 		for name, values := range req.Header {
 			if len(values) > 0 {
-				headers[name] = strings.Join(values, " , ")
+				headers[name] = redact.HeaderValue(name, strings.Join(values, " , "))
 			}
 		}
 		logger = logger.WithField("headers", headers)
@@ -258,7 +260,7 @@ func (t *loggingTransport) logResponseHeaders(logger *util.LogEntry, headers htt
 	headerMap := make(map[string]string)
 	for name, values := range headers {
 		if len(values) > 0 {
-			headerMap[name] = values[0]
+			headerMap[name] = redact.HeaderValue(name, values[0])
 		}
 	}
 	return logger.WithField("headers", headerMap)
@@ -272,7 +274,7 @@ func (t *loggingTransport) logResponseBody(logger *util.LogEntry, body *io.ReadC
 		bodyLogged := teeReader.LoggedBody()
 
 		if len(bodyLogged) > 0 {
-			logger = logger.WithField("body", string(bodyLogged))
+			logger = logger.WithField("body", redact.Body(string(bodyLogged)))
 		}
 	}
 	return logger

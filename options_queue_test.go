@@ -88,3 +88,34 @@ func TestOptionEarlyFailure(t *testing.T) {
 		})
 	}
 }
+
+func TestOptionEarlyFailure_NeverLeaksURLCredentials(t *testing.T) {
+	const password = "opt-queue-pw-5c"
+	invalidURL := "nats://svc:" + password + "@host:4222/\x7f"
+
+	tests := []struct {
+		name string
+		opt  frame.Option
+	}{
+		{name: "publisher", opt: frame.WithRegisterPublisher("pub", invalidURL)},
+		{name: "subscriber", opt: frame.WithRegisterSubscriber("sub", invalidURL,
+			&msgHandler{f: func(context.Context, map[string]string, []byte) error { return nil }})},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx, svc := frame.NewService(tt.opt)
+			defer svc.Stop(ctx)
+
+			errs := svc.GetStartupErrors()
+			if len(errs) == 0 {
+				t.Fatal("expected a startup error for an invalid queue URL")
+			}
+			for _, err := range errs {
+				if err != nil && strings.Contains(err.Error(), password) {
+					t.Fatalf("startup error leaks the queue URL password: %v", err)
+				}
+			}
+		})
+	}
+}

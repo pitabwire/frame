@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
+
+	"github.com/pitabwire/frame/v3/internal/redact"
 )
 
 // NormalizeDSN converts a postgres:// or postgresql:// URI into the
@@ -35,7 +37,8 @@ func NormalizeDSN(pgString string) (string, error) {
 func uriToLibpq(uri string) (string, error) {
 	u, err := url.Parse(uri)
 	if err != nil {
-		return "", err
+		// net/url echoes the full input, password included, in its errors.
+		return "", redact.Error(uri, err)
 	}
 
 	if u.Scheme != "postgres" && u.Scheme != "postgresql" {

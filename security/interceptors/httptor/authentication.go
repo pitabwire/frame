@@ -44,10 +44,13 @@ func AuthenticationMiddleware(
 
 		authorizationHeader := r.Header.Get("Authorization")
 
-		logger := util.Log(r.Context()).WithField("authorization_header", authorizationHeader)
+		// Never log the Authorization header, cookies or the raw request
+		// headers: they carry credentials. Only presence, the scheme and a
+		// token fingerprint are logged.
+		logger := util.Log(r.Context()).WithField("has_authorization_header", authorizationHeader != "")
 
 		if authorizationHeader == "" || !strings.HasPrefix(authorizationHeader, bearerScheme) {
-			logger.WithField("available_headers", r.Header).
+			logger.WithField("authorization_scheme", authorizationScheme(authorizationHeader)).
 				Debug(" AuthenticationMiddleware -- could not authenticate missing token")
 			http.Error(w, "An authorization header is required", http.StatusUnauthorized)
 			return
@@ -66,7 +69,8 @@ func AuthenticationMiddleware(
 		ctx, err := authenticator.Authenticate(ctx, jwtToken, opts...)
 
 		if err != nil {
-			logger.WithError(err).Info(" AuthenticationMiddleware -- could not authenticate token")
+			logger.WithField("token_fingerprint", security.TokenFingerprint(jwtToken)).
+				WithError(err).Info(" AuthenticationMiddleware -- could not authenticate token")
 			http.Error(w, "Authorization header is invalid", http.StatusForbidden)
 			return
 		}
@@ -80,4 +84,14 @@ func AuthenticationMiddleware(
 
 		next.ServeHTTP(w, r)
 	})
+}
+
+// authorizationScheme returns the scheme of an Authorization header value
+// (e.g. "Basic"), never its credential part.
+func authorizationScheme(header string) string {
+	scheme, _, found := strings.Cut(strings.TrimSpace(header), " ")
+	if !found {
+		return ""
+	}
+	return scheme
 }

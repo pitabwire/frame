@@ -14,6 +14,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	"gocloud.dev/pubsub"
 
+	"github.com/pitabwire/frame/v3/data"
 	"github.com/pitabwire/frame/v3/queue/protocol"
 	"github.com/pitabwire/frame/v3/telemetry"
 	"github.com/pitabwire/frame/v3/workerpool"
@@ -151,7 +152,8 @@ func (s *subscriber) createSubscription(ctx context.Context) error {
 
 	subs, err := pubsub.OpenSubscription(ctx, s.url)
 	if err != nil {
-		return fmt.Errorf("could not open topic subscription: %w", err)
+		// Drivers echo the full URL (credentials included) in their errors.
+		return fmt.Errorf("could not open topic subscription: %w", data.DSN(s.url).ScrubError(err))
 	}
 
 	s.mu.Lock()
@@ -323,7 +325,7 @@ func (s *subscriber) listen(ctx context.Context) {
 	logger := util.Log(ctx).
 		WithField("name", s.reference).
 		WithField("function", "subscription").
-		WithField("url", s.url)
+		WithField("url", data.RedactURL(s.url))
 	logger.Debug("starting to listen for messages")
 
 	var consecutiveReceiveErrors int

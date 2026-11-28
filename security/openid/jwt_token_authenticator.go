@@ -128,6 +128,9 @@ func (a *jwtTokenAuthenticator) Authenticate(
 	ctx = security.JwtToContext(ctx, jwtToken)
 
 	ctx = claims.ClaimsToContext(ctx)
+	// Mark these claims as coming from a verified token; header or queue
+	// metadata tenancy must never be mistaken for them.
+	ctx = security.VerifiedTokenClaimsToContext(ctx, claims)
 
 	return ctx, nil
 }

@@ -73,7 +73,7 @@ func TestRateLimitMiddleware(t *testing.T) {
 	rr2 := httptest.NewRecorder()
 	h.ServeHTTP(rr2, req)
 	assert.Equal(t, http.StatusTooManyRequests, rr2.Code)
-	assert.Equal(t, "0", rr2.Header().Get("X-RateLimit-Remaining"))
+	assert.Equal(t, "0", rr2.Header().Get("X-Ratelimit-Remaining"))
 }
 
 func TestUserRateLimitMiddlewarePrefersUser(t *testing.T) {
@@ -107,12 +107,12 @@ func TestUserRateLimitMiddlewarePrefersUser(t *testing.T) {
 	rr1 := httptest.NewRecorder()
 	h.ServeHTTP(rr1, req)
 	assert.Equal(t, http.StatusOK, rr1.Code)
-	assert.Equal(t, "user", rr1.Header().Get("X-RateLimit-Scope"))
+	assert.Equal(t, "user", rr1.Header().Get("X-Ratelimit-Scope"))
 
 	rr2 := httptest.NewRecorder()
 	h.ServeHTTP(rr2, req)
 	assert.Equal(t, http.StatusTooManyRequests, rr2.Code)
-	assert.Equal(t, "user", rr2.Header().Get("X-RateLimit-Scope"))
+	assert.Equal(t, "user", rr2.Header().Get("X-Ratelimit-Scope"))
 }
 
 func TestWindowLimiterAllow(t *testing.T) {

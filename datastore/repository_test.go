@@ -530,7 +530,7 @@ func (s *RepositoryTestSuite) TestImmutableFields() {
 }
 
 // TestBulkCreate tests bulk creation of entities.
-func (s *RepositoryTestSuite) TestBulkCreate() {
+func (s *RepositoryTestSuite) TestBulkCreate() { //nolint:gocognit // table-driven cases with per-case verification
 	testCases := []struct {
 		name        string
 		entityCount int

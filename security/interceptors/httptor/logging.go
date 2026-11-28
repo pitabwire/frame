@@ -12,6 +12,8 @@ import (
 	"unsafe"
 
 	"github.com/pitabwire/util"
+
+	"github.com/pitabwire/frame/v3/internal/redact"
 )
 
 const (
@@ -198,25 +200,42 @@ func LoggingMiddleware(next http.Handler, logBody bool) http.HandlerFunc {
 	}
 }
 
-// readAndReplaceBody — correct, no data loss, no duplication.
+// readAndReplaceBody captures up to maxBodyLogSize bytes for logging and
+// returns a replacement body that still yields the complete original
+// stream: the captured prefix followed by whatever was not read yet.
 func readAndReplaceBody(orig io.ReadCloser) ([]byte, io.ReadCloser, bool, error) {
 	if orig == http.NoBody {
 		return nil, orig, false, nil
 	}
-	defer orig.Close()
 
-	body, err := io.ReadAll(io.LimitReader(orig, maxBodyLogSize+1))
+	head, err := io.ReadAll(io.LimitReader(orig, maxBodyLogSize+1))
 	if err != nil {
+		_ = orig.Close()
 		return nil, nil, false, err
 	}
 
-	truncated := len(body) > maxBodyLogSize
-	if truncated {
-		body = body[:maxBodyLogSize]
+	replacement := &prefixedBody{
+		Reader: io.MultiReader(bytes.NewReader(head), orig),
+		closer: orig,
 	}
 
-	return body, io.NopCloser(bytes.NewReader(body)), truncated, nil
+	truncated := len(head) > maxBodyLogSize
+	if truncated {
+		head = head[:maxBodyLogSize]
+	}
+
+	return head, replacement, truncated, nil
 }
+
+// prefixedBody replays an already-read prefix before the rest of the
+// original body and closes the original on Close.
+type prefixedBody struct {
+	io.Reader
+
+	closer io.Closer
+}
+
+func (p *prefixedBody) Close() error { return p.closer.Close() }
 
 // shouldLogBody — only text-like content types.
 func shouldLogBody(r *http.Request) bool {
@@ -257,7 +276,7 @@ func logHTTPRequest(
 
 	// Request body
 	if logBody && len(reqBody) > 0 {
-		bodyStr := bytesToString(reqBody)
+		bodyStr := redact.Body(bytesToString(reqBody))
 		if reqTruncated {
 			bodyStr += " [truncated]"
 		}
@@ -266,7 +285,7 @@ func logHTTPRequest(
 
 	// Response body (only if body logging is enabled)
 	if logBody && w.body.Len() > 0 {
-		respStr := bytesToString(w.body.Bytes())
+		respStr := redact.Body(bytesToString(w.body.Bytes()))
 		if w.body.Len() == maxBodyLogSize {
 			respStr += " [truncated]"
 		}

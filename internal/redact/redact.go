@@ -47,7 +47,8 @@ var keywordPasswordPattern = regexp.MustCompile(`(?i)(\bpassword\s*=\s*)('(?:[^'
 // URL returns raw with credentials removed so it is safe to log or embed
 // in errors: the userinfo password and sensitive query parameters are
 // replaced with Placeholder, as is the password of libpq keyword/value DSNs.
-// A username without a password is not treated as a credential.
+// A bare userinfo without a password is masked too, since it is commonly a
+// token (redis://<token>@host, nats://<token>@host).
 //
 // Passwords containing reserved characters ('/', '?', '#', '"', '@', ...)
 // make net/url reject the string or mis-split it into host and path. In
@@ -70,6 +71,10 @@ func URL(raw string) string {
 	if u.User != nil {
 		if _, hasPassword := u.User.Password(); hasPassword {
 			u.User = url.UserPassword(u.User.Username(), Placeholder)
+		} else if u.User.Username() != "" {
+			// A bare userinfo is commonly the credential itself
+			// (redis://<token>@host, nats://<token>@host).
+			u.User = url.User(Placeholder)
 		}
 	}
 
@@ -196,22 +201,26 @@ func userinfoSecrets(raw string) []string {
 	return []string{userinfo}
 }
 
-// parsedPasswordForms returns the decoded password of a well-formed URL and
-// its raw (percent-encoded) spelling. A username alone is not a credential.
+// parsedPasswordForms returns the userinfo credential of a well-formed URL:
+// the password (decoded and raw spellings), or the bare username when there
+// is no password, since that is commonly a token.
 func parsedPasswordForms(u *url.URL, afterScheme string) []string {
 	if u.User == nil {
 		return nil
 	}
+	authority, _, _ := strings.Cut(afterScheme, "/")
+	rawUserinfo := ""
+	if at := strings.LastIndex(authority, "@"); at >= 0 {
+		rawUserinfo = authority[:at]
+	}
+
 	password, hasPassword := u.User.Password()
 	if !hasPassword {
-		return nil
+		return []string{u.User.Username(), rawUserinfo}
 	}
 	out := []string{password}
-	authority, _, _ := strings.Cut(afterScheme, "/")
-	if at := strings.LastIndex(authority, "@"); at >= 0 {
-		if _, rawPassword, ok := strings.Cut(authority[:at], ":"); ok {
-			out = append(out, rawPassword)
-		}
+	if _, rawPassword, ok := strings.Cut(rawUserinfo, ":"); ok {
+		out = append(out, rawPassword)
 	}
 	return out
 }

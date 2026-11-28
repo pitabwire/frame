@@ -70,14 +70,32 @@ func TestError_MasksQuotedAndReservedPasswordForms(t *testing.T) {
 	}
 }
 
-func TestURL_UserOnlyUserinfoIsNotASecret(t *testing.T) {
+// redis://<token>@host and nats://<token>@host carry the credential as a
+// bare userinfo, so a username without a password is masked too.
+func TestBareUserinfoIsTreatedAsSecret(t *testing.T) {
 	t.Parallel()
-	require.Equal(t, "https://alice@example.com/x", redact.URL("https://alice@example.com/x"))
-	require.Equal(t, "nats://svc:xxxxx@h:4222", redact.URL("nats://svc:pw@h:4222"))
 
-	plain := errors.New(`dial "https://alice@example.com/x": refused`)
-	require.Same(t, plain, redact.Error("https://alice@example.com/x", plain),
-		"a username alone is not a credential; the error must be left intact")
+	cases := []struct {
+		name, raw, token, want string
+	}{
+		{name: "redis token", raw: "redis://tok-redis-1@h", token: "tok-redis-1", want: "redis://xxxxx@h"},
+		{name: "nats token", raw: "nats://tok-nats-2@h/x", token: "tok-nats-2", want: "nats://xxxxx@h/x"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tc.want, redact.URL(tc.raw))
+
+			text := fmt.Sprintf("dial %s failed; user %q rejected", tc.raw, tc.token)
+			require.NotContains(t, redact.Text(tc.raw, text), tc.token)
+
+			err := redact.Error(tc.raw, fmt.Errorf("open %q: %w", tc.raw, errors.New("refused")))
+			require.NotContains(t, err.Error(), tc.token)
+		})
+	}
+
+	require.Equal(t, "nats://svc:xxxxx@h:4222", redact.URL("nats://svc:pw@h:4222"))
 }
 
 func TestURL_LegitAtSignInQueryIsKept(t *testing.T) {

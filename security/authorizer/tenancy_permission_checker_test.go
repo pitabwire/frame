@@ -4,11 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/pitabwire/frame/v3/security"
 	"github.com/pitabwire/frame/v3/security/authorizer"
 )
 
+// claimsCtx simulates a request authenticated with a verified JWT issued
+// for tenantID/partitionID.
 func claimsCtx(subject, tenantID, partitionID string, roles ...string) context.Context {
 	claims := &security.AuthenticationClaims{
 		TenantID:    tenantID,
@@ -16,7 +19,8 @@ func claimsCtx(subject, tenantID, partitionID string, roles ...string) context.C
 		Roles:       roles,
 	}
 	claims.Subject = subject
-	return claims.ClaimsToContext(context.Background())
+	ctx := claims.ClaimsToContext(context.Background())
+	return security.VerifiedTokenClaimsToContext(ctx, claims)
 }
 
 func tenancyPath(tenantID, partitionID string) string {
@@ -324,6 +328,7 @@ func (s *AuthorizerTestSuite) TestSelfHeal_HealsPartitionsCoveredByTokenClaims()
 				}
 				claims.Subject = "sh-bot-multi"
 				ctx := claims.ClaimsToContext(context.Background())
+				ctx = security.VerifiedTokenClaimsToContext(ctx, claims)
 				return security.EnrichTenancyClaims(ctx, "sh-multi-t", "sh-multi-p2", "")
 			}(),
 			subject:   "sh-bot-multi",
@@ -374,4 +379,107 @@ func (s *AuthorizerTestSuite) TestSelfHeal_CustomPartitionVerifier() {
 			s.Equal(tc.wantHeal, s.serviceTupleExists(tenancyPath("sh-ver-t", partition), subject))
 		})
 	}
+}
+
+// Queue consumers rebuild claims from message metadata, which carries the
+// publisher's header-enriched tenancy. Those claims are not a verified token
+// and must not count as covering the partition.
+func (s *AuthorizerTestSuite) TestSelfHeal_QueueMetadataClaimsAreNotTrustedAsToken() {
+	adapter := s.newAdapter(nil)
+	c := authorizer.NewTenancyAccessChecker(adapter, "tenancy_access")
+
+	claims := security.ClaimsFromMap(map[string]string{
+		"sub":          "sh-bot-queue",
+		"profile_id":   "sh-bot-queue",
+		"tenant_id":    "sh-queue-ghost-t",
+		"partition_id": "sh-queue-ghost-p",
+		"roles":        security.ConstantSystemInternalRole,
+	})
+	s.Require().NotNil(claims)
+	s.Require().True(claims.IsInternalSystem(), "precondition: metadata claims carry the internal role")
+	ctx := claims.ClaimsToContext(context.Background())
+
+	err := c.CheckAccess(ctx)
+
+	s.Require().Error(err)
+	s.False(s.serviceTupleExists(tenancyPath("sh-queue-ghost-t", "sh-queue-ghost-p"), "sh-bot-queue"),
+		"metadata-derived tenancy must not be self-healed without an existence check")
+}
+
+// Tuples written by self-heal (#service) must not count as evidence that a
+// partition exists, otherwise one heal bootstraps the next.
+func (s *AuthorizerTestSuite) TestSelfHeal_ServiceTuplesAreNotExistenceEvidence() {
+	ctx := s.T().Context()
+	adapter := s.newAdapter(nil)
+	path := tenancyPath("sh-svc-only-t", "sh-svc-only-p")
+	s.Require().NoError(adapter.WriteTuple(ctx, security.RelationTuple{
+		Object:   security.ObjectRef{Namespace: "tenancy_access", ID: path},
+		Relation: "service",
+		Subject:  security.SubjectRef{Namespace: security.NamespaceProfile, ID: "sh-other-bot"},
+	}))
+
+	c := authorizer.NewTenancyAccessChecker(adapter, "tenancy_access")
+	err := c.CheckAccess(headerEnrichedCtx("sh-bot-svc-only", "sh-svc-only-t", "sh-svc-only-p"))
+
+	s.Require().Error(err)
+	s.False(s.serviceTupleExists(path, "sh-bot-svc-only"))
+}
+
+// A child partition linked to its parent (child#member <- parent#member) is
+// registered even before anyone is granted on it directly.
+func (s *AuthorizerTestSuite) TestSelfHeal_ParentLinkIsExistenceEvidence() {
+	ctx := s.T().Context()
+	adapter := s.newAdapter(nil)
+	child := tenancyPath("sh-link-t", "sh-link-child")
+	s.Require().NoError(adapter.WriteTuple(ctx, security.RelationTuple{
+		Object:   security.ObjectRef{Namespace: "tenancy_access", ID: child},
+		Relation: "member",
+		Subject: security.SubjectRef{
+			Namespace: "tenancy_access", ID: tenancyPath("sh-link-t", "sh-link-parent"), Relation: "member",
+		},
+	}))
+
+	c := authorizer.NewTenancyAccessChecker(adapter, "tenancy_access")
+	s.Require().NoError(c.CheckAccess(headerEnrichedCtx("sh-bot-link", "sh-link-t", "sh-link-child")))
+	s.True(s.serviceTupleExists(child, "sh-bot-link"))
+}
+
+// A partition registered shortly after the first request (authz partition
+// sync is asynchronous) is healed when a bounded retry is configured.
+func (s *AuthorizerTestSuite) TestSelfHeal_RetryWaitsForAsyncPartitionRegistration() {
+	adapter := s.newAdapter(nil)
+	var calls int
+	verifier := func(context.Context, string, string) (bool, error) {
+		calls++
+		return calls >= 3, nil
+	}
+
+	c := authorizer.NewTenancyAccessChecker(adapter, "tenancy_access",
+		authorizer.WithPartitionVerifier(verifier),
+		authorizer.WithPartitionVerifyRetry(3, time.Millisecond))
+	s.Require().NoError(c.CheckAccess(headerEnrichedCtx("sh-bot-retry", "sh-retry-t", "sh-retry-p")))
+	s.Equal(3, calls)
+
+	calls = -100
+	c = authorizer.NewTenancyAccessChecker(adapter, "tenancy_access",
+		authorizer.WithPartitionVerifier(verifier),
+		authorizer.WithPartitionVerifyRetry(2, time.Millisecond))
+	s.Require().Error(c.CheckAccess(headerEnrichedCtx("sh-bot-retry2", "sh-retry-t", "sh-retry-p2")))
+	s.Equal(-98, calls, "attempts are bounded")
+
+	reqCtx, cancel := context.WithCancel(headerEnrichedCtx("sh-bot-retry3", "sh-retry-t", "sh-retry-p3"))
+	defer cancel()
+	cancelCalls := 0
+	cancellingVerifier := func(context.Context, string, string) (bool, error) {
+		cancelCalls++
+		cancel() // the request is abandoned while waiting for registration
+		return false, nil
+	}
+	c = authorizer.NewTenancyAccessChecker(adapter, "tenancy_access",
+		authorizer.WithPartitionVerifier(cancellingVerifier),
+		authorizer.WithPartitionVerifyRetry(5, time.Hour))
+	start := time.Now()
+	s.Require().Error(c.CheckAccess(reqCtx))
+	s.Equal(1, cancelCalls, "a cancelled context stops retrying")
+	s.Less(time.Since(start), time.Minute, "the backoff wait is interrupted by cancellation")
 }

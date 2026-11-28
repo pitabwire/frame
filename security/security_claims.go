@@ -16,6 +16,7 @@ func (c contextKey) String() string {
 
 const (
 	ctxKeyAuthenticationClaim     = contextKey("authenticationClaimKey")
+	ctxKeyVerifiedTokenClaims     = contextKey("verifiedTokenClaimsKey")
 	ctxKeySkipTenancyCheckOnClaim = contextKey("skipTenancyCheckOnClaimKey")
 	ctxKeyAuthenticationJwt       = contextKey("authenticationJwtKey")
 
@@ -523,17 +524,40 @@ func ClaimsFromContext(ctx context.Context) *AuthenticationClaims {
 	return authenticationClaims
 }
 
-// TokenClaimsFromContext returns the claims established by authentication
-// (the verified token, or trusted queue metadata), without the tenancy
-// overrides an internal caller may supply via X-Tenant-Id / X-Partition-Id
-// headers. Use it when a decision must rest on what the caller was actually
-// issued rather than on what it asked to act as.
-func TokenClaimsFromContext(ctx context.Context) *AuthenticationClaims {
-	authenticationClaims, ok := ctx.Value(ctxKeyAuthenticationClaim).(*AuthenticationClaims)
+// VerifiedTokenClaimsToContext records claims that came from a
+// cryptographically verified token (see openid's JWT authenticator). Only
+// authenticators that have verified a token's signature, issuer, audience
+// and expiry may call it. Claims rebuilt from queue metadata, headers or any
+// other caller-supplied input must never be passed here. A copy is stored
+// so later mutation of claims cannot change what was verified.
+func VerifiedTokenClaimsToContext(ctx context.Context, claims *AuthenticationClaims) context.Context {
+	if claims == nil {
+		return ctx
+	}
+	verified := *claims
+	if claims.Ext != nil {
+		verified.Ext = make(map[string]any, len(claims.Ext))
+		for k, v := range claims.Ext {
+			verified.Ext[k] = v
+		}
+	}
+	verified.Roles = append([]string(nil), claims.Roles...)
+	return context.WithValue(ctx, ctxKeyVerifiedTokenClaims, &verified)
+}
+
+// VerifiedTokenClaimsFromContext returns the claims of the verified token
+// that authenticated this request, or nil when the request was not
+// authenticated by a verified token. This is the case for queue consumers,
+// whose claims are rebuilt from message metadata. The X-Tenant-Id and
+// X-Partition-Id overrides an internal caller may supply do not affect the
+// result. Use it when a decision must rest on what the caller was actually
+// issued.
+func VerifiedTokenClaimsFromContext(ctx context.Context) *AuthenticationClaims {
+	claims, ok := ctx.Value(ctxKeyVerifiedTokenClaims).(*AuthenticationClaims)
 	if !ok {
 		return nil
 	}
-	return authenticationClaims
+	return claims
 }
 
 // ClaimsFromMap extracts authentication claims from the supplied map if they exist.

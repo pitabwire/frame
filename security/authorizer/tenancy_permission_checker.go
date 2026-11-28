@@ -3,6 +3,7 @@ package authorizer
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/pitabwire/util"
 
@@ -41,13 +42,37 @@ func WithOnTenancyAccessDenied(fn TenancyAccessDeniedFunc) TenantPermissionCheck
 
 // WithPartitionVerifier replaces the default partition-existence check used
 // before self-healing an internal caller's denial for a partition that its
-// token does not cover. The default treats a partition as existing when the
-// object namespace already holds at least one tuple for it, which the
-// tenancy service writes when it registers a partition. Services with direct
-// access to the partition registry should supply an authoritative verifier.
+// verified token does not cover.
+//
+// The default treats a partition as existing when the object namespace
+// already holds a "member" tuple for it: a direct membership, or a parent
+// link (child#member <- parent#member). The tenancy service writes these
+// when it registers a partition. "service" tuples are ignored because
+// self-heal writes them. Known gaps of the default:
+//   - a freshly created child partition is unknown until the tenancy
+//     service's asynchronous partition sync has written its parent link;
+//   - a root partition nobody has been granted on yet has no member tuple.
+//
+// Services with access to the partition registry should supply an
+// authoritative verifier, for example one backed by the tenancy service's
+// GetPartition API. See also WithPartitionVerifyRetry.
 func WithPartitionVerifier(fn PartitionVerifierFunc) TenantPermissionCheckerOption {
 	return func(c *TenancyAccessChecker) {
 		c.verifyPartition = fn
+	}
+}
+
+// WithPartitionVerifyRetry retries a negative partition verification up to
+// attempts times in total, waiting backoff before the first retry and
+// doubling it each time, bounded by the request context. It covers the
+// window in which a new partition exists in the tenancy service but its
+// tuples are still being synchronised to Keto. The default is a single
+// attempt (no retry). Keep the total wait well inside the request deadline,
+// e.g. 3 attempts with 200ms backoff (0.2s + 0.4s).
+func WithPartitionVerifyRetry(attempts int, backoff time.Duration) TenantPermissionCheckerOption {
+	return func(c *TenancyAccessChecker) {
+		c.verifyAttempts = attempts
+		c.verifyBackoff = backoff
 	}
 }
 
@@ -69,6 +94,8 @@ type TenancyAccessChecker struct {
 	subjectNamespace      string
 	onTenancyAccessDenied TenancyAccessDeniedFunc
 	verifyPartition       PartitionVerifierFunc
+	verifyAttempts        int
+	verifyBackoff         time.Duration
 	constraints           []AccessConstraint
 }
 
@@ -81,8 +108,10 @@ type TenancyAccessChecker struct {
 // once. Regular user denials only log. Override with WithOnTenancyAccessDenied.
 //
 // Self-healing (default or custom callback) only runs for an internal caller
-// when the target partition is either covered by the caller's authenticated
-// token claims, or verified to exist (see WithPartitionVerifier). Internal
+// when the target partition is either covered by the caller's verified token
+// (security.VerifiedTokenClaimsFromContext), or verified to exist (see
+// WithPartitionVerifier and WithPartitionVerifyRetry). Queue consumers, whose
+// claims are rebuilt from message metadata, always need the existence check. Internal
 // callers may name any tenancy in X-Tenant-Id / X-Partition-Id headers, so
 // without this gate a bot could mint access to arbitrary, non-existent
 // partitions.
@@ -139,10 +168,19 @@ func (c *TenancyAccessChecker) defaultOnTenancyAccessDenied(
 	return nil
 }
 
-// partitionKnownToAuthorizer is the default PartitionVerifierFunc: a
-// partition exists when the object namespace already holds at least one
-// tuple for it (members, parent links or service grants written by the
-// tenancy service when the partition was registered).
+// partitionEvidenceRelation is the only relation the default verifier
+// accepts as proof that a partition was registered. The tenancy service
+// writes it for direct members and for parent links
+// (child#member <- parent#member). The "service" relation is ignored on
+// purpose: self-heal writes it, so counting it would let one heal
+// bootstrap the next.
+const partitionEvidenceRelation = "member"
+
+// partitionKnownToAuthorizer is the default PartitionVerifierFunc. A
+// partition exists when the object namespace holds a member tuple for it:
+// a direct membership or a parent link written by the tenancy service.
+// Tuples written by self-heal do not count. This is a heuristic. Prefer an
+// authoritative WithPartitionVerifier backed by the tenancy service.
 func (c *TenancyAccessChecker) partitionKnownToAuthorizer(
 	ctx context.Context, tenantID, partitionID string,
 ) (bool, error) {
@@ -153,13 +191,45 @@ func (c *TenancyAccessChecker) partitionKnownToAuthorizer(
 	if err != nil {
 		return false, err
 	}
-	return len(tuples) > 0, nil
+	for _, t := range tuples {
+		if t.Relation == partitionEvidenceRelation {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
-// tokenCoversPartition reports whether the caller's authenticated token
-// (not header-supplied tenancy) was issued for tenantID/partitionID.
+// verifyWithRetry runs the partition verifier up to verifyAttempts times,
+// sleeping verifyBackoff (doubling) between attempts. Partition registration
+// in Keto is asynchronous, so a freshly created partition can be briefly
+// unknown. It stops as soon as ctx is done.
+func (c *TenancyAccessChecker) verifyWithRetry(ctx context.Context, tenantID, partitionID string) (bool, error) {
+	attempts := max(c.verifyAttempts, 1)
+	backoff := c.verifyBackoff
+	for attempt := 1; ; attempt++ {
+		if err := ctx.Err(); err != nil {
+			return false, err
+		}
+		exists, err := c.verifyPartition(ctx, tenantID, partitionID)
+		if err != nil || exists || attempt >= attempts {
+			return exists, err
+		}
+		timer := time.NewTimer(backoff)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return false, ctx.Err()
+		case <-timer.C:
+		}
+		backoff *= 2
+	}
+}
+
+// tokenCoversPartition reports whether the caller's cryptographically
+// verified token (not header-supplied tenancy, not queue-metadata claims)
+// was issued for tenantID/partitionID.
 func tokenCoversPartition(ctx context.Context, tenantID, partitionID string) bool {
-	token := security.TokenClaimsFromContext(ctx)
+	token := security.VerifiedTokenClaimsFromContext(ctx)
 	if token == nil || token.GetTenantID() != tenantID {
 		return false
 	}
@@ -194,7 +264,7 @@ func (c *TenancyAccessChecker) mayProvision(
 			Error("PERMISSION DENIED: no partition verifier; refusing to self-heal header-supplied tenancy")
 		return false
 	}
-	exists, err := c.verifyPartition(ctx, tenantID, partitionID)
+	exists, err := c.verifyWithRetry(ctx, tenantID, partitionID)
 	if err != nil {
 		util.Log(ctx).WithFields(fields).WithError(err).
 			Error("PERMISSION DENIED: could not verify partition; refusing to self-heal")

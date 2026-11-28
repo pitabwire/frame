@@ -75,6 +75,17 @@ if err == nil {
 - Timeout: 30s
 - Retry attempts: 3
 - Backoff: quadratic
+## Tracing and credential redaction
+
+Frame wraps the client transport in `otelhttp` and removes credential query
+parameters (`access_token`, `token`, `sig`, `signature`, `X-Amz-Signature`,
+`X-Goog-Signature`, ...) from the `url.full` span attribute.
+
+If you pass a transport that is **already** an `*otelhttp.Transport` to
+`WithHTTPTransport`, Frame uses it unchanged, and `url.full` is **not**
+redacted: otelhttp only strips userinfo. Pass the inner transport instead and
+let Frame add `otelhttp`.
+
 ## Best Practices
 
 - Use a single client per service.

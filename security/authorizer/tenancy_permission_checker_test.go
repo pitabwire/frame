@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/pitabwire/frame/v3/security"
@@ -482,4 +483,48 @@ func (s *AuthorizerTestSuite) TestSelfHeal_RetryWaitsForAsyncPartitionRegistrati
 	s.Require().Error(c.CheckAccess(reqCtx))
 	s.Equal(1, cancelCalls, "a cancelled context stops retrying")
 	s.Less(time.Since(start), time.Minute, "the backoff wait is interrupted by cancellation")
+}
+
+// WithPartitionVerifyRetry is capped (10 attempts, 5s per wait) so a
+// misconfiguration cannot stall requests or overflow the doubling backoff.
+func (s *AuthorizerTestSuite) TestSelfHeal_RetryIsCapped() {
+	adapter := s.newAdapter(nil)
+
+	s.Run("attempts capped at 10", func() {
+		calls := 0
+		c := authorizer.NewTenancyAccessChecker(adapter, "tenancy_access",
+			authorizer.WithPartitionVerifier(func(context.Context, string, string) (bool, error) {
+				calls++
+				return false, nil
+			}),
+			authorizer.WithPartitionVerifyRetry(1_000_000, 0))
+		s.Require().Error(c.CheckAccess(headerEnrichedCtx("sh-bot-cap1", "sh-cap-t", "sh-cap-p1")))
+		s.Equal(10, calls)
+	})
+
+	s.Run("backoff capped at 5s and overflow-safe", func() {
+		calls := 0
+		c := authorizer.NewTenancyAccessChecker(adapter, "tenancy_access",
+			authorizer.WithPartitionVerifier(func(context.Context, string, string) (bool, error) {
+				calls++
+				return false, nil
+			}),
+			authorizer.WithPartitionVerifyRetry(2, time.Duration(math.MaxInt64)))
+		start := time.Now()
+		s.Require().Error(c.CheckAccess(headerEnrichedCtx("sh-bot-cap2", "sh-cap-t", "sh-cap-p2")))
+		s.Equal(2, calls)
+		s.Less(time.Since(start), 7*time.Second, "a single wait never exceeds the 5s cap")
+	})
+
+	s.Run("non-positive values mean a single attempt", func() {
+		calls := 0
+		c := authorizer.NewTenancyAccessChecker(adapter, "tenancy_access",
+			authorizer.WithPartitionVerifier(func(context.Context, string, string) (bool, error) {
+				calls++
+				return false, nil
+			}),
+			authorizer.WithPartitionVerifyRetry(-3, -time.Second))
+		s.Require().Error(c.CheckAccess(headerEnrichedCtx("sh-bot-cap3", "sh-cap-t", "sh-cap-p3")))
+		s.Equal(1, calls)
+	})
 }

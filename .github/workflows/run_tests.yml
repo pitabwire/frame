@@ -17,3 +17,5 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
       - name: Run tests with coverage
         run: go test -p 1 -json -v ./... 2>&1 | gotestfmt -hide all
+      - name: Fuzz credential redaction (short)
+        run: make fuzz-redact FUZZTIME=30s

@@ -62,17 +62,25 @@ func WithPartitionVerifier(fn PartitionVerifierFunc) TenantPermissionCheckerOpti
 	}
 }
 
+// Upper bounds for WithPartitionVerifyRetry, so a misconfiguration cannot
+// stall a request for long.
+const (
+	maxPartitionVerifyAttempts = 10
+	maxPartitionVerifyBackoff  = 5 * time.Second
+)
+
 // WithPartitionVerifyRetry retries a negative partition verification up to
 // attempts times in total, waiting backoff before the first retry and
 // doubling it each time, bounded by the request context. It covers the
 // window in which a new partition exists in the tenancy service but its
 // tuples are still being synchronised to Keto. The default is a single
-// attempt (no retry). Keep the total wait well inside the request deadline,
-// e.g. 3 attempts with 200ms backoff (0.2s + 0.4s).
+// attempt (no retry). attempts is clamped to [1, 10] and each wait to
+// [0, 5s]. Keep the total wait well inside the request deadline, e.g. 3
+// attempts with 200ms backoff (0.2s + 0.4s).
 func WithPartitionVerifyRetry(attempts int, backoff time.Duration) TenantPermissionCheckerOption {
 	return func(c *TenancyAccessChecker) {
-		c.verifyAttempts = attempts
-		c.verifyBackoff = backoff
+		c.verifyAttempts = min(max(attempts, 1), maxPartitionVerifyAttempts)
+		c.verifyBackoff = min(max(backoff, 0), maxPartitionVerifyBackoff)
 	}
 }
 
@@ -221,7 +229,7 @@ func (c *TenancyAccessChecker) verifyWithRetry(ctx context.Context, tenantID, pa
 			return false, ctx.Err()
 		case <-timer.C:
 		}
-		backoff *= 2
+		backoff = min(backoff<<1, maxPartitionVerifyBackoff) // backoff <= 5s, so doubling cannot overflow
 	}
 }
 

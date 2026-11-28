@@ -91,3 +91,43 @@ func (s *DatastoreOptionsTestSuite) TestWithTenancyProviderNilDisablesEnforcemen
 			"svc.TenancyProvider should be nil when explicitly disabled")
 	})
 }
+
+// Secure tenancy modes must refuse readiness behind a transaction pooler, so
+// WithDatastore registers the session-affinity readiness check next to the
+// RLS arming check, and not in fail-open mode.
+func (s *DatastoreOptionsTestSuite) TestSecureModeRegistersSessionAffinityCheck() {
+	s.WithTestDependancies(s.T(), func(t *testing.T, dep *definition.DependencyOption) {
+		cases := []struct {
+			mode tenancy.SecurityMode
+			want bool
+		}{
+			{mode: tenancy.ModeFailClosed, want: true},
+			{mode: tenancy.ModeHybrid, want: true},
+			{mode: tenancy.ModeFailOpen, want: false},
+		}
+		for _, tc := range cases {
+			ctx := t.Context()
+			dsn := dep.ByIsDatabase(ctx).GetDS(ctx).String()
+			ctx, svc := frame.NewService(
+				frame.WithName("affinity-check-test"),
+				frametests.WithNoopDriver(),
+				frame.WithTenancySecurityMode(tc.mode),
+				frame.WithDatastore(pool.WithConnection(dsn, false)),
+			)
+
+			var names []string
+			for _, c := range svc.HealthCheckers() {
+				if named, ok := c.(interface{ Name() string }); ok {
+					names = append(names, named.Name())
+				}
+			}
+			if tc.want {
+				require.Contains(t, names, "tenancy_session_affinity", "mode %v", tc.mode)
+				require.Contains(t, names, "tenancy_provider_armed", "mode %v", tc.mode)
+			} else {
+				require.NotContains(t, names, "tenancy_session_affinity", "mode %v", tc.mode)
+			}
+			svc.Stop(ctx)
+		}
+	})
+}

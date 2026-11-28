@@ -180,8 +180,8 @@ func registerTenancyArmingCheck(s *Service, mode tenancy.SecurityMode) {
 	if !arming || s.tenancyProvider == nil {
 		return
 	}
-	s.AddHealthCheck(&tenpg.ArmingCheck{
-		DB: func(checkCtx context.Context) *gorm.DB {
+	appDB := func(readOnly bool) func(context.Context) *gorm.DB {
+		return func(checkCtx context.Context) *gorm.DB {
 			if s.datastoreManager == nil {
 				return nil
 			}
@@ -189,9 +189,13 @@ func registerTenancyArmingCheck(s *Service, mode tenancy.SecurityMode) {
 			if p == nil {
 				return nil
 			}
-			return p.DB(checkCtx, true)
-		},
-	})
+			return p.DB(checkCtx, readOnly)
+		}
+	}
+	s.AddHealthCheck(&tenpg.ArmingCheck{DB: appDB(true)})
+	// RLS GUCs are session-scoped: behind a transaction-mode pooler they
+	// leak across tenants. Refuse readiness when that is detected.
+	s.AddHealthCheck(&tenpg.SessionAffinityCheck{DB: appDB(false)})
 }
 
 // WithTenancyProvider overrides the default Postgres-RLS tenancy

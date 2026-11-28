@@ -133,11 +133,48 @@ Session GUCs require **session affinity** to the Postgres backend:
 
 - Direct Postgres: supported
 - PgBouncer `pool_mode=session`: supported
-- PgBouncer `pool_mode=transaction` / `statement`: **not safe** with
-  this provider
+- PgBouncer `pool_mode=transaction` / `statement`, Supavisor/Neon
+  transaction poolers, RDS Proxy without pinning: **unsupported**
 
-Keep Frame's pool small (`DATABASE_MAX_OPEN_CONNECTIONS`) and let
-PgBouncer cap total backends when used.
+**Why.** When a connection is acquired, the provider binds `app.tenant_id` /
+`app.partition_id` with session-level `set_config(..., false)`. A
+transaction pooler gives every statement whichever backend is free. The
+binding lands on one backend, and later statements on the same client
+connection run on other backends: one bound to a **different tenant**
+(cross-tenant reads/writes), or one with empty settings, which
+`app_tenancy_matches` treats as **match-all**.
+
+**Guard.** In `ModeHybrid` and `ModeFailClosed`, `WithDatastore` registers
+the `tenancy_session_affinity` readiness check
+(`tenancy/postgres.SessionAffinityCheck`), next to `tenancy_provider_armed`.
+It runs `CheckSessionAffinity` against the app pool. The check holds a probe
+connection bound to a sentinel tenant while helper connections pin backends
+inside open transactions. Under a transaction pooler, a helper being given
+the probe's backend, or the probe's pid or `app.tenant_id` changing, proves
+the pooling. Readiness then fails (`ErrSessionAffinityRequired`, logged at
+ERROR), so the pod never serves traffic.
+- Detection is not guaranteed in a single run, because the pooler picks
+  backends, but readiness repeats it continuously.
+- Direct Postgres and session-mode PgBouncer never fail it.
+- If the pool is too busy to run the helpers, the last conclusive verdict
+  is kept.
+- Disable both checks with `WithTenancyArmingCheck(false)`.
+- `ModeFailOpen` does not register the check. It is already match-all on
+  missing claims; call `CheckSessionAffinity` yourself if you want the
+  signal.
+
+**Longer term.** Bind the GUCs transaction-locally instead:
+`set_config(..., true)` as the first statement of every transaction, with
+gorm work always wrapped in a transaction (a gorm callback or `db.Transaction`
+in the repository layer). Transaction-local settings are discarded at
+COMMIT/ROLLBACK and always run on the backend that executes the rest of the
+transaction, which makes RLS correct behind transaction poolers too. The
+cost: an explicit transaction per unit of work (implicit single-statement
+autocommit would no longer carry tenancy), plus reworking the acquire/release
+hooks. That is not implemented yet.
+
+Keep Frame's pool small (`DATABASE_MAX_OPEN_CONNECTIONS`) and let a
+session-mode PgBouncer cap total backends when used.
 
 ### Wiring
 

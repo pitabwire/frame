@@ -13,6 +13,13 @@ import (
 // It should provision the necessary tuples so that a retry succeeds.
 type TenancyAccessDeniedFunc func(ctx context.Context, auth security.Authorizer, tenantID, subjectID string) error
 
+// PartitionVerifierFunc reports whether tenantID/partitionID is a real,
+// registered partition. It gates self-healing for internal callers: the
+// tenancy a caller names in request headers is unverified input, so
+// provisioning must never run for a partition that does not exist.
+// Returning an error fails closed (no self-heal).
+type PartitionVerifierFunc func(ctx context.Context, tenantID, partitionID string) (bool, error)
+
 // TenantPermissionCheckerOption configures a TenancyAccessChecker.
 type TenantPermissionCheckerOption func(*TenancyAccessChecker)
 
@@ -29,6 +36,18 @@ func WithSubjectNamespace(ns string) TenantPermissionCheckerOption {
 func WithOnTenancyAccessDenied(fn TenancyAccessDeniedFunc) TenantPermissionCheckerOption {
 	return func(c *TenancyAccessChecker) {
 		c.onTenancyAccessDenied = fn
+	}
+}
+
+// WithPartitionVerifier replaces the default partition-existence check used
+// before self-healing an internal caller's denial for a partition that its
+// token does not cover. The default treats a partition as existing when the
+// object namespace already holds at least one tuple for it, which the
+// tenancy service writes when it registers a partition. Services with direct
+// access to the partition registry should supply an authoritative verifier.
+func WithPartitionVerifier(fn PartitionVerifierFunc) TenantPermissionCheckerOption {
+	return func(c *TenancyAccessChecker) {
+		c.verifyPartition = fn
 	}
 }
 
@@ -49,6 +68,7 @@ type TenancyAccessChecker struct {
 	objectNamespace       string
 	subjectNamespace      string
 	onTenancyAccessDenied TenancyAccessDeniedFunc
+	verifyPartition       PartitionVerifierFunc
 	constraints           []AccessConstraint
 }
 
@@ -59,6 +79,13 @@ type TenancyAccessChecker struct {
 // denied Plane-1 access, the checker self-heals by writing
 // `{objectNamespace}:{path}#service ← profile_user:{profileID}` and retries
 // once. Regular user denials only log. Override with WithOnTenancyAccessDenied.
+//
+// Self-healing (default or custom callback) only runs for an internal caller
+// when the target partition is either covered by the caller's authenticated
+// token claims, or verified to exist (see WithPartitionVerifier). Internal
+// callers may name any tenancy in X-Tenant-Id / X-Partition-Id headers, so
+// without this gate a bot could mint access to arbitrary, non-existent
+// partitions.
 func NewTenancyAccessChecker(
 	auth security.Authorizer,
 	objectNamespace string,
@@ -71,6 +98,7 @@ func NewTenancyAccessChecker(
 	}
 	// Default after struct fields are set so the closure can use c.objectNamespace.
 	c.onTenancyAccessDenied = c.defaultOnTenancyAccessDenied
+	c.verifyPartition = c.partitionKnownToAuthorizer
 	for _, o := range opts {
 		o(c)
 	}
@@ -109,6 +137,75 @@ func (c *TenancyAccessChecker) defaultOnTenancyAccessDenied(
 	util.Log(ctx).WithFields(fields).
 		Info("self-healed missing tenancy service tuple for internal caller")
 	return nil
+}
+
+// partitionKnownToAuthorizer is the default PartitionVerifierFunc: a
+// partition exists when the object namespace already holds at least one
+// tuple for it (members, parent links or service grants written by the
+// tenancy service when the partition was registered).
+func (c *TenancyAccessChecker) partitionKnownToAuthorizer(
+	ctx context.Context, tenantID, partitionID string,
+) (bool, error) {
+	tuples, err := c.authorizer.ListRelations(ctx, security.ObjectRef{
+		Namespace: c.objectNamespace,
+		ID:        fmt.Sprintf("%s/%s", tenantID, partitionID),
+	})
+	if err != nil {
+		return false, err
+	}
+	return len(tuples) > 0, nil
+}
+
+// tokenCoversPartition reports whether the caller's authenticated token
+// (not header-supplied tenancy) was issued for tenantID/partitionID.
+func tokenCoversPartition(ctx context.Context, tenantID, partitionID string) bool {
+	token := security.TokenClaimsFromContext(ctx)
+	if token == nil || token.GetTenantID() != tenantID {
+		return false
+	}
+	for _, p := range token.GetPartitionIDs() {
+		if p == partitionID {
+			return true
+		}
+	}
+	return false
+}
+
+// mayProvision decides whether the self-heal callback may run for this
+// denial. Non-internal callers are passed through (the default callback only
+// logs for them). Internal callers are allowed only for partitions their
+// token covers or that the verifier confirms exist; anything else fails
+// closed.
+func (c *TenancyAccessChecker) mayProvision(
+	ctx context.Context, claims *security.AuthenticationClaims, tenantID, partitionID string,
+) bool {
+	if !claims.IsInternalSystem() || tokenCoversPartition(ctx, tenantID, partitionID) {
+		return true
+	}
+
+	fields := map[string]any{
+		"tenant_id":          tenantID,
+		"partition_id":       partitionID,
+		fieldSubjectID:       claims.GetProfileID(),
+		fieldObjectNamespace: c.objectNamespace,
+	}
+	if c.verifyPartition == nil {
+		util.Log(ctx).WithFields(fields).
+			Error("PERMISSION DENIED: no partition verifier; refusing to self-heal header-supplied tenancy")
+		return false
+	}
+	exists, err := c.verifyPartition(ctx, tenantID, partitionID)
+	if err != nil {
+		util.Log(ctx).WithFields(fields).WithError(err).
+			Error("PERMISSION DENIED: could not verify partition; refusing to self-heal")
+		return false
+	}
+	if !exists {
+		util.Log(ctx).WithFields(fields).
+			Error("PERMISSION DENIED: refusing to self-heal access to an unknown partition")
+		return false
+	}
+	return true
 }
 
 // CheckAccess verifies that the caller has data access to the partition
@@ -164,7 +261,7 @@ func (c *TenancyAccessChecker) CheckAccess(ctx context.Context) error {
 	}
 
 	// Self-healing: invoke callback and retry once.
-	if c.onTenancyAccessDenied != nil {
+	if c.onTenancyAccessDenied != nil && c.mayProvision(ctx, claims, tenantID, partitionID) {
 		if provisionErr := c.onTenancyAccessDenied(ctx, c.authorizer, tenancyPath, subjectID); provisionErr != nil {
 			return NewPermissionDeniedError(req.Object, relation, req.Subject, result.Reason)
 		}
@@ -221,7 +318,7 @@ func (c *TenancyAccessChecker) Check(ctx context.Context, permission string) err
 		return evaluateConstraints(ctx, c.constraints, permission, req.Object, req.Subject)
 	}
 
-	if c.onTenancyAccessDenied != nil {
+	if c.onTenancyAccessDenied != nil && c.mayProvision(ctx, claims, tenantID, partitionID) {
 		if provisionErr := c.onTenancyAccessDenied(ctx, c.authorizer, tenancyPath, subjectID); provisionErr != nil {
 			return NewPermissionDeniedError(req.Object, permission, req.Subject, result.Reason)
 		}

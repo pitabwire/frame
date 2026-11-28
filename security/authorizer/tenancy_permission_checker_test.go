@@ -226,3 +226,152 @@ func (s *AuthorizerTestSuite) TestPermissionChecker_DefaultSelfHealsInternalServ
 	s.Require().NoError(err)
 	s.True(result.Allowed)
 }
+
+// headerEnrichedCtx simulates an internal caller whose token is for its own
+// partition but who names a different partition in X-Tenant-Id /
+// X-Partition-Id headers, exactly as the auth interceptors do.
+func headerEnrichedCtx(subject, hdrTenant, hdrPartition string) context.Context {
+	ctx := claimsCtx(subject, "sh-own-t", "sh-own-p", security.ConstantSystemInternalRole)
+	return security.EnrichTenancyClaims(ctx, hdrTenant, hdrPartition, "")
+}
+
+func (s *AuthorizerTestSuite) serviceTupleExists(path, subject string) bool {
+	result, err := s.newAdapter(nil).Check(s.T().Context(), security.CheckRequest{
+		Object:     security.ObjectRef{Namespace: "tenancy_access", ID: path},
+		Permission: "service",
+		Subject:    security.SubjectRef{Namespace: security.NamespaceProfile, ID: subject},
+	})
+	s.Require().NoError(err)
+	return result.Allowed
+}
+
+func (s *AuthorizerTestSuite) TestSelfHeal_RefusesHeaderNamedPartitionUnknownToKeto() {
+	adapter := s.newAdapter(nil)
+	c := authorizer.NewTenancyAccessChecker(adapter, "tenancy_access")
+
+	ctx := headerEnrichedCtx("sh-bot-ghost", "sh-ghost-t", "sh-ghost-p")
+	err := c.CheckAccess(ctx)
+
+	var permErr *authorizer.PermissionDeniedError
+	s.Require().ErrorAs(err, &permErr, "a partition nobody registered must not be self-healed into existence")
+	s.False(s.serviceTupleExists(tenancyPath("sh-ghost-t", "sh-ghost-p"), "sh-bot-ghost"),
+		"no tenancy_access tuple may be written for an unverified partition")
+}
+
+func (s *AuthorizerTestSuite) TestSelfHeal_RefusesUnknownPartitionForCustomCallbacks() {
+	adapter := s.newAdapter(nil)
+	called := false
+	c := authorizer.NewTenancyAccessChecker(adapter, "tenancy_access",
+		authorizer.WithOnTenancyAccessDenied(
+			func(context.Context, security.Authorizer, string, string) error {
+				called = true
+				return nil
+			}),
+	)
+
+	err := c.CheckAccess(headerEnrichedCtx("sh-bot-cb", "sh-cb-t", "sh-cb-p"))
+
+	s.Require().Error(err)
+	s.False(called, "provisioning callbacks must not run for unverified partitions")
+}
+
+func (s *AuthorizerTestSuite) TestSelfHeal_HealsHeaderNamedPartitionKnownToKeto() {
+	ctx := s.T().Context()
+	adapter := s.newAdapter(nil)
+	path := tenancyPath("sh-known-t", "sh-known-p")
+
+	// The tenancy service registers partitions in Keto (members, parent
+	// links, service grants); any tuple on the object proves it exists.
+	s.Require().NoError(adapter.WriteTuple(ctx, security.RelationTuple{
+		Object:   security.ObjectRef{Namespace: "tenancy_access", ID: path},
+		Relation: "member",
+		Subject:  security.SubjectRef{Namespace: security.NamespaceProfile, ID: "sh-some-user"},
+	}))
+
+	c := authorizer.NewTenancyAccessChecker(adapter, "tenancy_access")
+	err := c.CheckAccess(headerEnrichedCtx("sh-bot-known", "sh-known-t", "sh-known-p"))
+
+	s.Require().NoError(err)
+	s.True(s.serviceTupleExists(path, "sh-bot-known"))
+}
+
+func (s *AuthorizerTestSuite) TestSelfHeal_HealsPartitionsCoveredByTokenClaims() {
+	adapter := s.newAdapter(nil)
+	c := authorizer.NewTenancyAccessChecker(adapter, "tenancy_access")
+
+	cases := []struct {
+		name      string
+		ctx       context.Context
+		subject   string
+		tenant    string
+		partition string
+	}{
+		{
+			name:      "token primary partition",
+			ctx:       claimsCtx("sh-bot-tok", "sh-tok-t", "sh-tok-p", security.ConstantSystemInternalRole),
+			subject:   "sh-bot-tok",
+			tenant:    "sh-tok-t",
+			partition: "sh-tok-p",
+		},
+		{
+			name: "header names a partition listed in the token partition_ids",
+			ctx: func() context.Context {
+				claims := &security.AuthenticationClaims{
+					TenantID:    "sh-multi-t",
+					PartitionID: "sh-multi-p1",
+					Roles:       []string{security.ConstantSystemInternalRole},
+					Ext:         map[string]any{"partition_ids": []any{"sh-multi-p2"}},
+				}
+				claims.Subject = "sh-bot-multi"
+				ctx := claims.ClaimsToContext(context.Background())
+				return security.EnrichTenancyClaims(ctx, "sh-multi-t", "sh-multi-p2", "")
+			}(),
+			subject:   "sh-bot-multi",
+			tenant:    "sh-multi-t",
+			partition: "sh-multi-p2",
+		},
+	}
+
+	for _, tc := range cases {
+		s.Run(tc.name, func() {
+			s.Require().NoError(c.CheckAccess(tc.ctx))
+			s.True(s.serviceTupleExists(tenancyPath(tc.tenant, tc.partition), tc.subject))
+		})
+	}
+}
+
+func (s *AuthorizerTestSuite) TestSelfHeal_CustomPartitionVerifier() {
+	adapter := s.newAdapter(nil)
+	verifierErr := errors.New("tenancy service unavailable")
+
+	cases := []struct {
+		name     string
+		verifier authorizer.PartitionVerifierFunc
+		wantHeal bool
+	}{
+		{name: "verifier confirms", wantHeal: true,
+			verifier: func(context.Context, string, string) (bool, error) { return true, nil }},
+		{name: "verifier rejects", wantHeal: false,
+			verifier: func(context.Context, string, string) (bool, error) { return false, nil }},
+		{name: "verifier fails closed", wantHeal: false,
+			verifier: func(context.Context, string, string) (bool, error) { return false, verifierErr }},
+	}
+
+	for i, tc := range cases {
+		s.Run(tc.name, func() {
+			subject := fmt.Sprintf("sh-bot-ver-%d", i)
+			partition := fmt.Sprintf("sh-ver-p-%d", i)
+			c := authorizer.NewTenancyAccessChecker(adapter, "tenancy_access",
+				authorizer.WithPartitionVerifier(tc.verifier))
+
+			err := c.CheckAccess(headerEnrichedCtx(subject, "sh-ver-t", partition))
+
+			if tc.wantHeal {
+				s.Require().NoError(err)
+			} else {
+				s.Require().Error(err)
+			}
+			s.Equal(tc.wantHeal, s.serviceTupleExists(tenancyPath("sh-ver-t", partition), subject))
+		})
+	}
+}

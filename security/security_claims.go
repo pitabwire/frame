@@ -523,6 +523,19 @@ func ClaimsFromContext(ctx context.Context) *AuthenticationClaims {
 	return authenticationClaims
 }
 
+// TokenClaimsFromContext returns the claims established by authentication
+// (the verified token, or trusted queue metadata), without the tenancy
+// overrides an internal caller may supply via X-Tenant-Id / X-Partition-Id
+// headers. Use it when a decision must rest on what the caller was actually
+// issued rather than on what it asked to act as.
+func TokenClaimsFromContext(ctx context.Context) *AuthenticationClaims {
+	authenticationClaims, ok := ctx.Value(ctxKeyAuthenticationClaim).(*AuthenticationClaims)
+	if !ok {
+		return nil
+	}
+	return authenticationClaims
+}
+
 // ClaimsFromMap extracts authentication claims from the supplied map if they exist.
 // Supports the keys produced by AsMetadata, including multi-partition
 // "partition_ids" (comma-separated extras restored into Ext).

@@ -969,7 +969,7 @@ func (s *Service) sendStopError(ctx context.Context, err error) {
 	// if multiple components fail; first non-nil that lands in the channel wins
 	// for Run, subsequent attempts drain and re-send the latest error.
 	select {
-	case <-s.errorChannel:
+	case <-s.errorChannel: //nolint:errcheck // draining a stale signal; the value is intentionally discarded
 	default:
 	}
 	select {

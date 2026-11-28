@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/pitabwire/frame/v3/data"
 )
 
 // DeliveryMode classifies how a subscriber receives messages.
@@ -64,7 +66,7 @@ func ClassifySubscriberURL(queueURL string) (DeliveryMode, url.Values, error) {
 		if err == nil {
 			err = errors.New("missing scheme")
 		}
-		return 0, nil, fmt.Errorf("queue: invalid subscriber URL: %w", err)
+		return 0, nil, fmt.Errorf("queue: invalid subscriber URL: %w", data.DSN(queueURL).ScrubError(err))
 	}
 	switch strings.ToLower(u.Scheme) {
 	case "mem", "nats", schemeGCPPubSub:
@@ -85,7 +87,7 @@ func ClassifyPublisherURL(queueURL string) (PublishKind, error) {
 		if err == nil {
 			err = errors.New("missing scheme")
 		}
-		return 0, fmt.Errorf("queue: invalid publisher URL: %w", err)
+		return 0, fmt.Errorf("queue: invalid publisher URL: %w", data.DSN(queueURL).ScrubError(err))
 	}
 	switch strings.ToLower(u.Scheme) {
 	case "mem", "nats", schemeGCPPubSub:
@@ -104,7 +106,7 @@ func ClassifyPublisherURL(queueURL string) (PublishKind, error) {
 func CloudEventsRequestURL(raw string) (string, url.Values, error) {
 	u, parseErr := url.Parse(raw)
 	if parseErr != nil {
-		return "", nil, parseErr
+		return "", nil, data.DSN(raw).ScrubError(parseErr)
 	}
 	switch strings.ToLower(u.Scheme) {
 	case schemeCEHTTPS:
@@ -142,7 +144,7 @@ type CloudTasksTarget struct {
 func ParseCloudTasksURL(raw string) (*CloudTasksTarget, error) {
 	u, err := url.Parse(raw)
 	if err != nil {
-		return nil, fmt.Errorf("queue: cloudtasks URL parse: %w", err)
+		return nil, fmt.Errorf("queue: cloudtasks URL parse: %w", data.DSN(raw).ScrubError(err))
 	}
 	if strings.ToLower(u.Scheme) != schemeCloudTasks {
 		return nil, errors.New("queue: not a cloudtasks URL")
@@ -181,7 +183,7 @@ func ParseCloudTasksURL(raw string) (*CloudTasksTarget, error) {
 		return nil, errors.New("queue: cloudtasks URL missing required query param url")
 	}
 	if _, uriErr := url.ParseRequestURI(target); uriErr != nil {
-		return nil, fmt.Errorf("queue: cloudtasks url param invalid: %w", uriErr)
+		return nil, fmt.Errorf("queue: cloudtasks url param invalid: %w", data.DSN(target).ScrubError(uriErr))
 	}
 
 	ct := &CloudTasksTarget{

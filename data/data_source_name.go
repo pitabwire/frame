@@ -89,8 +89,14 @@ func (d DSN) IsQueue() bool {
 	return d.IsMem() || d.IsNats()
 }
 
+// ToURI parses the DSN. Parse errors are scrubbed of credentials because
+// net/url echoes the full input in its error messages.
 func (d DSN) ToURI() (*url.URL, error) {
-	return url.Parse(string(d))
+	u, err := url.Parse(string(d))
+	if err != nil {
+		return nil, d.ScrubError(err)
+	}
+	return u, nil
 }
 
 func (d DSN) Valid() bool {

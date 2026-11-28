@@ -272,7 +272,7 @@ func (s *queueManager) initializeRegisteredPublishers(ctx context.Context) error
 		if err := pub.Init(ctx); err != nil {
 			util.Log(ctx).WithError(err).
 				WithField("publisher_ref", pub.Ref()).
-				WithField("publisher_url", pub.url).
+				WithField("publisher_url", data.RedactURL(pub.url)).
 				Error("Failed to initialize publisher")
 			initErrors = append(initErrors, fmt.Errorf("publisher %s: %w", pub.Ref(), err))
 		}
@@ -298,7 +298,7 @@ func (s *queueManager) initializeRegisteredSubscribers(ctx context.Context) erro
 		if err := s.initSubscriber(ctx, sub); err != nil {
 			util.Log(ctx).WithError(err).
 				WithField("subscriber_ref", sub.Ref()).
-				WithField("subscriber_url", sub.URI()).
+				WithField("subscriber_url", data.RedactURL(sub.URI())).
 				Error("Failed to initialize subscriber")
 			initErrors = append(initErrors, fmt.Errorf("subscriber %s: %w", sub.Ref(), err))
 		}

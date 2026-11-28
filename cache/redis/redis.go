@@ -28,6 +28,15 @@ func New(opts ...cache.Option) (cache.RawCache, error) {
 		opt(cacheOpts)
 	}
 
+	c, err := open(cacheOpts)
+	if err != nil {
+		// URL parsers and drivers echo the DSN (credentials included) in errors.
+		return nil, cacheOpts.DSN.ScrubError(err)
+	}
+	return c, nil
+}
+
+func open(cacheOpts *cache.Options) (cache.RawCache, error) {
 	redisOpts, err := redis.ParseURL(cacheOpts.DSN.String())
 	if err != nil {
 		return nil, err

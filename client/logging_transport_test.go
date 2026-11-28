@@ -5,10 +5,12 @@ import (
 	"context"
 	"errors"
 	"io"
+	"log/slog"
 	"net/http"
 	"strings"
 	"testing"
 
+	"github.com/pitabwire/util"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -86,4 +88,52 @@ func (s *LoggingTransportSuite) TestRoundTripErrorAndWrapClient() {
 	wrapped := WrapClient(nil, WithTransportLogRequests(true))
 	s.NotNil(wrapped)
 	s.NotNil(wrapped.Transport)
+}
+
+func (s *LoggingTransportSuite) TestRoundTrip_NeverLogsCredentials() {
+	const (
+		bearer    = "bearer-secret-token-123"
+		cookie    = "cookie-secret-456"
+		urlPass   = "url-secret-789"
+		queryTok  = "query-secret-abc"
+		setCookie = "set-cookie-secret-def"
+	)
+	base := loggingRoundTripFunc(func(_ *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       io.NopCloser(bytes.NewBufferString("ok")),
+			Header:     http.Header{"Set-Cookie": []string{"sid=" + setCookie}},
+		}, nil
+	})
+	rt := NewLoggingTransport(base,
+		WithTransportLogRequests(true),
+		WithTransportLogResponses(true),
+		WithTransportLogHeaders(true),
+	)
+
+	logs := &bytes.Buffer{}
+	logger := util.NewLogger(s.T().Context(),
+		util.WithLogOutput(logs),
+		util.WithLogLevel(slog.LevelDebug),
+		util.WithLogNoColor(true),
+		util.WithLogHandlerExclusive(),
+	)
+	ctx := util.ContextWithLogger(s.T().Context(), logger)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet,
+		"https://svc:"+urlPass+"@example.com/path?access_token="+queryTok+"&page=2", nil)
+	s.Require().NoError(err)
+	req.Header.Set("Authorization", "Bearer "+bearer)
+	req.Header.Set("Cookie", "sid="+cookie)
+	req.Header.Set("X-Request-ID", "req-1")
+
+	resp, err := rt.RoundTrip(req)
+	s.Require().NoError(err)
+	s.Require().NoError(resp.Body.Close())
+
+	out := logs.String()
+	s.Contains(out, "req-1", "non-sensitive headers are still logged")
+	for _, secret := range []string{bearer, cookie, urlPass, queryTok, setCookie} {
+		s.NotContains(out, secret, "credentials must never reach the logs")
+	}
 }
